@@ -4633,17 +4633,64 @@ DECISION_1 = _c1(6900000001, "決定：使用者 2026-10-25 在統籌 session �
         ([DECISION_1], "- 兩件事（[6900000001]）\n", []),
         # A longer id holding it is another id.
         ([DECISION_1], "- 兩件事（[69000000012]）\n", [6900000001]),
-        # Before the archive comment the body links (#794 AC-1): not listed; after it,
-        # listed. A comment link on a line without 歸檔 is no archive.
+        # Up to the archive line's comment (#794 AC-1, the line starts with 歸檔：): not
+        # listed, the archive's own id too; after it, listed.
         (
-            [DECISION_1, _c1(6900000009, "決定：歸檔之後" + MARK, at="10:00:00")],
-            f"- 整理前的本文歸檔在 [這則]({ISSUE1}6900000005)\n",
+            [
+                DECISION_1,
+                _c1(6900000005, "回報：整理前的本文全文" + MARK),
+                _c1(6900000009, "決定：歸檔之後" + MARK, at="10:00:00"),
+            ],
+            f"## 決策索引\n  歸檔：[6900000005]({ISSUE1}6900000005)（整理前的本文全文）\n",
             [6900000009],
         ),
+        # A decision line that says 歸檔 with a link is no archive line (PR #810 review).
         (
             [DECISION_1],
-            f"- 某決策（[6900000005]({ISSUE1}6900000005)）\n",
+            f"- 舊的歸檔到留言（[6900000005]({ISSUE1}6900000005)）\n",
             [6900000001],
+        ),
+        # 本文：不同步 in a coordinator's one-off 決定 (any line but the first): not
+        # listed; the user's 同意 it answers is covered, one level down.
+        (
+            [
+                _c1(6900000030, "同意"),
+                _c1(
+                    6900000031,
+                    "決定：PR #900 合併（回覆 [6900000030]）\n\n本文：不同步（一次性同意）"
+                    + MARK,
+                ),
+            ],
+            "## 決策索引\n",
+            [],
+        ),
+        # A 同意 answered by a 決定 in the body: covered. Answered by one neither in the
+        # body nor marked: both listed.
+        (
+            [
+                _c1(6900000032, "同意"),
+                _c1(6900000033, "決定：照建議做（回覆 [6900000032]）" + MARK),
+            ],
+            f"- 照建議做（[6900000033]({ISSUE1}6900000033)）\n",
+            [],
+        ),
+        (
+            [
+                _c1(6900000032, "同意"),
+                _c1(6900000033, "決定：照建議做（回覆 [6900000032]）" + MARK),
+            ],
+            "## 決策索引\n",
+            [6900000032, 6900000033],
+        ),
+        # A BOM before the type keeps it: a 部署 left out, a 決定 listed.
+        (
+            [
+                _c1(6900000040, chr(0xFEFF) + "部署：tag `v1.2.5` 的 image 已啟動"),
+                _c1(6900000041, chr(0xFEFF) + "決定：BOM 開頭" + MARK),
+                _c1(6900000042, "決定:半形冒號" + MARK),
+            ],
+            "## 決策索引\n",
+            [6900000041, 6900000042],
         ),
         # The coordinator's 回報 and 部署, 待使用者 and 決定 lower down: not listed.
         (
@@ -4685,6 +4732,8 @@ DECISION_1 = _c1(6900000001, "決定：使用者 2026-10-25 在統籌 session �
                     "部署：tag `v1.2.4` 的 image 已以 `docker compose up -d` 啟動",
                 ),
                 _c1(6900000014, "回報：統籌 session 更換：term_x／sess"),
+                _c1(6900000015, "回報：開工\n\n- session：x"),
+                _c1(6900000016, "回報：收到（回覆 [6900000010]）"),
             ],
             "## 決策索引\n",
             [6900000010],
@@ -4696,7 +4745,11 @@ DECISION_1 = _c1(6900000001, "決定：使用者 2026-10-25 在統籌 session �
         "id-bare",
         "longer-id",
         "archive",
-        "link-without-archive",
+        "decision-line-saying-archive",
+        "not-synced-mark",
+        "reply-covered",
+        "reply-not-covered",
+        "bom-and-half-width",
         "coordinator-reports",
         "commitment-and-addendum",
         "unmarked",
@@ -4776,6 +4829,29 @@ def test_patrol_puts_the_vacancy_after_a_missing_decision(slotted: Harness) -> N
     assert [r.split()[1] for r in _sync_lines(result.stdout)] == ["6900000001"]
 
 
+def test_patrol_in_the_daily_window_ends_with_a_missing_decision(
+    slotted: Harness,
+) -> None:
+    """The daily window prints the vacancy only; a missing decision still exits 12."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_thread(1, DECISION_1))
+    answer["data"]["repository"]["governance"] = {"body": "## 決策索引\n"}
+    slotted.answer("gh_questions", answer)
+    at = int(datetime(2026, 10, 25, 14, 0, tzinfo=timezone.utc).timestamp())
+    result = slotted.run(
+        "patrol.sh",
+        "--session-id",
+        "sess-1",
+        "--terminal",
+        "term_coord",
+        PATROL_NOW=str(at),
+    )
+    assert result.returncode == 12, result.stdout + result.stderr
+    lines = result.stdout.strip().splitlines()
+    assert "daily 時段不派新工，只印出" in lines[-2]
+    assert lines[-1].endswith("（patrol exit 12）")
+
+
 def test_patrol_with_a_handoff_marker_prints_a_missing_decision_only(
     patrol: Harness,
 ) -> None:
@@ -4790,10 +4866,10 @@ def test_patrol_with_a_handoff_marker_prints_a_missing_decision_only(
     ("size", "limit", "line"),
     [
         (14_336, None, None),
-        (14_337, None, "#1 本文 14 KB，超過上限 14 KB"),
-        (41_752, None, "#1 本文 40.8 KB，超過上限 14 KB"),
+        (14_337, None, "#1 本文 14,337 位元組（14.0 KB），超過上限 14,336"),
+        (41_752, None, "#1 本文 41,752 位元組（40.8 KB），超過上限 14,336"),
         (41_752, "51200", None),
-        (12_000, "10240", "#1 本文 11.7 KB，超過上限 10 KB"),
+        (12_000, "10240", "#1 本文 12,000 位元組（11.7 KB），超過上限 10,240"),
     ],
 )
 def test_patrol_says_when_the_governance_body_is_above_its_limit(
@@ -4838,31 +4914,84 @@ def test_patrol_refuses_a_bad_governance_body_limit(
     assert "STOCK_GOVERNANCE_BODY_LIMIT" in result.stderr
 
 
+def test_patrol_names_the_archive_comment_it_took(patrol: Harness) -> None:
+    body = f"歸檔：[6900000005]({ISSUE1}6900000005)（整理前的本文全文）\n"
+    patrol.answer("gh_questions", _governance(DECISION_1, body=body))
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "#1 漏同步：0 則（最近 1 則留言裡，id 不在本文、也不早於歸檔留言 6900000005）"
+        in result.stdout.splitlines()
+    )
+
+
 @pytest.mark.parametrize(
-    "how", ["max-gh-0", "gh-fails", "graphql-error", "no-body", "no-thread"]
+    ("how", "why"),
+    [
+        ("max-gh-0", "GitHub 沒讀到"),
+        ("gh-fails", "GitHub 沒讀到"),
+        ("graphql-error", "GitHub 沒讀到"),
+        ("no-body", "沒讀到 #1 本文"),
+        ("no-thread", "沒讀到 #1 的留言"),
+        ("comments-null", "沒讀到 #1 的留言"),
+        ("nodes-null", "沒讀到 #1 的留言"),
+        ("two-archive-lines", "歸檔：開頭的行有 2 行"),
+        ("archive-line-without-link", "歸檔行沒有 #1 留言連結"),
+        ("archive-line-with-two-links", "歸檔行有 2 個 #1 留言連結"),
+    ],
 )
 def test_patrol_does_not_take_an_unread_governance_issue_for_none_missing(
-    patrol: Harness, how: str
+    patrol: Harness, how: str, why: str
 ) -> None:
-    """#807 AC-3: GitHub not read, or the answer without #1's body or comments: 未查完,
-    no row, the exit as before."""
+    """#807 AC-3: GitHub not read, the answer without #1's body or comments, or an archive
+    line that cannot be told (PR #810 review 6912088904): 未查完 with why, no row, the
+    exit as before."""
     args = []
+    answer = _governance(DECISION_1)
+    thread = answer["data"]["repository"]["issues"]["nodes"][0]
+    archive = f"歸檔：[6900000005]({ISSUE1}6900000005)\n"
     if how == "max-gh-0":
         args = ["--max-gh", "0"]
-        patrol.answer("gh_questions", _governance(DECISION_1))
     elif how == "gh-fails":
         patrol.write("gh_questions_fails", "")
     elif how == "graphql-error":
-        patrol.answer("gh_questions", {"errors": [{"message": "rate limited"}]})
+        answer = {"errors": [{"message": "rate limited"}]}
     elif how == "no-body":
-        patrol.answer("gh_questions", _threads([_thread(1, DECISION_1)]))
+        answer = _threads([_thread(1, DECISION_1)])
+    elif how == "no-thread":
+        answer = _threads([_thread(401)], governance="x")
+    elif how == "comments-null":
+        thread["comments"] = None
+    elif how == "nodes-null":
+        thread["comments"]["nodes"] = None
+    elif how == "two-archive-lines":
+        answer = _governance(DECISION_1, body=archive + archive)
+    elif how == "archive-line-without-link":
+        answer = _governance(DECISION_1, body="歸檔：之後補\n")
     else:
-        patrol.answer("gh_questions", _threads([_thread(401)], governance="x"))
+        answer = _governance(
+            DECISION_1, body=archive.rstrip() + f" [6900000006]({ISSUE1}6900000006)\n"
+        )
+    patrol.answer("gh_questions", answer)
     result = _patrol(patrol, *args)
     assert result.returncode == 0, result.stdout + result.stderr
     (line,) = [ln for ln in result.stdout.splitlines() if ln.startswith("#1 漏同步")]
-    assert line.startswith("#1 漏同步：未查完（")
+    assert line == f"#1 漏同步：未查完（{why}）"
     assert _sync_lines(result.stdout) == []
+
+
+def test_patrol_checks_the_governance_issue_when_slots_cannot_give_its_query(
+    slotted: Harness,
+) -> None:
+    """The questions' own query carries #1's body as well (slots.py query failed)."""
+    (slotted.ops / "slots.py").write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+    slotted.answer("gh_questions", _governance(DECISION_1))
+    result = _patrol(slotted)
+    assert result.returncode == 12, result.stdout + result.stderr
+    assert "名額：判定不了（slots.py query 失敗" in result.stdout
+    assert [r.split()[1] for r in _sync_lines(result.stdout)] == ["6900000001"]
+    (call,) = slotted.calls("gh")
+    assert "governance:issue(number:1){body}" in call and "blockedBy" not in call
 
 
 def test_patrol_checks_the_governance_issue_within_one_gh_call(

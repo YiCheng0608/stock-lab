@@ -31,15 +31,17 @@
 # (so still one gh call) and the local `git worktree list` with `git status` of each task
 # worktree. With a slot free and a 待辦 task to dispatch, the last line is
 # 名額空缺 M 個，請派工：#n and the exit 11; in the daily window (台北 21:30～23:30) or
-# with this session's handoff marker it is printed only (exit 0), and when the handoff
-# condition holds it goes before the handoff line (exit 10). GitHub not read (gh failed,
+# with this session's handoff marker it is printed only (in the daily window the exit is
+# then 0, or 12 when a #1 comment is missing, below), and when the handoff condition holds
+# it goes before the handoff line (exit 10). GitHub not read (gh failed,
 # --max-gh 0): every task is counted as 判定不了 and no vacancy is claimed.
 #
 # #1's body (#807, docs/COORDINATOR.md 決策落地), from the same answer (its body is the
 # one extra field, its latest 100 comments are already there): above
-# STOCK_GOVERNANCE_BODY_LIMIT bytes the header says "#1 本文 N KB，超過上限 M KB" (a hint
-# only). The 決定 and 統籌承諾 comments and the ones without the coordinator mark whose id
-# is neither in the body nor before its archive comment are listed before the last lines
+# STOCK_GOVERNANCE_BODY_LIMIT bytes the header says "#1 本文 N 位元組（K KB），超過上限 M"
+# (a hint only). The 決定 and 統籌承諾 comments and the ones without the coordinator mark
+# whose id is neither in the body nor up to its archive line (歸檔：) and that no covered
+# comment names (本文：不同步, PR #810 review 6912088904) are listed before the last lines
 # (coordinator_json.governance_check), with the header line "#1 漏同步：N 則", and the last
 # line says so with exit 12, after the handoff's 10 and the slots' 11 (the lines of each
 # printed all the same); with this session's handoff marker printed only (exit 0).

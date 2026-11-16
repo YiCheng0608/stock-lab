@@ -503,24 +503,47 @@ _SCRIPT_COMMENT = re.compile(r"`tools/ops/[\w.]+` 自動留言")
 # An id in the body: in a comment link, or bare ([6911025182]) when 6 digits or more, so a
 # date or a PR number is not taken for one.
 _BODY_ID = re.compile(r"(?<!\d)(\d{6,})(?!\d)")
-# The archive comment (#794 AC-1): a #1 comment link on a line of the body that says 歸檔.
-# It holds an earlier body, so every comment before it is covered; comment ids grow with
-# time, so "before" is a smaller id (true as well of a comment not among those read).
+# The archive line (#794 AC-1, PR #810 review 6912088904): the one line of the body that
+# starts with 歸檔：, holding one link to a #1 comment, the earlier body. Every comment up
+# to it is covered; comment ids grow with time, so "up to" is an id at most the archive's
+# (true as well of a comment not among those read).
+_ARCHIVE_LINE = re.compile(r"\s*歸檔[：:]")
 _ARCHIVE_LINK = re.compile(r"/issues/1#issuecomment-(\d+)")
+# A one-off 決定 or 統籌承諾 of the coordinator (a merge agreed, a check done) says so on a
+# line of its own: 本文：不同步（<why>）. A comment such a covered one names (回覆 [id]) is
+# covered too, one level down: the user's 同意 it answers.
+_NOT_SYNCED = re.compile(r"^\s*本文[：:]\s*不同步", re.MULTILINE)
 # patrol.sh's exit when a comment is missing (after the handoff's 10 and the slots' 11).
 GOVERNANCE_EXIT = 12
 
 
-def _kb(size: int) -> str:
-    return f"{size / 1024:.1f}".removesuffix(".0")
+def _ids(text: str) -> set[str]:
+    return set(_BODY_ID.findall(text)) | set(_COMMENT_LINK.findall(text))
+
+
+def _archive(body: str) -> tuple[int | None, str | None]:
+    """(the archive comment's id or None, why it cannot be told or None)."""
+    lines = [ln for ln in body.splitlines() if _ARCHIVE_LINE.match(ln)]
+    if not lines:
+        return None, None
+    if len(lines) > 1:
+        return None, f"歸檔：開頭的行有 {len(lines)} 行"
+    links = _ARCHIVE_LINK.findall(lines[0])
+    if len(set(links)) != 1:
+        return None, (
+            f"歸檔行有 {len(set(links))} 個 #1 留言連結"
+            if links
+            else "歸檔行沒有 #1 留言連結"
+        )
+    return int(links[0]), None
 
 
 def governance_check(doc, limit: int) -> tuple[list[str], list[str]]:
     """(header lines, one line per comment missing from #1's body).
 
     The header says the body's size when above LIMIT bytes, and how many comments are
-    missing, or 未查完 with why when the body or #1's comments were not read: then no
-    comment is listed, never 0 taken for an answer.
+    missing, or 未查完 with why when the body, #1's comments or the archive line could not
+    be read: then no comment is listed, never 0 taken for an answer.
     """
     repo = get(doc, "data.repository") or {}
     body = (repo.get("governance") or {}).get("body")
@@ -537,38 +560,51 @@ def governance_check(doc, limit: int) -> tuple[list[str], list[str]]:
     header = []
     size = len(body.encode("utf-8"))
     if size > limit:
-        header.append(f"#1 本文 {_kb(size)} KB，超過上限 {_kb(limit)} KB")
-    if thread is None:
+        header.append(
+            f"#1 本文 {size:,} 位元組（{size / 1024:.1f} KB），超過上限 {limit:,}"
+        )
+    comments = (thread or {}).get("comments")
+    nodes = comments.get("nodes") if isinstance(comments, dict) else None
+    if not isinstance(nodes, list):
         return header + ["#1 漏同步：未查完（沒讀到 #1 的留言）"], []
-    ids = set(_BODY_ID.findall(body)) | set(_COMMENT_LINK.findall(body))
-    archive = max(
-        (
-            int(i)
-            for line in body.splitlines()
-            if "歸檔" in line
-            for i in _ARCHIVE_LINK.findall(line)
-        ),
-        default=None,
-    )
-    missing = []
-    comments = thread.get("comments") or {}
-    for c in comments.get("nodes") or []:
-        text = (c.get("body") or "").lstrip("﻿")
-        if not coordinator_comment(text):
+    archive, why = _archive(body)
+    if why:
+        return header + [f"#1 漏同步：未查完（{why}）"], []
+    in_body = _ids(body)
+
+    def comment_id(c: dict) -> str:
+        return (_COMMENT_LINK.findall(c.get("url") or "") or [""])[0]
+
+    def covered(cid: str) -> bool:
+        return cid in in_body or (archive is not None and int(cid) <= archive)
+
+    candidates, covering = [], set()
+    for c in nodes:
+        if not isinstance(c, dict):
+            continue
+        text = (c.get("body") or "").lstrip("\ufeff")
+        cid = comment_id(c)
+        if not cid:
+            continue
+        marked = coordinator_comment(text)
+        if marked and (covered(cid) or _NOT_SYNCED.search(text)):
+            covering |= _ids(without_mark(text)) - {cid}
+        if not marked:
             if _SCRIPT_COMMENT.search(text) or _NOT_DECISIONS.match(text):
                 continue
-        elif not _SYNCED.match(text):
+        elif not _SYNCED.match(text) or _NOT_SYNCED.search(text):
             continue
-        cid = (_COMMENT_LINK.findall(c.get("url") or "") or [""])[0]
-        if not cid or cid in ids or (archive is not None and int(cid) <= archive):
+        candidates.append((c, cid, text))
+    missing = []
+    for c, cid, text in candidates:
+        if covered(cid) or cid in covering:
             continue
         first = next((ln for ln in without_mark(text).splitlines() if ln.strip()), "")
         missing.append((c.get("createdAt") or "", cid, one_line(first, 60)))
     missing.sort()
-    read = len(comments.get("nodes") or [])
     header.append(
-        f"#1 漏同步：{len(missing)} 則（最近 {read} 則留言裡，id 不在本文"
-        f"{'、也不早於歸檔留言' if archive is not None else ''}）"
+        f"#1 漏同步：{len(missing)} 則（最近 {len(nodes)} 則留言裡，id 不在本文"
+        f"{f'、也不早於歸檔留言 {archive}' if archive is not None else ''}）"
     )
     return header, [f"{at} {cid} {first}" for at, cid, first in missing]
 
