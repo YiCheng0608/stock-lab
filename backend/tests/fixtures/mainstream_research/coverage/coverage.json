@@ -1,0 +1,51 @@
+{
+  "tool": "mainstream_research",
+  "version": 1,
+  "design": "813",
+  "registration_commit": "31a09e9e",
+  "correction_commit": "b417f716",
+  "segment": "exploration",
+  "round": 3,
+  "round_size": 2,
+  "cumulative": 15,
+  "definitions_sha256": "d2f87b1a3cd9fc9133a63352c9a1040844a070dfbb0f0577ac9b2e902f715a7d",
+  "copy": {
+    "latest": "2014-04-07",
+    "alembic": null
+  },
+  "read_until": "2014-02-24",
+  "coverage_only": true,
+  "window": {
+    "first_signal": "2013-12-17",
+    "first_session": "2013-12-18",
+    "last_session": "2014-02-24",
+    "days": 49,
+    "signal_days": 49
+  },
+  "coverage": {
+    "2013": {
+      "days": 11,
+      "universe": 385,
+      "grouped": 385,
+      "selectable": 385,
+      "ranked_groups": 44,
+      "retroactive": 44,
+      "remapped": 11,
+      "taiex_missing": 1,
+      "no_group": 0,
+      "short_groups": 10
+    },
+    "2014": {
+      "days": 38,
+      "universe": 1312,
+      "grouped": 1312,
+      "selectable": 1312,
+      "ranked_groups": 152,
+      "retroactive": 152,
+      "remapped": 38,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 38
+    }
+  }
+}
