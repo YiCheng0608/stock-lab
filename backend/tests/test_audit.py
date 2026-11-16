@@ -26,6 +26,7 @@ import app.coverage as product_coverage
 import app.indicators as product_indicators
 import worker.mops_events as mops_events
 import worker.pipeline as pipeline
+import worker.sources as product_sources
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import (
@@ -1131,6 +1132,23 @@ def test_the_audit_pins_the_product_versions_it_recomputes():
         audit_lib.SESSION_BASIS_START
         == product_coverage.SESSION_BASIS_START.isoformat()
     )
+    assert audit_lib.TAIEX_ROWS == product_sources.TWSE_INDEX_NAMES
+
+
+@pytest.mark.parametrize(
+    ("day", "close"),
+    [
+        # raw 28605: the price-index row reads 加權股價指數 (Issue #764).
+        ("20190429", 10939.06),
+        # raw 28609: the row reads 發行量加權股價指數.
+        ("20190430", 10967.73),
+    ],
+)
+def test_the_audit_reads_the_taiex_close_under_both_index_names(day, close):
+    path = ROOT / "backend/tests/fixtures/market_summary" / f"twse_mi_index_{day}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    # Not the 加權股價報酬指數 row of the return-index table.
+    assert audit_lib.taiex_close(payload) == close
 
 
 def test_index_history_before_the_stock_history_is_never_a_stock_session(fx):

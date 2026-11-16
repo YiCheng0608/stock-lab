@@ -777,8 +777,9 @@ OWNERS: dict[str, tuple[str, str]] = {
 
 
 def today_shots(run: Run) -> list[Shot]:
-    # The market page (/market, Issue 549) was split off the today page and is checked with it (features/today.md).
-    return [TODAY, MARKET, MARKET_TPEX, MARKET_TX]
+    # The market page (/market, Issue 549) was split off the today page and is checked with it (features/today.md);
+    # the page's second list, 主流族群前 20, is its own shot (?list=mainstream, Issue 769).
+    return [TODAY, TODAY_MAINSTREAM, MARKET, MARKET_TPEX, MARKET_TX]
 
 
 def news_shots(run: Run) -> list[Shot]:
@@ -2265,6 +2266,167 @@ def without_lines(text: Text, drop: set[str]) -> Text:
             kept.lines.append(line)
             kept.numbers.append(number)
     return kept
+
+
+# ---- T26: 主流族群前 20, the today page's second list (Issue 769; UI_COPY_SPEC §10, DESIGN_SYSTEM §5 候選列表) ----
+# Mirrors frontend/src/candidates/mainstream.ts (mainstreamDefinition, mainstreamReturnText, todayListMark,
+# mainstreamState) and MainstreamViews.tsx's line structure: change them together.
+TODAY_MAINSTREAM = Shot("today-mainstream", "/?list=mainstream")
+MAINSTREAM_TITLE = "主流族群前 20"
+MAINSTREAM_EMPTY = {"missing": "尚無主流族群名單", "zero": "當日沒有主流族群"}
+EXCHANGE_LABELS = {"TWSE": "上市", "TPEx": "上櫃"}  # presentation.ts exchangeLabel
+# The list has no price levels (decision #1 6891614350): none of these on it, nor the chart's rule level line.
+MAINSTREAM_LEVEL_WORDS = ("進場", "停損", "目標", "RR", "總分", "可買")
+# 「今日名單 #n」, or 「YYYY/MM/DD 今日名單 #n」 when the today list shown is of another date.
+MAINSTREAM_MARK = re.compile(r"^(?:\d{4}/\d{2}/\d{2} )?今日名單 #\d+$")
+
+
+def mainstream(run: Run) -> dict:
+    return run.get("mainstream", "mainstream.json")
+
+
+def signed_percent(ratio: float | None) -> str:
+    """mainstream.ts signedPercent: two decimals, + on a rise, 0.00% flat, — without a value."""
+
+    if ratio is None:
+        return "—"
+    percent = ratio * 100
+    rounded = float(f"{percent:.2f}")
+    return f"{'+' if rounded > 0 else ''}{0.0 if rounded == 0 else percent:.2f}%"
+
+
+def mainstream_definition(payload: dict) -> str:
+    groups = sorted(payload.get("groups") or [], key=lambda group: group["rank"])
+    window, cap = payload["window"], payload["group_count"]
+    count = (
+        f"{len(groups)} 個族群（上限 {cap} 個）"
+        if len(groups) < cap
+        else f"{cap} 個族群"
+    )
+    names = "、".join(group["name"] for group in groups)
+    return (
+        f"近 {window} 個交易日相對加權指數最強的 {count}：{names}；"
+        f"族群內個股依 {window} 日漲幅取前 20"
+    )
+
+
+def mainstream_row_lines(
+    item: dict, window: int, other_day: str | None = None
+) -> list[str]:
+    """A row's first lines: the title, the strength, then 「今日名單 #n」 when it is on the today list.
+
+    ``other_day``: the mainstream date when the page's today list is of another date; the mark is then
+    plain text that starts with it (mainstream.ts todayListMark, review 6893655832)."""
+
+    instrument = item["instrument"]
+    groups = (
+        "、".join(group["name"] for group in item.get("groups") or [])
+        or "無所屬主流族群"
+    )
+    market = EXCHANGE_LABELS.get(instrument["exchange"], "市場待核實")
+    lines = [
+        f"#{item['rank']} {instrument['symbol']} {instrument['name']} {market} · {groups}",
+        f"近 {window} 日 {signed_percent(item.get('return_w'))}"
+        f"（較加權 {signed_percent(item.get('excess_w'))}）",
+    ]
+    if item.get("today_list"):
+        mark = f"今日名單 #{item['today_list']['rank']}"
+        lines.append(f"{slash(other_day)} {mark}" if other_day else mark)
+    return lines
+
+
+@check("today", "T26")
+def t26(run: Run) -> str:
+    """Issue 769: ?list=mainstream shows mainstream.json: the head, the definition, each row's lines, no price level."""
+
+    payload = mainstream(run)
+    text = run.text(TODAY_MAINSTREAM)
+    items = payload.get("items") or []
+    found = [n for n, line in enumerate(text.lines) if line == MAINSTREAM_TITLE]
+    # The tab reads it too and comes first: the section title is the last one.
+    expect(len(found) >= 2, f"缺標題 `{MAINSTREAM_TITLE}`（分頁之外的整行）")
+    i = found[-1]
+    status = payload.get("status")
+    if status != "computed" or not items:
+        title = MAINSTREAM_EMPTY.get(
+            "missing" if status == "missing" else "zero", MAINSTREAM_EMPTY["zero"]
+        )
+        expect(
+            text.has(title),
+            f"mainstream.json {status}、items {len(items)}，缺 `{title}`",
+        )
+        expect(
+            text.find_where(lambda line: CANDIDATE_ROW.match(line) is not None, i) < 0,
+            f"mainstream.json {status} 卻有名次列",
+        )
+        return f"{status}：顯示 `{title}`，沒有名次列"
+    day = payload.get("trading_date")
+    badge = card_badge(run, text, i, day, MAINSTREAM_TITLE)
+    k = 1 if day == page_day(run) else 2
+    count_line = f"{len(items)} 檔"
+    expect(
+        text.after(i, k) == count_line,
+        f"`{MAINSTREAM_TITLE}` 後第 {k} 行是 {text.after(i, k)!r}，預期 `{count_line}`",
+    )
+    definition = mainstream_definition(payload)
+    expect(
+        text.after(i, k + 1) == definition,
+        f"定義行是 {text.after(i, k + 1)!r}，預期 `{definition}`",
+    )
+    rows = [
+        n
+        for n, line in enumerate(text.lines)
+        if n > i and CANDIDATE_ROW.match(line) is not None
+    ]
+    expect(len(rows) == len(items), f"名次列 {len(rows)}，items {len(items)}")
+    # The marks link to the today list only when it is of the same date (review 6893655832).
+    today_day = candidates(run).get("trading_date")
+    other_day = None if today_day and day and today_day[:10] == day[:10] else day
+    for row, item in zip(rows, items):
+        want = mainstream_row_lines(item, payload["window"], other_day)
+        got = text.lines[row : row + len(want)]
+        expect(
+            got == want, f"第 {item['rank']} 列是 {got}，預期 {want}（{text.at(row)}）"
+        )
+    marks = text.count(lambda line: MAINSTREAM_MARK.match(line) is not None)
+    listed = sum(1 for item in items if item.get("today_list"))
+    expect(marks == listed, f"`今日名單 #n` {marks} 行，today_list 非 null {listed} 筆")
+    # The list and the chart beside it, up to the hot groups under them.
+    end = text.find("熱門族群", i)
+    after = text.lines[i : end if end > i else len(text.lines)]
+    words = sorted(
+        {word for line in after for word in MAINSTREAM_LEVEL_WORDS if word in line}
+    )
+    expect(not words, f"第二份名單出現點位用詞 {words}")
+    expect(
+        not any(line.startswith(CHART_LEVELS_LINE) for line in after),
+        f"右側 K 線卡有 `{CHART_LEVELS_LINE}`（第二份名單不畫規則價位線）",
+    )
+    meta = run.shoot(TODAY_MAINSTREAM)[390]
+    if not meta.get("ready"):
+        raise Undetermined(
+            f"{TODAY_MAINSTREAM.name}-390 未 ready {meta.get('error', '')}".strip()
+        )
+    measured = meta.get("candidateRows")
+    expect(measured is not None, f"{TODAY_MAINSTREAM.name}-390 沒有 candidateRows 量測")
+    expect(
+        len(measured) == len(items), f"390 量到 {len(measured)} 列，items {len(items)}"
+    )
+    problems = [
+        f"#{n} 超出列邊被切：{'、'.join(row['clipped'])}"
+        for n, row in enumerate(measured, start=1)
+        if row["clipped"]
+    ] + [
+        f"#{n} 收盤欄 scrollWidth {row['numsScrollWidth']} > clientWidth {row['numsClientWidth']}"
+        for n, row in enumerate(measured, start=1)
+        if row["numsScrollWidth"] is not None
+        and row["numsScrollWidth"] > row["numsClientWidth"]
+    ]
+    expect(not problems, "；".join(problems))
+    return (
+        f"{badge}、`{count_line}`、定義行；{len(rows)} 列的名次、族群、強弱與 "
+        f"`今日名單 #n` {marks} 行 = mainstream.json；沒有點位用詞與規則價位線；390 收盤欄不被切"
+    )
 
 
 @check("today", "T23")

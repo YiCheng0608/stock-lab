@@ -13,7 +13,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
-from typing import Iterable
+from typing import Iterable, Iterator, TypeVar
 
 from sqlalchemy import or_, select
 from sqlalchemy import text as sql_text
@@ -31,6 +31,7 @@ from .models import (
 )
 from .taxonomy import INDUSTRY_DISPLAY_ZH, canonical_group_id, canonical_industry_label
 
+_T = TypeVar("_T")
 
 _SOURCE_NAMES = {
     "mops_material_information": "MOPS",
@@ -364,6 +365,24 @@ def _event_at(event: Event) -> datetime:
     return datetime.combine(event.event_date, time.min)
 
 
+# Bound values per IN query.  SQLite before 3.32 binds at most 999 variables
+# per statement (32766 since); 500 leaves room under either for the query's
+# other parameters (Issue #791).
+_IN_BATCH_SIZE = 500
+
+
+def _batches(values: list[_T]) -> Iterator[list[_T]]:
+    for start in range(0, len(values), _IN_BATCH_SIZE):
+        yield values[start : start + _IN_BATCH_SIZE]
+
+
+# Events read per segment of a full projection.  Loading every Event and
+# NewsItem at once took more than 2 GB on the research database (about
+# 690,000 of each); a segment is flushed before the next is read, so its rows
+# can be freed (Issue #791).
+_EVENT_SEGMENT_SIZE = 5000
+
+
 def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) -> int:
     """Upsert NewsItem rows for official Events and return changed row count.
 
@@ -371,37 +390,58 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
     useful as a one-time projection for an existing official database.  It
     does not delete historical NewsItem rows, including rows later marked
     duplicate/retracted by an operator.
+
+    Without ``events`` every stored Event is projected, read in id order in
+    segments of ``_EVENT_SEGMENT_SIZE``.
     """
 
-    event_rows = (
-        list(events)
-        if events is not None
-        else db.scalars(select(Event).order_by(Event.id)).all()
-    )
-    event_rows = [event for event in event_rows if _is_official_event(event)]
+    if events is not None:
+        return _project_events(db, list(events))
+    changed = 0
+    last_id = 0
+    while True:
+        segment = db.scalars(
+            select(Event)
+            .where(Event.id > last_id)
+            .order_by(Event.id)
+            .limit(_EVENT_SEGMENT_SIZE)
+        ).all()
+        if not segment:
+            return changed
+        last_id = segment[-1].id
+        changed += _project_events(db, segment)
+        # Flushed and no longer referenced here: the session holds clean rows
+        # weakly, so the segment's Events and NewsItems can be freed.
+        del segment
+
+
+def _project_events(db: Session, events: list[Event]) -> int:
+    event_rows = [event for event in events if _is_official_event(event)]
     # Projection is called by the dashboard and news feed.  Batch-load the
     # small relational context once so a market-sized event set cannot turn
     # into an N+1 query storm.
-    instrument_ids = {
-        int(event.instrument_id) for event in event_rows if event.instrument_id
-    }
+    # Each IN list goes in batches of _IN_BATCH_SIZE values: a full projection
+    # of a large database has more keys than SQLite binds in one statement
+    # (Issue #791).
+    instrument_ids = sorted(
+        {int(event.instrument_id) for event in event_rows if event.instrument_id}
+    )
     instruments_by_id = {
         instrument.id: instrument
-        for instrument in (
-            db.scalars(
-                select(Instrument).where(Instrument.id.in_(instrument_ids))
-            ).all()
-            if instrument_ids
-            else []
-        )
+        for batch in _batches(instrument_ids)
+        for instrument in db.scalars(
+            select(Instrument).where(Instrument.id.in_(batch))
+        ).all()
     }
     memberships_by_instrument: dict[int, list[tuple[GroupMembership, ThemeGroup]]] = {}
-    if instrument_ids:
+    for batch in _batches(instrument_ids):
+        # Batches follow the sorted ids, so each instrument's rows stay in
+        # group order as with one query.
         for membership, group in db.execute(
             select(GroupMembership, ThemeGroup)
             .join(ThemeGroup, ThemeGroup.id == GroupMembership.group_id)
             .where(
-                GroupMembership.instrument_id.in_(instrument_ids),
+                GroupMembership.instrument_id.in_(batch),
                 ThemeGroup.active.is_(True),
             )
             .order_by(GroupMembership.instrument_id, GroupMembership.group_id)
@@ -409,16 +449,13 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
             memberships_by_instrument.setdefault(membership.instrument_id, []).append(
                 (membership, group)
             )
-    canonical_keys = {_canonical_key(event) for event in event_rows}
+    canonical_keys = sorted({_canonical_key(event) for event in event_rows})
     items_by_key = {
         item.canonical_key: item
-        for item in (
-            db.scalars(
-                select(NewsItem).where(NewsItem.canonical_key.in_(canonical_keys))
-            ).all()
-            if canonical_keys
-            else []
-        )
+        for batch in _batches(canonical_keys)
+        for item in db.scalars(
+            select(NewsItem).where(NewsItem.canonical_key.in_(batch))
+        ).all()
     }
 
     changed = 0

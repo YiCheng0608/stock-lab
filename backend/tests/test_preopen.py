@@ -786,4 +786,4 @@ def test_the_upgrade_adds_the_preopen_news_check_table(tmp_path, monkeypatch, en
             else "0032_preopen_news_checks",
         )
     ]
-    assert migration_revisions.REVISIONS[-1] == "0032_preopen_news_checks"
+    assert "0032_preopen_news_checks" in migration_revisions.REVISIONS

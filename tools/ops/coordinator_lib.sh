@@ -333,6 +333,15 @@ cbm_project="${STOCK_CBM_PROJECT:-C-Users-YiCheng-Desktop-taiwan-stock-research}
 cbm_timeout="${STOCK_CBM_TIMEOUT:-300}"
 # dispatch.sh checks the files the newest N merges of the checkout's HEAD changed.
 cbm_recent_merges="${STOCK_CBM_RECENT_MERGES:-5}"
+# When index_repository answers that another index operation of the project is active (the
+# watcher's own refresh right after checkout_fast_forward, #766): index_repository itself is
+# tried again every STOCK_CBM_BUSY_POLL seconds while that is the answer, until
+# STOCK_CBM_BUSY_WAIT seconds have passed (judged between tries; a try may itself take up
+# to cbm_timeout). Both are positive integers, cbm_rebuild refuses anything else.
+cbm_busy_wait="${STOCK_CBM_BUSY_WAIT:-300}"
+cbm_busy_poll="${STOCK_CBM_BUSY_POLL:-10}"
+# The engine's text for that refusal (codebase-memory 0.10.8, 2026-11-15 #759/#764 收尾).
+cbm_busy_text="another index operation for this project is active"
 cbm_out="" cbm_error="" cbm_report="" cbm_steps=()
 
 # cbm_call TOOL ARGS_JSON: run `<cli> cli --json TOOL` with ARGS_JSON on stdin; cbm_out is the
@@ -375,17 +384,55 @@ cbm_root_check() {
     || { cbm_error="project $cbm_project 的 root 是 $root，不是這個 checkout（$want）；請從 master 管理 checkout 執行"; return 1; }
 }
 
-# cbm_rebuild [force]: index_repository of this checkout under the project's name; force
-# deletes the project first (delete_project), the one way to make the engine record a file
-# whose mtime alone changed (engine 0.10.8 keeps the old mtime and indexed_at otherwise).
+# cbm_index ARGS_JSON: index_repository; while the engine refuses it because another index
+# operation of the project is active (cbm_busy_text), tried again every cbm_busy_poll
+# seconds until cbm_busy_wait seconds have passed. It never looks at index_status (whose
+# status during the watcher's refresh is not known, and after delete_project is "project
+# not found") and touches nothing of the other operation. When it waited it appends
+# index_waited:<seconds> to cbm_steps, whether it then succeeded or not; past the limit
+# cbm_error has the seconds, the tries and the engine's last answer. Any other failure is
+# not retried.
+cbm_index() {
+  local start=$SECONDS tries=1 left
+  cbm_call index_repository "$1" && return 0
+  case "$cbm_error" in *"$cbm_busy_text"*) ;; *) return 1 ;; esac
+  while :; do
+    left=$((cbm_busy_wait - (SECONDS - start)))
+    if [ "$left" -le 0 ]; then
+      cbm_steps+=("index_waited:$((SECONDS - start))")
+      cbm_error="另一個索引作業等了 $((SECONDS - start)) 秒、試了 $tries 次仍在進行（上限 $cbm_busy_wait 秒，STOCK_CBM_BUSY_WAIT），最後的回答：$cbm_error"
+      return 1
+    fi
+    sleep "$((left < cbm_busy_poll ? left : cbm_busy_poll))"
+    tries=$((tries + 1))
+    if cbm_call index_repository "$1"; then
+      cbm_steps+=("index_waited:$((SECONDS - start))")
+      return 0
+    fi
+    case "$cbm_error" in
+      *"$cbm_busy_text"*) ;;
+      *)
+        cbm_steps+=("index_waited:$((SECONDS - start))")
+        cbm_error="等了 $((SECONDS - start)) 秒、第 $tries 次失敗：$cbm_error"
+        return 1
+        ;;
+    esac
+  done
+}
+
+# cbm_rebuild [force]: index_repository of this checkout under the project's name (through
+# cbm_index, which waits out another index operation of the project); force deletes the
+# project first (delete_project), the one way to make the engine record a file whose mtime
+# alone changed (engine 0.10.8 keeps the old mtime and indexed_at otherwise).
 cbm_rebuild() {
   local status project
+  case "$cbm_busy_wait" in '' | *[!0-9]* | 0*) cbm_error="STOCK_CBM_BUSY_WAIT 要是正整數（秒）：$cbm_busy_wait"; return 1 ;; esac
+  case "$cbm_busy_poll" in '' | *[!0-9]* | 0*) cbm_error="STOCK_CBM_BUSY_POLL 要是正整數（秒）：$cbm_busy_poll"; return 1 ;; esac
   cbm_root_check || return 1
   if [ "${1:-}" = force ]; then
     cbm_call delete_project "{\"project\":$(json_str "$cbm_project")}" || return 1
   fi
-  cbm_call index_repository "{\"repo_path\":$(json_str "$(native "$repo_root")"),\"name\":$(json_str "$cbm_project")}" \
-    || return 1
+  cbm_index "{\"repo_path\":$(json_str "$(native "$repo_root")"),\"name\":$(json_str "$cbm_project")}" || return 1
   status="$(printf '%s' "$cbm_out" | cj get status)"
   project="$(printf '%s' "$cbm_out" | cj get project)"
   [ "$status" = indexed ] && [ "$project" = "$cbm_project" ] \
@@ -466,7 +513,8 @@ cbm_only_mtime() {
 # cbm_ensure WHEN PATHS: WHEN is "rebuilt" (close_task.sh: rebuild first) or "check"
 # (dispatch.sh: verify, rebuild once when stale). After a rebuild that leaves only the mtime
 # rule stale, one forced rebuild (cbm_rebuild force) and a last verify. cbm_steps lists what
-# ran (index_rebuilt, index_forced, index_fresh:<n> paths); fails with cbm_error.
+# ran (index_waited:<seconds> from cbm_rebuild, index_rebuilt, index_forced, index_fresh:<n>
+# paths), also when it fails with cbm_error.
 cbm_ensure() {
   local when="$1" paths="$2" rc n
   cbm_steps=()

@@ -1,5 +1,8 @@
 import json
+import os
+import stat
 from datetime import date
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -841,6 +844,134 @@ def test_twse_mi_index_selects_price_table_not_return_table():
     assert rows[0].close == 47105.78
 
 
+# Issue #764: raw_payloads 28605 (2019-04-29) and 28609 (2019-04-30) of the
+# research volume, shortened to four price-index rows, two return-index rows
+# and two security rows.  2019-04-29 names the TAIEX row 加權股價指數.
+MI_INDEX_FIXTURES = Path(__file__).parent / "fixtures" / "market_summary"
+
+
+def mi_index_fixture(day: str) -> dict:
+    """A shortened MI_INDEX report of ``fixtures/market_summary`` (YYYYMMDD)."""
+
+    return json.loads(
+        (MI_INDEX_FIXTURES / f"twse_mi_index_{day}.json").read_text(encoding="utf-8")
+    )
+
+
+def _price_table(payload: dict) -> dict:
+    """The table the parsers read: the whole title once the ROC date is cut."""
+
+    (table,) = [
+        table
+        for table in payload["tables"]
+        if sources._ROC_TITLE_PREFIX.sub("", "".join(str(table.get("title")).split()))
+        == "價格指數(臺灣證券交易所)"
+    ]
+    return table
+
+
+@pytest.mark.parametrize(
+    ("day", "requested", "close"),
+    [
+        # raw 28605: the row reads 加權股價指數.
+        ("20190429", date(2019, 4, 29), 10939.06),
+        # raw 28609: the row reads 發行量加權股價指數.
+        ("20190430", date(2019, 4, 30), 10967.73),
+    ],
+)
+def test_twse_mi_index_taiex_accepts_both_official_names(day, requested, close):
+    rows = sources.parse_twse_taiex_from_all_daily_payload(
+        mi_index_fixture(day), requested_date=requested, payload_sha256="raw"
+    )
+
+    assert [(row.symbol, row.trading_date, row.close) for row in rows] == [
+        ("TAIEX", requested, close)
+    ]
+    assert rows[0].source == "twse_index"
+    assert rows[0].payload_sha256 == "raw"
+
+
+def test_twse_mi_index_taiex_names_are_exact():
+    assert sources.TWSE_INDEX_NAMES == (
+        "發行量加權股價指數",
+        "加權股價指數",
+    )
+    payload = mi_index_fixture("20190429")
+    price = _price_table(payload)
+    taiex = next(r for r in price["data"] if r[0] in sources.TWSE_INDEX_NAMES)
+    # The return-index row 加權股價報酬指數 of the same report is not TAIEX:
+    # moved into the price table it must not be read in place of the row.
+    return_row = next(
+        r
+        for table in payload["tables"]
+        if table.get("title") == "報酬指數(臺灣證券交易所)"
+        for r in table["data"]
+        if r[0] == "加權股價報酬指數"
+    )
+    price["data"] = [r for r in price["data"] if r is not taiex] + [return_row]
+    assert (
+        sources.parse_twse_taiex_from_all_daily_payload(
+            payload, requested_date=date(2019, 4, 29)
+        )
+        == []
+    )
+
+    # Only the return table carries the name: still no TAIEX.
+    payload = mi_index_fixture("20190429")
+    price = _price_table(payload)
+    price["data"] = [r for r in price["data"] if r[0] not in sources.TWSE_INDEX_NAMES]
+    assert (
+        sources.parse_twse_taiex_from_all_daily_payload(
+            payload, requested_date=date(2019, 4, 29)
+        )
+        == []
+    )
+
+    # A row that only contains the name, with padding or a suffix, is not one.
+    for label in ("加權股價指數(日)", "臺灣加權股價指數"):
+        payload = mi_index_fixture("20190429")
+        price = _price_table(payload)
+        for r in price["data"]:
+            if r[0] in sources.TWSE_INDEX_NAMES:
+                r[0] = label
+        assert (
+            sources.parse_twse_taiex_from_all_daily_payload(
+                payload, requested_date=date(2019, 4, 29)
+            )
+            == []
+        )
+
+
+def test_twse_mi_index_taiex_rejects_both_names_in_one_table():
+    payload = mi_index_fixture("20190429")
+    price = _price_table(payload)
+    old = next(r for r in price["data"] if r[0] == sources.TWSE_INDEX_NAMES[1])
+    new = list(old)
+    new[0] = sources.TWSE_INDEX_NAMES[0]
+    price["data"].append(new)
+
+    assert (
+        sources.parse_twse_taiex_from_all_daily_payload(
+            payload, requested_date=date(2019, 4, 29)
+        )
+        == []
+    )
+
+
+def test_twse_mi_index_taiex_old_name_still_needs_a_positive_close():
+    for close in ("0.00", "-1", "--", "nan"):
+        payload = mi_index_fixture("20190429")
+        for r in _price_table(payload)["data"]:
+            if r[0] == sources.TWSE_INDEX_NAMES[1]:
+                r[1] = close
+        assert (
+            sources.parse_twse_taiex_from_all_daily_payload(
+                payload, requested_date=date(2019, 4, 29)
+            )
+            == []
+        ), close
+
+
 def test_twse_openapi_adjacent_dates_select_exact_price_row():
     price_label = "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578"
     return_label = "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u5831\u916c\u6307\u6578"
@@ -1406,3 +1537,183 @@ def test_a_capture_without_a_time_is_stamped_with_the_clock(frozen_utcnow):
     )
     assert captured.collected_at == frozen_utcnow.at
     assert captured.payload_path.parent == day_dir
+
+
+# Raw files survive a power loss (#772): written through a synced temporary file, an
+# empty or damaged file is rewritten with the same content, a whole one is kept.
+
+_RAW_PAYLOAD = {"date": "2026-11-13", "rows": [[1, "台積電"]]}
+
+
+def _raw_target() -> tuple[Path, bytes]:
+    encoded = sources._encode_payload(_RAW_PAYLOAD)
+    digest = sources.hashlib.sha256(encoded).hexdigest()
+    return sources.RAW_DIR / "twse" / "2026" / "11" / "13" / f"{digest}.json", encoded
+
+
+def _persist_raw():
+    return sources.persist_raw_payload(
+        "twse",
+        "https://example.test/raw",
+        _RAW_PAYLOAD,
+        "2026-11-13",
+        collected_at=sources.datetime(2026, 11, 13, 9, 30),
+    )
+
+
+def test_raw_files_are_synced_before_they_are_renamed_into_place(monkeypatch):
+    events: list[tuple[str, str]] = []
+    real_fsync, real_replace = sources.os.fsync, sources.os.replace
+
+    def fsync(descriptor):
+        is_dir = stat.S_ISDIR(sources.os.fstat(descriptor).st_mode)
+        events.append(("fsync", "dir" if is_dir else "file"))
+        return real_fsync(descriptor)
+
+    def replace(source, target):
+        events.append(("replace", Path(target).name))
+        assert Path(source).parent == Path(target).parent
+        assert Path(source).name.startswith(f".{Path(target).name}.tmp-")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(sources.os, "fsync", fsync)
+    monkeypatch.setattr(sources.os, "replace", replace)
+    stored = _persist_raw()
+    target, encoded = _raw_target()
+    assert stored == target
+    assert target.read_bytes() == encoded
+    meta = target.with_suffix(".meta.json")
+    assert json.loads(meta.read_text(encoding="utf-8"))["sha256"] == target.stem
+    assert events == [
+        ("fsync", "file"),
+        ("replace", target.name),
+        ("fsync", "dir"),
+        ("fsync", "file"),
+        ("replace", meta.name),
+        ("fsync", "dir"),
+    ]
+    assert sorted(path.name for path in target.parent.iterdir()) == sorted(
+        [target.name, meta.name]
+    )
+
+
+@pytest.mark.parametrize("damage", ["empty", "same_size_other_bytes", "missing_meta"])
+def test_a_damaged_raw_file_is_rewritten_with_the_same_content(damage, capsys):
+    target, encoded = _raw_target()
+    meta = target.with_suffix(".meta.json")
+    _persist_raw()
+    if damage == "empty":
+        target.write_bytes(b"")
+        meta.write_bytes(b"")
+    elif damage == "same_size_other_bytes":
+        target.write_bytes(b"x" * len(encoded))
+    else:
+        meta.unlink()
+    capsys.readouterr()
+    assert _persist_raw() == target
+    assert target.read_bytes() == encoded
+    assert json.loads(meta.read_text(encoding="utf-8"))["sha256"] == target.stem
+    warned = capsys.readouterr()
+    assert warned.out == ""
+    damaged = {"empty": 2, "same_size_other_bytes": 1, "missing_meta": 0}[damage]
+    assert warned.err.count("warning:") == damaged
+
+
+def test_a_whole_raw_file_is_not_rewritten(monkeypatch):
+    target, _encoded = _raw_target()
+    _persist_raw()
+    meta = target.with_suffix(".meta.json")
+    before = (target.stat().st_mtime_ns, meta.stat().st_mtime_ns)
+
+    def no_write(*_args, **_kwargs):
+        raise AssertionError("a whole raw file must not be written again")
+
+    monkeypatch.setattr(sources.os, "replace", no_write)
+    monkeypatch.setattr(sources.tempfile, "mkstemp", no_write)
+    assert _persist_raw() == target
+    assert (target.stat().st_mtime_ns, meta.stat().st_mtime_ns) == before
+
+
+def test_content_whose_sha_is_not_the_file_name_is_not_written():
+    target, encoded = _raw_target()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"")
+    with pytest.raises(sources.OfficialDataError, match="does not match"):
+        sources.write_raw_file(target, encoded + b" ")
+    assert target.read_bytes() == b""
+    assert [path.name for path in target.parent.iterdir()] == [target.name]
+
+
+def _zip_target(data: bytes, suffix: str = ".zip") -> Path:
+    digest = sources.hashlib.sha256(data).hexdigest()
+    return sources.RAW_DIR / "mops_tifrs" / "2026" / "11" / "16" / f"{digest}{suffix}"
+
+
+ZIP_BYTES = b"PK\x03\x04 an archive's bytes (#781)"
+
+
+def test_a_zip_named_by_its_sha_is_written():
+    target = _zip_target(ZIP_BYTES)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    sources.write_raw_file(target, ZIP_BYTES)
+    assert target.read_bytes() == ZIP_BYTES
+
+
+@pytest.mark.parametrize("suffix", [".bin", ".zip.json", "", ".ZIP"])
+def test_a_raw_file_with_another_suffix_is_refused(suffix):
+    target = _zip_target(ZIP_BYTES, suffix)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(sources.OfficialDataError, match="does not match"):
+        sources.write_raw_file(target, ZIP_BYTES)
+    assert not target.exists()
+
+
+def test_a_zip_whose_sha_is_not_the_file_name_is_refused():
+    target = _zip_target(ZIP_BYTES)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(sources.OfficialDataError, match="does not match"):
+        sources.write_raw_file(target, ZIP_BYTES + b" ")
+    assert not target.exists()
+
+
+def test_ensure_raw_file_keeps_a_whole_zip_and_writes_its_metadata(monkeypatch):
+    target = _zip_target(ZIP_BYTES)
+    digest = target.stem
+    metadata = {"source": "mops_tifrs", "sha256": digest}
+    assert sources.ensure_raw_file(target, ZIP_BYTES, metadata) == sources.RAW_MISSING
+    meta = target.with_name(f"{digest}.meta.json")
+    assert json.loads(meta.read_text("utf-8")) == metadata
+
+    writes: list[Path] = []
+    real = sources._write_durably
+    monkeypatch.setattr(
+        sources,
+        "_write_durably",
+        lambda path, data: (writes.append(path), real(path, data)),
+    )
+    assert sources.ensure_raw_file(target, ZIP_BYTES, metadata) is None
+    assert writes == []
+    assert target.read_bytes() == ZIP_BYTES
+
+
+def test_a_failed_raw_write_raises_and_leaves_no_file(monkeypatch):
+    def fsync(_descriptor):
+        raise OSError(5, "fixture I/O error")
+
+    monkeypatch.setattr(sources.os, "fsync", fsync)
+    target, _encoded = _raw_target()
+    with pytest.raises(OSError, match="fixture I/O error"):
+        _persist_raw()
+    assert not target.parent.exists() or list(target.parent.iterdir()) == []
+
+
+def test_raw_files_keep_the_umask_mode_not_mkstemps_0600():
+    # #772 review 6893593170: mkstemp creates 0600 and os.replace keeps it; the files
+    # are written as write_bytes did, 0666 less the umask (0644 in the image).
+    current = os.umask(0o022)
+    os.umask(current)
+    expected = 0o666 & ~current
+    target, _encoded = _raw_target()
+    _persist_raw()
+    for path in (target, target.with_suffix(".meta.json")):
+        assert stat.S_IMODE(path.stat().st_mode) == expected

@@ -33,7 +33,10 @@ from app.models import (
     ScheduleRun,
     TradingCalendarDay,
 )
+from app.preopen_news import check_rows, replace_check
 from test_candidates import T, signal, stock
+from test_preopen import CHECKED, _news, _recomputed, _taipei
+from test_preopen import _list as _preopen_list
 from worker import job, notify, notify_card, pipeline
 from worker.candidates import compute_daily_candidates
 
@@ -76,10 +79,14 @@ def _pullback(low, high, stop, target):
     }
 
 
+# The list was checked before the open (#759): the rows without overnight news show no
+# mark and the card no 「尚未完成」 line.
+CHECK = {"status": "checked"}
 BREAKOUT = _breakout(61.1, 58.5, 65.27)
 PULLBACK = _pullback(110.99, 115.21, 110.29, 121.24)
 LISTING = {
     "status": "success",
+    "preopen_check": CHECK,
     "candidate_count": 2,
     "items": [_item(1, "2453", "凌群", BREAKOUT), _item(2, "2882", "國泰金", PULLBACK)],
 }
@@ -154,7 +161,12 @@ CARD_US = [
 
 
 def test_the_card_has_the_sections_the_levels_line_and_the_marked_us_indexes():
-    listing = {"status": "success", "candidate_count": 23, "items": CARD_ITEMS}
+    listing = {
+        "status": "success",
+        "preopen_check": CHECK,
+        "candidate_count": 23,
+        "items": CARD_ITEMS,
+    }
     text = notify.compose(MONDAY, T, listing, CARD_US)
     generic = [
         line
@@ -252,6 +264,7 @@ def test_a_missing_list_says_no_data_and_still_sends_the_us_indexes(status, head
 def test_an_empty_list_gives_its_reason():
     listing = {
         "status": "success",
+        "preopen_check": CHECK,
         "candidate_count": 0,
         "zero_reason_text": "當日沒有成立（條件成立）的策略訊號",
         "items": [],
@@ -270,6 +283,7 @@ def test_the_data_texts_are_escaped():
 
     listing = {
         "status": "success",
+        "preopen_check": CHECK,
         "candidate_count": 1,
         "items": [_item(1, "1234", "A&B<C>", BREAKOUT)],
     }
@@ -278,6 +292,7 @@ def test_the_data_texts_are_escaped():
     _well_formed(text)
     empty = {
         "status": "success",
+        "preopen_check": CHECK,
         "candidate_count": 0,
         "zero_reason_text": "<沒有> & 訊號",
         "items": [],
@@ -333,7 +348,12 @@ def test_rows_past_the_twenty_shown_are_counted_in_the_last_line():
     """Review 6882303076 item 7: N is the list's count less the rows shown."""
 
     items = [_item(rank, f"{rank:04d}", "名", BREAKOUT) for rank in range(1, 22)]
-    listing = {"status": "success", "candidate_count": 25, "items": items}
+    listing = {
+        "status": "success",
+        "preopen_check": CHECK,
+        "candidate_count": 25,
+        "items": items,
+    }
     lines = notify.compose(MONDAY, T, listing, US).splitlines()
     assert lines[1] == "09/04（五）收盤後產生・25 檔"
     assert lines[3] == "🚀 <b>突破（20 檔）</b>"
@@ -350,7 +370,12 @@ def test_a_long_list_is_cut_to_telegrams_limit_with_its_tags():
         _item(rank, f"{rank:04d}", "&" * 150, BREAKOUT if rank % 2 else PULLBACK)
         for rank in range(1, 21)
     ]
-    listing = {"status": "success", "candidate_count": 20, "items": items}
+    listing = {
+        "status": "success",
+        "preopen_check": CHECK,
+        "candidate_count": 20,
+        "items": items,
+    }
     text = notify.compose(MONDAY, T, listing, US)
     assert notify.length(text) <= notify.MAX_CHARS
     _well_formed(text)
@@ -443,8 +468,10 @@ def _list_of_t(db):
 def test_the_message_reads_the_list_of_the_session_before_and_todays_us_indexes(db):
     _list_of_t(db)
     lines = notify.message(db, MONDAY).splitlines()
-    assert lines[1:6] == [
+    assert lines[1:7] == [
         "09/04（五）收盤後產生・1 檔",
+        # No pre-open check of the list was stored (#759).
+        "開盤前檢查：尚未完成",
         "",
         "🚀 <b>突破（1 檔）</b>",
         "<b>1101 名1101</b>",
@@ -473,6 +500,80 @@ def test_the_session_before_skips_the_closed_days(db):
     assert notify.is_trading_day(db, date(2026, 9, 5)) is False  # Saturday
     assert notify.previous_session(db, date(2026, 9, 8)) == T
     assert "09/04（五）收盤後產生・1 檔" in notify.message(db, date(2026, 9, 8))
+
+
+# AC-1 (#759): the pre-open check of the list, as /api/candidates judges it.
+PENDING_HTML = '<div class="preopen-pending line">開盤前檢查：尚未完成</div>'
+
+
+def _preopen_case(db, case):
+    """The list of T (1101, 2330) and its pre-open check of CASE."""
+
+    run, _ = _preopen_list(db)
+    late = _taipei(2026, 9, 4, 23, 0)
+    if case == "news":
+        _news(db, ["1101"], published=late, collected=late)  # 可能負向
+        _news(db, ["1101"], published=late, direction="positive", collected=late)
+        _news(db, ["2330"], published=late, direction=None, collected=late)
+        db.commit()
+    if case in ("news", "no_news", "other_run"):
+        replace_check(db, run, check_rows(db, run, CHECKED))
+        db.commit()
+    if case == "other_run":
+        # The list recomputed after the check: the check is the older run's.
+        _recomputed(db, run, CHECKED + timedelta(minutes=1), move=True)
+    return notify.read(db, MONDAY)
+
+
+def _rows_html(card):
+    return [notify_card._row_html(row) for row in card.rows]
+
+
+def test_rows_with_overnight_news_are_marked_as_the_today_page_marks_them(db):
+    card = _preopen_case(db, "news")
+    lines = notify.text(card).splitlines()
+    assert "<b>1101 名1101</b>　隔夜新聞 2（可能負向 1）" in lines
+    # No 可能負向 one: no brackets (the not judged yet item counts as news).
+    assert "<b>2330 名2330</b>　隔夜新聞 1" in lines
+    assert notify.PREOPEN_PENDING not in lines
+    html = notify_card.card_html(card)
+    assert PENDING_HTML not in html
+    marks = {
+        row.name: notify_card._row_html(row).split('<span class="preopen', 1)[1]
+        for row in card.rows
+    }
+    assert marks == {
+        "1101 名1101": ' muted line">隔夜新聞 2（<span class="down">可能負向 1</span>）'
+        "</span></div>",
+        "2330 名2330": ' muted line">隔夜新聞 1</span></div>',
+    }
+    assert all('class="row grid marked"' in row for row in _rows_html(card))
+
+
+def test_a_checked_list_without_overnight_news_marks_nothing(db):
+    card = _preopen_case(db, "no_news")
+    text = notify.text(card)
+    assert "隔夜新聞" not in text and notify.PREOPEN_PENDING not in text
+    assert "<b>1101 名1101</b>" in text.splitlines()
+    html = notify_card.card_html(card)
+    assert PENDING_HTML not in html and "隔夜新聞" not in html
+    assert all('class="row grid"' in row for row in _rows_html(card))
+
+
+@pytest.mark.parametrize("case", ["none", "other_run"])
+def test_a_list_without_its_own_check_says_not_done_yet(db, case):
+    """No check stored, or the check of an older run of the date (the list recomputed
+    after it): one 「尚未完成」 line, no older result."""
+
+    card = _preopen_case(db, case)
+    lines = notify.text(card).splitlines()
+    assert lines[1].startswith("09/04（五）收盤後產生・")
+    assert lines[2] == "開盤前檢查：尚未完成"
+    assert "<b>1101 名1101</b>" in lines and "<b>2330 名2330</b>" in lines
+    assert "隔夜新聞" not in "".join(lines)
+    html = notify_card.card_html(card)
+    assert html.count(PENDING_HTML) == 1 and "隔夜新聞" not in html
+    assert html.index(PENDING_HTML) < html.index("</header>")
 
 
 # --- the runs --------------------------------------------------------------------------

@@ -5,7 +5,10 @@ import html
 import inspect
 import json
 import math
+import os
 import re
+import sys
+import tempfile
 import time
 from calendar import monthrange
 from collections import defaultdict
@@ -250,6 +253,11 @@ class TradingHaltRecord:
     ``resume_date``.  TWSE names the last trading day (``halt_start`` is the
     calendar day after it); TPEx names the first stopped day and no last
     trading day.  ``details`` is the official row as published.
+
+    ``infer_last_trade`` marks a TWSE row whose 詳細資料 date is not before
+    the resumption (2011～2015-04, #776): it names no last trading day, so
+    ``halt_start`` is the resumption (an empty stop) and ``last_trade_date``
+    None until ``trading_halts`` infers them from the stored bars.
     """
 
     symbol: str
@@ -263,6 +271,7 @@ class TradingHaltRecord:
     reason: str = "capital_reduction"
     details: dict[str, Any] = field(default_factory=dict)
     payload_sha256: str | None = None
+    infer_last_trade: bool = False
 
 
 @dataclass(frozen=True)
@@ -281,6 +290,9 @@ class TradingHaltWindow:
     end: date
     payload_sha256: str | None
     rejected: tuple[str, ...] = ()
+    # (code, resumption) the answer lists with rows that disagree (#774): the
+    # stored stop is kept, as the rows cannot say which one is right.
+    clashing: tuple[tuple[str, date], ...] = ()
 
 
 @dataclass
@@ -541,6 +553,10 @@ TWSE_INSTITUTIONAL_FIRST_DATE = date(2012, 5, 2)  # T86
 # 2008-12-31 and earlier have only 大盤統計資訊 and 每日收盤行情 (#692 probes),
 # so those sessions take the close from MI_5MINS_HIST.
 TWSE_MI_INDEX_TAIEX_FIRST_DATE = date(2009, 1, 5)
+# The TAIEX row of that table, by its label compared whole (also the stored
+# market summary name).  2019-04-29 reads 加權股價指數 (Issue #764).
+TWSE_INDEX_NAME = "發行量加權股價指數"
+TWSE_INDEX_NAMES = (TWSE_INDEX_NAME, "加權股價指數")
 TPEX_QUOTES_FIRST_DATE = date(2007, 4, 23)  # dailyQuotes
 TPEX_INSTITUTIONAL_FIRST_DATE = date(2014, 12, 1)  # insti/dailyTrade
 TWSE_ACTION_HISTORY_FIRST_DATE = date(2003, 5, 5)  # TWT49U: 查詢開始日期小於92年5月5日
@@ -810,31 +826,157 @@ def persist_raw_payload(
     *,
     collected_at: datetime | None = None,
 ) -> Path:
+    """Store PAYLOAD as ``<RAW_DIR>/<source>/<Y/m/d>/<sha256>.json`` and its ``.meta.json``.
+
+    Both files are on disk before this returns (Issue #772): the caller records the
+    path in ``raw_payloads`` right after, so a capture the database cites must not be
+    lost when the host stops.  A file already there is kept when it is whole (the
+    payload: same size and sha256; the metadata: JSON naming the same sha256) and
+    rewritten otherwise, which is how an empty file left by a power loss comes back
+    the next time the same content is fetched.  A write that fails raises.
+    """
+
     collected = collected_at or utcnow()
     encoded = _encode_payload(payload)
     digest = hashlib.sha256(encoded).hexdigest()
     target_dir = RAW_DIR / source / collected.strftime("%Y/%m/%d")
-    target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{digest}.json"
-    if not target.exists():
-        target.write_bytes(encoded)
-    metadata = target.with_suffix(".meta.json")
-    if not metadata.exists():
-        metadata.write_text(
-            json.dumps(
-                {
-                    "source": source,
-                    "endpoint": endpoint,
-                    "sha256": digest,
-                    "data_as_of": data_as_of,
-                    "collected_at": collected.isoformat(),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    state = ensure_raw_file(
+        target,
+        encoded,
+        {
+            "source": source,
+            "endpoint": endpoint,
+            "sha256": digest,
+            "data_as_of": data_as_of,
+            "collected_at": collected.isoformat(),
+        },
+    )
+    if state not in (None, RAW_MISSING):
+        warn_raw(f"raw payload {target} was {state}; rewrote it")
     return target
+
+
+RAW_MISSING, RAW_EMPTY, RAW_DAMAGED = "missing", "empty", "damaged"
+
+
+def _umask() -> int:
+    # os.umask can only be read by setting it; done once, at import.
+    current = os.umask(0o022)
+    os.umask(current)
+    return current
+
+
+RAW_FILE_MODE = 0o666 & ~_umask()
+
+
+def ensure_raw_file(target: Path, data: bytes, metadata: dict[str, Any]) -> str | None:
+    """Make TARGET hold DATA and its ``.meta.json`` hold METADATA, durably.
+
+    A whole file (same size and sha256; metadata naming the same sha256) is left as
+    it is.  Returns the payload file's state before: None when it was whole, else
+    ``RAW_MISSING``, ``RAW_EMPTY`` or ``RAW_DAMAGED``.  Raises when DATA's sha256 is
+    not TARGET's name or a write fails.  ``pipeline._upsert_raw_payload`` also calls
+    it for the file an existing ``raw_payloads`` row cites (Issue #772 decision A).
+    """
+
+    digest = hashlib.sha256(data).hexdigest()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    state = raw_file_state(target, digest, len(data))
+    if state is not None:
+        write_raw_file(target, data)
+    meta = target.with_suffix(".meta.json")
+    if not _raw_metadata_is_whole(meta, digest):
+        _write_durably(
+            meta,
+            json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8"),
+        )
+    return state
+
+
+def _fsync_directory(directory: Path) -> None:
+    # A rename is durable once its directory is synced (POSIX; the collectors
+    # run in the Linux containers, #331, #772).
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _write_durably(target: Path, data: bytes) -> None:
+    """Write DATA to TARGET through a synced temporary file in the same directory."""
+
+    descriptor, temporary = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}.tmp-{os.getpid()}-"
+    )
+    try:
+        # mkstemp creates 0600 and os.replace keeps it; a raw file gets the mode
+        # write_bytes gave it before #772 (0666 less the umask, 0644 in the image).
+        os.fchmod(descriptor, RAW_FILE_MODE)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    _fsync_directory(target.parent)
+
+
+# A raw file is ``<sha256><suffix>``: JSON captures, and the MOPS XBRL archives kept as
+# the zip itself (worker.quarterly_xbrl, #781 decision 6894583382).
+RAW_FILE_SUFFIXES = (".json", ".zip")
+
+
+def write_raw_file(target: Path, data: bytes) -> None:
+    """Write a raw capture whose file name is its sha256; refuse any other content."""
+
+    digest = hashlib.sha256(data).hexdigest()
+    if target.name not in {f"{digest}{suffix}" for suffix in RAW_FILE_SUFFIXES}:
+        raise OfficialDataError(
+            f"raw payload sha256 {digest} does not match its file name: {target}"
+        )
+    _write_durably(target, data)
+
+
+def raw_file_state(target: Path, digest: str, size: int | None = None) -> str | None:
+    """None when TARGET is whole (SIZE bytes when given, sha256 DIGEST), else why not."""
+
+    try:
+        stored_size = target.stat().st_size
+    except FileNotFoundError:
+        return RAW_MISSING
+    if stored_size == 0:
+        return RAW_EMPTY
+    if (
+        size in (None, stored_size)
+        and hashlib.sha256(target.read_bytes()).hexdigest() == digest
+    ):
+        return None
+    return RAW_DAMAGED
+
+
+def _raw_metadata_is_whole(metadata: Path, digest: str) -> bool:
+    try:
+        stored = json.loads(metadata.read_bytes().decode("utf-8"))
+    except FileNotFoundError:
+        return False
+    except (OSError, ValueError):
+        stored = None
+    if isinstance(stored, dict) and stored.get("sha256") == digest:
+        return True
+    warn_raw(f"raw metadata {metadata} is damaged; rewriting it")
+    return False
+
+
+def warn_raw(message: str) -> None:
+    """One warning line about a raw file (also pipeline._restore_cited_raw_file)."""
+
+    # stderr, not logging: backend/alembic/env.py's fileConfig disables the loggers
+    # that exist when a command migrates, and stdout is the command's JSON result.
+    print(f"warning: {message}", file=sys.stderr, flush=True)
 
 
 def capture_payload(
@@ -2247,6 +2389,11 @@ _TWSE_REDUCTION_DETAIL = re.compile(r"\s*([0-9A-Z]+)\s*,\s*(\d{8})\s*")
 _TPEX_DETAIL_DATE = r"\s*:?\s*(\d{2,3}/\d{1,2}/\d{1,2})"
 
 
+# A reduction table's stops, the rows left out (as text) and the (code,
+# resumption) left out because its rows disagree with each other (#774).
+ReductionAnswer = tuple[list[TradingHaltRecord], list[str], list[tuple[str, date]]]
+
+
 def trading_halt_warning(exchange: str, exc: Exception) -> str:
     """The non-core warning for a table that could not be fetched, read or stored."""
 
@@ -2302,15 +2449,29 @@ def parse_twse_reduction_payload(
     end: date,
     endpoint: str = TWSE_REDUCTION_ENDPOINT,
     payload_sha256: str | None = None,
-) -> tuple[list[TradingHaltRecord], list[str]]:
+) -> ReductionAnswer:
     """Read TWSE ``TWTAUU`` (股票減資恢復買賣參考價格) for ``start``..``end``.
 
     ``stat`` 很抱歉，沒有符合條件的資料 is an empty range.  Each row's 詳細資料
-    is ``<code>  ,<YYYYMMDD>``, the last trading day of the old shares; the
-    stop begins the calendar day after it.  A row whose 詳細資料 names another
-    code or no date, or whose last trading day is not before the resumption,
-    is left out and named in the second list.  A table with other columns,
-    another range or a resumption outside the range is rejected whole.
+    is ``<code>  ,<YYYYMMDD>``: the date of the announcement the row is, from
+    2015 on mostly the last trading day of the old shares (#774 AC-1), so it
+    is taken as that and the stop begins the calendar day after it.  A date
+    not before the resumption (89 rows resuming 2011-01～2015-04, none since)
+    is not a trading day of the stop: the row is returned with
+    ``infer_last_trade`` for the stored bars to give its stop
+    (``trading_halts``, #776).  A row whose 詳細資料 names another code or no
+    date is left out and named in the second list.  A table with
+    other columns, another range or a resumption outside the range is
+    rejected whole.
+
+    One stop can be listed more than once, one row per announcement (3536
+    resuming 2015-03-20 three times, #774).  Rows of one code and resumption
+    that give two values for a column other than 名稱 and 詳細資料 (``-``／``--``
+    agree with any value) leave that code out, named in the second list and, as (code,
+    resumption), in the third.
+    Rows that agree are all returned, each with ``same_resumption_rows`` (the
+    group's 詳細資料) in ``details``: the stored bars decide which stop is
+    right (``trading_halts``).
     """
 
     if not isinstance(payload, dict):
@@ -2318,7 +2479,7 @@ def parse_twse_reduction_payload(
     stat = str(payload.get("stat") or "").strip()
     if stat != "OK":
         if "沒有符合條件" in stat:
-            return [], []
+            return [], [], []
         raise OfficialDataError(f"TWSE capital reduction stat {stat!r}")
     reported = (str(payload.get("strDate") or ""), str(payload.get("endDate") or ""))
     if reported != (start.strftime("%Y%m%d"), end.strftime("%Y%m%d")):
@@ -2330,7 +2491,7 @@ def parse_twse_reduction_payload(
     rows = payload.get("data")
     if not isinstance(rows, list):
         raise OfficialDataError("TWSE capital reduction table has no data list")
-    records: dict[tuple[str, date], TradingHaltRecord] = {}
+    groups: dict[tuple[str, date], list[TradingHaltRecord]] = {}
     rejected: list[str] = []
     for raw in rows:
         row = _reduction_row(raw, columns, "TWSE")
@@ -2342,37 +2503,76 @@ def parse_twse_reduction_payload(
                 f"{row[columns['恢復買賣日期']]!r}, outside {start}..{end}"
             )
         detail = _TWSE_REDUCTION_DETAIL.fullmatch(str(row[columns["詳細資料"]] or ""))
-        last_trade = parse_roc_date(detail.group(2)) if detail else None
-        if (
-            detail is None
-            or detail.group(1) != symbol
-            or last_trade is None
-            or last_trade >= resume
-        ):
+        stated = parse_roc_date(detail.group(2)) if detail else None
+        if detail is None or detail.group(1) != symbol or stated is None:
             rejected.append(
                 f"{symbol} resuming {resume}: 詳細資料 "
-                f"{row[columns['詳細資料']]!r} names no earlier last trading day"
+                f"{row[columns['詳細資料']]!r} names another code or no date"
             )
             continue
+        # A date not before the resumption is when the row was announced or
+        # updated (2412 resuming 2011-01-25 says 20110128): the stored bars
+        # give the last trading day instead (#776).
+        infer = stated >= resume
         record = TradingHaltRecord(
             symbol=symbol,
             exchange="TWSE",
-            halt_start=last_trade + timedelta(days=1),
+            halt_start=resume if infer else stated + timedelta(days=1),
             resume_date=resume,
-            last_trade_date=last_trade,
+            last_trade_date=None if infer else stated,
             reason_detail=str(row[columns["減資原因"]] or "").strip() or None,
             endpoint=endpoint,
             source=TRADING_HALT_SOURCES["TWSE"],
             details=dict(zip(fields, row)),
             payload_sha256=payload_sha256,
+            infer_last_trade=infer,
         )
-        previous = records.get((symbol, resume))
-        if previous is not None and previous.halt_start != record.halt_start:
-            raise OfficialDataError(
-                f"TWSE capital reduction lists {symbol} resuming {resume} twice"
+        groups.setdefault((symbol, resume), []).append(record)
+    records: list[TradingHaltRecord] = []
+    clashing: list[tuple[str, date]] = []
+    for (symbol, resume), group in groups.items():
+        if len(group) == 1:
+            records.extend(group)
+            continue
+        disagreement = _reduction_disagreement(group)
+        if disagreement:
+            rejected.append(
+                f"{symbol} resuming {resume}: {len(group)} rows disagree on "
+                f"{disagreement}"
             )
-        records[(symbol, resume)] = record
-    return list(records.values()), rejected
+            clashing.append((symbol, resume))
+            continue
+        listed = [str(item.details.get("詳細資料") or "").strip() for item in group]
+        records.extend(
+            replace(item, details={**item.details, "same_resumption_rows": listed})
+            for item in group
+        )
+    return records, rejected, clashing
+
+
+# Values of a TWTAUU price column not yet given (1808 潤隆's ``-``, 3536's
+# ``--`` before its 除權參考價 was published, #774).
+_REDUCTION_NO_VALUE = ("", "-", "--")
+# Columns two rows of one stop may differ in: a rename (2408 南亞科／南科) and
+# the announcement each row is (#774).
+_REDUCTION_FREE_COLUMNS = ("名稱", "詳細資料")
+
+
+def _reduction_disagreement(group: list[TradingHaltRecord]) -> str | None:
+    """The first column the rows give two values for, as text; None if none.
+
+    A value not yet given (``_REDUCTION_NO_VALUE``) agrees with any value.
+    """
+
+    for name in group[0].details:
+        if name in _REDUCTION_FREE_COLUMNS:
+            continue
+        values = {str(item.details.get(name) or "").strip() for item in group} - set(
+            _REDUCTION_NO_VALUE
+        )
+        if len(values) > 1:
+            return f"{name} {sorted(values)!r}"
+    return None
 
 
 def parse_tpex_reduction_payload(
@@ -2382,15 +2582,16 @@ def parse_tpex_reduction_payload(
     end: date,
     endpoint: str = TPEX_REDUCTION_ENDPOINT,
     payload_sha256: str | None = None,
-) -> tuple[list[TradingHaltRecord], list[str]]:
+) -> ReductionAnswer:
     """Read TPEx ``revivt`` (減資恢復買賣) for ``start``..``end``.
 
     The 詳細資料 HTML names the code, 停止買賣日期 and 恢復買賣日期: the first
     and the resumption must be readable, the code and the resumption must
     match the row, and the stop must begin before the resumption, or the row
-    is left out and named in the second list.  ``totalCount`` above the rows
-    (a truncated answer), another range, other columns or a resumption
-    outside the range reject the table whole.
+    is left out and named in the second list, as is a code listed twice for
+    one resumption with two stops (#774), also in the third list.  ``totalCount``
+    above the rows (a truncated answer), another range, other columns or a
+    resumption outside the range reject the table whole.
     """
 
     if not isinstance(payload, dict) or not isinstance(payload.get("tables"), list):
@@ -2408,6 +2609,7 @@ def parse_tpex_reduction_payload(
     rows = table.get("data")
     if not isinstance(rows, list):
         raise OfficialDataError("TPEx capital reduction table has no data list")
+    clashing: dict[tuple[str, date], None] = {}
     total = table.get("totalCount")
     if total is not None and int(total) != len(rows):
         raise OfficialDataError(
@@ -2458,13 +2660,19 @@ def parse_tpex_reduction_payload(
             details=dict(zip(fields, row)),
             payload_sha256=payload_sha256,
         )
-        previous = records.get((symbol, resume))
-        if previous is not None and previous.halt_start != record.halt_start:
-            raise OfficialDataError(
-                f"TPEx capital reduction lists {symbol} resuming {resume} twice"
-            )
-        records[(symbol, resume)] = record
-    return list(records.values()), rejected
+        key = (symbol, resume)
+        previous = records.get(key)
+        if key in clashing or (
+            previous is not None and previous.halt_start != record.halt_start
+        ):
+            # Only this code is left out, not the table (#774).
+            records.pop(key, None)
+            clashing[key] = None
+            continue
+        records[key] = record
+    for symbol, resume in clashing:
+        rejected.append(f"{symbol} resuming {resume}: listed twice with other stops")
+    return list(records.values()), rejected, list(clashing)
 
 
 def parse_reduction_payload(
@@ -2475,7 +2683,7 @@ def parse_reduction_payload(
     end: date,
     endpoint: str,
     payload_sha256: str | None = None,
-) -> tuple[list[TradingHaltRecord], list[str]]:
+) -> ReductionAnswer:
     parse = (
         parse_twse_reduction_payload
         if exchange == "TWSE"
@@ -2502,7 +2710,7 @@ def fetch_reduction_window(
 
     endpoint = reduction_query(exchange, start, end)
     captured = fetch(endpoint, data_as_of)
-    records, rejected = parse_reduction_payload(
+    records, rejected, clashing = parse_reduction_payload(
         exchange,
         captured.payload,
         start=start,
@@ -2518,6 +2726,7 @@ def fetch_reduction_window(
         end=end,
         payload_sha256=captured.sha256,
         rejected=tuple(rejected),
+        clashing=tuple(clashing),
     )
     return records, window, captured
 
@@ -2677,10 +2886,12 @@ def parse_twse_taiex_from_all_daily_payload(
     # official table and labels instead of relying on table order or a value
     # position.  Returning no row is deliberately fail-closed; callers treat
     # this as an unverified session and must not persist a guessed benchmark.
+    # The row label is one of the fixed ``TWSE_INDEX_NAMES``, compared whole:
+    # 2019-04-29 reads 加權股價指數 and the return table has 加權股價報酬指數.
+    # A table with both names is two rows, not a choice (Issue #764).
     price_table_title = (
         "\u50f9\u683c\u6307\u6578(\u81fa\u7063\u8b49\u5238\u4ea4\u6613\u6240)"
     )
-    index_label = "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578"
     close_label = "\u6536\u76e4\u6307\u6578"
     candidates: list[float] = []
     tables = payload.get("tables")
@@ -2708,7 +2919,7 @@ def parse_twse_taiex_from_all_daily_payload(
                 continue
             if max(name_index, close_index) >= len(values):
                 continue
-            if str(values[name_index]).strip() != index_label:
+            if str(values[name_index]).strip() not in TWSE_INDEX_NAMES:
                 continue
             close = parse_number(values[close_index])
             if close is None or not math.isfinite(close) or close <= 0:
@@ -2855,7 +3066,6 @@ def parse_twse_index_history_payload(
 
 TWSE_MARKET_SUMMARY_SOURCE = "twse_mi_index"
 TPEX_MARKET_SUMMARY_SOURCE = "tpex_mainborad_highlight"
-TWSE_INDEX_NAME = "發行量加權股價指數"
 TPEX_INDEX_NAME = "櫃買指數"
 _ROC_TITLE_PREFIX = re.compile(r"^\d{3,4}年\d{1,2}月\d{1,2}日")
 _HTML_TAG = re.compile(r"<[^>]*>")
@@ -2954,13 +3164,18 @@ def _report_table(
 
 
 def _report_row(
-    table: tuple[list[str], list[Any]] | None, key_field: str, key: str
+    table: tuple[list[str], list[Any]] | None,
+    key_field: str,
+    key: str | tuple[str, ...],
 ) -> dict[str, Any] | None:
     """The one row whose ``key_field`` is ``key``, by field name; None otherwise.
 
-    A field the table repeats is dropped, so it reads as missing.
+    A tuple ``key`` lists whole labels of one row: rows matching any of them
+    count together, so two of them in one table is ambiguous.  A field the
+    table repeats is dropped, so it reads as missing.
     """
 
+    keys = (key,) if isinstance(key, str) else key
     if table is None:
         return None
     fields, data = table
@@ -2972,7 +3187,7 @@ def _report_row(
         for values in data
         if isinstance(values, (list, tuple))
         and len(values) == len(fields)
-        and str(values[position]).strip() == key
+        and str(values[position]).strip() in keys
     ]
     if len(rows) != 1:
         return None
@@ -2990,8 +3205,9 @@ def parse_twse_market_summary(
 ) -> MarketSummaryRecord:
     """Read the TWSE market summary from the date-scoped MI_INDEX report.
 
-    - 價格指數(臺灣證券交易所), row 發行量加權股價指數: close, signed change
-      points and the official percentage.
+    - 價格指數(臺灣證券交易所), row 發行量加權股價指數 or 加權股價指數
+      (``TWSE_INDEX_NAMES``): close, signed change points and the official
+      percentage.
     - 大盤統計資訊, row 總計(1~15): turnover of all securities in yuan.
     - 漲跌證券數合計, column 股票: advancers/decliners with their limit counts
       (``247(3)``), unchanged, unmatched and 無比價.
@@ -3016,7 +3232,7 @@ def parse_twse_market_summary(
         else []
     )
     index_row = _report_row(
-        _report_table(tables, "價格指數(臺灣證券交易所)"), "指數", TWSE_INDEX_NAME
+        _report_table(tables, "價格指數(臺灣證券交易所)"), "指數", TWSE_INDEX_NAMES
     )
     total_row = _report_row(
         _report_table(tables, "大盤統計資訊"), "成交統計", "總計(1~15)"

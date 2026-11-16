@@ -56,9 +56,15 @@ case "$*" in
     [ -f "$d/fail_get" ] && exit 1
     cat "$d/issue1.json" ;;
   "api graphql "*)
+    # Page 1 is <fake>/closed.json, the page after cursor C <fake>/closed-C.json (#787);
+    # <fake>/fail_graphql fails every call, <fake>/fail_closed-C that page's.
+    page=closed all="$*"
+    case "$all" in *" -f after="*) page="closed-${all##* -f after=}" ;; esac
     [ -f "$d/fail_graphql" ] && exit 1
-    if [ -f "$d/closed.json" ]; then cat "$d/closed.json"
-    else echo '{"data":{"search":{"issueCount":0,"nodes":[]}}}'; fi ;;
+    [ -f "$d/fail_$page" ] && exit 1
+    if [ -f "$d/$page.json" ]; then cat "$d/$page.json"
+    elif [ "$page" = closed ]; then echo '{"data":{"search":{"issueCount":0,"nodes":[]}}}'
+    else echo "no page $page" >&2; exit 1; fi ;;
   *) echo "unexpected gh call: $*" >&2; exit 1 ;;
 esac
 """
@@ -183,7 +189,7 @@ def test_take_over_runs_every_step_in_order_and_reads_each_back(to: Harness) -> 
     )
     assert to.calls("gh")[-1].startswith(
         "api graphql -f q=repo:YiCheng0608/stock-lab is:closed "
-        "closed:>=2026-10-23T12:00:00Z -f query="
+        "closed:>=2026-10-23T12:00:00Z sort:created-asc -f query="
     )
     gets = to.calls("gh")[1:-1]
     assert len(gets) == 3
@@ -554,11 +560,19 @@ def _issue(number: int, *prs: dict, reason: str = "COMPLETED") -> dict:
     }
 
 
-def _closed(h: Harness, *nodes: dict, total: int | None = None) -> None:
+def _closed(
+    h: Harness,
+    *nodes: dict,
+    total: int | None = None,
+    page: str = "closed",
+    next_cursor: str | None = None,
+) -> None:
+    """The search page PAGE (closed for page 1, closed-<cursor> for the next ones, #787);
+    NEXT_CURSOR set says there is a page after it."""
     count = len(nodes) if total is None else total
-    h.answer(
-        "closed", {"data": {"search": {"issueCount": count, "nodes": list(nodes)}}}
-    )
+    info = {"hasNextPage": next_cursor is not None, "endCursor": next_cursor or "end"}
+    search = {"issueCount": count, "pageInfo": info, "nodes": list(nodes)}
+    h.answer(page, {"data": {"search": search}})
 
 
 def _all_fine() -> list[dict]:
@@ -588,7 +602,8 @@ def _report(result: subprocess.CompletedProcess) -> list[str]:
 
 
 def test_closed_step_all_fine_is_one_line(to: Harness) -> None:
-    """AC-1: nothing wrong prints the header and one line for the rest."""
+    """AC-1: nothing wrong prints the header and one line for the rest. One page (#787
+    AC-1): one gh call, the report as it was before paging."""
     _closed(to, *_all_fine())
     to.write("git_worktrees.txt", MASTER_WORKTREE)
     to.write("branches.txt", "master\ntask/7130-other\n")
@@ -831,6 +846,112 @@ def test_closed_step_says_what_it_could_not_read(to: Harness) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "closed" in _last(result)["done"]
     assert "關閉單核對：未查完（gh api graphql 失敗；gh 呼叫 1 次）" in result.stdout
+
+
+ALL_FINE_REPORT = [
+    "關閉單核對（2026-10-23T12:00:00Z 之後關閉的 Issue 5 張、PR 2 個）：異常或未查完 0 張",
+    "  其餘正常：Issue 5 張（連同它們的 PR）、沒有連到 Issue 的 PR 1 個；"
+    "沒有 PR 的 Issue：#899、#898；不做（PR 都沒合併）的 Issue：#893",
+]
+
+
+def _graphql_calls(h: Harness) -> list[str]:
+    return [c for c in h.calls("gh") if c.startswith("api graphql ")]
+
+
+# Every page asks the same search, sorted by creation time (PR #788 review): best match
+# leaves ties in any order from one call to the next.
+SORTED_SEARCH = (
+    "api graphql -f q=repo:YiCheng0608/stock-lab is:closed "
+    "closed:>=2026-10-23T12:00:00Z sort:created-asc -f query="
+)
+
+
+def _searches(calls: list[str]) -> list[str]:
+    return [c.split(" -f query=", 1)[0] + " -f query=" for c in calls]
+
+
+def test_closed_step_reads_the_next_page_by_its_cursor(to: Harness) -> None:
+    """#787 AC-1: two pages read are one report, counted over both; an Issue the second
+    page repeats (one closed in between moves the others along) is counted once. Red
+    before paging: only the first page was read, and its issueCount said 未查完."""
+    fine = _all_fine()
+    _closed(to, *fine[:4], total=len(fine), next_cursor="c2")
+    _closed(to, fine[3], *fine[4:], total=len(fine), page="closed-c2")
+    to.write("git_worktrees.txt", MASTER_WORKTREE)
+    to.write("branches.txt", "master\n")
+    result = _closed_only(to)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _report(result) == ALL_FINE_REPORT
+    calls = _graphql_calls(to)
+    assert len(calls) == 2
+    assert _searches(calls) == [SORTED_SEARCH] * 2
+    assert " -f after=" not in calls[0]
+    assert calls[1].endswith(" -f after=c2")
+    assert list(to.temp.iterdir()) == []
+
+
+def test_closed_step_stops_after_three_pages(to: Harness) -> None:
+    """#787 AC-1: a third page that has a next one is 未查完（超過 300 張）; no fourth
+    page is read."""
+    fine = _all_fine()
+    _closed(to, *fine[:2], total=350, next_cursor="c2")
+    _closed(to, *fine[2:4], total=350, page="closed-c2", next_cursor="c3")
+    _closed(to, *fine[4:], total=350, page="closed-c3", next_cursor="c4")
+    to.write("git_worktrees.txt", MASTER_WORKTREE)
+    to.write("branches.txt", "master\n")
+    result = _closed_only(to)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _report(result) == ALL_FINE_REPORT + [
+        "  未查完（超過 300 張）：關閉的 Issue／PR 共 350 張，只讀了 7 張"
+    ]
+    calls = _graphql_calls(to)
+    assert [c.rsplit(" -f after=", 1)[-1] for c in calls[1:]] == ["c2", "c3"]
+    assert _searches(calls) == [SORTED_SEARCH] * 3
+
+
+@pytest.mark.parametrize(
+    ("setup", "want"),
+    [
+        (
+            lambda h: h.write("fail_closed-c2", ""),
+            "關閉單核對：未查完（第 2 頁 gh api graphql 失敗；gh 呼叫 2 次）",
+        ),
+        (
+            lambda h: h.answer("closed-c2", {"errors": [{"message": "x"}]}),
+            "關閉單核對：未查完（第 2 頁 GraphQL 的回答沒有 data.search；gh 呼叫 2 次）",
+        ),
+        (
+            lambda h: h.answer(
+                "closed-c2",
+                {
+                    "data": {
+                        "search": {
+                            "issueCount": 7,
+                            "pageInfo": {"hasNextPage": True, "endCursor": None},
+                            "nodes": [],
+                        }
+                    }
+                },
+            ),
+            "關閉單核對：未查完（第 2 頁 說有下一頁卻沒有游標；gh 呼叫 2 次）",
+        ),
+    ],
+    ids=["gh-fails", "no-data", "no-cursor"],
+)
+def test_closed_step_a_page_it_cannot_read_leaves_all_unread(
+    to: Harness, setup, want: str
+) -> None:
+    """#787 AC-1: a later page that cannot be read is 未查完 with its page and the gh
+    calls made; the pages read before it are not reported as if complete."""
+    fine = _all_fine()
+    _closed(to, *fine[:4], total=len(fine), next_cursor="c2")
+    setup(to)
+    result = _closed_only(to)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _report(result) == [want]
+    assert len(_graphql_calls(to)) == 2
+    assert list(to.temp.iterdir()) == []
 
 
 def test_closed_check_without_git_listings_says_so() -> None:

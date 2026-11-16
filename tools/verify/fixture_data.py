@@ -1913,6 +1913,122 @@ def _monthly_revenue_rows() -> list[dict[str, Any]]:
     ]
 
 
+# ---- 主流族群前 20 (mainstream_v1, #768; the today page's second list, #769) ----
+# The fixture has SESSION_COUNT bars and groups of three, so worker.mainstream cannot compute a list
+# (it needs WINDOW + 1 bars and MIN_MEMBERS in the universe). This is a stored computed run written
+# the same way over what the fixture has: each stock's return from its first fixture close to T
+# (in place of the close WINDOW bars before), groups of at least MAINSTREAM_MIN_MEMBERS, and
+# app.mainstream's top third, overlap rule, G and list size. /api/mainstream reads the stored rows.
+MAINSTREAM_MIN_MEMBERS = 3
+
+
+def _fixture_return(symbol: str) -> float:
+    bars = SERIES[symbol]
+    return bars[-1]["close"] / bars[0]["close"] - 1.0
+
+
+def _mainstream_plan() -> tuple[
+    float, dict[int, float], list[tuple[str, float, int]], int
+]:
+    from app.mainstream import DEDUP_OVERLAP, GROUP_COUNT, top_count
+
+    index_return = _fixture_return("TAIEX")
+    returns = {
+        INSTRUMENT_IDS[symbol]: _fixture_return(symbol)
+        for _id, _exchange, symbol, *_rest in STOCKS
+        if symbol not in LIFECYCLE
+    }
+    scored = []
+    for group_id, (_board, symbols, _rank, _quality) in GROUP_PLAN.items():
+        ids = sorted(
+            (INSTRUMENT_IDS[s] for s in symbols if INSTRUMENT_IDS[s] in returns),
+            key=lambda i: -returns[i],
+        )
+        if len(ids) < MAINSTREAM_MIN_MEMBERS:
+            continue
+        top = ids[: top_count(len(ids))]
+        strength = sum(returns[i] for i in top) / len(top) - index_return
+        scored.append((strength, group_id, ids))
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    chosen: list[tuple[str, float, int]] = []
+    covered: set[int] = set()
+    for strength, group_id, ids in scored:
+        if len(chosen) == GROUP_COUNT:
+            break
+        if len(set(ids) & covered) / len(ids) >= DEDUP_OVERLAP:
+            continue
+        chosen.append((group_id, strength, len(ids)))
+        covered |= set(ids)
+    return index_return, returns, chosen, len(scored)
+
+
+def _mainstream_run_rows() -> list[dict[str, Any]]:
+    from app.mainstream import (
+        GROUP_COUNT,
+        MAINSTREAM_CONFIG,
+        MAINSTREAM_VERSION,
+        WINDOW,
+        top_count,
+    )
+
+    index_return, returns, chosen, ranked = _mainstream_plan()
+    types = {group["id"]: group["group_type"] for group in GROUPS}
+    return [
+        {
+            "id": 1,
+            "trading_date": T,
+            "version": MAINSTREAM_VERSION,
+            "status": "computed",
+            "window": WINDOW,
+            "group_count": GROUP_COUNT,
+            "universe_count": len(returns),
+            "ranked_group_count": ranked,
+            "item_count": len(_mainstream_item_rows()),
+            "index_return": index_return,
+            "groups_json": [
+                {
+                    "group_id": group_id,
+                    "group_type": types[group_id],
+                    "strength": strength,
+                    "rank": rank,
+                    "member_count": count,
+                    "top_count": top_count(count),
+                }
+                for rank, (group_id, strength, count) in enumerate(chosen, start=1)
+            ],
+            "config_json": dict(MAINSTREAM_CONFIG),
+            "computed_at": _at(T, 10, 5),
+        }
+    ]
+
+
+def _mainstream_item_rows() -> list[dict[str, Any]]:
+    from app.mainstream import LIST_SIZE, MAINSTREAM_VERSION, tie_key
+
+    index_return, returns, chosen, _ranked = _mainstream_plan()
+    owners: dict[int, list[str]] = {}
+    for group_id, _strength, _count in chosen:
+        for symbol in GROUP_PLAN[group_id][1]:
+            instrument_id = INSTRUMENT_IDS[symbol]
+            if instrument_id in returns:
+                owners.setdefault(instrument_id, []).append(group_id)
+    ordered = sorted(owners, key=lambda i: (-returns[i], tie_key(T, i)))[:LIST_SIZE]
+    return [
+        {
+            "id": rank,
+            "mainstream_run_id": 1,
+            "trading_date": T,
+            "instrument_id": instrument_id,
+            "version": MAINSTREAM_VERSION,
+            "rank": rank,
+            "return_w": returns[instrument_id],
+            "excess_w": returns[instrument_id] - index_return,
+            "group_ids_json": owners[instrument_id],
+        }
+        for rank, instrument_id in enumerate(ordered, start=1)
+    ]
+
+
 # ---- assembled tables (insertion order respects foreign keys) ----
 
 TABLES: dict[str, list[dict[str, Any]]] = {
@@ -1939,6 +2055,8 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "daily_candidates": _daily_candidate_rows(),
     "preopen_news_checks": _preopen_rows(),
     "candidate_llm_notes": _candidate_note_rows(),
+    "mainstream_runs": _mainstream_run_rows(),
+    "mainstream_items": _mainstream_item_rows(),
     "tracking_plans": _tracking_plan_rows(),
     "tracking_plan_sessions": _tracking_plan_session_rows(),
     "portfolio_positions": _portfolio_rows(),
@@ -2147,6 +2265,34 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("news/1", "ai.status", "done"),
         ("news/5", "ai.status", "done"),
         ("news/6", "ai", None),
+        # 主流族群前 20 (Issue 769): the stored run of T (_mainstream_run_rows); W and
+        # G are app.mainstream's, three groups chosen (the packaging theme is a copy
+        # of the semiconductor members and is skipped), names by rank.
+        ("mainstream", "status", "computed"),
+        ("mainstream", "trading_date", D),
+        ("mainstream", "window", 240),
+        ("mainstream", "group_count", 5),
+        (
+            "mainstream",
+            "groups[].name",
+            [
+                INDUSTRY_DISPLAY_ZH["Semiconductor"],
+                "示範 AI 伺服器",
+                INDUSTRY_DISPLAY_ZH["Computer and Peripherals"],
+            ],
+        ),
+        (
+            "mainstream",
+            "items[].instrument.symbol",
+            ["9101", "9103", "9201", "9102", "9202", "9203"],
+        ),
+        # The three today-list stocks carry their rank there; the rest none.
+        ("mainstream", "items[].today_list.rank", [1, 2, 3, None, None, None]),
+        (
+            "mainstream",
+            "items.1.groups[].name",
+            ["示範 AI 伺服器", INDUSTRY_DISPLAY_ZH["Computer and Peripherals"]],
+        ),
     ],
     "news": [
         ("news?category=domestic&limit=20", "items", 4),

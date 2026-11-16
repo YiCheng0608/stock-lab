@@ -2,7 +2,7 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
-analyze -> evaluate -> candidates -> indicators ->
+analyze -> evaluate -> candidates -> indicators -> mainstream ->
 plan_tracking -> strategy_levels -> action_tiers -> candidate_notes ->
 period_backfill).  catchup
 first collects recent official
@@ -86,6 +86,7 @@ DAILY_STEPS = (
     "evaluate",
     "candidates",
     "indicators",
+    "mainstream",
     "plan_tracking",
     "strategy_levels",
     "action_tiers",
@@ -99,6 +100,7 @@ STEP_REQUIRES = {
     "evaluate": ("analyze",),
     "candidates": ("analyze",),
     "indicators": (),
+    "mainstream": (),
     "plan_tracking": (),
     "strategy_levels": ("analyze",),
     "action_tiers": ("analyze",),
@@ -121,6 +123,7 @@ NON_BLOCKING_STEPS = frozenset(
         "candidate_notes",
         "strategy_levels",
         "action_tiers",
+        "mainstream",
         "period_backfill",
     }
 )
@@ -159,6 +162,8 @@ STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
 STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
 ACTION_TIERS_MODULE = "worker.action_tiers"
 ACTION_TIERS_FUNCTION = "run_action_tiers"
+MAINSTREAM_MODULE = "worker.mainstream"
+MAINSTREAM_FUNCTION = "run_mainstream"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
 TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
 # Set by worker.job for the worker it starts while holding the job's lock (#336).
@@ -260,6 +265,11 @@ def _strategy_levels_step(target: date) -> dict[str, Any]:
 def _action_tiers_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(ACTION_TIERS_MODULE)
     return getattr(module, ACTION_TIERS_FUNCTION)(target)
+
+
+def _mainstream_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(MAINSTREAM_MODULE)
+    return getattr(module, MAINSTREAM_FUNCTION)(target)
 
 
 def _trading_calendar_step(target: date) -> dict[str, Any]:
@@ -832,6 +842,8 @@ def run_daily_job(
         ("evaluate", 4, lambda: pipeline.evaluate(init_schema=False)),
         ("candidates", 5, lambda: _candidate_step(target)),
         ("indicators", 6, lambda: _indicator_step(target)),
+        # The second list (#768): after the today list, on the bars alone.
+        ("mainstream", 7, lambda: _mainstream_step(target)),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
         ("plan_tracking", 8, lambda: _plan_tracking_step(target)),

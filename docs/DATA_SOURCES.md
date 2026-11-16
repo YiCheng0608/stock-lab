@@ -39,8 +39,9 @@
 | 季度財報（回補） | MOPS 彙總報表－綜合損益表 [`t163sb04`](https://mops.twse.com.tw/mops/#/web/t163sb04)（舊站 `POST https://mopsov.twse.com.tw/mops/web/ajax_t163sb04`，HTML） | 手動的 `fundamentals backfill` 回補近 8 季的累計營收與基本 EPS，寫入 `fundamental_snapshots`（`source=mops_t163sb04`）；daily 在申報期限前後的窗口自動補最近 2 季。上市、上櫃每季各 1 個請求。 | 沒有實際公告日，可得日用法定申報期限；不屬於 collect。規則見[季度財報回補](#季度財報回補)。 |
 | 月營收（快照） | TWSE [`t187ap05_L`](https://openapi.twse.com.tw/v1/opendata/t187ap05_L)、TPEx [`mopsfin_t187ap05_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O)（每月營業收入彙總表） | 當日 collect 各 1 個請求，寫入 `monthly_revenues`（`source=mops_t187ap05`）：當月營收、去年當月營收、去年同月增減(%)、當月累計營收（千元），可得日用出表日期（[月營收](#月營收)，#530）。 | 非核心；只有最新一個月，整份共用一個出表日期，不是各公司的申報日。 |
 | 月營收（回補） | MOPS 營業收入統計表 `t21sc03` 靜態頁（`GET https://mopsov.twse.com.tw/nas/t21/<sii\|otc>/t21sc03_<民國年>_<月>_<0\|1>.html`，Big5 HTML） | 手動的 `revenue backfill` 回補近 24 個月，寫入 `monthly_revenues`（`source=mops_t21sc03`）；daily 在每月 1～20 日自動補最近 2 個月。每個市場月 2 頁：`_0` 國內公司、`_1` 國外公司（`-KY`、`-DR`）。 | 沒有實際申報日，可得日用法定期限次月 10 日；不屬於 collect。規則見[月營收](#月營收)。 |
+| 月營收（下市公司，只在研究 DB） | MOPS 單一公司月營收 `ajax_t05st10_ifrs`（`POST https://mopsov.twse.com.tw/mops/web/ajax_t05st10_ifrs`，表單 `co_id`、民國 `year`、兩位數 `month`、`TYPEK=all`，UTF-8 HTML） | 手動的 `revenue company-classify`／`revenue company-backfill`，每家每月 1 個請求，寫入 `monthly_revenues`（`source=mops_t05st10`）；轉板公司另由 `revenue transfers` 從同一家公司的另一個標的複製（`source=mops_t21sc03_transfer`，0 個請求）。 | 只有仍公開發行的公司查得到；可得日同 `t21sc03`。規則見[下市與轉板公司的月營收](#下市與轉板公司的月營收)。 |
 
-每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload；重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖與借券欄位，現有寫入路徑不收集這些值；融券餘額 2026-11 起收集（[籌碼來源](#籌碼來源)，[#662](https://github.com/YiCheng0608/stock-lab/issues/662)）。券商分點列後版，collector 不接入。
+每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。raw 檔（`raw/<來源>/<擷取日>/<SHA-256>.json` 與旁邊的 `.meta.json`）先寫同目錄的暫存檔、`fsync` 後換名再同步目錄，DB 才記它的路徑；目標已存在但大小或 SHA-256 不符（例如斷電留下的 0 bytes 檔）時，下一次寫同一個路徑會以同 SHA-256 的內容重寫，內容的 SHA-256 與檔名不同就不寫、拋錯。目錄是擷取日，所以隔天重抓（例如回補 `--force`）會寫進當天的目錄；同一個 run 已有同 endpoint、同 SHA-256 的 `raw_payloads` 列時沿用那一列，它引用的檔不存在、0 bytes 或 SHA-256 不符就以這次的內容寫回原路徑（含 `.meta.json`），DB 不改，寫回失敗則 run 失敗（[#772](https://github.com/YiCheng0608/stock-lab/issues/772) 決定 [6893166947](https://github.com/YiCheng0608/stock-lab/issues/772#issuecomment-6893166947)）。列出 DB 引用、但不存在、0 bytes 或 SHA-256 不符的 raw 檔，用 [`tools/audit/raw_files.py`](../tools/audit/raw_files.py)（[讀 raw 的工具](ops/LOCAL.md#讀-raw-的工具)）。重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖與借券欄位，現有寫入路徑不收集這些值；融券餘額 2026-11 起收集（[籌碼來源](#籌碼來源)，[#662](https://github.com/YiCheng0608/stock-lab/issues/662)）。券商分點列後版，collector 不接入。
 
 ### 核心與非核心來源
 
@@ -92,7 +93,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 | 資料 | 端點 | 最早可得 | 更早時的回應 | 回補路徑怎麼處理更早的日子 |
 | --- | --- | --- | --- | --- |
-| 上市日行情、TAIEX 收盤 | `MI_INDEX` | 2004-02-11 | `stat`「查詢日期小於93年2月11日」 | `backfill --start-date` 早於這天就拒絕、不發請求（`sources.TWSE_QUOTES_FIRST_DATE`）。2008-12-31 以前的 `MI_INDEX` 只有「大盤統計資訊」與「每日收盤行情」，沒有「價格指數」表（2009-01-05 起才有，`TWSE_MI_INDEX_TAIEX_FIRST_DATE`）：那些日子的 TAIEX 收盤改取 `MI_5MINS_HIST` 月報（每月 1 個請求），寫成同樣的收盤列（`twse_index`），raw 指向月報，交易日基準照[TAIEX 交易日基準](#taiex-交易日基準)核實 |
+| 上市日行情、TAIEX 收盤 | `MI_INDEX` | 2004-02-11 | `stat`「查詢日期小於93年2月11日」 | `backfill --start-date` 早於這天就拒絕、不發請求（`sources.TWSE_QUOTES_FIRST_DATE`）。2008-12-31 以前的 `MI_INDEX` 只有「大盤統計資訊」與「每日收盤行情」，沒有「價格指數」表（2009-01-05 起才有，`TWSE_MI_INDEX_TAIEX_FIRST_DATE`）：那些日子的 TAIEX 收盤改取 `MI_5MINS_HIST` 月報（每月 1 個請求），寫成同樣的收盤列（`twse_index`），raw 指向月報，交易日基準照[TAIEX 交易日基準](#taiex-交易日基準)核實。價格指數表的加權指數列名以「發行量加權股價指數」為主，2019-04-29 是「加權股價指數」；兩個名稱都接受，完全比對（`sources.TWSE_INDEX_NAMES`，#764） |
 | 上市三大法人 | `T86` | 2012-05-02 | `stat`「查詢日期小於101年05月02日」 | 不請求，籌碼列只有融資組；run metadata 的 `feed_sources.TWSE.not_published.institutional` 記日期，不記 warning。較舊的版面沒有外資自營商欄（2012-05-02 實測如此，2014-11-28 已是現行版面，改版日沒有實測），外資取「外資買賣超股數」（當時的外資口徑，含後來分出的外資自營商）；parser 依欄名判斷版面，現行版面不改讀這欄 |
 | 上市融資融券 | `MI_MARGN` | 不晚於 2004-02-11 | — | 照常請求 |
 | 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05 | `stat`「查詢開始日期小於92年5月5日」 | `corporate-actions sync` 的起日夾到這天 |
@@ -109,6 +110,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 重大訊息清單 | MOPS `t05st02` | 不晚於 2004-02-11 | — | 研究 DB 先不補（#692 決定） |
 | 月營收 | MOPS `t21sc03` | 2013-01（民國 102）起與現行格式相同 | 2012 年以前的頁面標題沒有市場別、沒有國內／國外合計，`monthly_revenue` 整頁拒收；口徑是個別營收，2013 年起是 IFRS 合併營收 | 不補 2012 年以前（#692 決定） |
 | 季度財報 | MOPS `t163sb04` | 2013Q1（IFRS） | 2012Q4 回沒有表格的頁面 | 不補 2012 年以前（#692 決定） |
+| 季度 EPS（下市股） | MOPS 季度 XBRL 整包 `tifrs-<年>Q<季>.zip` | 2013Q1 | 2024Q3 也有（新格式 inline `.html`） | 只補下市、轉板標的（[#781](https://github.com/YiCheng0608/stock-lab/issues/781)） |
 
 ## 新聞來源
 
@@ -266,7 +268,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 | 欄位 | 上市（TWSE `MI_INDEX`） | 上櫃（TPEx `tpex_mainborad_highlight`） |
 | --- | --- | --- |
-| 指數 | 「價格指數(臺灣證券交易所)」的「發行量加權股價指數」列：`收盤指數`；漲跌點數是未帶正負號的 `漲跌點數` 加上 `漲跌(+/-)` 欄的 HTML 標記（`<p style ='color:green'>-</p>`）；漲跌幅是官方 `漲跌百分比(%)`，`change_pct_method=official`。標記為空且點數為 0 是平盤，`X` 或其他標記為 null；標記與百分比正負相反時兩者都存 null | `CloseIndex`、`IndexChange`（帶正負號）；官方沒有漲跌幅，以 `IndexChange ÷ (CloseIndex − IndexChange)`（前一日收市指數）計算，`change_pct_method=derived` |
+| 指數 | 「價格指數(臺灣證券交易所)」的「發行量加權股價指數」列（2019-04-29 是「加權股價指數」，`sources.TWSE_INDEX_NAMES`，恰好一列）：`收盤指數`；漲跌點數是未帶正負號的 `漲跌點數` 加上 `漲跌(+/-)` 欄的 HTML 標記（`<p style ='color:green'>-</p>`）；漲跌幅是官方 `漲跌百分比(%)`，`change_pct_method=official`。標記為空且點數為 0 是平盤，`X` 或其他標記為 null；標記與百分比正負相反時兩者都存 null | `CloseIndex`、`IndexChange`（帶正負號）；官方沒有漲跌幅，以 `IndexChange ÷ (CloseIndex − IndexChange)`（前一日收市指數）計算，`change_pct_method=derived` |
 | 成交金額（元，整數） | 「大盤統計資訊」的「總計(1~15)」，含 ETF、權證等全部證券，`turnover_scope=twse_all_securities`；即一般網站的大盤成交值，等於 OpenAPI `FMTQIK` 的 `TradeValue`（只算股票的「證券合計(1+6+14+15)」不用） | `DailyTradingValue` × 1,000,000，只算上櫃股票，`turnover_scope=tpex_stocks`（10/22 為 225,545 百萬元，等於已收 `dailyQuotes` 四碼普通股成交金額合計） |
 | 漲跌家數 | 「漲跌證券數合計」的「股票」欄（不是「整體市場」）：`247(3)` 拆成上漲 247、漲停 3，跌停同理；持平、未成交、無比價（`not_comparable`）；`breadth_scope=twse_stocks` | 上漲、下跌、平盤、漲停、跌停、未成交（含暫停交易）；沒有無比價；`breadth_scope=tpex_stocks` |
 
@@ -425,9 +427,26 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
 
 - **來源**：TWSE `TWTAUU`（股票減資恢復買賣參考價格）與 TPEx `revivt`（減資恢復買賣）都是網站報表，以恢復買賣日的區間查詢（`startDate`／`endDate`）。一個請求回該區間全部的列：2024-09-01～2026-11-30 實測 TWSE 44 列、TPEx 42 列。停止買賣開始前就會列出，例如 11/10 查到的表已有 11/16 恢復的 3714、4534。
 - **判定**：停止買賣期間是 `halt_start` 起、到 `resume_date` 前一天為止的交易日（交易日以 TAIEX 為準）。
-  - TWSE：「詳細資料」是 `<代號>  ,<YYYYMMDD>`，多數是最後交易日，`halt_start` 取它的下一個日曆日，`last_trade_date` 存這一天。少數列的日期早一個交易日（2025-09 2101 南港、2026-10 4155 訊映：「停止買賣前收盤價格」是下一個交易日的收盤）。所以推出的區間內已存 bar、而且最後一根 bar 的收盤等於「停止買賣前收盤價格」（或該列還沒有價格）時，最後交易日改用那根 bar 的日期，原日期留在 `details_json.stated_last_trade_date`（`last_trade_date_basis = last_bar_before_resumption`；run metadata 記 `moved_past_bars`）。
-  - TPEx：「詳細資料」的 HTML 寫明停止買賣日期與恢復買賣日期，`halt_start` 取停止買賣日期；TPEx 沒有最後交易日，`last_trade_date` 留空。
-  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或停止買賣不早於恢復日。該股在區間內已存 bar、又不是上一點的 TWSE 情形時也一樣（TPEx 明寫停止買賣日期，區間內有 bar 一律略過；官方行情表有價格，以 bar 為準）。
+  - TWSE：「詳細資料」是 `<代號>  ,<YYYYMMDD>`，是那一列公告的日期（[#774 AC-1](https://github.com/YiCheng0608/stock-lab/issues/774)），2015 年以後多數是最後交易日，`halt_start` 取它的下一個日曆日，`last_trade_date` 存這一天。少數列的日期早一個交易日（2025-09 2101 南港、2026-10 4155 訊映：「停止買賣前收盤價格」是下一個交易日的收盤）。所以推出的區間內已存 bar、而且最後一根 bar 的收盤等於「停止買賣前收盤價格」（或該列還沒有價格）時，最後交易日改用那根 bar 的日期，原日期留在 `details_json.stated_last_trade_date`（`last_trade_date_basis = last_bar_before_resumption`；run metadata 記 `moved_past_bars`）。
+  - TWSE 同一次停止買賣可能列好幾次，每次公告一列（3536 誠創 2015-03-20 恢復列了 3 次、5906 列了 2 次，#774）。同一 (代號, 恢復日) 的列，除「名稱」「詳細資料」以外的欄有兩種值時（`-`、`--`、空白算還沒給值，跟任何值相容），只略過這一檔。值相容時每列各自照上一點對已存 bar 推區間：推出同一個區間就寫一列（取沒被 bar 移動的那列原列，`details_json.same_resumption_rows` 列出同組各列的「詳細資料」），推不出或推出兩種以上就只略過這一檔，warning 附各列的區間；選出一個區間、但同組有列被 bar 推翻時照寫，被推翻的列另記 warning（`… kept <詳細資料>, rows the bars reject: …`）。因同組列不一致（價格不同或推出 0／≥2 種區間）而略過的那一檔，已存的列不刪不改，記 warning `<交易所> trading halts kept the stored stop of …`，run metadata 記 `kept_on_conflict`（[PR #778 review](https://github.com/YiCheng0608/stock-lab/pull/778#issuecomment-6893689730)）。
+  - TWSE「詳細資料」日期**不早於**恢復日的列（[#776](https://github.com/YiCheng0608/stock-lab/issues/776)）：那是公告或更新的日期，不是停止買賣日（2412 中華電 2011-01-25 恢復，詳細資料寫 20110128）。這種列只出現在恢復日 2015-04-16 以前：2011～2014 年 85 列、2015 年 4 列，共 89 列；2015-04-16 以後沒有，正式 DB 目前也沒有。最後交易日改用日線推（`trading_halts._infer_from_bars`）：
+    - 取該股恢復日前的最後一根日線 L。L 要符合下面全部條件，才以 L 當 `last_trade_date`，`halt_start` 取 L 的下一個日曆日，到恢復日（不含）為止。`details_json` 保留官方原列（含原「詳細資料」），另記 `last_trade_date_basis = inferred_from_bars`；run metadata 記 `inferred_from_bars`。
+    - 不符合就略過這一列，warning `TWSE trading halts rejected: <代號> resuming <恢復日>: …` 寫明原因：
+      - 恢復日前沒有任何日線：`no bar before the resumption`。
+      - 「停止買賣前收盤價格」是 `-`／`--`／空白：`停止買賣前收盤價格 '--' is not given`。這裡收盤價是唯一的證據，所以跟上一點不同，沒有價格不收。
+      - 恢復日 − L 超過 30 個日曆日（`INFER_MAX_DAYS`）：`last bar … is N days before the resumption, over 30`。2017～2024 年 215 列的正常值是 8～21 天；2011～2014 年還沒有 TAIEX 交易日基準，所以用日曆日。
+      - L 的收盤不等於「停止買賣前收盤價格」：`last bar … closes X, not 停止買賣前收盤價格 Y`。
+      - L 的隔天到恢復日（不含）之間，TWSE 沒有任何其他股票的日線：`no TWSE bars between … and the resumption`。這條擋的是收集缺口：該股沒有日線的那幾天，市場本身要有交易。
+    - 校準：不看「詳細資料」，套在 2015-01～2024-09 的 272 列上。267 列跟現行規則推出同一個最後交易日。其餘 5 列：
+      - 3149（2016-10-11 恢復）：推出 2016-09-26。「詳細資料」的 09-28 是颱風休市日，停止買賣的交易日相同。
+      - 3 列超過上限：3536 的兩列停了 63 天，3312 停了 61 天。
+      - 3557：收盤 6.63，不等於價格欄 6.65。
+    - 同一 (代號, 恢復日) 也列了日期早於恢復日的列時（2408、2438、3536），推定列當成同組的一列，照上面「同一次停止買賣可能列好幾次」那點選區間。推定列算被 bar 移動過，所以推出同一個區間時：
+      - 早列沒被移動，寫早列的原列。
+      - 早列也被移動（2408：詳細資料 08-20，日線到 08-25），寫同組第一列，`last_trade_date_basis` 跟著那一列。
+    - 正式 collect：恢復日在收集日前 10 天到後 60 天的列，停止買賣開始前推不出來，會記上面的 warning（非核心，collect 仍是 `success`）。開始停止買賣之後，L 就是最後交易日，下一次 collect 就寫得進去。
+  - TPEx：「詳細資料」的 HTML 寫明停止買賣日期與恢復買賣日期，`halt_start` 取停止買賣日期；TPEx 沒有最後交易日，`last_trade_date` 留空。同一 (代號, 恢復日) 列了兩種停止買賣日期時只略過這一檔，已存的列同樣保留。
+  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或 TPEx 的停止買賣日期不早於恢復日。TWSE 日期不早於恢復日的列不在此列，改用日線推（上面）。該股在區間內已存 bar、又不是上一點的 TWSE 情形時也一樣（TPEx 明寫停止買賣日期，區間內有 bar 一律略過；官方行情表有價格，以 bar 為準）。
   - 整份不採用的情形：回應的區間跟請求的不同、欄名改變、TPEx `totalCount` 多於列數（回應被截斷），或有列的恢復日在區間外。
 - **保存**：`trading_halts` 每個標的、每個來源、每個恢復日一列，記 `exchange`、`halt_start`、`resume_date`、`last_trade_date`、`reason`（`capital_reduction`）、`reason_detail`（減資原因，如「退還股款」「彌補虧損」）、`source`（`twse_twtauu`／`tpex_revivt`）、`endpoint`（含查詢區間）、`data_as_of`（查詢那天：collect 的收集日或 CLI 的執行日）、`collected_at`、`raw_payload_id` 與官方原列 `details_json`。
 - **重建**：每份可讀的回應對它的區間是完整的。同一來源、恢復日落在該區間的已存列都用它重建：
@@ -435,7 +454,7 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
   - 回應一列都沒有（TWSE「沒有符合條件」、TPEx 空表）而該來源在這個區間已有存列時，不刪任何列，記非核心 warning `<交易所> trading halts empty answer kept N stored rows resuming …`，run metadata 記 `kept_on_empty`：TWSE 的空回應沒有區間與總數可核對，官方誤回一次空表就會刪光區間內的列，若剛好在恢復日後第 10 天就再也查不回來。區間內沒有存列時空回應照常、不記 warning。恢復日不在區間內的已存列不受這次重建影響。
   - 內容改變的列改指向新的 capture；沒變的列保留原 capture。
   - 代號在 `instruments` 找不到的只計入 `outside_universe`，不寫；已下市但主檔還有的標的照寫。
-  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`。
+  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`；有用到時另記 `moved_past_bars`、`inferred_from_bars`、`kept_on_conflict`、`kept_on_empty`。被已存 bar 推翻或用日線推不出的列（warning 字首仍是 `… trading halts rejected:`）：整檔沒寫入時算 `conflicts`；同組有別列寫入時只記 warning（`… kept <詳細資料>, rows the bars reject: …`），不算進任何計數（例如 3536 2015-03-20 的晚列）。`rejected` 只數解析時就略過的列。
 - **請求**：當日 collect 各 1 個（恢復日在收集日前 10 天到後 60 天）；取得、解析或寫入失敗記非核心 warning（`TWSE trading halts unavailable: …`），collect 仍為 `success`。歷史由 [`worker.cli trading-halts`](ops/CLI.md#現有-worker-cli) 回補，每個交易所 1 個請求，經同一個官方主機限流。
 - **誰讀它**：
   - coverage（`/api/coverage`、回補報表）把期間內沒有 bar 的交易日算進涵蓋，原因是 `capital_reduction_halt`，不列為 `missing_bar_dates`；摘要另計 `halted_to_20`／`halted_to_60`。
@@ -532,13 +551,34 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **實測**（2026-11-06，正式 DB 副本，alembic `0027_emerging_issuers`）：16 個請求約 66 秒；2024Q4～2026Q2 每季 1,930～1,986 檔，2026Q3 當時 283 檔；重跑 `changed 0`。
 - **daily 自動回補**（[#536](https://github.com/YiCheng0608/stock-lab/issues/536)）：日快照換季後（2026Q2 在 11-02 換成 Q3）不再更新上一季，所以換季後才上市的公司（2026Q2 的 7867 特力屋，10-30 上市）、晚申報與更正都收不到。daily 的 period_backfill 步驟在每季最早期限前 14 天到最晚期限後 14 天之間（Q3 是 10/31～12/13）每天補該季與前一季，窗口、上限與記錄見 [SCHEDULING](ops/SCHEDULING.md#日誌與-run-記錄)。快照落後的期別不算漏：2026Q3 回補在 11-06 早上比 11-05 的快照多 85 檔，11-06 的上市快照就全部列入了。
 
+### 下市股的季度 EPS（XBRL 整包）
+
+`t163sb04` 是用今天的上市櫃名單產生的，下市、轉板公司的季度一列都沒有（[#781](https://github.com/YiCheng0608/stock-lab/issues/781)）。MOPS 另外每季提供一包 XBRL 檔，收的是當季每家申報公司的 instance，含之後下市的公司。研究 DB 用它補下市、轉板標的的 EPS，實作在 [`worker/quarterly_xbrl.py`](../backend/worker/quarterly_xbrl.py)。
+
+- **請求**：
+  - 網址：`GET https://mopsov.twse.com.tw/server-java/FileDownLoad?step=9&fileName=tifrs-<年>Q<季>.zip&filePath=/home/html/nas/ifrs/<年>/`，一季一個請求。2014Q2 一包 50.7 MB、2,037 個成員、2,004 家；伺服器忽略 `Range`。
+  - 範圍：2013Q1～2024Q3 都有。2013 年的成員是 `.xml`，2024 年的是 inline XBRL `.html`。
+- **下載**：`fundamentals xbrl-fetch --start --end --dir` 只寫目錄，不碰 DB。
+  - 目錄裡有整包與 `manifest.json`（網址、狀態碼、位元組數、sha256、成員數、抓取時間）；已有而且 sha256 相符的季不重抓。
+  - 每個請求間隔 ≥ 5 秒，台北 20:30～23:30 與 08:00～09:00 不發。
+  - 不重試。非 200、空回應、不是完整的 zip、成員名稱或季別不符，都算該季失敗；連續 3 季失敗就停。
+- **寫入**：`fundamentals xbrl-apply --start --end --dir [--dry-run] [--exclude-file]`，`run_type=fundamental_xbrl_backfill`，一季一個 commit。只在 DB 旁有 `research-db.json`（`purpose=research_history`）的研究 DB 跑，否則拒絕；起跑時持有維護模式（`--dry-run` 除外）。
+  - **raw**：`raw_payloads` 一季一列，`source=mops_tifrs`，`payload_path` 直接指向整包 zip，`sha256` 是整包的 sha256。檔案放在 `<RAW_DIR>/mops_tifrs/<抓取日>/<sha256>.zip`，經 `sources.ensure_raw_file` 寫入（`write_raw_file` 收 `.json` 與 `.zip`）。
+  - **成員**：一家取一份，順序是 `cr`（合併）、`ir`（個體）、`er`。產業碼對到 `t163sb04` 的格式：`ci` 一般、`basi` 銀行、`bd` 證券、`fh` 金控、`ins` 舊格式保險、`mim` 其他。2014Q2 的 1,517 家一對一，產業碼不在表上的公司略過並計數。
+  - **EPS**：取 `BasicEarningsLossPerShare`，比對 local name，所以 `ifrs:` 與 `ifrs-full:` 都認得。context 是當年 1/1 到季底、沒有維度的 YTD 累計，和 `t163sb04` 同口徑。inline XBRL 要處理 `format`、`scale`、`sign`、`xsi:nil`；同一 context 的多個 fact 要相同。
+  - **可得日**：照上一節，各格式的法定申報期限。
+  - **寫給誰**：只寫 `stock`／`ipo` 的 `delisted`、`transferred` 標的，而且要在季底到季底後 670 天內有日線。670 天是研究工具讀到這一季的最晚日子：5 季 × 92 天＋`QUARTER_STALE_DAYS` 200 天＋10 天餘裕。已有的列（任何來源）不動。active 標的一律不寫：它們在 `t163sb04` 上，同一代號的舊公司也不會寫到現在的公司上。
+  - **口徑核對**：每季先比兩邊都有的公司。EPS 或格式有一家不同、`t163sb04` 有列卻一家都沒比到，或比不到的（沒有成員、沒有 EPS、讀不了）超過核對家數的 1%（`CHECK_MISSING_LIMIT`；2014Q2 是 1／1,518），那一季就不寫，命令也停下。`source=mops_tifrs_zip`，`data_json` 記成員名稱、成員 sha256、產業碼、格式、context 與可得日的依據。
+- **外部檔案的防護**：成員只在記憶體內讀，不解壓到路徑。上限：成員數 5,000、單一成員 32 MB、一季解壓總量 8 GB、下載 1 GB，讀取時邊讀邊算。含 `<!DOCTYPE` 或 `<!ENTITY`、NUL 或 UTF-16 BOM 的成員不解析。CRC 錯、不支援的壓縮法、加密或資料流壞掉的成員讓整季失敗；同一家同一種報表（`cr`／`ir`／`er`）有兩份也是。
+- **實測**（2026-11-15，研究 DB 唯讀、2014Q2 探測檔、`--dry-run` 等價）：核對相同 1,517、不同 0、缺值 1（6026 不在整包）。下市股都在窗口外，因為當時研究 DB 的日線從 2017-08 起。
+
 ### 月營收
 
 個股頁財務分頁的「月營收」表讀 `monthly_revenues`，每家公司每月一列（唯一鍵 `(instrument_id, revenue_month)`，`revenue_month` 存該月 1 日）；不納入策略與評分（[#530](https://github.com/YiCheng0608/stock-lab/issues/530)，實作在 [`worker/monthly_revenue.py`](../backend/worker/monthly_revenue.py)）。
 
 - **欄位與單位**：`revenue`（當月營收）、`prior_year_revenue`（去年當月營收）、`cumulative_revenue`（當月累計營收）是千元；`yoy` 是來源的「去年同月增減(%)」，不自己重算：快照是全精度，MOPS 頁截斷到小數 2 位（2330 115/09 為 54.6486 → `54.64`）。上月營收、上月比較、去年累計、前期比較、備註存 `data_json`。來源是空白（上月或去年同月為 0）時存 NULL，不補 0。
 - **每日快照**：collect 抓 `t187ap05_L`、`mopsfin_t187ap05_O`，各 1 個請求。兩份都只有一個月（`資料年月`），整份共用一個 `出表日期`；例如 2026-11-06 抓到的仍是 10/17 出表的 9 月表，10 月要等申報期限 11/10 之後才換。可得日用出表日期，`data_json.announcement_basis = release_date`。列的 `資料年月` 不一致、同一代號兩次、出表日期讀不到或不在該月之後時整份不寫；出表日期晚於收集日的列略過（回補舊日期時不讀今天的表）。取得、解析或寫入失敗是非核心 warning（`TWSE monthly revenue unavailable`／`TPEx …`），collect 仍為 `success`，各交易所分開寫，一邊失敗不影響另一邊。
-- **回補**：`worker.cli revenue backfill`（[CLI](ops/CLI.md#現有-worker-cli)）抓 MOPS 營業收入統計表靜態頁，預設上個月往回 24 個月，每個市場月 2 頁，共 2 × 2 × 24 = 96 個請求，同一 host 間隔至少 3 秒。`_0` 只有國內公司；國外公司（`-KY`、`-DR`）在 `_1`，兩頁不重疊（115/09 上市 997＋94、上櫃 867＋30 檔，合起來涵蓋快照的全部公司）。頁面是 Big5（cp950），raw 存 `mops` 來源，內容是 URL 與解碼後的 HTML，`data_as_of` 是月底日。頁首的「出表日期」是當天產生頁面的日期，不是申報日，不使用。MOPS 偶發 `502 Unreachable Server`（探路時等 10 秒重試就成功），傳輸錯誤、429 與 5xx 依序等 5、10、20 秒各重試一次；仍失敗記該頁失敗，連續 3 頁失敗停跑，重跑可補。`_0` 與 `_1` 若出現同一代號，留先讀到的那頁、後一頁的列不寫，記 warning（run 為 `partial`）。
+- **回補**：`worker.cli revenue backfill`（[CLI](ops/CLI.md#現有-worker-cli)）抓 MOPS 營業收入統計表靜態頁，預設上個月往回 24 個月，每個市場月 2 頁，共 2 × 2 × 24 = 96 個請求，同一 host 間隔至少 3 秒。`_0` 只有國內公司；國外公司（`-KY`、`-DR`）在 `_1`，兩頁不重疊（115/09 上市 997＋94、上櫃 867＋30 檔，合起來涵蓋快照的全部公司）。頁面是 Big5（cp950），raw 存 `mops` 來源，內容是 URL 與解碼後的 HTML，`data_as_of` 是月底日。少數頁有 cp950 沒有對應的 Big5 造字（2013-02 上市 `_0` 在 2539 櫻花建的備註有 `c8 ba`、`c8 bb` 兩個字，[#774](https://github.com/YiCheng0608/stock-lab/issues/774)）：每個造字（lead byte 加 trail byte 兩個位元組）讀成 1 個 U+FFFD，不用 `errors="replace"`（它只吞 lead byte，會把後面的字讀錯）；一頁最多 8 個，而且只能落在「公司名稱」或「備註」，落在數值欄、代號、表頭、合計列或頁尾，或超過 8 個，該頁失敗。有造字的頁 raw 另存原始位元組（`content_base64`）與各字的位置（`undecodable`：`offset`、`bytes`），超過上限的頁只存這兩項、不存 HTML，先存 raw 再記失敗；讀進來的頁記 warning `<月>:<市場>:<頁>: N undecodable cp950 characters replaced with U+FFFD at bytes …: <代號> <欄> ×<數>`（run 為 `partial`）。能完整解碼的頁 raw 跟以前相同。頁首的「出表日期」是當天產生頁面的日期，不是申報日，不使用。MOPS 偶發 `502 Unreachable Server`（探路時等 10 秒重試就成功），傳輸錯誤、429 與 5xx 依序等 5、10、20 秒各重試一次；仍失敗記該頁失敗，連續 3 頁失敗停跑，重跑可補。`_0` 與 `_1` 若出現同一代號，留先讀到的那頁、後一頁的列不寫，記 warning（run 為 `partial`）。
 - **頁面格式**：每個產業一張表，欄位依序是公司代號、公司名稱、當月營收、上月營收、去年當月營收、上月比較增減(%)、去年同月增減(%)、當月累計營收、去年累計營收、前期比較增減(%)、備註，與快照同口徑；每表最後的「合計」列與頁尾的「全部國內／國外上市（上櫃）公司合計」不是公司。標題不是請求的市場與月份、頁尾總計不是請求的國內／國外頁、表頭改變、公司列不是 11 格、同一代號兩次，或回應是阻擋頁時，整頁記失敗、不寫入。還沒有公司申報的月份，頁面照樣存在（200，不是 404），只有標題與「查無資料」、沒有表與頁尾總計（[#539](https://github.com/YiCheng0608/stock-lab/issues/539)，2026-11-06 實測尚未結束的 115/11）：該月期限（遇休市順延）以前記 `empty`、不算失敗，過了期限仍是這樣才記失敗。
 - **可得日**：回補的月份沒有申報時間，`announcement_date` 用法定期限次月 10 日（證券交易法第 36 條），遇休市順延到下一個交易日，順延規則同[季度財報回補](#季度財報回補)（有 `trading_calendar_days` 的年度照官方休市表，沒有的只順延週末）；`data_json` 記 `announcement_basis: statutory_deadline`、`statutory_deadline`、`deadline_calendar`。回補前要先有對應年度的休市表（`trading-calendar --year <年>`），缺的話會退回只順延週末（`deadline_calendar: weekend_only`），例如 2025-10-10 國慶會記成當天而不是 10/13；網站版休市表從 2021 年起有內容（2020 年以前回 `total 0`，[#692](https://github.com/YiCheng0608/stock-lab/issues/692) 實測），所以研究 DB 回補的 2013～2020 年月份只順延週末。期限還沒到的月份（例如 11/6 跑時的 10 月，已申報的公司先列出）用抓到那天的台北日期，`announcement_basis: first_seen`。可得日的意思同季報：該日結束後可得，研究截止日期等於可得日時列入。逾期申報的公司會比實際早「可見」。
 - **兩個來源同一個月**：可得日照季度回補的規則，保留較早的那個與它的依據（9 月快照的 10/17 調成 10/12，10/10 是週六）。數值先比對：當月營收、去年當月營收、當月累計營收相等，年增率相差不到 0.01（MOPS 頁截斷到小數 2 位）算同值。
@@ -547,6 +587,26 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   - **更正之後的快照**：快照再發布同一個舊值（只換出表日期）不改回；快照帶來與 MOPS 不同的新值（公司再次更正）也不寫入數值，`superseded_snapshot` 保留第一次被取代的值，以下一次回補讀到的 MOPS 頁為準；快照改成和 MOPS 相同時仍是已更正。之後的 MOPS 頁若回到原快照值，回補寫回該值並拿掉 `superseded_snapshot`。
 - **冪等**：數值、來源、可得日與它的依據都沒變的列不寫（`data_json`、`raw_payload_id`、`collected_at` 也不動），重跑 `changed` 是 0；快照換了出表日期但數字相同時也不寫。
 - **daily 自動回補**（[#536](https://github.com/YiCheng0608/stock-lab/issues/536)）：月快照出表後到下個月換表前不再更新，例如 9 月表 10-17 出表、到 11 月 10 月表出來前都是那一份。2026-11-06 比對時，10-20～10-30 上市的 7 檔新股（2249、6825、6898、6938、6467、7710、7867）的 9 月營收只在 MOPS 頁上有；期限前已申報的下個月（11-06 時 10 月有 289 檔）也要等換表才進快照。daily 的 period_backfill 步驟在每月 1～20 日每天補上個月與上上個月，窗口、上限與記錄見 [SCHEDULING](ops/SCHEDULING.md#日誌與-run-記錄)。出表後更正的數字依「兩個來源同一個月」以 MOPS 頁為準，自動回補會把快照寫的舊值改成 MOPS 頁的值，之後每天的 collect 不會改回。
+
+#### 下市與轉板公司的月營收
+
+`t21sc03` 頁與快照都只列今天的公司，下市股沒有任何一個月（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。研究 DB 用下面兩種方式補一部分（[#782](https://github.com/YiCheng0608/stock-lab/issues/782)，實作在 [`worker/monthly_revenue_company.py`](../backend/worker/monthly_revenue_company.py)）。三個命令都只在研究 DB 跑：DB 旁沒有 `research-db.json`（`purpose` 是 `research_history`）就印 `refused`、exit 2。
+
+- **月份範圍**：標的第一根日線那個月往前 13 個月，到最後一根日線那個月，從 2013-01 起。13 是 `tools/research` 用月營收的特徵裡回看最長的 `revenue_high_12` 要的 12 個月，加上公告延遲的 1 個月：第一根日線在 M 月、早於 M−1 月的期限時，已公告的是 M−13～M−2（[review 6895006123](https://github.com/YiCheng0608/stock-lab/pull/784#issuecomment-6895006123)）。現存的股票本來就有上市前的月營收，所以下市股也補到上市前，兩邊口徑一致（[決定 6894566253](https://github.com/YiCheng0608/stock-lab/issues/782#issuecomment-6894566253)）。
+- **可以問的最後一個月**：期限（次月 10 日，遇休市順延）在今天（台北）之前的最新月份。月份結束了、期限還沒到時，公司可能還沒申報，MOPS 回「查無資料」，那個答覆又會被存下來沿用，所以不問。範圍的上限與分類用的月份都不晚於它。
+- **同一家公司的名稱比對**：兩邊都做 NFKC、去掉所有空白，再去掉結尾的 `*`、`-KY` 與開頭的 `F-`。
+- **轉板**（`revenue transfers`，0 個請求）：轉板公司是兩個標的，今天的上市頁把它上櫃那幾年的月份列在上市標的上。對每個 `transferred` 標的，找另一交易所同代號的標的，兩個條件都成立才算同一家公司：正規化後名稱相同，以及新標的第一根日線在舊標的最後一根之後 7 天內。不成立就略過並列出。舊標的範圍內的月份從新標的**複製**一列：數值、可得日、`raw_payload_id` 照原列，`source=mops_t21sc03_transfer`，`data_json.copied_from` 記原標的的 id、交易所與 `source`。新標的的列不動，轉上市後的頭 12 個月才有完整的回看。重跑時，原列更正過的月份會同步過來；舊標的那個月已有其他來源的列就不動（`kept`）。不加 `--apply` 只印對應與月數。新標的是 `delisted`（轉板後又下市）的列在 `twin_delisted`：它的月份要等 `company-backfill` 補完，再跑一次 `transfers` 才複製得到。
+- **下市股分類**（`revenue company-classify`）：對象是 `delisted` 的 `stock`／`ipo`，要有日線，分類月在 2013-01 以後。每檔問 1 次單一公司頁，用最後一個有日線的月份，晚於「可以問的最後一個月」時改用它：
+  - 頁上是「該 <代號> 公開發行公司不繼續公開發行！」：`not_public`。破產（2475 華映）、合併消滅（2888 新光金）是這樣，這些公司的月營收補不到。
+  - 有營收表、通過檢查：`found`。這個月同時寫入。
+  - 頁上是「查無資料」：`no_data`，列出來，等統籌決定。
+  - 頁首的公司名稱和標的名稱（正規化後）互不包含：`name_mismatch`，不寫入、列出來。代號被後來的公司重用時，`co_id` 可能查到現在那家。
+- **補「查得到」的**（`revenue company-backfill`）：分類為 `found` 的標的，範圍內還沒有列的月份每月 1 個請求。每一頁都重新核對公司名稱。
+- **頁面檢查**：隱藏欄位 `Q1V`、`Q2V` 要是請求的代號與民國年月，頁面印的「民國YYY年MM月」也要相同，單位要是「新台幣仟元」；表頭是「項目／營業收入淨額」，接著 8 列依序是本月、去年同期、增減金額、增減百分比、本年累計、去年累計、增減金額、增減百分比，再來是備註。不合就記失敗、不寫入。本月 → `revenue`、去年同期 → `prior_year_revenue`、第一個增減百分比 → `yoy`、本年累計 → `cumulative_revenue`（千元）；8 列的文字、備註、`co_id`、頁首名稱與公司類別（例如「公開發行公司」）存 `data_json`。
+- **可得日**：同 `t21sc03`，法定期限次月 10 日，遇休市順延（`announcement_basis=statutory_deadline`）。
+- **raw 與續跑**：每個回應存一列 `raw_payloads`（`source=mops`），`endpoint` 是 `…/ajax_t05st10_ifrs?co_id=<代號>&year=<民國年>&month=<月>`，內容是表單與 HTML。發請求前先找同一個鍵的已存回應：檔案的 sha256 要和 `raw_payloads` 那列相同、內容要通過檢查，有就重讀、不重抓；分類結果也是從已存的回應重讀，所以沒有另外的表。中斷後重跑就接著做，失敗的那一個下次再問。
+- **請求規則**：同一 host 每個請求間隔至少 5 秒；台北 20:30～23:30 與 08:00～09:00 不發，下一個請求（等完間隔之後）會落在這兩段時就停，run 標 `partial`，之後重跑接續；不重試；封鎖頁（`查詢過於頻繁` 等）、非 200、空回應或傳輸錯誤連續 3 次就停。`--max-requests N` 限制這次最多發幾個（已存的不算）；`--plan` 只印對象與請求數，不發請求、不寫入。
+- **run**：`run_type` 是 `revenue_transfer_copy`／`revenue_company_classify`／`revenue_company_backfill`，metadata 有每家（每月）的結果、raw id 與中止原因；每個請求之後 commit，跑到一半也讀得到。例外時 run 記 `failed` 與已完成的部分，再把例外拋出。
 
 ## FinMind 補缺口規則
 

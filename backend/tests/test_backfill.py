@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Iterator
 
 import pytest
@@ -169,7 +172,9 @@ def test_full_target_extends_before_range_for_two_no_data_weekdays(backfill_env)
     adapter = HolidayAdapter()
     result = backfill.targeted_backfill(start, end, adapter=adapter)
     metadata = result["metadata"]
-    assert result["status"] == "partial"
+    # Two confirmed closures and nothing missing: the run is complete (#772).
+    assert result["status"] == "success"
+    assert metadata["coverage_manifest_summary"]["status"] == "success"
     assert len(metadata["requested_calendar_dates"]) == 65
     assert len(metadata["verified_trading_sessions"]) == 65
     assert metadata["target_met"] is True
@@ -648,7 +653,8 @@ def test_backfill_explicit_no_data_is_skipped_and_not_retried(backfill_env):
 
     adapter = NoDataAdapter()
     initial = backfill.targeted_backfill(trading_date, trading_date, adapter=adapter)
-    assert initial["status"] == "partial"
+    assert initial["status"] == "success"
+    assert initial["error"] is None
     assert initial["metadata"]["skipped_dates"] == [trading_date.isoformat()]
     assert initial["metadata"]["coverage"]["skipped_non_trading_dates"] == [
         trading_date.isoformat()
@@ -675,7 +681,154 @@ def test_backfill_explicit_no_data_is_skipped_and_not_retried(backfill_env):
         trading_date, trading_date, adapter=MustNotRetry()
     )
     assert resumed["id"] == initial["id"]
-    assert resumed["metadata"]["reused_dates"] == [trading_date.isoformat()]
+    # A closure alone is a success since #772, and a successful run that met its
+    # target is returned as it is.
+    assert resumed["status"] == "success"
+    assert resumed["metadata"]["skipped_dates"] == [trading_date.isoformat()]
+
+
+def test_a_forced_refetch_restores_the_empty_file_an_existing_row_cites(
+    backfill_env, monkeypatch, capsys
+):
+    # #772 decision A: the first capture is stored under 2026-11-14, the host stops
+    # and leaves it 0 bytes; a forced refetch on 2026-11-15 gets the same content.
+    day = date(2026, 9, 8)
+
+    class Adapter:
+        def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+            return _batch_for(start)
+
+    monkeypatch.setattr(sources, "utcnow", lambda: datetime(2026, 11, 14, 11, 20))
+    first = backfill.targeted_backfill(day, day, adapter=Adapter())
+    assert first["status"] == "success"
+    with backfill_env() as db:
+        rows = db.execute(
+            select(RawPayload.id, RawPayload.payload_path, RawPayload.sha256)
+        ).all()
+        cited = db.execute(
+            select(MarketBar.id, MarketBar.raw_payload_id).order_by(MarketBar.id)
+        ).all()
+    assert rows and cited
+    old_files = {}
+    for raw_id, path, sha in rows:
+        stored = Path(path)
+        assert "2026/11/14" in stored.as_posix()
+        old_files[raw_id] = (stored, stored.read_bytes(), sha)
+        stored.write_bytes(b"")
+        stored.with_suffix(".meta.json").write_bytes(b"")
+
+    monkeypatch.setattr(sources, "utcnow", lambda: datetime(2026, 11, 15, 10, 0))
+    capsys.readouterr()
+    again = backfill.targeted_backfill(day, day, adapter=Adapter(), force=True)
+    assert again["status"] == "success"
+    warned = capsys.readouterr().err
+    for raw_id, (stored, content, sha) in old_files.items():
+        assert stored.read_bytes() == content
+        assert hashlib.sha256(stored.read_bytes()).hexdigest() == sha
+        meta = json.loads(stored.with_suffix(".meta.json").read_text("utf-8"))
+        assert meta["sha256"] == sha
+        assert f"raw payload {raw_id} file {stored} was empty" in warned
+    with backfill_env() as db:
+        assert (
+            db.execute(
+                select(RawPayload.id, RawPayload.payload_path, RawPayload.sha256)
+            ).all()
+            == rows
+        )
+        assert (
+            db.execute(
+                select(MarketBar.id, MarketBar.raw_payload_id).order_by(MarketBar.id)
+            ).all()
+            == cited
+        )
+
+
+def _holiday_week_adapter(holiday: date, *, failing=None, security_only=None):
+    """2026-09-07..11 with HOLIDAY closed; FAILING raises, SECURITY_ONLY lacks TAIEX."""
+
+    class Adapter:
+        def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+            if start == holiday:
+                return _no_data_batch_for(start)
+            if start == failing:
+                raise sources.OfficialDataError("fixture source down")
+            batch = _batch_for(start)
+            if start == security_only:
+                return sources.OfficialBatch(
+                    instruments=batch.instruments,
+                    bars=[bar for bar in batch.bars if bar.symbol != "TAIEX"],
+                    payloads=batch.payloads,
+                    data_as_of=batch.data_as_of,
+                )
+            return batch
+
+    return Adapter()
+
+
+def _stored_run_status(run_id: int) -> str:
+    from app.models import IngestionRun
+
+    with backfill.pipeline.SessionLocal() as db:
+        return db.get(IngestionRun, run_id).status
+
+
+def test_confirmed_closure_alone_leaves_the_run_success(backfill_env):
+    # #772: a month whose only gap is a confirmed closure is complete; the CLI
+    # summary (chunked_backfill, what history-backfill.jsonl logs), the run and
+    # its manifest summary say the same.
+    start, end, holiday = date(2026, 9, 7), date(2026, 9, 11), date(2026, 9, 9)
+    result = backfill.chunked_backfill(
+        start, end, adapter=_holiday_week_adapter(holiday)
+    )
+    assert result["status"] == "success"
+    assert result["skipped_non_trading_dates"] == [holiday.isoformat()]
+    (window,) = result["windows"]
+    assert window["status"] == "success"
+    assert _stored_run_status(window["run_id"]) == "success"
+    run = backfill.targeted_backfill(start, end, adapter=_holiday_week_adapter(holiday))
+    assert run["metadata"]["coverage_manifest_summary"]["status"] == "success"
+    assert (
+        run["metadata"]["coverage_manifest_summary"]["skipped_non_trading_dates"] == 1
+    )
+
+
+@pytest.mark.parametrize("kind", ["failed", "partial"])
+def test_a_missing_date_next_to_a_closure_keeps_the_run_partial(backfill_env, kind):
+    start, end, holiday = date(2026, 9, 7), date(2026, 9, 11), date(2026, 9, 9)
+    missing = date(2026, 9, 10)
+    adapter = _holiday_week_adapter(
+        holiday,
+        failing=missing if kind == "failed" else None,
+        security_only=missing if kind == "partial" else None,
+    )
+    result = backfill.chunked_backfill(start, end, adapter=adapter)
+    (window,) = result["windows"]
+    assert result["status"] == "partial"
+    assert window["status"] == "partial"
+    assert _stored_run_status(window["run_id"]) == "partial"
+    assert window[f"{kind}_dates"] == [missing.isoformat()]
+    run = backfill.targeted_backfill(start, end, adapter=adapter)
+    assert run["status"] == "partial"
+    assert run["metadata"]["coverage_manifest_summary"]["status"] == "partial"
+
+
+@pytest.mark.parametrize("with_closure", [False, True])
+def test_a_window_with_nothing_received_is_failed_in_run_and_summary(
+    backfill_env, with_closure
+):
+    # #772 review 6893593170: a closure does not save a window whose every
+    # trading day failed, and the manifest summary says what the run says.
+    holiday, missing = date(2026, 9, 9), date(2026, 9, 10)
+    start = holiday if with_closure else missing
+    adapter = _holiday_week_adapter(holiday, failing=missing)
+    run = backfill.targeted_backfill(start, missing, adapter=adapter)
+    assert run["status"] == "failed"
+    assert run["metadata"]["coverage_manifest_summary"]["status"] == "failed"
+    assert _stored_run_status(run["id"]) == "failed"
+    assert run["metadata"]["failed_dates"] == [missing.isoformat()]
+    assert run["metadata"]["skipped_dates"] == (
+        [holiday.isoformat()] if with_closure else []
+    )
 
 
 def test_backfill_retry_budget_is_three_immediate_plus_two_targeted(backfill_env):

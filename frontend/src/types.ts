@@ -1723,3 +1723,46 @@ export type OvernightUs = {
   indexes: ForeignIndex[]
   group_links: Record<string, string[]>
 }
+
+// /api/mainstream (主流族群前 20, mainstream_v1, #768): a second daily list beside the today list, with no price levels.
+// status computed: groups and items; zero: no group ranked (no items); missing: no stored list of the day (or none at
+// all). universe_count and ranked_group_count are only on computed and zero (a missing response has no run).
+export type MainstreamGroup = {
+  id: string
+  name: string
+  group_type: string | null
+  strength: number
+  rank: number
+  member_count: number | null
+  top_count: number | null
+}
+
+// The day's today list entry of the stock (read at request time); null when it is not on that day's today list.
+export type MainstreamTodayList = { rank: number; entry_type: string | null; score_version: string }
+
+export type MainstreamItem = {
+  rank: number
+  instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
+  // The chosen groups the stock belongs to, in their rank order.
+  groups: Array<Pick<MainstreamGroup, 'id' | 'name' | 'group_type' | 'rank'>>
+  // Close of the date over the close `window` sessions before, minus one; excess_w is that minus TAIEX's.
+  return_w: number
+  excess_w: number
+  market: CandidateMarket
+  recent_closes: CandidateRecentCloses
+  today_list: MainstreamTodayList | null
+}
+
+export type MainstreamResponse = {
+  status: 'computed' | 'zero' | 'missing' | string
+  trading_date: string | null
+  version: string
+  window: number
+  group_count: number
+  computed_at: string | null
+  index_return: number | null
+  universe_count?: number
+  ranked_group_count?: number
+  groups: MainstreamGroup[]
+  items: MainstreamItem[]
+}
