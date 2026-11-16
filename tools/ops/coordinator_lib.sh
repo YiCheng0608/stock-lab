@@ -38,10 +38,23 @@ find_python() {
   die "找不到可用的 Python（用 --python 或 STOCK_PYTHON 指定）" 2
 }
 
-cj() { "$python" -X utf8 "$script_dir/coordinator_json.py" "$@"; }
+# need_python: what runs "$python" calls this first. A shell that sourced this file and
+# went on without find_python has an empty $python, and "$python" ran a command named ""
+# (": command not found", exit 1, no reason given: #350, then twice more, #806). It says
+# what is missing and returns 2 instead; it does not run find_python itself: that one
+# exits the shell that sourced it when no Python works, and inside $(cj …) what it found
+# would be lost after every call.
+need_python() {
+  [ -n "$python" ] && return 0
+  printf '%s: coordinator_lib.sh 的 $python 是空的：source 之後先跑 find_python（或 source 前設 STOCK_PYTHON），再呼叫 cj、json_str、board_set 等函式（#806）\n' \
+    "${0##*/}" >&2
+  return 2
+}
+
+cj() { need_python || return; "$python" -X utf8 "$script_dir/coordinator_json.py" "$@"; }
 
 # json_str VALUE: VALUE as a JSON string literal.
-json_str() { printf '%s' "$1" | "$python" -X utf8 -c 'import json,sys; sys.stdout.write(json.dumps(sys.stdin.read(), ensure_ascii=False))'; }
+json_str() { need_python || return; printf '%s' "$1" | "$python" -X utf8 -c 'import json,sys; sys.stdout.write(json.dumps(sys.stdin.read(), ensure_ascii=False))'; }
 
 # listener_post PATH: POST to the host's wake listener (wake_listener.py, #338) with the
 # token STOCK_WAKE_TOKEN; prints the answer. Returns 1 without a token, when the listener
@@ -64,9 +77,11 @@ orca_repo_id() {
 
 # board_set ISSUE STATUS: set the issue's Status on project 1, adding the issue first when
 # it is not on the board. The item id comes from the issue's own projectItems, never
-# from a board listing. Prints the status that was set; returns 1 on failure.
+# from a board listing. Prints the status that was set; returns 1 on failure, 2 without
+# $python (before any gh call, #806).
 board_set() {
   local issue="$1" status="$2" out item project field options node option entry entries
+  need_python || return
   out="$(gh api graphql -F n="$issue" -f query='query($n:Int!){
     repository(owner:"YiCheng0608",name:"stock-lab"){issue(number:$n){id
       projectItems(first:10){nodes{id project{id number
@@ -547,6 +562,8 @@ cbm_ensure() {
 memory_out="" memory_failures=""
 memory_check() {
   local rc=0
+  memory_out="" memory_failures=""
+  need_python || return
   memory_out="$("$python" -X utf8 "$script_dir/memory_check.py" --repo "$repo_root" 2>&1)" || rc=$?
   memory_out="$(printf '%s' "$memory_out" | tr -d '\r')"
   memory_failures="$(printf '%s\n' "$memory_out" | awk '
