@@ -49,6 +49,7 @@ from worker.mops_events import stored_event_manifest
 from worker.sources import (
     OfficialBatch,
     OfficialMarketDataAdapter,
+    is_request_date,
 )
 
 
@@ -96,23 +97,25 @@ def _validate_range(start_date: date, end_date: date) -> None:
 def calendar_weekday_dates(start_date: date, end_date: date) -> list[date]:
     """Return requested weekdays; official feeds decide which are sessions.
 
-    Weekends are never sent to a source.  Public-holiday handling remains
-    source-driven because a weekday without a verified official response must
-    not be silently converted into a fabricated market session.
+    A weekend is sent to a source only when it is an official weekend session
+    (``sources.OFFICIAL_WEEKEND_SESSIONS``, Issue #790); other weekends never
+    are.  Public-holiday handling remains source-driven because a weekday
+    without a verified official response must not be silently converted into
+    a fabricated market session.
     """
 
     _validate_range(start_date, end_date)
     values: list[date] = []
     cursor = start_date
     while cursor <= end_date:
-        if cursor.weekday() < 5:
+        if is_request_date(cursor):
             values.append(cursor)
         cursor += timedelta(days=1)
     return values
 
 
 def _extension_candidate_dates(start_date: date, end_date: date) -> list[date]:
-    """Return bounded weekdays immediately before ``start_date``.
+    """Return bounded weekdays (and official weekend sessions) before ``start_date``.
 
     The original request range is immutable for request-key compatibility.  A
     full 65-session run may activate these candidates when an official
@@ -124,7 +127,7 @@ def _extension_candidate_dates(start_date: date, end_date: date) -> list[date]:
     cursor = start_date - timedelta(days=1)
     values: list[date] = []
     while cursor >= lower_bound:
-        if cursor.weekday() < 5:
+        if is_request_date(cursor):
             values.append(cursor)
         cursor -= timedelta(days=1)
     return values
@@ -1180,7 +1183,7 @@ def _initial_metadata(
         "scope_semantics": "market=all official market-base rows; priority=portfolio/watchlist/events/candidates union",
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
-        "date_semantics": "calendar weekdays are requested; official source responses decide actual trading sessions; weekends are excluded and explicit no-data dates are skipped_non_trading",
+        "date_semantics": "calendar weekdays are requested; official source responses decide actual trading sessions; weekends are excluded except official weekend sessions (#790), and explicit no-data dates are skipped_non_trading",
         "requested_dates": [item.isoformat() for item in requested_dates],
         "requested_calendar_dates": [item.isoformat() for item in requested_dates],
         "extension_candidate_dates": [

@@ -253,6 +253,11 @@ class TradingHaltRecord:
     ``resume_date``.  TWSE names the last trading day (``halt_start`` is the
     calendar day after it); TPEx names the first stopped day and no last
     trading day.  ``details`` is the official row as published.
+
+    ``infer_last_trade`` marks a TWSE row whose 詳細資料 date is not before
+    the resumption (2011～2015-04, #776): it names no last trading day, so
+    ``halt_start`` is the resumption (an empty stop) and ``last_trade_date``
+    None until ``trading_halts`` infers them from the stored bars.
     """
 
     symbol: str
@@ -266,6 +271,7 @@ class TradingHaltRecord:
     reason: str = "capital_reduction"
     details: dict[str, Any] = field(default_factory=dict)
     payload_sha256: str | None = None
+    infer_last_trade: bool = False
 
 
 @dataclass(frozen=True)
@@ -557,6 +563,37 @@ TWSE_ACTION_HISTORY_FIRST_DATE = date(2003, 5, 5)  # TWT49U: 查詢開始日期�
 # Capital reduction reports: TWTAUU 查詢開始日期小於100年1月1日; revivt answers an
 # empty table for 2012 and has rows from 2013.
 REDUCTION_FIRST_DATES = {"TWSE": date(2011, 1, 1), "TPEx": date(2013, 1, 1)}
+# Weekend sessions (補行交易日) the TWSE FMTQIK month tables list, 2004-02 to
+# 2018-12 (Issue #790; how the list is made is in docs/DATA_SOURCES.md 交易日).
+# A weekend is requested only when it is here; there was none from 2019 on, so
+# a new one must be added by hand.  A weekday range never reads this list.
+OFFICIAL_WEEKEND_SESSIONS = frozenset(
+    {
+        date(2006, 10, 14),
+        date(2007, 3, 3),
+        date(2007, 4, 14),
+        date(2007, 6, 23),
+        date(2007, 9, 29),
+        date(2009, 1, 10),
+        date(2009, 1, 17),
+        date(2009, 6, 6),
+        date(2010, 2, 6),
+        date(2012, 2, 4),
+        date(2012, 3, 3),
+        date(2012, 12, 22),
+        date(2013, 2, 23),
+        date(2013, 9, 14),
+        date(2014, 12, 27),
+        date(2016, 1, 30),
+        date(2016, 6, 4),
+        date(2016, 9, 10),
+        date(2017, 2, 18),
+        date(2017, 6, 3),
+        date(2017, 9, 30),
+        date(2018, 3, 31),
+        date(2018, 12, 22),
+    }
+)
 
 
 def _taiex_month_closes(payload: Any, day: date) -> dict[date, float]:
@@ -1480,10 +1517,16 @@ def _month_starts(start: date, end: date) -> list[date]:
     return result
 
 
+def is_request_date(day: date) -> bool:
+    """A weekday, or a weekend the official tables list as a session (#790)."""
+
+    return day.weekday() < 5 or day in OFFICIAL_WEEKEND_SESSIONS
+
+
 def _weekday_dates(start: date, end: date) -> Iterable[date]:
     cursor = start
     while cursor <= end:
-        if cursor.weekday() < 5:
+        if is_request_date(cursor):
             yield cursor
         cursor += timedelta(days=1)
 
@@ -2449,9 +2492,12 @@ def parse_twse_reduction_payload(
     ``stat`` 很抱歉，沒有符合條件的資料 is an empty range.  Each row's 詳細資料
     is ``<code>  ,<YYYYMMDD>``: the date of the announcement the row is, from
     2015 on mostly the last trading day of the old shares (#774 AC-1), so it
-    is taken as that and the stop begins the calendar day after it.  A row
-    whose 詳細資料 names another code or no date, or whose date is not before
-    the resumption, is left out and named in the second list.  A table with
+    is taken as that and the stop begins the calendar day after it.  A date
+    not before the resumption (89 rows resuming 2011-01～2015-04, none since)
+    is not a trading day of the stop: the row is returned with
+    ``infer_last_trade`` for the stored bars to give its stop
+    (``trading_halts``, #776).  A row whose 詳細資料 names another code or no
+    date is left out and named in the second list.  A table with
     other columns, another range or a resumption outside the range is
     rejected whole.
 
@@ -2494,29 +2540,29 @@ def parse_twse_reduction_payload(
                 f"{row[columns['恢復買賣日期']]!r}, outside {start}..{end}"
             )
         detail = _TWSE_REDUCTION_DETAIL.fullmatch(str(row[columns["詳細資料"]] or ""))
-        last_trade = parse_roc_date(detail.group(2)) if detail else None
-        if (
-            detail is None
-            or detail.group(1) != symbol
-            or last_trade is None
-            or last_trade >= resume
-        ):
+        stated = parse_roc_date(detail.group(2)) if detail else None
+        if detail is None or detail.group(1) != symbol or stated is None:
             rejected.append(
                 f"{symbol} resuming {resume}: 詳細資料 "
-                f"{row[columns['詳細資料']]!r} names no earlier last trading day"
+                f"{row[columns['詳細資料']]!r} names another code or no date"
             )
             continue
+        # A date not before the resumption is when the row was announced or
+        # updated (2412 resuming 2011-01-25 says 20110128): the stored bars
+        # give the last trading day instead (#776).
+        infer = stated >= resume
         record = TradingHaltRecord(
             symbol=symbol,
             exchange="TWSE",
-            halt_start=last_trade + timedelta(days=1),
+            halt_start=resume if infer else stated + timedelta(days=1),
             resume_date=resume,
-            last_trade_date=last_trade,
+            last_trade_date=None if infer else stated,
             reason_detail=str(row[columns["減資原因"]] or "").strip() or None,
             endpoint=endpoint,
             source=TRADING_HALT_SOURCES["TWSE"],
             details=dict(zip(fields, row)),
             payload_sha256=payload_sha256,
+            infer_last_trade=infer,
         )
         groups.setdefault((symbol, resume), []).append(record)
     records: list[TradingHaltRecord] = []

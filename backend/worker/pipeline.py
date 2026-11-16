@@ -121,6 +121,7 @@ from worker.sources import (
     FundamentalRecord,
     InstrumentRecord,
     OfficialDataError,
+    OFFICIAL_WEEKEND_SESSIONS,
     OfficialMarketDataAdapter,
     OfficialBatch,
     TWSE_CHIP_ENDPOINT,
@@ -4914,7 +4915,9 @@ def collect(
 
     if init_schema:
         init_db()
-    score_date = latest_weekday(end_date)
+    score_date = (
+        end_date if end_date in OFFICIAL_WEEKEND_SESSIONS else latest_weekday(end_date)
+    )
     start_date = _official_start_date(score_date, months_back)
     request_key = f"official-ohlcv:{start_date.isoformat()}:{score_date.isoformat()}"
     now = utcnow()

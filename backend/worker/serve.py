@@ -33,6 +33,13 @@ commands those tasks ran.
   (worker.notify). Not a worker.job job: it takes its own lock and log, skips a day
   the stored calendar marks closed and a day already sent, and runs in maintenance
   mode too (it only reads the database).
+- intraday: Monday to Friday 08:59 (#801), ``worker.cli intraday --send --trigger
+  scheduler``: the intraday alerts (worker.intraday), a round of Fugle quotes a minute from
+  09:00 to 13:30, then it ends itself. Not a worker.job job: its own lock, log and jsonl of
+  the day's events; it skips a closed day and runs in maintenance mode too (it writes no
+  database). Caught up at start between 08:59 and 13:30 when the day's
+  ``logs/intraday-YYYYMMDD.log`` has no result that ends the day; the run reads the day's
+  jsonl first and sends nothing twice.
 - watchdog: at :15 and :45, ``tools/ops/watchdog.sh``.
 - monitor: every minute, one poll of the coordinator's event monitor
   ``tools/ops/monitor.sh --once`` (#338), only with ``--monitor`` (or
@@ -110,11 +117,14 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import job, notify, preopen
+from . import intraday, job, notify, preopen
 
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
-JOBS = ("daily", "news", "us", "preopen", "notify", "watchdog", "monitor")
+JOBS = ("daily", "news", "us", "preopen", "notify", "intraday", "watchdog", "monitor")
+# intraday (#801 decision 6906133359): Taipei Monday to Friday 08:59, the run ends itself
+# after the 13:30 round; the job itself skips the days the stored calendar marks closed.
+INTRADAY_DAYS = "mon-fri"
 # notify (#728 decision 6881879639): Taipei Monday to Friday before the open; the job
 # itself skips the days the stored calendar marks closed.
 NOTIFY_DAYS = "mon-fri"
@@ -380,6 +390,12 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
             minute=notify.SEND_TIME[1],
             timezone=TAIPEI,
         ),
+        "intraday": CronTrigger(
+            day_of_week=INTRADAY_DAYS,
+            hour=intraday.START_TIME[0],
+            minute=intraday.START_TIME[1],
+            timezone=TAIPEI,
+        ),
         "watchdog": CronTrigger(minute=args.watchdog_minutes, timezone=TAIPEI),
     }
     if args.monitor != "off":
@@ -504,6 +520,19 @@ class Serve:
                 # The injected time, not only its day: the job checks 08:45 to 13:30.
                 argv += ["--now", at.isoformat()]
             return argv, environment
+        if name == "intraday":
+            # FUGLE_API_KEY and the Telegram variables come with os.environ (env_file).
+            argv = [
+                *job.worker_command(["intraday", "--send"]),
+                "--trigger",
+                "scheduler",
+                "--log-dir",
+                str(self.log_dir),
+            ]
+            if self.offset:
+                # The injected time: the run's rounds go by it (09:00 to 13:30).
+                argv += ["--now", at.isoformat()]
+            return argv, environment
         argv = [
             *job.worker_command(["job", name]),
             "--trigger",
@@ -581,6 +610,26 @@ class Serve:
         if notify.day_done(self.log_dir, now.date()):
             return None
         return "not_sent"
+
+    def missed_intraday(self) -> str | None:
+        """Why serve starts the day's intraday alerts as it starts, or None (#801).
+
+        Monday to Friday between intraday.START_TIME and intraday.LAST_POLL, when the
+        day's log has no result that ends the day (finished, stopped, non_trading_day,
+        no_targets): a container recreated during the session goes on with the rest of
+        it, and the run reads the day's jsonl so that it sends nothing twice.
+        """
+
+        now = self.now()
+        if now.weekday() >= 5:
+            return None
+        if not intraday.in_run_window(now):
+            return None
+        if not Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"]).is_file():
+            return None
+        if intraday.day_done(self.log_dir, now.date()):
+            return None
+        return "not_running"
 
     def missed_preopen(self) -> str | None:
         """Why serve runs the day's pre-open check as it starts, or None (#755).
@@ -660,17 +709,20 @@ class Serve:
         )
 
     def catch_up_missed(self, scheduler) -> None:
-        """At start and at the end of maintenance: the day's missing daily, us and notify."""
+        """At start and at the end of maintenance: the day's missing daily, us, preopen,
+        notify and intraday."""
 
         for name, missed in (
             ("daily", self.missed_daily()),
             ("us", self.missed_us()),
             ("preopen", self.missed_preopen()),
             ("notify", self.missed_notify()),
+            ("intraday", self.missed_intraday()),
         ):
             if not missed:
                 continue
-            if self._maintenance and name != "notify":
+            # notify and intraday write no database: they run in maintenance mode too.
+            if self._maintenance and name not in ("notify", "intraday"):
                 # The job would only skip: the end of maintenance catches it up.
                 self.say("catchup_deferred", job=name, reason=missed, maintenance="on")
             else:
@@ -714,6 +766,8 @@ class Serve:
             return (notify.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
         if name == "preopen":
             return (preopen.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
+        if name == "intraday":
+            return (intraday.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
         limit = getattr(self.args, f"{name}_time_limit_minutes")
         minutes = limit or job.TIME_LIMIT_MINUTES[name]
         return (minutes + BACKSTOP_MINUTES) * 60

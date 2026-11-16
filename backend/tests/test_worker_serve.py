@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 
+import worker.intraday as intraday
 import worker.job as job
 import worker.notify as notify
 import worker.serve as serve
@@ -104,9 +105,10 @@ class ServeTree(Tree):
     def __init__(self, root: Path) -> None:
         super().__init__(root)
         worker = self.backend / "worker"
-        # serve reads the notify and preopen logs through worker.notify (#728) and
-        # worker.preopen (#755); both standard library only at the top.
-        for name in ("serve.py", "notify.py", "preopen.py"):
+        # serve reads the notify, preopen and intraday logs through worker.notify (#728),
+        # worker.preopen (#755) and worker.intraday (#801, which imports worker.fugle); all
+        # standard library only at the top.
+        for name in ("serve.py", "notify.py", "preopen.py", "intraday.py", "fugle.py"):
             shutil.copyfile(ROOT / "backend" / "worker" / name, worker / name)
         (worker / "cli.py").write_text(SERVE_CLI, encoding="utf-8")
         ops = self.project / "tools" / "ops"
@@ -284,6 +286,7 @@ def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
         "us",
         "preopen",
         "notify",
+        "intraday",
         "watchdog",
         # #468: serve's own read of the maintenance marker, not a job it starts.
         "maintenance-watch",
@@ -2073,6 +2076,147 @@ def test_the_missed_preopen_check_waits_for_the_end_of_maintenance(tmp_path, cap
     assert " serve catchup_deferred job=preopen reason=not_checked maintenance=on" in (
         capsys.readouterr().out
     )
+
+
+# intraday (#801) --------------------------------------------------------------------
+
+
+def test_intraday_starts_monday_to_friday_at_0859_and_ends_by_1331():
+    triggers = serve.triggers(serve_args())
+    monday = datetime(2026, 11, 16, tzinfo=TAIPEI)
+    week = monday + timedelta(days=7)
+    times = fire_times(triggers["intraday"], monday, week)
+    assert [moment.strftime("%a %H:%M") for moment in times] == [
+        f"{day} 08:59" for day in ("Mon", "Tue", "Wed", "Thu", "Fri")
+    ]
+    for name in ("daily", "news", "us", "preopen", "notify", "watchdog"):
+        other = set(fire_times(triggers[name], monday, week))
+        assert not other & set(times), name
+    assert intraday.START_TIME == (8, 59)
+    assert (intraday.FIRST_POLL, intraday.LAST_POLL, intraday.END_TIME) == (
+        (9, 0),
+        (13, 30),
+        (13, 31),
+    )
+    # 09:00 to 13:30, one round a minute.
+    assert intraday.POLLS_PER_DAY == 4 * 60 + 30 + 1
+
+
+def test_the_intraday_command_sends_with_its_own_log_and_no_job_wrapper(tmp_path):
+    data = tmp_path / "data"
+    runner = serve.Serve(serve_args("--data-dir", str(data)))
+    command, environment = runner.command("intraday", runner.now())
+    assert command == [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-m",
+        "worker.cli",
+        "intraday",
+        "--send",
+        "--trigger",
+        "scheduler",
+        "--log-dir",
+        str(data / "logs"),
+    ]
+    assert environment["STOCK_DB_PATH"] == str(data / "stock.db")
+    injected = serve.Serve(
+        serve_args("--data-dir", str(data), "--now", "2026-11-16T08:58:50")
+    )
+    argv = injected.command("intraday", injected.now())[0]
+    assert argv[-2] == "--now" and argv[-1].startswith("2026-11-16T08:58:5")
+    # 08:59 to past 13:31, then serve's 5 minutes: the run ends itself long before.
+    assert runner.backstop("intraday") == (280 + 5) * 60
+    start = datetime(2026, 11, 16, 8, 59, tzinfo=TAIPEI)
+    end = datetime(2026, 11, 16, 13, 31, tzinfo=TAIPEI)
+    assert start + timedelta(minutes=intraday.TIME_LIMIT_MINUTES) > end
+
+
+def _intraday_log(data: Path, day: str, *results: str) -> None:
+    logs = data / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / f"intraday-{day.replace('-', '')}.log").write_text(
+        "".join(
+            f"===== {day}T08:59:00+08:00 start job=intraday\n--- result {result}\n"
+            f"===== {day}T13:30:01+08:00 end exit=0 seconds=16261\n"
+            for result in results
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    "results, now, reason",
+    [
+        # Recreated during the session: the rest of it, at once.
+        ((), f"{MONDAY}T10:30", "not_running"),
+        ((), f"{MONDAY}T08:59", "not_running"),
+        (
+            ("status=failed reason=error:OperationalError",),
+            f"{MONDAY}T10:00",
+            "not_running",
+        ),
+        # A key set later the same morning (the scheduler recreated with it).
+        (
+            ("status=not_configured missing=FUGLE_API_KEY",),
+            f"{MONDAY}T09:40",
+            "not_running",
+        ),
+        # The day is done.
+        (
+            ("status=finished polls=271 ok_polls=271 events=3 symbols=13",),
+            f"{MONDAY}T13:00",
+            None,
+        ),
+        (("status=stopped reason=key_invalid code=401",), f"{MONDAY}T10:00", None),
+        (("status=skipped reason=non_trading_day",), f"{MONDAY}T10:00", None),
+        (("status=skipped reason=no_targets",), f"{MONDAY}T10:00", None),
+        # Before 08:59, from 13:30 on, or a weekend.
+        ((), f"{MONDAY}T08:58", None),
+        ((), f"{MONDAY}T13:30", None),
+        ((), f"{SATURDAY}T10:00", None),
+    ],
+)
+def test_serve_starts_the_missed_intraday_alerts_at_start(
+    tmp_path, results, now, reason
+):
+    data = tmp_path / "data"
+    _runs_db(data)
+    if results:
+        _intraday_log(data, MONDAY, *results)
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    jobs = {scheduled.id: scheduled for scheduled in runner.scheduler().get_jobs()}
+    assert runner.missed_intraday() == reason
+    if reason is None:
+        assert "intraday-catchup" not in jobs
+    else:
+        assert jobs["intraday-catchup"].args == ("intraday",)
+
+
+def test_a_volume_without_a_database_starts_no_intraday_alerts(tmp_path):
+    runner = serve.Serve(
+        serve_args("--data-dir", str(tmp_path / "data"), "--now", f"{MONDAY}T10:00")
+    )
+    assert runner.missed_intraday() is None
+
+
+def test_the_missed_intraday_alerts_run_in_maintenance_mode_too(tmp_path, capsys):
+    """They write no database (#801 decision 6906133359): no deferral."""
+
+    data = tmp_path / "data"
+    _runs_db(data)
+    _maintenance_on(data)
+    runner, scheduler, jobs = _deferred(data, f"{MONDAY}T10:00")
+    assert "intraday-catchup" in jobs
+    out = capsys.readouterr().out
+    assert " serve catchup job=intraday reason=not_running" in out
+    assert "catchup_deferred job=intraday" not in out
+
+
+def test_the_env_example_lists_the_fugle_key_empty():
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^FUGLE_API_KEY=$", text, re.M)
+    assert "docs/DATA_SOURCES.md" in text
 
 
 def test_the_telegram_variables_reach_the_scheduler_through_env_file_only():

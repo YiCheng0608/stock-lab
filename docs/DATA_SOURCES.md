@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、標的狀態同步、官方來源限制、新聞來源清單、盤中報價來源、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [CAPABILITIES](CAPABILITIES.md) 為準。
@@ -137,6 +137,63 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - **非股市內容**：中央社產經證券 feed 會混入生活（含彩券開獎）、社會等分類的稿件，CNBC Top News 會混入 CNBC Make It 專欄；這些稿件與標題含彩券、社會案件關鍵字者存為 `status=excluded`，不顯示、不送 LLM，raw 照存。各來源的排除分類與關鍵字見 [NEWS_SPEC §3](NEWS_SPEC.md#3-去重新資訊與事件影響)。
 - **限制**：feed 只保留最近 10～65 則，抓取間隔內若超過這個數量會漏稿，漏掉的舊稿不回補。feed 的 `pubDate` 是來源宣稱的發布時間，不是本系統可證明的第一次可得時間。
 
+## 盤中報價
+
+這一節記盤中即時通知用的報價來源。通知是今日名單與我的追蹤的股票觸及規則價位時傳 Telegram。查證與實測在 2026-11-15～16 做（[#756](https://github.com/YiCheng0608/stock-lab/issues/756)）。使用者 2026-11-16 選富果行情 API 的免費方案（[#1 6909629060](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6909629060)、[#756 決定 6909643332](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6909643332)）。實作是 [#801](https://github.com/YiCheng0608/stock-lab/issues/801)：scheduler 的 `intraday` 工作（[`backend/worker/intraday.py`](../backend/worker/intraday.py)、adapter [`backend/worker/fugle.py`](../backend/worker/fugle.py)，排程與規則見 [SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）；只有它讀盤中報價，collector 與 daily 都不讀，也不寫 DB。
+
+### 採用：富果行情 API 基本用戶
+
+- **端點**：`GET https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/{symbol}`，標頭 `X-API-KEY`。上市、上櫃都有。
+- **帳戶**：要註冊富果會員取得 API key。使用者自己註冊、自己把 key 放進本機設定檔，agent 不註冊也不讀 key。這是[來源選用原則](#來源選用原則)的例外：免費但要帳戶，由使用者決定採用。
+- **上限**（[行情方案及價格](https://developer.fugle.tw/docs/pricing)，2026-11-15 查）：
+  - 基本用戶的額度：「台股日內行情 API (呼叫次數/分鐘) 60/min」「台股即時行情 WebSocket 5 訂閱數 1 連線數」「台股日內行情快照 ✘ 不支援」。
+  - 每檔每分鐘 1 個請求，一分鐘最多約 50 檔，留 10 次餘裕。
+  - WebSocket 只有 5 個訂閱，不用。
+- **條款**（[使用規範與聲明](https://developer.fugle.tw/docs/data/intro)）：
+  - 每人只能有一個帳號，不得用多帳號規避免費行情的限制。
+  - 要遵守[臺灣證券交易所交易資訊使用管理辦法](https://www.twse.com.tw/downloads/zh/products/regulation_use.pdf)，不得轉接、出售或轉讓交易資訊，也不得傳送給第三人。
+  - 該辦法第三條第六款：「市場交易時間中所傳送之交易資訊為即時資訊，較即時資訊延遲二十分鐘以上之交易資訊為延遲資訊」。
+  - 第二十七條：「資訊用戶不得將本公司交易資訊出租、出售或轉讓他人，或以任何方式再轉接他處」。
+  - 所以通知只傳給使用者本人，只寫規則價位與觸及時的成交價與時間，不轉傳、不公開。
+- **讀的欄位**：
+  - `highPrice`／`lowPrice`：開盤以來的最高最低，用來判斷觸及。
+  - `lastTrade.price`／`lastTrade.time`：訊息附的成交價與時間。
+  - `isTrial`：試撮階段不判斷。
+  - `isLimitUpPrice` 等漲跌停旗標。
+  - `lastUpdated`：記延遲。
+- **錯誤碼與處理**（#801）：401（key 無效）、403（方案不支援）、429（限流）當天停止讀取並通知；逾時（10 秒）、連線失敗與 5xx 這一分鐘這檔跳過、不重試；404（代號）與缺 `highPrice`／`lowPrice`／`lastTrade` 的回應只停那一檔；整輪連續 5 次沒有回應改成每 5 分鐘一輪（[SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）。
+- **延遲**：還沒實測，因為使用者還沒放好 key。#801 AC-6 會在放好 key 後的交易日盤中跑 `worker.cli intraday --dry-run` 30～60 分鐘，量每檔回應時間、`lastUpdated` 與實際時間的差、失敗率，和下面 MIS 的數字並列在這裡。
+
+### 沒採用的來源
+
+查證日是 2026-11-15，條款原文在 [#756 AC-1](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6888637963) 的留言。
+
+| 來源 | 為什麼不用 |
+| --- | --- |
+| TWSE 基本市況報導網站（MIS）`getStockInfo.jsp` | 條款禁止自動下載（見下）；非公開端點，沒有文件、上限與 SLA |
+| TWSE OpenAPI（`STOCK_DAY_ALL` 等）、TPEx OpenAPI（`tpex_mainboard_quotes`，以及名稱有「盤中」的排行 `tpex_active_*`） | 沒有逐檔盤中價。2026-11-16 10:00～11:00 每 5 或 15 分鐘讀一次，32 次全部回 11/13 的資料，盤中不更新 |
+| 永豐 Shioaji | 要永豐金證券帳戶；官方要求盤中用訂閱，反覆輪詢 `snapshots` 會被停權 |
+| 富邦 Neo API | 要富邦證券開戶、電子交易憑證，並簽署 API 使用聲明 |
+| FinMind `taiwan_stock_tick_snapshot` | 只限 sponsor 會員（付費） |
+| Yahoo 股市等第三方網站 | [Yahoo 條款](https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html)禁止以自動化方式收集資料 |
+
+**MIS 的條款與實測**（留作沒採用的紀錄）：
+
+- **條款**：MIS 內嵌「基本市況報導網站使用條款」，第六條與 [TWSE 主站使用條款](https://www.twse.com.tw/zh/terms/use.html)同文：
+  - 「非依臺灣證券交易所同意之方式或經臺灣證券交易所同意者，禁止透過包括但不限於自動化裝置、指令碼、自動程式、蜘蛛程式、爬蟲程式或擷取程式等方式下載本網站之軟體或資料。」
+  - 頁尾另寫「本網站資料不得作為商業使用」。
+  - MIS 的即時報價沒有登錄在政府資料開放平臺。
+- **實測**：使用者同意只做一次評估（[#756 6892582754](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6892582754)），結果見 [6906081956](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6906081956)。
+  - 2026-11-16 10:02～10:23 每分鐘 1 個請求，一次帶 14 檔，共 22 個請求。
+  - 失敗 1／22，是 10 秒逾時，照決定停止、不重試。
+  - 回應時間中位數 1,474 ms、p90 4,009 ms。
+  - 伺服器快照（`queryTime.sysTime`）約每 1～2 分鐘才換一次。
+  - 各檔報價時間（`tlong`）比收到時間落後：中位數 66 秒、p90 125 秒、最大 256 秒。
+  - 最近一筆成交距快照時間中位數 109 秒，冷門股更久。
+  - 頂層成交價 `z` 有 89% 是 `-`：快照常常只更新五檔、沒有新成交，最近成交要讀 `trade` 子物件。
+  - 漲停鎖住時，委買最佳一檔是 `0`、委賣是 `-`。
+  - 換算成通知：每分鐘輪詢一次時，通知比成交晚約 1～5 分鐘。
+
 ## 欄位規則
 
 ### 法人口徑
@@ -248,8 +305,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 回補 run 的 `target_met` 有三處：metadata 頂層、`coverage_manifest_summary`、`coverage`。這三處和 `/api/coverage` 的 `summary.target_met` 都用同一條規則（[#479](https://github.com/YiCheng0608/stock-lab/issues/479)）：
 
-- **目標**：`min(65, 窗口平日數 − 確定休市日)`，已驗證交易日（[TAIEX 交易日基準](#taiex-交易日基準)）達到目標就算達成。
-  - 回補 run 的窗口平日數含延伸補抓日；短範圍的上限是範圍內的平日數。
+- **目標**：`min(65, 窗口請求日數 − 確定休市日)`，已驗證交易日（[TAIEX 交易日基準](#taiex-交易日基準)）達到目標就算達成。
+  - 窗口請求日數是平日，加上清單裡的週末交易日（[交易日的判定與週末交易日](#交易日的判定與週末交易日)，#790）。
+  - 回補 run 的窗口請求日數含延伸補抓日；短範圍的上限是範圍內的請求日數。
   - run metadata 記 `target_sessions` 與 `confirmed_non_trading_dates`。
   - `/api/coverage` 的 summary 記 `target_ohlcv_taiex_sessions`（扣除後）、`target_ohlcv_taiex_cap`（扣除前）與 `confirmed_non_trading_dates`。
   - `coverage_targets.ohlcv_taiex_sessions` 仍是上限 65；要不要延伸補抓照舊看它，窗口還有空間就往前補。
@@ -261,6 +319,39 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
   只有當天一次 no-data、沒有確認的日子仍算缺資料。這條規則也決定 catchup 要不要補抓（[重跑與回補](ops/SCHEDULING.md#重跑與回補)），只寫在 `app.coverage.collect_states` 一處。官方休市表（[交易日曆](#交易日曆)）不讀：颱風等臨時休市不在表上（2026-10-23），官方 no-data 兩種都涵蓋。
 - **為什麼要扣**：延伸補抓不能早於迄日前 93 日。93 日的窗口約 66～67 個平日，扣掉休市日常湊不到 65 日。例如 run 2266（08/03～11/03）有 67 個平日、5 個確定休市日、驗證到 62 日：舊規則永遠「尚未達成」，新規則的目標是 62，已達成。
 - **日期表**：有回補 manifest 或指定了起訖時，`/api/coverage` 把確定休市日列為 `skipped_non_trading`，計入 `skipped_non_trading_dates`；當天有 MOPS 事件列也一樣，不顯示成 `partial`。完全沒有回補 manifest 的快照模式不扣休市日，目標維持 65。
+
+### 交易日的判定與週末交易日
+
+回補與 collect 要送哪些日子給官方來源，規則只有一條：`worker.sources.is_request_date`（[#790](https://github.com/YiCheng0608/stock-lab/issues/790)）。
+
+- **送出的日子**：週一到週五都送。週末只送 `OFFICIAL_WEEKEND_SESSIONS`（`backend/worker/sources.py`）列出的補行交易日，其他週末不送。
+- **誰是交易日**：由官方回應決定。平日回 no-data 就是休市，見上節[確定休市日](#回補目標與確定休市日)；週末交易日也一樣，送出後由回應核實。
+- **用到這條規則的地方**：
+  - backfill 的候選日與延伸補抓日：`calendar_weekday_dates`、`_extension_candidate_dates`。
+  - sources 的逐日請求：上市 `MI_INDEX`、上櫃 `dailyQuotes`、`fetch_index_history`。
+  - `pipeline.collect`：收到清單裡的週末時，用原日；其他週末照舊推回星期五。
+  - 資料稽核 `tools/audit/audit_checks.py`（[#798](https://github.com/YiCheng0608/stock-lab/issues/798)）：從 `worker.sources` 匯入同一份清單，不另抄。
+    - `bars_integrity` 的 `weekend_date`：清單上的日子有日線不算違規，其他週末照舊算。
+    - `bars_coverage` 的缺口：用 `is_request_date`，清單上的日子沒有日線也列進缺口（2020 年以前休市表是空的，所以記成 `not_in_holiday_table`）；星期日與清單外的星期六照舊不檢查。
+- **平日不受影響**：範圍裡、以及迄日前 93 日內都沒有清單日期時，送出的日子、延伸補抓的候選日和 request key，都和 #790 之前一樣。
+  - 延伸補抓看的是迄日前 93 日。所以清單日期在範圍外、但在這個窗口內時，會多一個延伸補抓候選日。例如 2016-06-06～08-31 會多出 2016-06-04。
+  - 這一天只有要延伸補抓時才會送；範圍內送出的日子不變。
+  - 正式 daily 只在週一到週五跑。
+  - 清單只到 2018-12，正式 DB 從 2024-09-30 開始，所以正式環境不會用到這份清單。
+- **清單從哪裡來**：TWSE `FMTQIK`（每日市場成交資訊）月表，`https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=<YYYYMM01>&response=json`。
+  - 每個月 1 個請求，`data` 每列是一個交易日（民國日期），其中星期六、星期日的列就是週末交易日。
+  - 2004-02～2018-12 共 179 個月，2026-11-16 產生。2012-05～2018-12 用研究 DB 已存的 raw，2004-02～2012-04 另發請求；每天出自哪個 raw，列在 #790 的 PR。
+  - 休市表（[交易日曆](#交易日曆)）不能用：2020 年以前回 `total 0`。
+- **只涵蓋到 2018-12**：2019 年起官方沒有週末交易日。以後若再有，要手動加進清單。
+  - **依據**：研究 DB 已存的官方月表。2019-01～2026-11 的 `index-bars backfill`（TWSE `MI_5MINS_HIST`、TPEx `indexInfo/inx` 月表）都沒有週末列：TPEx 指數 2019 年以後的 1,909 列沒有一天是週末，TWSE 也沒有任何週末的 `no_close_row`。
+  - 2026-11-16 在 #790 的研究 DB 副本上查，沒有另發請求。
+  - 2019 年以後的 FMTQIK 沒有逐月再核對。
+- **重產清單**：
+  1. 對要涵蓋的每個月抓一次 FMTQIK（研究 DB 有已存 raw 的月份讀 raw）。
+  2. 取 `data` 裡日期是週末的列。
+  3. 核對上櫃那天也有官方資料（`indexInfo/inx` 月表或 `dailyQuotes`）。
+  4. 更新 `OFFICIAL_WEEKEND_SESSIONS`，`backend/tests/test_sources.py` 會檢查每一天都是 2019 年以前的週末。
+- **研究 DB 怎麼補**：見 [RESEARCH_DB 的回補表](ops/RESEARCH_DB.md#跑一批)。
 
 ### 大盤概況
 
@@ -429,9 +520,24 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
 - **判定**：停止買賣期間是 `halt_start` 起、到 `resume_date` 前一天為止的交易日（交易日以 TAIEX 為準）。
   - TWSE：「詳細資料」是 `<代號>  ,<YYYYMMDD>`，是那一列公告的日期（[#774 AC-1](https://github.com/YiCheng0608/stock-lab/issues/774)），2015 年以後多數是最後交易日，`halt_start` 取它的下一個日曆日，`last_trade_date` 存這一天。少數列的日期早一個交易日（2025-09 2101 南港、2026-10 4155 訊映：「停止買賣前收盤價格」是下一個交易日的收盤）。所以推出的區間內已存 bar、而且最後一根 bar 的收盤等於「停止買賣前收盤價格」（或該列還沒有價格）時，最後交易日改用那根 bar 的日期，原日期留在 `details_json.stated_last_trade_date`（`last_trade_date_basis = last_bar_before_resumption`；run metadata 記 `moved_past_bars`）。
   - TWSE 同一次停止買賣可能列好幾次，每次公告一列（3536 誠創 2015-03-20 恢復列了 3 次、5906 列了 2 次，#774）。同一 (代號, 恢復日) 的列，除「名稱」「詳細資料」以外的欄有兩種值時（`-`、`--`、空白算還沒給值，跟任何值相容），只略過這一檔。值相容時每列各自照上一點對已存 bar 推區間：推出同一個區間就寫一列（取沒被 bar 移動的那列原列，`details_json.same_resumption_rows` 列出同組各列的「詳細資料」），推不出或推出兩種以上就只略過這一檔，warning 附各列的區間；選出一個區間、但同組有列被 bar 推翻時照寫，被推翻的列另記 warning（`… kept <詳細資料>, rows the bars reject: …`）。因同組列不一致（價格不同或推出 0／≥2 種區間）而略過的那一檔，已存的列不刪不改，記 warning `<交易所> trading halts kept the stored stop of …`，run metadata 記 `kept_on_conflict`（[PR #778 review](https://github.com/YiCheng0608/stock-lab/pull/778#issuecomment-6893689730)）。
-  - 2011～2014 年多數列的「詳細資料」日期晚於恢復日，照下面「列被略過」那點全被略過，那幾年的上市減資停止買賣大多仍缺（[#776](https://github.com/YiCheng0608/stock-lab/issues/776)）。
+  - TWSE「詳細資料」日期**不早於**恢復日的列（[#776](https://github.com/YiCheng0608/stock-lab/issues/776)）：那是公告或更新的日期，不是停止買賣日（2412 中華電 2011-01-25 恢復，詳細資料寫 20110128）。這種列只出現在恢復日 2015-04-16 以前：2011～2014 年 85 列、2015 年 4 列，共 89 列；2015-04-16 以後沒有，正式 DB 目前也沒有。最後交易日改用日線推（`trading_halts._infer_from_bars`）：
+    - 取該股恢復日前的最後一根日線 L。L 要符合下面全部條件，才以 L 當 `last_trade_date`，`halt_start` 取 L 的下一個日曆日，到恢復日（不含）為止。`details_json` 保留官方原列（含原「詳細資料」），另記 `last_trade_date_basis = inferred_from_bars`；run metadata 記 `inferred_from_bars`。
+    - 不符合就略過這一列，warning `TWSE trading halts rejected: <代號> resuming <恢復日>: …` 寫明原因：
+      - 恢復日前沒有任何日線：`no bar before the resumption`。
+      - 「停止買賣前收盤價格」是 `-`／`--`／空白：`停止買賣前收盤價格 '--' is not given`。這裡收盤價是唯一的證據，所以跟上一點不同，沒有價格不收。
+      - 恢復日 − L 超過 30 個日曆日（`INFER_MAX_DAYS`）：`last bar … is N days before the resumption, over 30`。2017～2024 年 215 列的正常值是 8～21 天；2011～2014 年還沒有 TAIEX 交易日基準，所以用日曆日。
+      - L 的收盤不等於「停止買賣前收盤價格」：`last bar … closes X, not 停止買賣前收盤價格 Y`。
+      - L 的隔天到恢復日（不含）之間，TWSE 沒有任何其他股票的日線：`no TWSE bars between … and the resumption`。這條擋的是收集缺口：該股沒有日線的那幾天，市場本身要有交易。
+    - 校準：不看「詳細資料」，套在 2015-01～2024-09 的 272 列上。267 列跟現行規則推出同一個最後交易日。其餘 5 列：
+      - 3149（2016-10-11 恢復）：推出 2016-09-26。「詳細資料」的 09-28 是颱風休市日，停止買賣的交易日相同。
+      - 3 列超過上限：3536 的兩列停了 63 天，3312 停了 61 天。
+      - 3557：收盤 6.63，不等於價格欄 6.65。
+    - 同一 (代號, 恢復日) 也列了日期早於恢復日的列時（2408、2438、3536），推定列當成同組的一列，照上面「同一次停止買賣可能列好幾次」那點選區間。推定列算被 bar 移動過，所以推出同一個區間時：
+      - 早列沒被移動，寫早列的原列。
+      - 早列也被移動（2408：詳細資料 08-20，日線到 08-25），寫同組第一列，`last_trade_date_basis` 跟著那一列。
+    - 正式 collect：恢復日在收集日前 10 天到後 60 天的列，停止買賣開始前推不出來，會記上面的 warning（非核心，collect 仍是 `success`）。開始停止買賣之後，L 就是最後交易日，下一次 collect 就寫得進去。
   - TPEx：「詳細資料」的 HTML 寫明停止買賣日期與恢復買賣日期，`halt_start` 取停止買賣日期；TPEx 沒有最後交易日，`last_trade_date` 留空。同一 (代號, 恢復日) 列了兩種停止買賣日期時只略過這一檔，已存的列同樣保留。
-  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或停止買賣不早於恢復日。該股在區間內已存 bar、又不是上一點的 TWSE 情形時也一樣（TPEx 明寫停止買賣日期，區間內有 bar 一律略過；官方行情表有價格，以 bar 為準）。
+  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或 TPEx 的停止買賣日期不早於恢復日。TWSE 日期不早於恢復日的列不在此列，改用日線推（上面）。該股在區間內已存 bar、又不是上一點的 TWSE 情形時也一樣（TPEx 明寫停止買賣日期，區間內有 bar 一律略過；官方行情表有價格，以 bar 為準）。
   - 整份不採用的情形：回應的區間跟請求的不同、欄名改變、TPEx `totalCount` 多於列數（回應被截斷），或有列的恢復日在區間外。
 - **保存**：`trading_halts` 每個標的、每個來源、每個恢復日一列，記 `exchange`、`halt_start`、`resume_date`、`last_trade_date`、`reason`（`capital_reduction`）、`reason_detail`（減資原因，如「退還股款」「彌補虧損」）、`source`（`twse_twtauu`／`tpex_revivt`）、`endpoint`（含查詢區間）、`data_as_of`（查詢那天：collect 的收集日或 CLI 的執行日）、`collected_at`、`raw_payload_id` 與官方原列 `details_json`。
 - **重建**：每份可讀的回應對它的區間是完整的。同一來源、恢復日落在該區間的已存列都用它重建：
@@ -439,7 +545,7 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
   - 回應一列都沒有（TWSE「沒有符合條件」、TPEx 空表）而該來源在這個區間已有存列時，不刪任何列，記非核心 warning `<交易所> trading halts empty answer kept N stored rows resuming …`，run metadata 記 `kept_on_empty`：TWSE 的空回應沒有區間與總數可核對，官方誤回一次空表就會刪光區間內的列，若剛好在恢復日後第 10 天就再也查不回來。區間內沒有存列時空回應照常、不記 warning。恢復日不在區間內的已存列不受這次重建影響。
   - 內容改變的列改指向新的 capture；沒變的列保留原 capture。
   - 代號在 `instruments` 找不到的只計入 `outside_universe`，不寫；已下市但主檔還有的標的照寫。
-  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`。
+  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`；有用到時另記 `moved_past_bars`、`inferred_from_bars`、`kept_on_conflict`、`kept_on_empty`。被已存 bar 推翻或用日線推不出的列（warning 字首仍是 `… trading halts rejected:`）：整檔沒寫入時算 `conflicts`；同組有別列寫入時只記 warning（`… kept <詳細資料>, rows the bars reject: …`），不算進任何計數（例如 3536 2015-03-20 的晚列）。`rejected` 只數解析時就略過的列。
 - **請求**：當日 collect 各 1 個（恢復日在收集日前 10 天到後 60 天）；取得、解析或寫入失敗記非核心 warning（`TWSE trading halts unavailable: …`），collect 仍為 `success`。歷史由 [`worker.cli trading-halts`](ops/CLI.md#現有-worker-cli) 回補，每個交易所 1 個請求，經同一個官方主機限流。
 - **誰讀它**：
   - coverage（`/api/coverage`、回補報表）把期間內沒有 bar 的交易日算進涵蓋，原因是 `capital_reduction_halt`，不列為 `missing_bar_dates`；摘要另計 `halted_to_20`／`halted_to_60`。

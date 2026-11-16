@@ -1717,3 +1717,87 @@ def test_raw_files_keep_the_umask_mode_not_mkstemps_0600():
     _persist_raw()
     for path in (target, target.with_suffix(".meta.json")):
         assert stat.S_IMODE(path.stat().st_mode) == expected
+
+
+# Weekend sessions (Issue #790): 2012-12-22 is a Saturday the FMTQIK table
+# lists; 2012-12-23 (Sunday) and 2012-12-29 (Saturday) are not sessions.
+LISTED_SATURDAY = date(2012, 12, 22)
+
+
+def test_listed_weekend_session_is_a_request_date_and_others_are_not():
+    # Before #790 the Saturday was dropped: this list had no 2012-12-22.
+    assert list(sources._weekday_dates(date(2012, 12, 21), date(2012, 12, 31))) == [
+        date(2012, 12, 21),
+        LISTED_SATURDAY,
+        date(2012, 12, 24),
+        date(2012, 12, 25),
+        date(2012, 12, 26),
+        date(2012, 12, 27),
+        date(2012, 12, 28),
+        date(2012, 12, 31),
+    ]
+    assert sources.is_request_date(LISTED_SATURDAY)
+    for day in (date(2012, 12, 23), date(2012, 12, 29), date(2012, 12, 30)):
+        assert not sources.is_request_date(day)
+
+
+def test_official_weekend_sessions_are_weekends_before_2019():
+    assert sources.OFFICIAL_WEEKEND_SESSIONS
+    for day in sources.OFFICIAL_WEEKEND_SESSIONS:
+        assert day.weekday() >= 5, day
+        assert sources.TWSE_QUOTES_FIRST_DATE <= day < date(2019, 1, 1), day
+
+
+def test_weekday_range_request_dates_are_unchanged():
+    # A range without a listed weekend gives exactly the Monday-Friday days.
+    for start, end in (
+        (date(2026, 6, 1), date(2026, 8, 31)),
+        (date(2012, 12, 24), date(2013, 2, 22)),
+        (date(2019, 1, 1), date(2019, 3, 31)),
+    ):
+        expected = []
+        cursor = start
+        while cursor <= end:
+            if cursor.weekday() < 5:
+                expected.append(cursor)
+            cursor = date.fromordinal(cursor.toordinal() + 1)
+        assert list(sources._weekday_dates(start, end)) == expected
+
+
+def _mi_index_dates(start: date, end: date, tmp_path, monkeypatch) -> list[str]:
+    monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
+    asked: list[str] = []
+
+    def fetcher(url: str, **_kwargs):
+        if url in {sources.TWSE_DAILY_ENDPOINT, sources.TWSE_HOLIDAY_ENDPOINT}:
+            return []
+        if url.startswith(sources.TWSE_DAILY_HISTORY_ENDPOINT):
+            asked.append(parse_qs(urlsplit(url).query)["date"][0])
+            return {
+                "stat": "\u5f88\u62b1\u6b49\uff0c\u6c92\u6709\u7b26\u5408\u689d\u4ef6\u7684\u8cc7\u6599!",
+                "type": "ALLBUT0999",
+            }
+        raise AssertionError(url)
+
+    sources.TwseAdapter(fetcher).fetch_bars(["1101"], start, end)
+    return asked
+
+
+def test_twse_historical_bars_ask_the_listed_saturday(tmp_path, monkeypatch):
+    # Old code asked 20121221 and 20121224 only (red before #790).
+    assert _mi_index_dates(
+        date(2012, 12, 21), date(2012, 12, 24), tmp_path, monkeypatch
+    ) == ["20121221", "20121222", "20121224"]
+    assert _mi_index_dates(LISTED_SATURDAY, LISTED_SATURDAY, tmp_path, monkeypatch) == [
+        "20121222"
+    ]
+
+
+def test_twse_historical_bars_skip_unlisted_weekends(tmp_path, monkeypatch):
+    assert _mi_index_dates(
+        date(2012, 12, 28), date(2012, 12, 31), tmp_path, monkeypatch
+    ) == ["20121228", "20121231"]
+    assert (
+        _mi_index_dates(date(2012, 12, 29), date(2012, 12, 30), tmp_path, monkeypatch)
+        == []
+    )

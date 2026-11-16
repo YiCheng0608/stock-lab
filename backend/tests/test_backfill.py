@@ -1755,3 +1755,143 @@ def test_backfill_at_the_code_head_skips_the_whole_database_check(
     with _whole_database_checks(engine) as checks:
         backfill.targeted_backfill(saturday, sunday, force=True)
     assert migrated == ["init_db"] and len(checks) >= 1
+
+
+# Weekend sessions (Issue #790): 2012-12-22 is a Saturday the FMTQIK table
+# lists; 2012-12-23 (Sunday) and 2012-12-29 (Saturday) are not sessions.
+LISTED_SATURDAY = date(2012, 12, 22)
+
+
+class _RecordingAdapter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[date, date]] = []
+
+    def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+        self.calls.append((start, end))
+        return _batch_for(end)
+
+
+def test_calendar_dates_add_only_listed_weekend_sessions():
+    # Before #790 the list skipped 2012-12-22.
+    assert backfill.calendar_weekday_dates(date(2012, 12, 21), date(2012, 12, 30)) == [
+        date(2012, 12, 21),
+        LISTED_SATURDAY,
+        date(2012, 12, 24),
+        date(2012, 12, 25),
+        date(2012, 12, 26),
+        date(2012, 12, 27),
+        date(2012, 12, 28),
+    ]
+    assert backfill.calendar_weekday_dates(LISTED_SATURDAY, LISTED_SATURDAY) == [
+        LISTED_SATURDAY
+    ]
+    assert backfill.calendar_weekday_dates(date(2012, 12, 29), date(2012, 12, 30)) == []
+    assert LISTED_SATURDAY in backfill._extension_candidate_dates(
+        date(2012, 12, 24), date(2013, 3, 22)
+    )
+    extension = backfill._extension_candidate_dates(date(2013, 1, 2), date(2013, 3, 29))
+    assert date(2012, 12, 29) not in extension and date(2012, 12, 30) not in extension
+
+
+def test_weekday_ranges_request_the_same_dates_as_before():
+    for start, end in (
+        (date(2026, 6, 10), date(2026, 9, 8)),
+        (date(2013, 10, 1), date(2013, 12, 31)),
+    ):
+        expected = [
+            start + timedelta(days=offset)
+            for offset in range((end - start).days + 1)
+            if (start + timedelta(days=offset)).weekday() < 5
+        ]
+        assert backfill.calendar_weekday_dates(start, end) == expected
+        lower = end - timedelta(days=backfill.OFFICIAL_MAX_BACKFILL_DAYS)
+        assert backfill._extension_candidate_dates(start, end) == [
+            start - timedelta(days=offset)
+            for offset in range(1, (start - lower).days + 1)
+            if (start - timedelta(days=offset)).weekday() < 5
+        ]
+
+
+def test_backfill_sends_the_listed_saturday_and_not_other_weekends(backfill_env):
+    adapter = _RecordingAdapter()
+    result = backfill.targeted_backfill(
+        date(2012, 12, 21), date(2012, 12, 30), adapter=adapter
+    )
+    # Old code: (2012-12-22, 2012-12-22) was never sent.
+    assert [call[1] for call in adapter.calls] == [
+        date(2012, 12, 21),
+        LISTED_SATURDAY,
+        date(2012, 12, 24),
+        date(2012, 12, 25),
+        date(2012, 12, 26),
+        date(2012, 12, 27),
+        date(2012, 12, 28),
+    ]
+    assert all(start == end for start, end in adapter.calls)
+    assert result["request_key"] == "official-backfill:v1:market:2012-12-21:2012-12-30"
+    assert "2012-12-22" in result["metadata"]["verified_trading_sessions"]
+    with backfill_env() as db:
+        keys = set(
+            db.scalars(
+                select(IngestionRun.request_key).where(
+                    IngestionRun.run_type == "collect"
+                )
+            )
+        )
+    assert "official-ohlcv:2012-12-22:2012-12-22" in keys
+    assert not any("2012-12-23" in key or "2012-12-29" in key for key in keys)
+
+
+def test_weekday_backfill_collect_keys_are_unchanged(backfill_env):
+    adapter = _RecordingAdapter()
+    backfill.targeted_backfill(date(2026, 9, 3), date(2026, 9, 8), adapter=adapter)
+    assert adapter.calls == [
+        (day, day)
+        for day in (
+            date(2026, 9, 3),
+            date(2026, 9, 4),
+            date(2026, 9, 7),
+            date(2026, 9, 8),
+        )
+    ]
+    with backfill_env() as db:
+        keys = sorted(
+            db.scalars(
+                select(IngestionRun.request_key).where(
+                    IngestionRun.run_type == "collect"
+                )
+            )
+        )
+    assert keys == [
+        "official-ohlcv:2026-09-03:2026-09-03",
+        "official-ohlcv:2026-09-04:2026-09-04",
+        "official-ohlcv:2026-09-07:2026-09-07",
+        "official-ohlcv:2026-09-08:2026-09-08",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("requested", "score_date"),
+    [
+        # Old code collected 2012-12-21 here (red before #790).
+        (LISTED_SATURDAY, LISTED_SATURDAY),
+        (date(2012, 12, 23), date(2012, 12, 21)),
+        (date(2012, 12, 29), date(2012, 12, 28)),
+        (date(2012, 12, 30), date(2012, 12, 28)),
+        (date(2012, 12, 26), date(2012, 12, 26)),
+    ],
+)
+def test_collect_keeps_a_listed_weekend_session(backfill_env, requested, score_date):
+    adapter = _RecordingAdapter()
+    result = pipeline.collect(requested, adapter=adapter)
+    assert adapter.calls == [(score_date, score_date)]
+    assert result["date"] == score_date.isoformat()
+    with backfill_env() as db:
+        assert (
+            db.scalar(
+                select(IngestionRun.request_key).where(
+                    IngestionRun.run_type == "collect"
+                )
+            )
+            == f"official-ohlcv:{score_date.isoformat()}:{score_date.isoformat()}"
+        )

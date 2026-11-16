@@ -71,6 +71,7 @@
 
 - **每日主動通知**（[#728](https://github.com/YiCheng0608/stock-lab/issues/728)，原列在下面的候選方向）：使用者 2026-11-15 選定 Telegram Bot、每個交易日 08:45、內容是今日名單與隔夜美股（[#1 6881270275](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881270275)），只送使用者自己的對話。
 - **開盤前檢查**（[#755](https://github.com/YiCheng0608/stock-lab/issues/755)，原列在下面的候選方向，使用者 2026-11-11 提出）：使用者 2026-11-15 決定做（[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）。隔夜美股與費半已由 [#681](https://github.com/YiCheng0608/stock-lab/issues/681) 做完；#755 做剩下的部分：每個交易日 08:20 對今日名單的每一檔，列出名單產生之後才收到的新聞與已判讀好的 AI 方向（不另外呼叫 AI），每天存進 `preopen_news_checks`，今日名單頁顯示檢查時點、每列的「隔夜新聞 N」與選中個股的明細（[排程](ops/SCHEDULING.md#scheduler-容器的排程serve)、[UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-每日候選)）。時間窗以名單的 `candidate_runs.computed_at` 起算、看新聞收進 DB 的時間（#755 決定 [6888598143](https://github.com/YiCheng0608/stock-lab/issues/755#issuecomment-6888598143)）：daily 讀新聞時 20:00 那輪 news 之後發布的還沒收進來，正式 DB 上每晚有 10～62 則，用發布時間切會漏掉。先只顯示，不改分數、排序與候選門檻；累積之後以成績單比較隔夜有利空與沒有的候選，有差距才讓它影響排序，那是之後的單。Telegram 卡片加隔夜新聞等 #754 合併後另開單。
+- **盤中即時通知**（[#801](https://github.com/YiCheng0608/stock-lab/issues/801)，原列在下面的候選方向，使用者 2026-11-15 想要，[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）：評估在 [#756](https://github.com/YiCheng0608/stock-lab/issues/756)，使用者 2026-11-16 選富果行情 API 的免費方案（[#1 6909629060](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6909629060)、[盤中報價](DATA_SOURCES.md#盤中報價)）。每個交易日 09:00～13:30，今日名單與我的追蹤進行中的計畫觸及頁面上的規則進場、停損或目標價時，幾分鐘內傳一則 Telegram；只是通知、不下單，訊息只陳述規則價位（[排程](ops/SCHEDULING.md#scheduler-容器的排程serve)）。規則照追蹤的口徑：停損與達標只在進場之後才算，跳空不算進場。真實交易日的延遲實測等使用者放好 key（#801 AC-6）。
 - **主流族群前 20**（[#768](https://github.com/YiCheng0608/stock-lab/issues/768) 計算與 API → [#769](https://github.com/YiCheng0608/stock-lab/issues/769) 畫面）：使用者 2026-11-15 決定在今日名單之外並列第二份名單，兩份都看一陣子，再決定留哪一份（[#1 6891572797](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6891572797)、統籌的預設 [6891614350](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6891614350)）。起因是主流族群（例如 AI、半導體）短期回檔時，`hot_group_v1` 只看 1、5、20 日，會判它們不熱門；今日名單又只收當天觸發兩條規則的股票。
   - **選法**（`mainstream_v1`，#768 定案 [6892019991](https://github.com/YiCheng0608/stock-lab/issues/768#issuecomment-6892019991)）：官方產業與題材一起排，看族群內成員 240 個交易日報酬的前 ⌈n/3⌉ 檔（至少 3 檔）平均減加權指數，依序取 5 個族群，成員有 80% 以上已在前面選上的族群裡時跳過。再把這 5 個族群的成員全部比 240 日報酬，取前 20，不設族群上限。
   - **不附點位**：這份是篩選，不附進場區、停損、目標，因為點位要是通過驗證的假設的一部分（上面「現況與方向」第 4 項）。當天也在今日名單的，標「今日名單 #n」。
@@ -83,7 +84,6 @@
 
 排入前各自先開單評估，由使用者決定：
 
-- **盤中即時通知**（使用者 2026-11-15 想要，[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）：今日名單的股票在盤中觸發進場、停損或達標時馬上傳 Telegram 訊息。現在的資料都是收盤後的官方資料，所以先另開單評估免費且條款允許的盤中報價來源、延遲、呼叫上限與觸發規則，由使用者選定再開實作單；只是通知、不下單，付費來源不用。
 - **事件研究**：用已有的重大訊息與月營收公布日，量特定事件之後 5／20 日的超額報酬，同時檢驗新聞 AI 方向判讀有沒有用。
 - **以模型組合特徵**：取代人訂的權重。兩年資料容易只記住這段歷史，等歷史回補後再評估。
 
@@ -150,7 +150,7 @@ V1 的建置順序，三個里程碑都已完成（[V1 已完成](#v1-已完成)
 - 只用免費公開來源，選用與限制見[資料來源](DATA_SOURCES.md)。
 - 保留研究、模擬追蹤、持倉風險與來源追溯。
 - LLM 只做新聞摘要、關聯、方向判讀與進出點說明文字，結果標推論；經本機 Claude Code 無介面模式用使用者訂閱帳號呼叫，不用 API 計費。勝率顯示條件見[產品規格 §8](PRODUCT_SPEC.md#8-ai-的角色與完成條件)。
-- 第一版不含自動下單、盤中即時交易、無來源 AI 報價與未驗證勝率。本機排程屬 V1 範圍；正式 DB、採購、帳戶、部署仍須個別授權。
+- 第一版不含自動下單、盤中即時交易、無來源 AI 報價與未驗證勝率。盤中即時**通知**不在此限：今日名單與我的追蹤的股票觸及頁面上的規則進場、停損或目標價時傳 Telegram，只陳述規則價位、不寫成下單指示，來源為富果行情 API（[#756](https://github.com/YiCheng0608/stock-lab/issues/756)），做法依該單的決定（使用者 2026-11-15 提出，[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）。本機排程屬 V1 範圍；正式 DB、採購、帳戶、部署仍須個別授權。
 
 ## 附錄：V1-G7 發布驗收（已通過）
 
