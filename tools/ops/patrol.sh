@@ -279,7 +279,7 @@ if [ "$overview" = 1 ]; then
   overview_dir="$(mktemp -d 2>/dev/null)" || overview_dir=""
   trap '[ -n "$overview_dir" ] && rm -f -- "$overview_dir"/* && rmdir -- "$overview_dir"' EXIT
   backfill_query=""
-  [ -n "$out" ] && backfill_query="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/overview.py" backfill-query)"
+  [ -n "$out" ] && backfill_query="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/overview.py" backfill-query ${overview_numbers[@]+"${overview_numbers[@]}"})"
   if [ -n "$backfill_query" ]; then
     if [ -z "$overview_dir" ]; then
       backfill_note="建不了暫存目錄"

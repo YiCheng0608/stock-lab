@@ -16,9 +16,10 @@ Two layers (#804 決定 6914347432):
   turn_hook.cjs) and the last comment on one line; in full the 提問 no 決定 links to
   (any open thread's) and the 統籌承諾 whose comment id is not in the commitments file;
   on one line the latest 等外部 declaration while it holds; the ids of the comments of no
-  type; the sentences of the coordinator's 決定, 統籌承諾 and review (past the first line)
-  that say it is to do something (由統籌, 統籌會, 統籌在, 我會). Then #1 and the
-  commitments kept in the last 24 hours.
+  type; the sentences of the coordinator's 決定, 統籌承諾 and review (the first line's
+  too, its type taken off) that say it is to do something (由統籌, 統籌會, 統籌在, 我會).
+  Then #1 and the commitments kept in the last 24 hours. When the task worktrees
+  could not be listed, every Issue's slot is 判定不了 and no 等外部 is said to hold.
 - **the full section** of the threads named (`--overview <n>...`, read before acting on
   one): every comment on one line (Taipei time, 統 for the coordinator mark or 工 for
   none, the comment id, the first line with its links cut to ids, the question a 決定
@@ -35,10 +36,13 @@ for this page only: the questions and the slots are judged on the main answer.
 
 #1 (range 2): its latest 10 comments by the first line; in full the ones that say
 待使用者 on it or have no coordinator mark, unless #1's body (read at takeover) names
-them. 部署： and 回報：統籌 session 更換 are counted only.
+them. 部署： and 回報：統籌 session 更換 are counted only. A 統籌承諾 on #1 whose id the
+commitments file lacks, among every #1 comment read, is printed in full.
 
-  backfill-query       stdin is the main answer; prints the query for the threads with
-                       comments not read, or nothing when there is none. Exit 0.
+  backfill-query [N...]
+                       stdin is the main answer; prints the query for the threads with
+                       comments not read (only N when given), or nothing when there is
+                       none. Exit 0.
   page NOW WORKTREES STATUS LOGS BACKFILL NOTE [N...]
                        stdin is the main answer, or nothing when GitHub was not read.
                        NOW is epoch seconds; WORKTREES and STATUS are the files slots.py
@@ -60,6 +64,7 @@ from datetime import datetime, timedelta, timezone
 
 import commitments
 import slots
+from coordinator_json import _DECISION as _ANSWER  # patrol's rule of what answers
 from coordinator_json import (
     GOVERNANCE_ISSUE,
     PAGE,
@@ -91,6 +96,10 @@ _GOV_COUNTED = re.compile(r"\s*(?:部署[：:]|回報[：:]\s*統籌 ?session �
 # before acting on the thread instead.
 _KEYWORDS = ("由統籌", "統籌會", "統籌在", "我會")
 _TODO_TYPES = re.compile(r"\s*(?:決定|統籌承諾|review)[：:（(]", re.IGNORECASE)
+# The type at the start of a first line, taken off before its sentences are read.
+_TYPE_PREFIX = re.compile(
+    r"^\s*(?:決定|統籌承諾|review)(?:[（(][^）)]*[）)])?[：:]\s*", re.IGNORECASE
+)
 _SENTENCE = re.compile(r"(?<=[。；;])")
 _COMMENT_ID = re.compile(r"issuecomment-(\d+)")
 _CLOSES = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)")
@@ -99,7 +108,7 @@ _AC = re.compile(
 )
 # Lines of a comment that hold no sentence of the coordinator's own: tables, headings,
 # quotes, code fences, HTML comments.
-_NOT_PROSE = re.compile(r"\s*(?:\||#|>|```|<!--)")
+_NOT_PROSE = re.compile(r"\s*(?:\||#+\s|>|```|<!--)")
 _MD_LINK = re.compile(r"\[([^\]\n]*)\]\((https?://[^)\s]+)\)")
 # A bare url ends at a space, a bracket or full-width punctuation (（42）、 ends a url
 # in a Chinese sentence).
@@ -129,12 +138,16 @@ def _short_of(thread: dict) -> int:
     return max((comments.get("totalCount") or 0) - len(comments.get("nodes") or []), 0)
 
 
-def backfill_query(doc) -> str:
+def backfill_query(doc, numbers=None) -> str:
+    """The backfill of every thread over a page, or of NUMBERS only (--overview <n>:
+    the other threads are not printed, PR #815 review 6915587653)."""
     repo = get(doc, "data.repository") or {}
     parts = []
     for _, thread in _threads(repo):
         number = thread.get("number")
         if number == GOVERNANCE_ISSUE or thread.get("state") not in (None, "OPEN"):
+            continue
+        if numbers and number not in numbers:
             continue
         short = _short_of(thread)
         if short <= 0 or not isinstance(number, int):
@@ -249,8 +262,12 @@ def _full(body: str, number) -> list[str]:
 
 
 def _todo(body: str, number) -> list[str]:
-    """The sentences past the first line that say the coordinator is to do something."""
-    lines = without_mark(body).lstrip(BOM).strip().splitlines()[1:]
+    """The sentences that say the coordinator is to do something, the first line's too
+    (its type taken off): the index prints only a thread's last comment (PR #815
+    review 6915587653)."""
+    lines = without_mark(body).lstrip(BOM).strip().splitlines()
+    if lines:
+        lines[0] = _TYPE_PREFIX.sub("", lines[0])
     out, fenced = [], False
     for line in lines:
         if line.lstrip().startswith("```"):
@@ -319,9 +336,14 @@ def _session_line(state: dict) -> str:
         if state.get("last_message"):
             parts.append("最後：" + one_line(state["last_message"], 80))
     elif what in ("failed", "ended"):
-        detail = state.get("error") or state.get("reason") or state.get("detail")
+        # turn_hook.cjs: end_reason (SessionEnd), error and error_details (StopFailure).
+        detail = " ".join(
+            str(state[k])
+            for k in ("end_reason", "error", "error_details")
+            if state.get(k)
+        )
         if detail:
-            parts.append(one_line(str(detail), 80))
+            parts.append(one_line(detail, 80))
     return "；".join(parts)
 
 
@@ -374,10 +396,21 @@ class Page:
     threads NUMBERS (read before acting on one; #804 決定 6914347432)."""
 
     def __init__(
-        self, doc, tasks, now: int, logs: str, backfill, note: str, numbers=None
+        self,
+        doc,
+        tasks,
+        now: int,
+        logs: str,
+        backfill,
+        note: str,
+        numbers=None,
+        listed: bool = True,
     ):
         self.doc, self.tasks, self.now, self.logs = doc, tasks, now, logs
         self.backfill, self.note, self.numbers = backfill, note, numbers
+        # False when the task worktrees could not be listed: no Issue is said to have
+        # none, no 等外部 is said to hold (PR #815 review 6915587653).
+        self.listed = listed
         self.repo = get(doc, "data.repository") if doc is not None else None
         records, _ = commitments.read(logs)
         self.records = records
@@ -402,7 +435,7 @@ class Page:
                     continue
                 for c in comments:
                     body = c.get("body") or ""
-                    if _DECISION.match(body.lstrip(BOM)):
+                    if _ANSWER.match(body.lstrip(BOM)):
                         self.answered.update(_COMMENT_ID.findall(body))
 
     def build(self) -> list[str]:
@@ -515,7 +548,9 @@ class Page:
         if not is_pr:
             out.extend(_depends(body, number, open_numbers))
             verdict = self.verdicts.get(number)
-            if verdict is None:
+            if not self.listed:
+                out.append("  名額：判定不了（讀不到 task worktree）")
+            elif verdict is None:
                 out.append("  名額：追蹤／待辦（沒有 task worktree）")
             else:
                 link = f" {short_links(verdict.link, number)}" if verdict.link else ""
@@ -582,7 +617,14 @@ class Page:
                 untyped.append(cid)
             elif _PROMISE.match(body) and cid not in self.promised:
                 why = "不在承諾檔的統籌承諾"
-            if i == ext_at:
+            if i == ext_at and not self.listed:
+                # Whether the worktree is clean at the declared head is not known.
+                external = (
+                    f"  等外部宣告（worktree 未查，有效與否判定不了）：{line.strip()}"
+                )
+                if detail:
+                    line += "（等外部宣告：worktree 未查，有效與否判定不了）"
+            elif i == ext_at:
                 if isinstance(ext, slots.Verdict):
                     if detail:
                         why = why or f"等外部宣告（仍有效，{ext.reason}）"
@@ -644,6 +686,15 @@ class Page:
         in_body = set(
             _BARE_ID.findall((self.repo.get("governance") or {}).get("body") or "")
         )
+        # A 統籌承諾 on #1 the commitments file does not hold, among every #1 comment
+        # read (not only the latest 10; PR #815 review 6915587653): in full, as on the
+        # other threads.
+        unfiled = [
+            c
+            for c in comments
+            if _PROMISE.match((c.get("body") or "").lstrip(BOM))
+            and _cid(c) not in self.promised
+        ]
         skipped: dict[str, int] = {}
         for c in recent:
             body = (c.get("body") or "").lstrip(BOM)
@@ -654,7 +705,10 @@ class Page:
                 skipped[key] = skipped.get(key, 0) + 1
                 continue
             head = f"    {_when(c.get('createdAt'))} {_who(body)} {cid}"
-            if cid not in in_body and (
+            if c in unfiled:
+                out.append(f"{head}（全文；不在承諾檔的統籌承諾）：")
+                out.extend(_full(body, GOVERNANCE_ISSUE))
+            elif cid not in in_body and (
                 "待使用者" in first or not coordinator_comment(body)
             ):
                 # The full text holds the first line.
@@ -669,6 +723,15 @@ class Page:
                 "  只計數："
                 + "、".join(f"{k} {v} 則" for k, v in sorted(skipped.items()))
             )
+        older = [c for c in unfiled if c not in recent]
+        if older:
+            out.append(f"  最近 10 則以前、不在承諾檔的統籌承諾 {len(older)} 則：")
+        for c in older:
+            body = (c.get("body") or "").lstrip(BOM)
+            out.append(
+                f"    {_when(c.get('createdAt'))} {_who(body)} {_cid(c)}（全文）："
+            )
+            out.extend(_full(body, GOVERNANCE_ISSUE))
 
     def _kept(self) -> None:
         out = self.lines
@@ -709,10 +772,12 @@ def page(
     listed: bool = True,
     numbers=None,
 ) -> list[str]:
-    lines = Page(doc, tasks, now, logs, backfill, note, numbers).build()
+    lines = Page(doc, tasks, now, logs, backfill, note, numbers, listed).build()
     if not listed:
+        # patrol.sh passes no listing when git failed, its temporary directory could
+        # not be made, or slots.py gave no query: the cause is in patrol's 名額 line.
         lines.insert(
-            1, "名額：判定不了（git worktree list 失敗，讀不到 task worktree）"
+            1, "名額：判定不了（讀不到 task worktree，原因見上方 patrol 的名額行）"
         )
     text = "\n".join(lines) + "\n"
     size = len(text.encode("utf-8"))
@@ -732,8 +797,11 @@ def _json(text: str | None):
 
 def main(argv: list[str]) -> int:
     sys.stdout.reconfigure(newline="\n")
-    if argv[:1] == ["backfill-query"] and len(argv) == 1:
-        query = backfill_query(_json(sys.stdin.read()))
+    if argv[:1] == ["backfill-query"] and all(
+        a.lstrip("#").isdigit() for a in argv[1:]
+    ):
+        wanted = {int(a.lstrip("#")) for a in argv[1:]} or None
+        query = backfill_query(_json(sys.stdin.read()), wanted)
         if query:
             print(query)
         return 0

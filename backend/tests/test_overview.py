@@ -256,14 +256,20 @@ def test_what_the_coordinator_is_to_do(logs: Path) -> None:
         "> 引用裡由統籌的不算\n"
         "```\n由統籌 這是程式碼\n```\n"
         "合併由統籌做；這句沒有。\n"
-        "- 我會在批 5 跑完時再看。統籌在本單排代跑。"
+        "- 我會在批 5 跑完時再看。統籌在本單排代跑。\n"
+        "#817 由統籌另開單。\n"
+        "## 標題由統籌不算"
     )
     report = "回報：草稿\n\n- 新決策由統籌在 #1 留言寫下後同步。"
+    # PR #815 review 6915587653 must-fix 2: a first line is read too, the index only
+    # prints the last comment.
+    first = "決定：照 A；合併後由統籌開單做範圍 6"
     doc = _answer(
         [
             _issue(
                 804,
                 [
+                    _c(804, 70, first, coordinator=True),
                     _c(804, 71, body, coordinator=True),
                     _c(804, 72, report, coordinator=True),
                 ],
@@ -274,10 +280,59 @@ def test_what_the_coordinator_is_to_do(logs: Path) -> None:
         text = _text(_page(doc, logs, numbers=numbers))
         todo = [ln for ln in text.splitlines() if ln.startswith("    7")]
         assert todo == [
+            "    70：合併後由統籌開單做範圍 6",
             "    71：合併由統籌做；",
             "    71：- 我會在批 5 跑完時再看。",
             "    71：統籌在本單排代跑。",
+            "    71：#817 由統籌另開單。",
         ], numbers
+
+
+def test_worktrees_not_listed_are_not_taken_for_none(logs: Path) -> None:
+    """PR #815 review 6915587653 must-fix 3: without the task worktrees an Issue is not
+    「沒有 task worktree」 and a declaration is not said to hold."""
+    comments = [_c(702, 41, _external(SHA[:8], "2026-11-17 01:00"))]
+    doc = _answer([_issue(702, comments)])
+    for numbers in (None, [702]):
+        lines = overview.page(doc, {}, NOW, str(logs), None, "", False, numbers)
+        text = _text(lines)
+        assert "沒有 task worktree" not in text, numbers
+        assert "  名額：判定不了（讀不到 task worktree）" in lines, numbers
+        assert "仍有效" not in text, numbers
+        assert "worktree 未查，有效與否判定不了" in text, numbers
+        assert lines[1].startswith("名額：判定不了（讀不到 task worktree")
+
+
+def test_a_supplementary_decision_does_not_answer_a_question(logs: Path) -> None:
+    """PR #815 review 6915587653 suggestion 1: what answers a question is patrol's own
+    rule (coordinator_json), so the page and patrol's list agree."""
+    comments = [
+        _c(804, 81, "提問：要不要 A？"),
+        _c(804, 82, f"決定（補充）：見 [81]({_url(804, 81)})", coordinator=True),
+    ]
+    text = _text(_page(_answer([_issue(804, comments)]), logs))
+    assert "  全文［未回覆的提問］81：" in text
+
+
+def test_an_ended_session_says_why(logs: Path) -> None:
+    """Suggestion 4: turn_hook.cjs writes end_reason."""
+    sessions = logs / "sessions"
+    sessions.mkdir()
+    (sessions / "s1234567-x.json").write_text(
+        json.dumps(
+            {
+                "session_id": "s1234567-x",
+                "issue": 804,
+                "state": "ended",
+                "started_at": "2026-11-16T09:00:00Z",
+                "ended_at": "2026-11-16T09:30:00Z",
+                "end_reason": "prompt_input_exit",
+            }
+        ),
+        encoding="utf-8",
+    )
+    text = _text(_page(_answer([_issue(804)]), logs, _tasks(804)))
+    assert "工程師 session：s1234567 ended（11-16 17:30）；prompt_input_exit" in text
 
 
 # --- the index (決定 6914347432) -------------------------------------------------------
@@ -353,6 +408,10 @@ def test_the_backfill_query_reads_the_oldest_comments_of_each_long_thread() -> N
     assert "comments(first:100)" in query
     assert "t804:" not in query
     assert overview.backfill_query(_answer([_issue(804, _many(804, 1, 3))])) == ""
+    # --overview <n> (review 6915587653 suggestion 3): only the threads printed.
+    only = overview.backfill_query(doc, {812})
+    assert "t812:" in only and "t702:" not in only
+    assert overview.backfill_query(doc, {804}) == ""
 
 
 def test_the_backfill_is_merged_by_url(logs: Path) -> None:
@@ -418,17 +477,55 @@ def test_the_governance_comments(logs: Path) -> None:
     assert "## #1 [任務]" not in text
     section = text.split("## #1 最近 10 則留言", 1)[1]
     assert "回報：舊的" not in section
-    for full in ("要你做的事", "第二行"):
+    # 102 is a 統籌承諾 the (empty) commitments file lacks: in full (review 6915587653).
+    for full in ("要你做的事", "第二行", "承諾內文"):
         assert f"      > {full}" in section
     for line in (
-        "統 102 統籌承諾：B",
+        "統 102（全文；不在承諾檔的統籌承諾）：",
         "統 105 回報：一般回報",
         "統 6912550851 待使用者：本文已列",
     ):
         assert line in section
-    for hidden in ("承諾內文", "不印的內文", "已在本文的全文"):
+    for hidden in ("不印的內文", "已在本文的全文"):
         assert hidden not in section
     assert "  只計數：session 更換 2 則、部署 2 則" in section
+
+
+def test_a_promise_on_1_not_in_the_commitments_file(logs: Path) -> None:
+    """PR #815 review 6915587653 must-fix 1: a 統籌承諾 on #1 the commitments file lacks
+    is printed in full, also when it is older than the latest 10; one in the file is
+    not."""
+    (logs / "commitments.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "add",
+                "id": "c1",
+                "issue": 1,
+                "due": None,
+                "text": "已寫進",
+                "url": _url(1, 2),
+                "at": "2026-11-16T01:00:00Z",
+                "session_id": "s",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    comments = [
+        _c(1, 1, "統籌承諾：明天 10:00 讀回 X\n\n沒寫進承諾檔的內文", True),
+        _c(1, 2, "統籌承諾：已在承諾檔\n\n寫進了的內文", True),
+    ] + [_c(1, n, f"回報：其他 {n}", True) for n in range(10, 20)]
+    text = _text(_page(_answer([_issue(1, comments, title="治理")]), logs))
+    section = text.split("## #1 最近 10 則留言", 1)[1]
+    assert "  最近 10 則以前、不在承諾檔的統籌承諾 1 則：" in section
+    assert "      > 沒寫進承諾檔的內文" in section
+    assert "寫進了的內文" not in section
+    # Among the latest 10 it is marked where it stands.
+    recent = _text(
+        _page(_answer([_issue(1, comments[:1] + comments[3:], title="治理")]), logs)
+    )
+    assert "統 1（全文；不在承諾檔的統籌承諾）：" in recent
 
 
 def test_commitments_kept_in_the_last_24_hours(logs: Path) -> None:
