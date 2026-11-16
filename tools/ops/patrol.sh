@@ -148,18 +148,40 @@ echo "心跳 $written_at session=$session_id terminal=$handle（$heartbeat）"
 [ "$heartbeat_only" = 0 ] || exit 0
 
 # 2. compaction count and handoff marker
+# The count is the main conversation's compactions in this session's transcript (#811,
+# session_cost.py compactions): the PreCompact hook gets the parent's session id for a
+# subagent's compaction too, so its .count has those. The hook's count only when the
+# transcript cannot be read, said so on the line.
 count_file="$logs/compactions/$session_id.count"
-count=0
-[ -f "$count_file" ] && count="$(tr -dc '0-9' <"$count_file")"
-count="${count:-0}"
+hook_count=0
+[ -f "$count_file" ] && hook_count="$(tr -dc '0-9' <"$count_file")"
+hook_count="${hook_count:-0}"
 # Strip leading zeros so 08 is not read as octal.
-count="$((10#$count))"
+hook_count="$((10#$hook_count))"
+if [ -n "$transcript" ]; then
+  compact_out="$("$python" -X utf8 "$script_dir/session_cost.py" compactions --transcript "$transcript" 2>&1)"
+else
+  compact_out="$("$python" -X utf8 "$script_dir/session_cost.py" compactions --session-id "$session_id" 2>&1)"
+fi
+compact_rc=$?
+if [ "$compact_rc" = 0 ] && [[ "$compact_out" =~ ^([0-9]+)\ (.*)$ ]]; then
+  count="$((10#${BASH_REMATCH[1]}))"
+  count_note=""
+  if [ "$hook_count" -gt "$count" ]; then
+    count_note="（hook 記 $hook_count 次，含子代理）"
+  elif [ "$hook_count" != "$count" ]; then
+    count_note="（hook 記 $hook_count 次）"
+  fi
+else
+  count="$hook_count"
+  count_note="（hook 計數，可能含子代理；紀錄檔未讀到：${compact_out:-session_cost.py exit $compact_rc}）"
+fi
 handoff_due=0
 if [ "$count" -ge 2 ]; then
   handoff_due=1
-  echo "壓縮 $count 次：已達換手條件（手冊「統籌 session」自動換手機制）"
+  echo "壓縮 $count 次$count_note：已達換手條件（手冊「統籌 session」自動換手機制）"
 else
-  echo "壓縮 $count 次"
+  echo "壓縮 $count 次$count_note"
 fi
 # The context of this session's last model call (#710).
 misses_file="$logs/compactions/$session_id.context-misses"
