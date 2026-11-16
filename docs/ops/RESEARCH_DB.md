@@ -176,31 +176,42 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的；#702 AC-5 的清單拆出的舊公司，依日期分開。
 - 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。manifest 的 `completeness` 逐日記原因並分開計數：`checked`（核對過，`missing` 是不在任何產業的普通股）、`no_stored_answer`（研究 DB 沒有那一天的全市場行情）、`raw_missing`（有列但檔案找不到或 sha256 不符）。這也是唯一能看出「代號期間外其實有列」的檢查。
 
-**檔案**：在 `task-779_members` volume 的 `/out/`，統籌核對 sha256 後複製到研究 volume 的 `/data/research/`。
+**檔案**：在研究 volume 的 `/data/research/industry_members/`。M1、M2 的研究工具讀 `/data/research/industry_members/industry_members_v1.json`。
+- 2026-11-16 由統籌從產生它的 `task-779_members` volume 整包複製（8,317 個檔、92 MB，#779 決定 [6911923892](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6911923892)）。`task-779_members` 在 #779 結案時刪除。
+- 主檔 sha256 `2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827`，manifest sha256 `03882bce1bfe0da71091fae37448a1bef06dd46869448bd94c75aa52a5dfdb03`（commit `0c8d1710`）。
 - `industry_members_v1.json`：主檔。內容排好序，同一份 raw 重跑位元組相同。
 - `industry_members_v1.manifest.json`：命令、commit、定義與其雜湊、每個回應的路徑與 sha256、每年列數、完整性檢查。
 - `raw/<exchange>/<YYYYMMDD>/<代號>.json`：原始回應的位元組。
 - `failed/<exchange>/<YYYYMMDD>/<代號>.<n>.body`：失敗回應的本文（有本文才存，第 n 次失敗），只用來判讀，`build` 不讀。
 - `requests.jsonl`：每個請求的網址、狀態碼、sha256 與時間；失敗的列另有 `error` 與 `body`。
+- `logs/`：#779 各次 `sweep`、`bisect`、`fetch` 的輸出，只用來判讀。
 
 **怎麼重建**：
-- 只從 raw 重建，不發請求：
+- 只從 raw 重建，不發請求。不要直接拿研究 volume 裡的那份當 `--out`：先整包複製到一個新的暫存 volume，再對它 `build`，最後比對主檔 sha256。
 
   ```bash
-  docker run --rm --network none -v task-779_members:/out \
+  docker volume create <暫存 volume>
+  docker run --rm --network none -u 0 -v stock-lab-research:/data:ro -v <暫存 volume>:/out \
+    --entrypoint sh stock-lab-backend:<tag> \
+    -c 'cp -a /data/research/industry_members/. /out/ && chown -R 1000:1000 /out'
+  docker run --rm --network none -v <暫存 volume>:/out \
     -v stock-lab-research:/data:ro -e STOCK_DATA_DIR=/data \
     -v stock-lab_stock-data:/prod:ro -e STOCK_STORED_RAW_DIR=/prod/raw \
     -v "$PWD:/w:ro" -w /w --entrypoint python stock-lab-backend:<tag> \
     tools/research/industry_members.py build --start 2013-01 --end 2024-09 --out /out \
     --research-db /data/stock.db
+  docker run --rm --network none -v <暫存 volume>:/out:ro -v stock-lab-research:/data:ro \
+    --entrypoint sha256sum stock-lab-backend:<tag> \
+    /out/industry_members_v1.json /data/research/industry_members/industry_members_v1.json
   ```
 
+  - 2026-11-16 照這組命令跑過一次（`stock-lab-backend:v1.2.57`、commit `0c8d1710`，`build` 10 秒），重建的主檔與 manifest 都和研究 volume 裡的那份逐位元組相同。manifest 記 commit，要它也相同就加 `-e STOCK_RESEARCH_COMMIT=<commit>`；主檔不受影響。
   - 研究 volume 要掛在 `/data`：研究 DB 的 `raw_payloads.payload_path` 是容器內寫的 `/data/raw/...`，掛在別處就一個檔案都找不到（PR #785 review [6905527404](https://github.com/YiCheng0608/stock-lab/pull/785#issuecomment-6905527404)），和 `tools/audit/raw_files.py` 的慣例一樣。
   - 種子列（id 很小的那些）是 Windows 舊路徑，`app.raw_paths.payload_file` 對到 `STOCK_STORED_RAW_DIR`；它們的檔案在正式 volume，所以唯讀另掛 `/prod`。不核對它們就拿掉這一行，那些日子會記成 `raw_missing`。
   - 有 `raw_missing` 的日子時，`build` 不寫任何檔案、以 1 結束；確定要寫才加 `--allow-raw-missing`。
 
 - 重新抓：
-  - 用 `fetch --start 2013-01 --end 2024-09 --out /out`，在 `docker run -d` 的容器裡跑。
+  - 用 `fetch --start 2013-01 --end 2024-09 --out /out`，在 `docker run -d` 的容器裡跑；`/out` 同樣是新的暫存 volume，不要掛研究 volume 寫入。
   - 每個 host 間隔 ≥ 5 秒，兩個 host 並行。
   - 台北 20:30～23:30、08:00～09:00 不發。
   - 第一次被擋（封鎖頁、`查詢過於頻繁`、HTTP 403／429、連線被拒）就停下；同一個 host 連續 3 次失敗（其他非 200、空回應、不是 JSON、「網站維護中」）也停下。都是 exit 2，不自己重試。
