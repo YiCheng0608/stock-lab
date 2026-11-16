@@ -29,7 +29,7 @@
 已知限制：
 
 - **代號重用**：一個代號下市多年後分配給別家公司時，兩家的日線會接在同一個標的上，這裡分不出來。回補完成後要依名稱變化稽核一次（回補執行單處理）。
-- **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。
+- **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。研究用的當時分類見[官方產業的逐月成員表](#官方產業的逐月成員表)。
 - **月營收**：MOPS 的 `t21sc03` 頁只列今天的公司，回補不到下市股的任何一個月。轉板公司上櫃那幾年的月份則接在上市標的上（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。[#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補其中補得到的部分，規則見 [DATA_SOURCES 的下市與轉板公司的月營收](../DATA_SOURCES.md#下市與轉板公司的月營收)：
   - **轉板**：`revenue transfers --apply` 把上櫃標的範圍內的月份從上市標的複製過來（0 個請求）。2026-11-15 在研究 DB 副本上實測（日線從 2017-03 起）：21 檔都通過同一家公司的核對，寫 1,360 列，重跑全部 `unchanged`，和上市標的逐列比對沒有不同。批 3～5 把日線往前補之後要再跑一次，補上新增的月份。
   - **下市股**：`revenue company-classify`，接著 `revenue company-backfill`，用 MOPS 單一公司查詢，只有仍公開發行的公司查得到。破產、合併消滅等「不繼續公開發行」的公司補不到，這部分的缺口會留下來，偏差方向仍對假設有利。等 #702 批 4 建完標的再發請求，請求數先貼在執行單，經統籌核准才補。
@@ -120,6 +120,106 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 ```
 
 這裡的 `--segment` 只是讓既有的兩個工具能在研究 DB 上指定日期（例如確認工具讀得到回補的資料）。新策略探索的分段已在 [策略證據「分段」](../spec/evidence.md#分段) 寫死（探索段到 2019-12-31、驗證段 2020-01-02～2024-09-27，[#697](https://github.com/YiCheng0608/stock-lab/issues/697)），探索工具另開單，參數寫死在程式裡；回補完成前不要在回補的歷史上跑整段的特徵證據（#692 決定）。`portfolio_research.py --hypothesis` 的凍結假設不接受 `--segment`。
+
+## 官方產業的逐月成員表
+
+研究用的「T 日屬於哪個官方產業」，給第三輪 M1、M2（[策略證據「官方產業的成員」](../spec/evidence.md#第三輪m1m2)）。由 [`tools/research/industry_members.py`](../../tools/research/industry_members.py) 從官方的分產業收盤行情產生，不寫進研究 DB（[#779](https://github.com/YiCheng0608/stock-lab/issues/779)）。
+
+**來源**：每月最後一個交易日 D，兩個市場各取每個產業代號那一天的收盤行情。
+- 上市：TWSE `MI_INDEX?date=<D>&type=<代號>`。
+- 上櫃：TPEx 舊版 `stk_wn1430_result.php?d=<民國 D>&se=<代號>`。新版 `dailyQuotes` 不分產業，帶 `type` 也回全部。
+- 表裡是當天掛牌的全部股票，含停牌、沒成交、之後下市的公司。
+- 產業：上櫃是**當時**的分類；上市是**現在（或下市前最後）的分類回填**，見下面的限制。
+- D 由 TWSE `type=01`（水泥）決定：從月底往前，第一個有列的平日。
+
+**為什麼不用別的**：
+- **`group_memberships`**：現行分類往回填（[下市與轉板的標的](#下市與轉板的標的)）。
+- **MOPS 月營收頁（`t21sc03`）**：用今天的公司名單重新產生，舊頁沒有任何下市公司，產業也是現在的。2013-01～2024-09 的 563 頁裡，研究 DB 的 150 檔下市、19 檔轉板標的一檔都沒有（#779 [6894170671](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6894170671)）。
+- **MOPS 公司基本資料（`t05st03`）**：下市公司只回舊大類或沒有資料。
+- 2015-01-05 實測，TPEx 其他電子類 39 檔中，有 8 檔現在被分到別的產業，6 檔不在 MOPS 頁上（[6894326371](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6894326371)）。
+
+**一列**：`snapshot_date`、`exchange`（`TWSE`／`TPEx`）、`industry_code`、`category`（回應的類別名稱原文）、`group_label`、`group_id`、`symbol`、`name`、`retroactive_category`。
+- `retroactive_category` 是 `true` 的列：上市 35 綠能環保、36 數位雲端、37 運動休閒、38 居家生活，`snapshot_date` 在 2023-07-03 以前。這四類是那天才新增的，舊日子的成員是事後分類。manifest 的 `retroactive_rows` 是這種列的數量。
+- `group_label` 是產品 `app.taxonomy` 的英文標籤，`group_id` 是 `canonical_group_id("industry", group_label)`。兩個市場同標籤的產業是同一個族群。
+- 對照表寫死在工具的 `GROUP_LABELS`／`CATEGORY_NAMES`／`CODE_PERIODS`，三者都進 `definitions_sha256`。工具不 import 產品，`backend/tests/test_industry_members_tool.py` 會和產品的表比對。
+- 上櫃 18 貿易百貨併入上市的 `Wholesale and Retail`。
+- 上櫃 34 電子商務只在 2023-07-03 以前出現，產品沒有對應標籤，記成獨立族群 `E-commerce`。
+- 存託憑證（上市 `type=9299`）、管理股票（上櫃 `se=80`）不是產業，不抓。
+- 上櫃 33 農業科技、34 電子商務的回應有列，但 `category` 是空字串。`CATEGORY_NAMES` 只對這兩個代號寫成「空」，其他代號回空類別名照樣算失敗；主檔這兩類的 `category` 是空字串（[6904909658](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6904909658)、決定 [6904973827](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6904973827)）。
+
+**各時期抓哪些代號**（`CODE_PERIODS`，決定 [6905102853](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6905102853)）：
+
+| 期間 | 市場 | 代號 |
+|---|---|---|
+| 2013-01～2024-09 | 上市 | 01～06、08～12、14～18、20～31、35～38（32 個） |
+| 2013-01～2013-12 | 上櫃 | 02～06、10、11、14～18、20～31（24 個） |
+| 2014-01～2016-08 | 上櫃 | 加 32 |
+| 2016-09～2018-02 | 上櫃 | 再加 33 |
+| 2018-03～2022-06 | 上櫃 | 再加 34 |
+| 2022-07～2023-06 | 上櫃 | 去掉 11 |
+| 2023-07～2024-09 | 上櫃 | 去掉 18、34，加 35～38 |
+
+- 怎麼來的：2013-01-31、2023-06-30、2024-09-30 三天全掃，再用 `bisect` 找上櫃 32、33、34 的起始月與 11 的結束月（[6904942765](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6904942765)、[6905069704](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6905069704)）。
+- **二分的前提**：代號在出現之後一直存在、消失後不再出現。三天全掃與二分的每一步都沒有矛盾；上市的分類是回溯的，不二分。
+- 上櫃 18、34 的結束與 35～38 的起始，照官方 2023-07-03 改代號放在 2023-06／2023-07 之間，沒有另外二分：2023-06 的 18、34 或 2023-07 的 35～38 沒有列，`build` 就會失敗。
+- 上市 19 綜合、上櫃 08 玻璃陶瓷不抓：三天全掃加 2013～2024 每年 12 月（2024 用 9 月）都是 0 列。
+
+**T 日用哪一份**：`snapshot_date ≤ T` 的最新一份（`industry_members.members_on`）。D 的收盤行情在 D 收盤後就公開，所以 T＝D 可以用。研究工具的 T 都是交易日的收盤後。
+
+**限制**：
+- **上市的分類是回溯的**（#779 [6904648128](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6904648128)、決定 [6904679034](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6904679034)）：
+  - `MI_INDEX?type=` 在舊日子也用每檔股票現在（或下市前最後）的分類。2013-01-31 與 2023-06-30 都有的上市股票 736 檔，分類不同的 0 檔；2013-01-31 的 35～38 已有 18 檔，例如 9904 寶成、9921 巨大在 37 運動休閒，當時它們是「其他」。
+  - 只有 35～38 標了 `retroactive_category`。其他改過分類的上市股，這份資料看不出來：同樣比，上櫃 547 檔裡有 65 檔改過，上市實際上應該也有。
+  - 名單本身是當時的（含之後下市的，例如 2475 華映），只有類別是回溯的。
+  - 上市當時分類的來源不在 #779 找，由 M1、M2 的研究工具單決定只用上櫃、接受回溯，還是先補對照。
+- 一個月一份：月中改分類、新上市的股票，要到月底那一份才反映。新上市的股票在第一份快照前沒有族群，不能被選，但照樣在母體裡。
+- 2023-07 以後上櫃 18、34 不抓，看不出它們之後還有沒有列，只在 2024-09-30 全掃確認過是 0 列。19、08 同理，只有檢查過的日子確定是 0 列。
+- 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的；#702 AC-5 的清單拆出的舊公司，依日期分開。
+- 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。manifest 的 `completeness` 逐日記原因並分開計數：`checked`（核對過，`missing` 是不在任何產業的普通股）、`no_stored_answer`（研究 DB 沒有那一天的全市場行情）、`raw_missing`（有列但檔案找不到或 sha256 不符）。這也是唯一能看出「代號期間外其實有列」的檢查。
+
+**檔案**：在研究 volume 的 `/data/research/industry_members/`。M1、M2 的研究工具讀 `/data/research/industry_members/industry_members_v1.json`。
+- 2026-11-16 由統籌從產生它的 `task-779_members` volume 整包複製（8,317 個檔、92 MB，#779 決定 [6911923892](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6911923892)）。`task-779_members` 在 #779 結案時刪除。
+- 主檔 sha256 `2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827`，manifest sha256 `03882bce1bfe0da71091fae37448a1bef06dd46869448bd94c75aa52a5dfdb03`（commit `0c8d1710`）。
+- `industry_members_v1.json`：主檔。內容排好序，同一份 raw 重跑位元組相同。
+- `industry_members_v1.manifest.json`：命令、commit、定義與其雜湊、每個回應的路徑與 sha256、每年列數、完整性檢查。
+- `raw/<exchange>/<YYYYMMDD>/<代號>.json`：原始回應的位元組。
+- `failed/<exchange>/<YYYYMMDD>/<代號>.<n>.body`：失敗回應的本文（有本文才存，第 n 次失敗），只用來判讀，`build` 不讀。
+- `requests.jsonl`：每個請求的網址、狀態碼、sha256 與時間；失敗的列另有 `error` 與 `body`。
+- `logs/`：#779 各次 `sweep`、`bisect`、`fetch` 的輸出，只用來判讀。
+
+**怎麼重建**：
+- 只從 raw 重建，不發請求。不要直接拿研究 volume 裡的那份當 `--out`：先整包複製到一個新的暫存 volume，再對它 `build`，最後比對主檔 sha256。
+
+  ```bash
+  docker volume create <暫存 volume>
+  docker run --rm --network none -u 0 -v stock-lab-research:/data:ro -v <暫存 volume>:/out \
+    --entrypoint sh stock-lab-backend:<tag> \
+    -c 'cp -a /data/research/industry_members/. /out/ && chown -R 1000:1000 /out'
+  docker run --rm --network none -v <暫存 volume>:/out \
+    -v stock-lab-research:/data:ro -e STOCK_DATA_DIR=/data \
+    -v stock-lab_stock-data:/prod:ro -e STOCK_STORED_RAW_DIR=/prod/raw \
+    -v "$PWD:/w:ro" -w /w --entrypoint python stock-lab-backend:<tag> \
+    tools/research/industry_members.py build --start 2013-01 --end 2024-09 --out /out \
+    --research-db /data/stock.db
+  docker run --rm --network none -v <暫存 volume>:/out:ro -v stock-lab-research:/data:ro \
+    --entrypoint sha256sum stock-lab-backend:<tag> \
+    /out/industry_members_v1.json /data/research/industry_members/industry_members_v1.json
+  ```
+
+  - 2026-11-16 照這組命令跑過一次（`stock-lab-backend:v1.2.57`、commit `0c8d1710`，`build` 10 秒），重建的主檔與 manifest 都和研究 volume 裡的那份逐位元組相同。manifest 記 commit，要它也相同就加 `-e STOCK_RESEARCH_COMMIT=<commit>`；主檔不受影響。
+  - 研究 volume 要掛在 `/data`：研究 DB 的 `raw_payloads.payload_path` 是容器內寫的 `/data/raw/...`，掛在別處就一個檔案都找不到（PR #785 review [6905527404](https://github.com/YiCheng0608/stock-lab/pull/785#issuecomment-6905527404)），和 `tools/audit/raw_files.py` 的慣例一樣。
+  - 種子列（id 很小的那些）是 Windows 舊路徑，`app.raw_paths.payload_file` 對到 `STOCK_STORED_RAW_DIR`；它們的檔案在正式 volume，所以唯讀另掛 `/prod`。不核對它們就拿掉這一行，那些日子會記成 `raw_missing`。
+  - 有 `raw_missing` 的日子時，`build` 不寫任何檔案、以 1 結束；確定要寫才加 `--allow-raw-missing`。
+
+- 重新抓：
+  - 用 `fetch --start 2013-01 --end 2024-09 --out /out`，在 `docker run -d` 的容器裡跑；`/out` 同樣是新的暫存 volume，不要掛研究 volume 寫入。
+  - 每個 host 間隔 ≥ 5 秒，兩個 host 並行。
+  - 台北 20:30～23:30、08:00～09:00 不發。
+  - 第一次被擋（封鎖頁、`查詢過於頻繁`、HTTP 403／429、連線被拒）就停下；同一個 host 連續 3 次失敗（其他非 200、空回應、不是 JSON、「網站維護中」）也停下。都是 exit 2，不自己重試。
+  - `fetch` 對期間列出的代號回 0 列或沒有資料，也算失敗（`sweep`、`bisect` 不算）。
+  - 失敗的回應本文存在 `failed/`，`requests.jsonl` 那一列記本文路徑。
+  - 已存的 raw 不重抓，重跑就是續跑。
+  - 各時期的代號清單是先用 `sweep`（指定月份全掃）與 `bisect`（找出代號開始或結束的月份）確認的。
 
 ## 研究工具的耗時與記憶體
 
