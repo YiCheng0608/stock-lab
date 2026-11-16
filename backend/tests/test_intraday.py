@@ -1149,3 +1149,136 @@ def test_the_days_that_need_no_run_any_more(tmp_path, results, done):
         encoding="utf-8",
     )
     assert intraday.day_done(tmp_path, MONDAY) is done
+
+
+# --- #802 review 6910820856 -----------------------------------------------------------
+
+
+def _counting(clock, *, seconds=0.0, jump=None):
+    """The fixture's fetch that records (symbol, minute) per request; each request takes
+    SECONDS on the clock, and JUMP=(at, seconds) moves the clock once when it passes AT
+    (a host asleep)."""
+
+    good = _fixture_fetch(clock)
+    asked: list[tuple[str, str]] = []
+
+    def fetch(symbol):
+        asked.append((symbol, f"{clock.now:%H:%M}"))
+        answer = good(symbol)
+        clock.now += timedelta(seconds=seconds)
+        if jump and clock.now >= jump[0] and not jump[2:]:
+            clock.now += timedelta(seconds=jump[1])
+            jump.append("done")
+        return answer
+
+    fetch.asked = asked
+    return fetch
+
+
+@linux_only
+def test_a_slow_round_skips_the_minutes_it_took_and_asks_once_a_minute(env):
+    """Each request takes 40 s: a round of 4 stocks takes 160 s, so the next starts at the
+    next whole minute still ahead, never in a minute already asked."""
+
+    _listed(env.db)
+    made = {}
+
+    def make(clock):
+        made["fetch"] = _counting(clock, seconds=40)
+        return made["fetch"]
+
+    _run(env, start="13:20:00", fetch=make)
+    asked = made["fetch"].asked
+    starts = [minute for symbol, minute in asked if symbol == "2618"]
+    assert len(starts) == len(set(starts))  # one request per stock per minute
+    for symbol in DAY["levels"]:
+        minutes = [minute for s, minute in asked if s == symbol]
+        assert len(minutes) == len(set(minutes)), symbol
+    log = _log(env)
+    polls = [
+        line.split()[2] for line in log.splitlines() if line.startswith("--- poll ")
+    ]
+    assert polls[:3] == ["at=13:20:00", "at=13:23:00", "at=13:26:00"]
+    assert "--- skipped_rounds from=13:21 to=13:22 minutes=2" in log
+    assert f"polls={len(polls)} ok_polls={len(polls)}" in log
+
+
+@linux_only
+def test_a_host_asleep_for_an_hour_does_not_catch_up_the_hour(env):
+    _listed(env.db)
+    made = {}
+
+    def make(clock):
+        jump = [_at("2026-11-16T10:00:00+08:00"), 3600]
+        made["fetch"] = _counting(clock, jump=jump)
+        return made["fetch"]
+
+    _run(env, start="09:58:00", fetch=make)
+    asked = made["fetch"].asked
+    per_minute: dict[str, int] = {}
+    for _symbol, minute in asked:
+        per_minute[minute] = per_minute.get(minute, 0) + 1
+    assert max(per_minute.values()) == 4  # the 4 stocks once each
+    log = _log(env)
+    assert "--- skipped_rounds from=10:01 to=11:00 minutes=60" in log
+    polls = [line for line in log.splitlines() if line.startswith("--- poll ")]
+    # 09:58 to 10:00, then 11:01 to 13:30: the hour is no poll of the day.
+    assert len(polls) == 3 + 150
+    assert "--- poll at=11:01:00 " in log
+
+
+@linux_only
+def test_a_quote_of_another_day_is_not_judged(env):
+    """A session called off (a typhoon the stored calendar does not have): Fugle answers
+    with the last session's quote, whose high and low are not today's."""
+
+    _listed(env.db)
+
+    def make(clock):
+        def fetch(symbol):
+            body = dict(DAY["polls"][2]["quotes"][symbol], date="2026-11-13")
+            return fugle.Fetched(symbol, "200", 10, quote=fugle.parse(symbol, body)[0])
+
+        return fetch
+
+    result = _run(env, start="13:28:00", fetch=make)
+    assert result.sent == []
+    log = _log(env)
+    assert log.count("--- stale_quote symbol=2618 date=2026-11-13") == 1
+    assert "--- result status=finished polls=3 ok_polls=3 events=0" in log
+    assert fugle.parse("2618", DAY["polls"][2]["quotes"]["2618"])[0].day == "2026-11-16"
+
+
+def test_a_plan_with_other_levels_than_its_signal_is_a_track_of_its_own(db):
+    """The plan keeps its own copy (#801 scope 3): the signal rewritten after the plan was
+    made gives two tracks of the stock, each with its own levels and source."""
+
+    signals = _listed(db)
+    plan = _plan(db, signals["2618"], invalid_price=46.0, target_1=51.0)
+    tracks = intraday.read_tracks(db, MONDAY, NINE)
+    mine = [t for t in tracks if t.symbol == "2618"]
+    assert [(t.key, t.sources, t.invalid, t.target_1) for t in mine] == [
+        (f"signal:{signals['2618'].id}", (intraday.LIST,), 46.31, 50.05),
+        (f"plan:{plan.id}", (intraday.TRACKING,), 46.0, 51.0),
+    ]
+    assert intraday.symbols_of(tracks) == ["2618", "3374", "8099", "3162"]
+
+
+def test_the_read_only_session_reads_and_refuses_to_write(tmp_path, monkeypatch):
+    import sqlite3
+
+    import app.config
+
+    path = tmp_path / "stock.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.execute("INSERT INTO t VALUES (7)")
+    conn.close()
+    monkeypatch.setattr(app.config, "DB_PATH", path)
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+
+    with intraday._read_only_session() as session:
+        assert session.execute(text("SELECT x FROM t")).scalar() == 7
+        with pytest.raises(OperationalError, match="readonly"):
+            session.execute(text("INSERT INTO t VALUES (8)"))

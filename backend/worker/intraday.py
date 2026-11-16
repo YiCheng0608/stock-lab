@@ -10,9 +10,10 @@ once a minute (``worker.fugle``) and sends a Telegram message to the user's own 
   run the today page shows (``app.candidate_runs.read_run`` of the session before today,
   at most the page's 20, in rank order) whose signal's ``earliest_execution_date`` is
   today; and my tracking's open plans (``pending``, ``triggered``, not cancelled) created
-  before 09:00. A plan of a listed signal is the same stock: one track, both sources on its
-  messages. At most ``fugle.MAX_SYMBOLS`` stocks a minute: the list by rank first, then the
-  plans by creation; the others are logged and told once a day.
+  before 09:00. A plan of a listed signal with the very same levels is one track, both
+  sources on its messages; with other levels (the signal rewritten after the plan was made)
+  each is a track of its own. At most ``fugle.MAX_SYMBOLS`` stocks a minute: the list by
+  rank first, then the plans by creation; the others are logged and told once a day.
 - **Levels**: the signal's own (``signals``), as the page shows them
   (``app.candidate_view._levels``): a breakout's ``breakout_price``, a pullback's
   ``pullback_low``～``pullback_high``, ``invalid_price``, ``target_1``, ``target_2``; a
@@ -445,10 +446,25 @@ def notice(kind: str, polled: datetime, **fields: Any) -> str:
 # --- the stocks -----------------------------------------------------------------------
 
 
+LEVEL_FIELDS = (
+    "entry_type",
+    "breakout_price",
+    "pullback_low",
+    "pullback_high",
+    "invalid_price",
+    "target_1",
+    "target_2",
+)
+
+
+def _levels(row: Any) -> tuple:
+    return tuple(getattr(row, name, None) for name in LEVEL_FIELDS)
+
+
 def read_tracks(db, today: date, before: datetime) -> list[Track]:
     """The day's tracks in priority order: the today list by rank, then the open plans
-    created before BEFORE (aware) by creation. A plan of a listed signal joins that
-    signal's track."""
+    created before BEFORE (aware) by creation. A plan of a listed signal with the same
+    levels joins that signal's track; with other levels it is a track of its own."""
 
     from sqlalchemy import select
 
@@ -475,7 +491,10 @@ def read_tracks(db, today: date, before: datetime) -> list[Track]:
         )
         .order_by(TrackingPlan.created_at, TrackingPlan.id)
     ).all()
-    plan_signals = {plan.signal_id for plan in plans}
+    # A plan joins its listed signal's track only with the very same levels: a plan keeps
+    # its own copy (#801 scope 3), and a signal rewritten after the plan was made has
+    # other levels, so then each is a track of its own (#802 review 6910820856 item 2).
+    plan_signals = {plan.signal_id: plan for plan in plans}
     tracks: list[Track] = []
     listed: set[int] = set()
     run = read_run(db, notify.previous_session(db, today))
@@ -491,9 +510,18 @@ def read_tracks(db, today: date, before: datetime) -> list[Track]:
             if signal.earliest_execution_date != today:
                 continue
             symbol, name = instrument(candidate.instrument_id)
-            sources = (LIST, TRACKING) if signal.id in plan_signals else (LIST,)
-            made = track(f"signal:{signal.id}", symbol, name, sources, signal)
-            listed.add(signal.id)
+            plan = plan_signals.get(signal.id)
+            same = plan is not None and _levels(plan) == _levels(signal)
+            made = track(
+                f"signal:{signal.id}",
+                symbol,
+                name,
+                (LIST, TRACKING) if same else (LIST,),
+                signal,
+                entered=same and plan.status == "triggered",
+            )
+            if same:
+                listed.add(signal.id)
             if made is not None:
                 tracks.append(made)
     for plan in plans:
@@ -887,8 +915,13 @@ class Run:
         last = _minute(start, LAST_POLL)
         polls = ok_polls = failed_in_row = 0
         slow = False
+        stale: set[str] = set()
         while due <= last and symbols and (deadline is None or due <= deadline):
             self._sleep_until(due)
+            woken = self._woken(due, last)
+            if woken is None:
+                break
+            due = woken
             current = _Round(self.clock())
             current.fetched = self._fetch_all(symbols)
             polls += 1
@@ -904,6 +937,17 @@ class Run:
                     self.log(f"--- dropped symbol={item.symbol} reason={reason}")
                     symbols = [symbol for symbol in symbols if symbol != item.symbol]
                 elif item.outcome == fugle.OK:
+                    if item.quote.day != self.today.isoformat():
+                        # Another day's quote (a session called off by a typhoon, which
+                        # the stored calendar does not have): its high and low are not
+                        # today's, so nothing is judged (#802 review item 3).
+                        if item.symbol not in stale:
+                            stale.add(item.symbol)
+                            self.log(
+                                f"--- stale_quote symbol={item.symbol}"
+                                f" date={item.quote.day or '-'}"
+                            )
+                        continue
                     for watched in by_symbol.get(item.symbol, []):
                         self._judge(watched, states, item.quote, current.polled)
             if stop is not None:
@@ -941,12 +985,43 @@ class Run:
                         f" failed_rounds={failed_in_row}"
                     )
                     self.deliver(OPS, "", PAUSED, notice(PAUSED, current.polled))
-            due += timedelta(minutes=SLOW_MINUTES if slow else 1)
+            due = self._next_due(due, SLOW_MINUTES if slow else 1, last)
         events = sum(len(items) for key, items in self.sent.items() if key != OPS)
         return 0, (
             f"status={FINISHED} polls={polls} ok_polls={ok_polls} events={events}"
             f" symbols={len(symbols)}"
         )
+
+    def _next_due(self, due: datetime, minutes: int, last: datetime) -> datetime:
+        """The round after DUE: MINUTES later, or, when the run is behind (a host asleep,
+        a slow send, many timeouts), the next whole minute still ahead. The minutes
+        passed meanwhile are skipped, not caught up: a stock is asked at most once a
+        minute (#802 review 6910820856 item 1), and they are no poll of the day."""
+
+        planned = due + timedelta(minutes=minutes)
+        now = self.clock()
+        if now < planned:
+            return planned
+        ahead = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        self._skipped(planned, min(ahead - timedelta(minutes=1), last))
+        return ahead
+
+    def _skipped(self, first: datetime, to: datetime) -> None:
+        if first <= to:
+            self.log(
+                f"--- skipped_rounds from={first:%H:%M} to={to:%H:%M}"
+                f" minutes={round((to - first).total_seconds() / 60) + 1}"
+            )
+
+    def _woken(self, due: datetime, last: datetime) -> datetime | None:
+        """The round's minute after the sleep: DUE, or the minute the run woke in when it
+        slept past DUE (a host asleep); the minutes between are skipped. None past LAST."""
+
+        minute = self.clock().replace(second=0, microsecond=0)
+        if minute <= due:
+            return due
+        self._skipped(due, min(minute - timedelta(minutes=1), last))
+        return minute if minute <= last else None
 
     def _judge(
         self, watched: Track, states: dict[str, State], quote, polled: datetime

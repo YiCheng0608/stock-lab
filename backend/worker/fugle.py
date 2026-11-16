@@ -72,6 +72,8 @@ class Quote:
     bid: float | None = None
     ask: float | None = None
     last_updated: datetime | None = None
+    # The quote's trading day, YYYY-MM-DD (``date``): the run judges only today's.
+    day: str | None = None
 
     @property
     def locked_up(self) -> bool:
@@ -172,6 +174,7 @@ def parse(symbol: str, body: Any) -> tuple[Quote | None, str]:
             bid=_best(body.get("bids")),
             ask=_best(body.get("asks")),
             last_updated=_moment(body.get("lastUpdated")),
+            day=body.get("date") if isinstance(body.get("date"), str) else None,
         ),
         "",
     )
