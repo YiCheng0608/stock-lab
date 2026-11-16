@@ -84,6 +84,7 @@ FAILURES_TO_STOP = 3
 BLACKOUTS = ((time(20, 30), time(23, 30)), (time(8, 0), time(9, 0)))
 # The TWSE code that answers the day's rows on every trading day: it decides D.
 DAY_PROBE_CODE = "01"
+DAY_PROBE_CATEGORY = "水泥工業"
 BLOCK_MARKERS = ("FOR SECURITY REASONS", "查詢過於頻繁", "THE PAGE CANNOT BE ACCESSED")
 TWSE_NO_DATA = "沒有符合條件的資料"
 STOP_EXIT = 2
@@ -549,6 +550,16 @@ class Host:
         return result
 
 
+def closed(answer: Answer) -> bool:
+    """A ``DAY_PROBE_CODE`` answer of a day without trading.
+
+    TWSE says 「沒有符合條件的資料」 on most such weekdays, but on some (2014-02-28,
+    a holiday) answers ``stat`` OK with the day's cement table and no row.
+    """
+
+    return answer.no_data or (not answer.rows and answer.category == DAY_PROBE_CATEGORY)
+
+
 def snapshot_day(host: Host, month: str) -> date | None:
     """The month's last weekday on which TWSE ``DAY_PROBE_CODE`` has rows."""
 
@@ -558,7 +569,7 @@ def snapshot_day(host: Host, month: str) -> date | None:
             return None
         if result.rows:
             return day
-        if not result.no_data:
+        if not closed(result):
             raise AnswerError(
                 f"TWSE {day.isoformat()} type={DAY_PROBE_CODE} has no rows but "
                 "does not say no data"
@@ -787,7 +798,7 @@ def build_rows(out: Path, first: str, last: str) -> tuple[list[list], dict]:
             if answer.rows:
                 day = candidate
                 break
-            if not answer.no_data:
+            if not closed(answer):
                 raise BuildError(f"TWSE {candidate} type 01 has no rows")
         if day is None:
             raise BuildError(f"{month} has no snapshot day in the raw")

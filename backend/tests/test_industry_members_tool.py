@@ -250,6 +250,18 @@ def test_the_table_flags_retroactive_rows(tmp_path, monkeypatch):
     assert manifest["definitions"]["retroactive_codes"] == {tool.TWSE: ["26"]}
 
 
+def test_an_empty_cement_table_is_a_day_without_trading(tmp_path):
+    # 2014-02-28 (a holiday) answered stat OK with an empty cement table.
+    table = answers()
+    table[tool.url_for(tool.TWSE, JAN_CLOSED, "01")] = twse(JAN_CLOSED, "水泥工業", [])
+    summary = _fetch(tmp_path, FakeSource(table))
+    assert summary["days"]["2015-01"] == JAN.isoformat()
+    tool.build(tmp_path, "2014-12", "2015-01", ["build"])
+    # An empty table of another category is not a closed day.
+    assert not tool.closed(tool.Answer("光電業", ()))
+    assert tool.closed(tool.Answer(None, (), no_data=True))
+
+
 def test_a_snapshot_is_used_from_its_own_day():
     rows = [
         ["2014-12-31", "TWSE", "26", "光電業", "Optoelectronics", "x", "2475", "華映"],
