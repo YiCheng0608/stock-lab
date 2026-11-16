@@ -56,6 +56,7 @@ from coordinator_json import (
     THREAD_FIELDS,
     coordinator_comment,
     get,
+    latest_checks,
     newest_ci_run,
     one_line,
     run_id,
@@ -197,12 +198,13 @@ def ci_red(pr: dict) -> bool:
     """The `required` check run of the newest CI run of the PR's head failed. The
     rollup's own state is not used: a run cancelled by a newer one of the same head
     (concurrency) makes it FAILURE while `required` decides (docs/GUARDRAILS.md, PR
-    #432). The newest run is newest_ci_run's, the one patrol's ci= (check_state) reads:
+    #432). The newest run is newest_ci_run's, the run patrol's ci= (check_state) reads:
     while it has no `required` yet, or its `required` is still going, the CI is going,
     not red, even if the cancelled run's `required` failed (PR #816, 2026-11-16, #817).
-    Runs with no run id (no detailsUrl) fall back to the newest `required` by startedAt.
-    With no `required` run yet the CI is not red; with none among the runs read and more
-    left, the rollup state decides."""
+    Of that run's `required` checks the newest is latest_checks's, as for ci= (a queued
+    re-run with no time yet is the newest). Checks with no run id (no detailsUrl) are
+    all taken. With no `required` among the runs read and more left, the rollup state
+    decides (判定不了 is counted, PR #829 review 6926278317); with all read, not red."""
     tip = get(pr, "tip.nodes") or []
     rollup = (get(tip[0], "commit.statusCheckRollup") or {}) if tip else {}
     contexts = rollup.get("contexts") or {}
@@ -211,13 +213,12 @@ def ci_red(pr: dict) -> bool:
     runs = [c for c in checks if c["name"] == GATE]
     newest = newest_ci_run(checks)
     if newest is not None:
-        workflow, run = newest
-        runs = [c for c in runs if c["workflowName"] == workflow and run_id(c) == run]
-        if not runs:
-            return False
+        # A run id is unique in the repository (event_queue.ci_result compares it alone).
+        runs = [c for c in runs if run_id(c) == newest[1]]
     if runs:
-        newest_gate = max(runs, key=lambda n: n.get("startedAt") or "")
-        return (newest_gate.get("conclusion") or "").upper() in _RED
+        return any(
+            (c.get("conclusion") or "").upper() in _RED for c in latest_checks(runs)
+        )
     if (contexts.get("totalCount") or 0) > len(nodes):
         return (rollup.get("state") or "").upper() in ("FAILURE", "ERROR")
     return False

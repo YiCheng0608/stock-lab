@@ -369,6 +369,51 @@ def test_patrols_ci_and_the_slots_agree_on_the_cancelled_run(case) -> None:
     assert slots.ci_red(pr) is red is (ci == "failure")
 
 
+def test_a_newer_runs_required_not_read_falls_back_to_the_rollup() -> None:
+    """PR #829 review 6926278317 必修 1: more check runs than CONTEXTS. The newest run's
+    `required` is not among those read, so the rollup state decides (判定不了 is
+    counted); with every run read and no `required` of that run, it is going."""
+    checks = _seen_at("2026-11-16T10:40:00Z")
+    # The cancelled run's `required` failure is read, the newer run's `required` is not.
+    read = [c for c in checks if c["name"] != "required" or c["run"] != NEW_RUN]
+    assert any(c["name"] == "required" for c in read)
+    nodes = _query_nodes(read)
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=nodes)
+    rollup = pr["tip"]["nodes"][0]["commit"]["statusCheckRollup"]
+    assert not slots.ci_red(pr)
+    rollup["contexts"]["totalCount"] = len(nodes) + 1
+    rollup["state"] = "FAILURE"
+    assert slots.ci_red(pr)
+    rollup["state"] = "PENDING"
+    assert not slots.ci_red(pr)
+
+
+def test_a_queued_rerun_of_required_is_newer_than_its_failure() -> None:
+    """PR #829 review 6926278317 必修 2: gh run rerun --failed queues a new `required` in
+    the same run, with no startedAt yet. Like check_state (latest_checks), the queued
+    one is the newest: neither says red."""
+    import coordinator_json
+
+    checks = _seen_at("2026-11-16T10:40:00Z", gate="FAILURE")
+    gate = next(c for c in checks if c["name"] == "required" and c["run"] == NEW_RUN)
+    checks.append({**gate, "conclusion": None, "startedAt": None, "completedAt": None})
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=_query_nodes(checks))
+    assert not slots.ci_red(pr)
+    assert coordinator_json.check_state(_gh_rollup(checks)) == "pending"
+
+
+def test_a_check_without_its_workflow_run_is_kept_by_its_run_id() -> None:
+    """PR #829 review 6926278317 建議 1: the `required` of the newest run is known by its
+    run id alone; a node whose checkSuite.workflowRun is null still decides."""
+    checks = _seen_at("2026-11-16T10:40:00Z", gate="FAILURE")
+    nodes = _query_nodes(checks)
+    for n in nodes:
+        if n["name"] == "required" and f"/runs/{NEW_RUN}/" in n["detailsUrl"]:
+            n["checkSuite"] = {"workflowRun": None}
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=nodes)
+    assert slots.ci_red(pr)
+
+
 def test_the_query_reads_the_workflow_run_of_each_check() -> None:
     """ci_red tells the runs apart by what newest_ci_run reads (#817), in patrol's one
     gh call."""
