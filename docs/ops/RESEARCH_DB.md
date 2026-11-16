@@ -99,7 +99,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 
 | 資料 | 命令 | 備註 |
 | --- | --- | --- |
-| 除權息 | `corporate-actions sync --start-date 2004-01-01 --end-date 2024-09-30 --apply` | 每月 TWSE、TPEx 各 1 個請求，含權的列另查明細；TWT49U 的起日自動夾到 2003-05-05 |
+| 除權息 | `corporate-actions sync --start-date 2004-01-01 --end-date 2024-09-30 --apply` | 每月 TWSE、TPEx 各 1 個請求，含權的列另查明細；TWT49U 的起日自動夾到 2003-05-05。民國 99 年（2010）以前 TWT49U 的資料日期寫成兩位數民國年（`93年02月11日`），[#818](https://github.com/YiCheng0608/stock-lab/issues/818) 起才讀得懂；之前的 image 在第一個月就以 `TWSE TWT49U row without a code or date` 失敗，要用含 #818 的 image 跑 |
 | 指數日 K | `index-bars backfill --from-month 2004-02 --to-month 2007-12`，之後每 48 個月一段 | 一次最多 48 個月（`MAX_MONTHS`） |
 | 月營收 | `revenue backfill --months 60 --end-month 2018-08`、`--end-month 2023-08`，再 `--months 8 --end-month 2013-08` | 從 2013-01 起（#692 D4） |
 | 季報 | `fundamentals backfill --quarters 20 --end-quarter 2017Q4`，再 `--quarters 20 --end-quarter 2022Q4` | 從 2013Q1 起 |

@@ -1801,3 +1801,82 @@ def test_twse_historical_bars_skip_unlisted_weekends(tmp_path, monkeypatch):
         _mi_index_dates(date(2012, 12, 29), date(2012, 12, 30), tmp_path, monkeypatch)
         == []
     )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # #818: TWT49U before ROC 100 writes the year with two digits.
+        ("93年02月11日", date(2004, 2, 11)),
+        ("99年12月31日", date(2010, 12, 31)),
+        ("100年01月03日", date(2011, 1, 3)),
+        ("101年05月02日", date(2012, 5, 2)),
+        ("093年02月11日", date(2004, 2, 11)),
+        ("93 年 2 月 11 日", date(2004, 2, 11)),
+        # A bare six-digit number is not read as a ROC date.
+        ("930211", None),
+        ("93年02月30日", None),
+        # Spellings read before #818 keep their results.
+        ("20040211", date(2004, 2, 11)),
+        ("1010502", date(2012, 5, 2)),
+        ("0930211", date(2004, 2, 11)),
+        ("93/02/11", date(2004, 2, 11)),
+        (" 93/03/31", date(2004, 3, 31)),
+        ("101/08/01", date(2012, 8, 1)),
+        ("2006/02/27", date(2006, 2, 27)),
+        ("2004-02-11", date(2004, 2, 11)),
+        ("115/11/16 18:01:51", None),
+        ("20040201~20040229", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_parse_roc_date_reads_two_digit_roc_years(value, expected):
+    assert sources.parse_roc_date(value) == expected
+
+
+# Issue #818: the stored TWT49U answers of the research volume, unchanged
+# (raw/twse/2026/11/16/809146be… for 2004-02, raw/twse/2026/11/15/b0e8a8e7…
+# for 2012-05).  2004-02 writes 93年02月11日, 2012-05 writes 101年05月03日.
+TWT49U_FIXTURES = Path(__file__).parent / "fixtures" / "twt49u"
+
+
+def _twt49u_fixture(name: str) -> dict:
+    return json.loads((TWT49U_FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def test_twt49u_with_a_two_digit_roc_year_is_read():
+    [row] = sources.parse_twse_action_history(
+        _twt49u_fixture("twt49u_20040201_20040229.json"),
+        start=date(2004, 2, 1),
+        end=date(2004, 2, 29),
+    )
+    assert (row["symbol"], row["action_date"], row["kind"]) == (
+        "2849",
+        date(2004, 2, 11),
+        "權",
+    )
+    assert row["row"]["股票名稱"] == "安泰銀"
+
+
+def test_twt49u_with_a_three_digit_roc_year_is_read_as_before():
+    payload = _twt49u_fixture("twt49u_20120501_20120531.json")
+    rows = sources.parse_twse_action_history(
+        payload, start=date(2012, 5, 1), end=date(2012, 5, 31)
+    )
+    published = [str(raw[0]).strip() for raw in payload["data"]]
+    assert len(rows) == len(published)
+    # Each row's date is the 7-digit reading used before #818.
+    assert [row["action_date"] for row in rows] == [
+        date(int(text[:3]) + 1911, int(text[4:6]), int(text[7:9])) for text in published
+    ]
+    assert rows[0]["symbol"] == "910069"
+    assert rows[0]["action_date"] == date(2012, 5, 3)
+
+
+def test_the_title_prefix_cuts_the_2004_mi_index_date():
+    # MI_INDEX titles before ROC 100 keep three digits (093年…), so the
+    # market summary prefix needs no change (#818).
+    assert (
+        sources._ROC_TITLE_PREFIX.sub("", "093年09月03日大盤統計資訊") == "大盤統計資訊"
+    )
