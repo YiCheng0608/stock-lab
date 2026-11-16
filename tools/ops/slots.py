@@ -24,7 +24,8 @@ Issue or PR: a #n before a 後 in the same sentence (cut at 。；;) with 合併
 or 驗收 between them (waited_refs).
 
 One GraphQL call reads all of it, and the unanswered questions as well (QUERY keeps the
-OpenQuestions name and every field coordinator_json.unanswered_questions reads).
+OpenQuestions name and every field coordinator_json.unanswered_questions reads, and #1's
+body for governance_check, #807).
 
   query                      the GraphQL query (no stdin)
   report NOW WORKTREES STATUS
@@ -48,7 +49,14 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from coordinator_json import PAGE, THREAD_FIELDS, coordinator_comment, get, one_line
+from coordinator_json import (
+    GOVERNANCE_FIELDS,
+    PAGE,
+    THREAD_FIELDS,
+    coordinator_comment,
+    get,
+    one_line,
+)
 from event_queue import SLOTS
 
 TAIPEI = timezone(timedelta(hours=8))
@@ -70,6 +78,7 @@ _THREAD = THREAD_FIELDS.format(n=PAGE)
 QUERY = (
     "query OpenQuestions($owner:String!,$name:String!){"
     "repository(owner:$owner,name:$name){"
+    f"{GOVERNANCE_FIELDS} "
     f"issues(states:OPEN,first:{PAGE}){{totalCount nodes{{{_THREAD}}}}}"
     f"pullRequests(states:OPEN,first:{PAGE}){{totalCount nodes{{{_THREAD} url "
     "headRefName headRefOid "
