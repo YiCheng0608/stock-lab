@@ -27,6 +27,8 @@ def _tool():
 
 
 tool = _tool()
+# The tool's own names, before the fixture below swaps in the test's.
+CONFIRMED_NAMES = tool.CATEGORY_NAMES
 
 PERIODS = (
     ("2014-12", "2015-01", tool.TWSE, ("01", "26")),
@@ -154,6 +156,51 @@ def test_the_stored_answers_parse():
     )
     assert answer.category == "其他電子類"
     assert answer.rows == (("3093", "港建"), ("3131", "弘塑"), ("8183", "精星"))
+
+
+def test_only_codes_named_empty_may_answer_no_category(monkeypatch):
+    # TPEx 2023-06-30 se=33 (農業科技) answers its rows with category "".
+    content = (FIXTURES / "tpex_20230630_33.json").read_bytes()
+    day = date(2023, 6, 30)
+    with pytest.raises(tool.AnswerError, match="has no category"):
+        tool.parse_tpex(content, day, "33")
+    names = {**NAMES, tool.TPEX: {**NAMES[tool.TPEX], "33": frozenset({""})}}
+    monkeypatch.setattr(tool, "CATEGORY_NAMES", names)
+    answer = tool.parse_tpex(content, day, "33")
+    assert answer.category is None
+    assert [symbol for symbol, _ in answer.rows] == ["1240", "4171", "6508", "6578"]
+    # Another code answering an empty category still fails.
+    with pytest.raises(tool.AnswerError, match="has no category"):
+        tool.parse_tpex(content, day, "31")
+
+
+def test_the_confirmed_names_let_only_tpex_33_and_34_be_empty():
+    empty = {
+        (exchange, code)
+        for exchange, table in CONFIRMED_NAMES.items()
+        for code, names in table.items()
+        if "" in names
+    }
+    assert empty == {(tool.TPEX, "33"), (tool.TPEX, "34")}
+    for exchange, table in CONFIRMED_NAMES.items():
+        assert set(table) <= set(tool.GROUP_LABELS[exchange])
+
+
+def test_a_sweep_may_ask_only_some_codes(tmp_path):
+    source = FakeSource(answers())
+    summary = tool.sweep(
+        ["2014-12"],
+        tmp_path,
+        only=[(tool.TPEX, "31")],
+        get=source,
+        now=_daytime,
+        sleep=lambda seconds: None,
+    )
+    # The day probe, then TPEx 31 only.
+    assert summary["sent"] == {tool.TWSE: 1, tool.TPEX: 1}
+    assert source.urls[-1] == tool.url_for(tool.TPEX, DEC, "31")
+    with pytest.raises(ValueError, match="not a known code"):
+        tool.sweep(["2014-12"], tmp_path, only=[(tool.TWSE, "99")], get=source)
 
 
 def test_an_answer_for_another_day_is_refused():

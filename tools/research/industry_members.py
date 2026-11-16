@@ -166,11 +166,80 @@ GROUP_LABELS: dict[str, dict[str, str]] = {
 }
 
 # The category name each code answers with (TWSE: the table title's
-# parentheses; TPEx: ``category``).  Confirmed per period before the full fetch
-# (#779 AC-1); a name not here fails the build.
+# parentheses; TPEx: ``category``), from the sweep of 2013-01-31, 2023-06-30 and
+# 2024-09-30 (#779 6904909658); a name not here fails the build.  TPEx 33 and
+# 34 answer rows with an empty ``category``: ``""`` lets only them through
+# (decision 6904973827), any other code answering it still fails.
 CATEGORY_NAMES: dict[str, dict[str, frozenset[str]]] = {
-    TWSE: {"26": frozenset({"光電業"})},
-    TPEX: {"31": frozenset({"其他電子類"})},
+    TWSE: {
+        "01": frozenset({"水泥工業"}),
+        "02": frozenset({"食品工業"}),
+        "03": frozenset({"塑膠工業"}),
+        "04": frozenset({"紡織纖維"}),
+        "05": frozenset({"電機機械"}),
+        "06": frozenset({"電器電纜"}),
+        "08": frozenset({"玻璃陶瓷"}),
+        "09": frozenset({"造紙工業"}),
+        "10": frozenset({"鋼鐵工業"}),
+        "11": frozenset({"橡膠工業"}),
+        "12": frozenset({"汽車工業"}),
+        "14": frozenset({"建材營造"}),
+        "15": frozenset({"航運業"}),
+        "16": frozenset({"觀光餐旅"}),
+        "17": frozenset({"金融保險"}),
+        "18": frozenset({"貿易百貨"}),
+        "19": frozenset({"綜合"}),
+        "20": frozenset({"其他"}),
+        "21": frozenset({"化學工業"}),
+        "22": frozenset({"生技醫療業"}),
+        "23": frozenset({"油電燃氣業"}),
+        "24": frozenset({"半導體業"}),
+        "25": frozenset({"電腦及週邊設備業"}),
+        "26": frozenset({"光電業"}),
+        "27": frozenset({"通信網路業"}),
+        "28": frozenset({"電子零組件業"}),
+        "29": frozenset({"電子通路業"}),
+        "30": frozenset({"資訊服務業"}),
+        "31": frozenset({"其他電子業"}),
+        "35": frozenset({"綠能環保"}),
+        "36": frozenset({"數位雲端"}),
+        "37": frozenset({"運動休閒"}),
+        "38": frozenset({"居家生活"}),
+    },
+    TPEX: {
+        "02": frozenset({"食品工業"}),
+        "03": frozenset({"塑膠工業"}),
+        "04": frozenset({"紡織纖維"}),
+        "05": frozenset({"電機機械"}),
+        "06": frozenset({"電器電纜"}),
+        "08": frozenset({"玻璃陶瓷"}),
+        "10": frozenset({"鋼鐵工業"}),
+        "11": frozenset({"橡膠工業"}),
+        "14": frozenset({"建材營造"}),
+        "15": frozenset({"航運業"}),
+        "16": frozenset({"觀光餐旅"}),
+        "17": frozenset({"金融業"}),
+        "18": frozenset({"貿易百貨"}),
+        "20": frozenset({"其他"}),
+        "21": frozenset({"化學工業"}),
+        "22": frozenset({"生技醫療類"}),
+        "23": frozenset({"油電燃氣類"}),
+        "24": frozenset({"半導體類"}),
+        "25": frozenset({"電腦及週邊類"}),
+        "26": frozenset({"光電業類"}),
+        "27": frozenset({"通信網路類"}),
+        "28": frozenset({"電子零組件類"}),
+        "29": frozenset({"電子通路類"}),
+        "30": frozenset({"資訊服務類"}),
+        "31": frozenset({"其他電子類"}),
+        "32": frozenset({"文化創意業"}),
+        "33": frozenset({""}),
+        "34": frozenset({""}),
+        "35": frozenset({"綠能環保"}),
+        "36": frozenset({"數位雲端"}),
+        "37": frozenset({"運動休閒"}),
+        "38": frozenset({"居家生活"}),
+    },
 }
 
 # TWSE MI_INDEX answers each stock under its current (or last) category on
@@ -401,12 +470,12 @@ def parse_tpex(content: bytes, day: date, code: str) -> Answer:
     if fields[:2] != ["代號", "名稱"]:
         raise AnswerError(f"{label} columns changed: {fields[:2]!r}")
     category = str(table.get("category") or "").strip()
-    if not category:
+    if not category and "" not in CATEGORY_NAMES.get(TPEX, {}).get(code, ()):
         raise AnswerError(f"{label} has no category")
     rows = _rows(data, label)
     if table.get("totalCount") not in (None, len(rows)):
         raise AnswerError(f"{label} totalCount {table.get('totalCount')} != rows")
-    return Answer(category, rows)
+    return Answer(category or None, rows)
 
 
 PARSERS: dict[str, Callable[[bytes, date, str], Answer]] = {
@@ -674,10 +743,29 @@ def all_codes(month: str, exchange: str) -> tuple[str, ...]:
     return tuple(GROUP_LABELS[exchange])
 
 
-def sweep(month_list: list[str], out: Path, **options) -> dict:
-    """Every known code on each month's snapshot day (the code-list check)."""
+def sweep(
+    month_list: list[str],
+    out: Path,
+    only: Iterable[tuple[str, str]] = (),
+    **options,
+) -> dict:
+    """Every known code on each month's snapshot day (the code-list check).
 
-    return run_plan(month_list, all_codes, out, **options)
+    ``only``: (exchange, code) pairs to ask instead of every code.
+    """
+
+    wanted = set(only)
+    for exchange, code in wanted:
+        if code not in GROUP_LABELS.get(exchange, {}):
+            raise ValueError(f"{exchange} {code} is not a known code")
+
+    def codes_of(month: str, exchange: str) -> tuple[str, ...]:
+        codes = all_codes(month, exchange)
+        if not wanted:
+            return codes
+        return tuple(code for code in codes if (exchange, code) in wanted)
+
+    return run_plan(month_list, codes_of, out, **options)
 
 
 def stored_answer(out: Path, exchange: str, day: date, code: str) -> Answer | None:
@@ -815,7 +903,7 @@ def build_rows(out: Path, first: str, last: str) -> tuple[list[list], dict]:
                 if answer.no_data or not answer.rows:
                     raise BuildError(f"{exchange} {day} {code} answered no rows")
                 names = CATEGORY_NAMES.get(exchange, {}).get(code, frozenset())
-                if answer.category not in names:
+                if (answer.category or "") not in names:
                     raise BuildError(
                         f"{exchange} {day} {code} is {answer.category!r}, "
                         f"not one of {sorted(names)}"
@@ -1076,6 +1164,9 @@ def main(argv: list[str] | None = None) -> int:
     step = sub.add_parser("sweep", help="every known code on each month's day")
     step.add_argument("--months", required=True, help="YYYY-MM,YYYY-MM,...")
     step.add_argument("--out", required=True, type=Path)
+    step.add_argument(
+        "--only", action="append", default=[], help="EXCHANGE:CODE, repeatable"
+    )
     step = sub.add_parser("bisect", help="the month a code starts or ends")
     step.add_argument("--exchange", required=True, choices=EXCHANGES)
     step.add_argument("--code", required=True)
@@ -1091,7 +1182,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.start, args.end, args.out, max_requests=args.max_requests
             )
         else:
-            summary = sweep(args.months.split(","), args.out)
+            only = [tuple(item.split(":", 1)) for item in args.only]
+            summary = sweep(args.months.split(","), args.out, only=only)
         if summary["stopped"]:
             return STOP_EXIT
         return FAILED_EXIT if summary["failed"] or summary["errors"] else 0
