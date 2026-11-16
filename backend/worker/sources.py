@@ -560,6 +560,13 @@ TWSE_INDEX_NAMES = (TWSE_INDEX_NAME, "加權股價指數")
 TPEX_QUOTES_FIRST_DATE = date(2007, 4, 23)  # dailyQuotes
 TPEX_INSTITUTIONAL_FIRST_DATE = date(2014, 12, 1)  # insti/dailyTrade
 TWSE_ACTION_HISTORY_FIRST_DATE = date(2003, 5, 5)  # TWT49U: 查詢開始日期小於92年5月5日
+# TWT49UDetail answers {"stat": "無相關資料"} for every ex-right before this day
+# (2005-01-24 2888 none, 2005-01-25 2825 has its row; Issue #821).  Such an
+# event is written without its breakdown, its factor the published
+# 除權息參考價 / 除權息前收盤價 (``TWSE_REFERENCE_FACTOR_SOURCE``); a detail
+# missing on or after this day is still left out with a warning.
+TWSE_ACTION_DETAIL_FIRST_DATE = date(2005, 1, 25)
+TWSE_REFERENCE_FACTOR_SOURCE = "twt49u_reference"
 # Capital reduction reports: TWTAUU 查詢開始日期小於100年1月1日; revivt answers an
 # empty table for 2012 and has rows from 2013.
 REDUCTION_FIRST_DATES = {"TWSE": date(2011, 1, 1), "TPEx": date(2013, 1, 1)}
@@ -4265,7 +4272,10 @@ class TwseAdapter:
         TWT49U gives the official prices and the combined 權值+息值 of each
         event; a row that is an ex-right (權 or 權息) also needs its
         TWT49UDetail breakdown.  An event whose detail cannot be read is
-        left out with a warning instead of being written half known.
+        left out with a warning instead of being written half known, except
+        a detail answered without its row before
+        ``TWSE_ACTION_DETAIL_FIRST_DATE``, which TWSE never published: that
+        event is written without the breakdown (#821).
         """
         records: list[ActionRecord] = []
         payloads: list[FetchedPayload] = []
@@ -4316,6 +4326,21 @@ class TwseAdapter:
                     detail = parse_twse_action_detail(
                         detail_payload.payload, row["symbol"]
                     )
+                    if (
+                        detail is None
+                        and row["action_date"] < TWSE_ACTION_DETAIL_FIRST_DATE
+                    ):
+                        # TWSE never published these breakdowns (#821).
+                        records.append(
+                            twse_action_history_record(
+                                row,
+                                None,
+                                payload_sha256=payload.sha256,
+                                detail_sha256=detail_payload.sha256,
+                                detail_unpublished=True,
+                            )
+                        )
+                        continue
                     if detail is None:
                         warnings.append(
                             "TWSE TWT49UDetail has no row for "
@@ -5904,6 +5929,7 @@ def twse_action_history_record(
     *,
     payload_sha256: str | None,
     detail_sha256: str | None,
+    detail_unpublished: bool = False,
 ) -> ActionRecord:
     """A TWT49U row (plus its TWT49UDetail for an ex-right) as an ActionRecord.
 
@@ -5911,11 +5937,20 @@ def twse_action_history_record(
     TWT48U keys Code, Date, Name and Exdividend, which the stock page reads
     to classify a TWSE row.  A 息 row's 權值+息值 is its cash dividend; a
     row with 權 takes cash per share and free shares per thousand from the
-    detail.
+    detail.  ``detail_unpublished`` (an ex-right before
+    TWSE_ACTION_DETAIL_FIRST_DATE, #821) leaves the cash dividend and the
+    ratio empty and marks ``factor_source``: the price factor is then the
+    published 除權息參考價 / 除權息前收盤價 (pipeline.official_reference_factor).
     """
     published = row["row"]
     symbol, action_date, kind = row["symbol"], row["action_date"], row["kind"]
-    if detail is None:
+    if detail_unpublished:
+        if detail is not None or "權" not in kind:
+            raise ValueError("only an ex-right without its detail is unpublished")
+        cash = None
+        stock_ratio = None
+        ratio_source = None
+    elif detail is None:
         if "權" in kind:
             raise ValueError("an ex-right TWT49U row needs its TWT49UDetail")
         cash = parse_number(published.get("權值+息值"))
@@ -5937,6 +5972,10 @@ def twse_action_history_record(
         details["detail"] = detail
         details["detail_sha256"] = detail_sha256
         details["stock_ratio_source"] = ratio_source
+    elif detail_unpublished:
+        details["detail"] = None
+        details["detail_sha256"] = detail_sha256
+        details["factor_source"] = TWSE_REFERENCE_FACTOR_SOURCE
     return ActionRecord(
         symbol=symbol,
         action_date=action_date,

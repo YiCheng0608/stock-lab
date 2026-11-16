@@ -96,13 +96,13 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 上市日行情、TAIEX 收盤 | `MI_INDEX` | 2004-02-11 | `stat`「查詢日期小於93年2月11日」 | `backfill --start-date` 早於這天就拒絕、不發請求（`sources.TWSE_QUOTES_FIRST_DATE`）。2008-12-31 以前的 `MI_INDEX` 只有「大盤統計資訊」與「每日收盤行情」，沒有「價格指數」表（2009-01-05 起才有，`TWSE_MI_INDEX_TAIEX_FIRST_DATE`）：那些日子的 TAIEX 收盤改取 `MI_5MINS_HIST` 月報（每月 1 個請求），寫成同樣的收盤列（`twse_index`），raw 指向月報，交易日基準照[TAIEX 交易日基準](#taiex-交易日基準)核實。價格指數表的加權指數列名以「發行量加權股價指數」為主，2019-04-29 是「加權股價指數」；兩個名稱都接受，完全比對（`sources.TWSE_INDEX_NAMES`，#764） |
 | 上市三大法人 | `T86` | 2012-05-02 | `stat`「查詢日期小於101年05月02日」 | 不請求，籌碼列只有融資組；run metadata 的 `feed_sources.TWSE.not_published.institutional` 記日期，不記 warning。較舊的版面沒有外資自營商欄（2012-05-02 實測如此，2014-11-28 已是現行版面，改版日沒有實測），外資取「外資買賣超股數」（當時的外資口徑，含後來分出的外資自營商）；parser 依欄名判斷版面，現行版面不改讀這欄 |
 | 上市融資融券 | `MI_MARGN` | 不晚於 2004-02-11 | — | 照常請求 |
-| 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05 | `stat`「查詢開始日期小於92年5月5日」 | `corporate-actions sync` 的起日夾到這天 |
+| 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05；`TWT49UDetail` 2005-01-25 起 | `stat`「查詢開始日期小於92年5月5日」；明細 `stat`「無相關資料」 | `corporate-actions sync` 的起日夾到這天。2005-01-25 以前的含權列沒有明細，照樣寫入，欄位留空、以參考價還原（`sources.TWSE_ACTION_DETAIL_FIRST_DATE`，見[除權息回補](#除權息回補)，#821） |
 | 上市減資停止買賣 | `TWTAUU` | 2011-01-01 | `stat`「查詢開始日期小於100年1月1日」 | `trading-halts` 的起日夾到這天，輸出 `not_published_before` |
 | 加權指數日 K | `MI_5MINS_HIST`＋`FMTQIK` | 不晚於 2004-02 | — | `index-bars backfill`，研究 DB 以 `STOCK_INDEX_HISTORY_START` 放寬下限 |
 | 上櫃日行情 | `dailyQuotes` | 2007-04-23 | `stat ok` 但「上櫃家數: 0家」的空表（2006-12-29、2007-01-02） | 不請求，也不記成休市（空表在這天以前不是 no-data 證據）；`feed_sources.TPEx.not_published.quotes` |
 | 上櫃三大法人 | `insti/dailyTrade` | 2014-12-01 | 空表（2014-11-28、07-01，2010～2014 各年 1 月） | 不請求，籌碼列只有融資組；`feed_sources.TPEx.not_published.institutional`。起始時的版面是 16 欄（外資及陸資淨買、投信淨買、自營淨買、三大法人買賣超，沒有外資自營商欄），而且 2014～2015 的回應第一張表是空的、明細在第二張「三大法人買賣明細資訊」；parser 依欄名認這個版面（`TPEX_INSTITUTIONAL_LEGACY_FIELDS`），欄名不同就不讀 |
 | 上櫃融資融券 | `margin/balance` | 不晚於 2007-01-02 | — | 照常請求 |
-| 上櫃除權息 | `exDailyQ` | 2007-07 是空表，2008-07 起有 | 空表 | 照常逐月請求；空月份不寫 |
+| 上櫃除權息 | `exDailyQ` | 2007-12（2004-02～04、2006-04、2007-04、07、10、11 實測都是空表，#821） | 空表 | 照常逐月請求；空月份不寫。上櫃日線 2007-04-23～2007-11-30 因此沒有除權息事件（研究 DB 的限制） |
 | 上櫃減資停止買賣 | `revivt` | 2013 年 | 2012 年整年空表 | `trading-halts` 的起日夾到 2013-01-01 |
 | 櫃買指數日 K | `inx`＋`tradingIndex` | 不晚於 2007-01 | — | 同加權指數 |
 | TPEx 停復牌 | OpenAPI `tpex_spendi_history` | 只有今年（2026-11-14 查到 365 列，暫停日 1150109～1151113） | — | 不能回補 |
@@ -594,7 +594,7 @@ TWSE：`GET /instruments/{symbol}` 的 `corporate_actions[]` 帶唯讀分類 `so
 | TWSE 計算結果明細 | `https://www.twse.com.tw/rwd/zh/exRight/TWT49UDetail?STK_NO=<代號>&T1=YYYYMMDD&response=json` | `(每股配發現金股利)除息`（`3 元／股`）、`A. 按普通股股東持股比例每千股無償配股`（`100 股`）；其餘現增欄位只保存。只對 `權/息` 含「權」的列請求。 |
 | TPEx 除權除息計算結果表 | `https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ?startDate=YYYY/MM/DD&endDate=YYYY/MM/DD&response=json` | 21 欄（`除權息日期`、`代號`…`按持股比例仟股認購`）逐一對應 `tpex_exright_daily` 的英文欄名後，以 daily 同一個 parser 解析；回應的 `date` 須等於請求區間。 |
 
-- **TWSE 對應**：`息` 列的現金股利是 `權值+息值`；含「權」的列取明細的每股現金股利，配股率見下一點。明細讀不到時該事件不寫入、記 warning，run 為 `partial`。`details_json` 保留 `TWT49U` 全部欄位、`detail` 與 `detail_sha256`，並補 `Code`／`Date`／`Name`／`Exdividend`，讓上面的分類照常運作。
+- **TWSE 對應**：`息` 列的現金股利是 `權值+息值`；含「權」的列取明細的每股現金股利，配股率見下一點。明細讀不到時該事件不寫入、記 warning，run 為 `partial`；例外是 2005-01-25 以前，明細回 `{"stat": "無相關資料"}`（TWSE 沒有公布這段的明細，2005-01-24 2888 沒有、2005-01-25 2825 有，#821）：事件照寫，`cash_dividend`、`stock_dividend_ratio` 留空，`details_json` 記 `factor_source: "twt49u_reference"`、`detail: null` 與那份空回應的 `detail_sha256`。還原因子由 `除權息參考價／除權息前收盤價` 決定（[還原因子](spec/indicators.md)，欄位空白時就用官方比）；寫入防呆不比這種列，也不寫 `factor_mismatch`，sync 的輸出另外計 `reference_factor_rows`。transport 失敗、或 2005-01-25 以後明細讀不到，仍照上面跳過。`details_json` 保留 `TWT49U` 全部欄位、`detail` 與 `detail_sha256`，並補 `Code`／`Date`／`Name`／`Exdividend`，讓上面的分類照常運作。
 - **TWSE 配股率**（`sources._twse_stock_ratio`）：明細的每千股無償配股只印到小數一位（2442 2026-09-08 印 `71.1 股`，實際 0.07111516），印出值 ÷ 1,000 最多差 0.00005。TWSE 用精確比率算參考價，所以從同一列的價格反推：沒有現增時 `(除權息前收盤價 − 現金股利) ／ (除權息前收盤價 − 權值+息值) − 1`（`權值+息值` 六位小數、未捨去）；明細有現增（`C. (有償) 現金增資` 或 `按股東持股比例每千股認購` 大於 0）時，分母改用不含認購的 `減除股利參考價`。存哪個值：
   - 反推值與印出值相差不到 0.000001：存印出值（`used=printed`）。
   - 相差不超過半個印出單位（0.00005）：存反推值（`used=derived`，精度為 TWSE 計算時用的比率）。

@@ -152,7 +152,12 @@ def _plan(
         if instrument is None:
             unknown[record.exchange] += 1
             continue
-        check = pipeline.action_factor_check(record)
+        if pipeline.reference_factor_only(record):
+            # Published without its breakdown (#821): nothing to compare.
+            counts["reference_factor"] += 1
+            check = None
+        else:
+            check = pipeline.action_factor_check(record)
         if check is not None and not check["passed"]:
             rejected.append(
                 {
@@ -202,6 +207,9 @@ def _plan(
         "unchanged_rows": counts["same_fields"],
         "changes": changes,
         "factor_mismatches": rejected,
+        # TWSE ex-rights before 2005-01-25 without TWT49UDetail (#821): fields
+        # empty, factor 除權息參考價 / 除權息前收盤價.
+        "reference_factor_rows": counts["reference_factor"],
         # instrument id -> earliest action date whose factor input changes;
         # ``rebuild`` recomputes these instruments from that date.
         "affected": {
@@ -274,6 +282,7 @@ def sync_corporate_actions(
         "new_rows": plan["new_rows"],
         "changed_rows": plan["changed_rows"],
         "factor_mismatches": len(plan["factor_mismatches"]),
+        "reference_factor_rows": plan["reference_factor_rows"],
         "affected": plan["affected"],
     }
     result.update(status=run.status, run_id=run.id, after=table_summary(db))
