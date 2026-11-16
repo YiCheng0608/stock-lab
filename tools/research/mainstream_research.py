@@ -65,7 +65,8 @@ DESIGN = "813"
 TOOL = "mainstream_research"
 REGISTRATION_COMMIT = "31a09e9e"
 CORRECTION_COMMIT = "b417f716"  # the first and second corrections (#779)
-DECISION = "https://github.com/YiCheng0608/stock-lab/issues/813"
+# the tool and its AC-1 decision (corrected by 6914015496: 46 put back, about 87)
+DECISION = "https://github.com/YiCheng0608/stock-lab/issues/813#issuecomment-6913227984"
 EXPLORATION, VALIDATION, USED = ex.EXPLORATION, ex.VALIDATION, ex.USED
 STAGES = ex.STAGES
 SEGMENTS = dict(ex.SEGMENTS)
@@ -819,8 +820,9 @@ def _members_line() -> str:
     retro = {
         "exclude": "上市 35～38 在 2023-07-03 以前的回溯列排除",
         "keep": "上市 35～38 在 2023-07-03 以前的回溯列保留",
-        "remap_2023": "上市 2023-07-03 改分類的 47 家，在那天以前依證交所調整名單"
-        f"（公告 1121802250，sha256 `{REMAP_SOURCE['sha256'][:16]}…`）放回原產業；"
+        "remap_2023": "上市 2023-07-03 以前的快照，證交所 112 年調整名單"
+        f"（公告 1121802250，sha256 `{REMAP_SOURCE['sha256'][:16]}…`）47 家中，"
+        "成員表裡仍是名單新代號的放回原產業（實際 46 家，3054 不符）；"
         "其他年度的調整仍是回溯的",
     }[RETROACTIVE]
     return (
@@ -842,7 +844,7 @@ def hypothesis_markdown(result: dict[str, Any], header: dict[str, Any]) -> str:
         f"- 判定：**{verdict}**"
         + (f"（{REASONS[result['reason']]}，不跑）" if result["reason"] else ""),
         f"- 假設：{spec['direction']}；{spec['label']}；N＝{spec['top']}、K＝{spec['hold']}",
-        f"- 登記 commit `{REGISTRATION_COMMIT}`，更正 `{CORRECTION_COMMIT}`；"
+        f"- 登記 commit `{REGISTRATION_COMMIT}`，更正 `{CORRECTION_COMMIT}` 與第三次更正 {DECISION}；"
         f"定義雜湊 `{header['definitions_sha256'][:16]}…`",
         _members_line(),
         f"- 期間：訊號日 {window.get('first_signal', '—')} 起，有淨值的交易日 "
@@ -1022,8 +1024,8 @@ def overview_markdown(report: dict[str, Any], sha256: str) -> str:
         "",
         f"# 新策略探索 第 {report['round']} 輪 {stage}（mainstream_research 第 {VERSION} 版，#{DESIGN}）",
         "",
-        f"- 登記 commit `{REGISTRATION_COMMIT}`、更正 `{CORRECTION_COMMIT}`"
-        f"（docs/spec/evidence.md「第三輪：M1、M2」）；工具 {DECISION}",
+        f"- 登記 commit `{REGISTRATION_COMMIT}`、更正 `{CORRECTION_COMMIT}` 與第三次更正"
+        f"（docs/spec/evidence.md「第三輪：M1、M2」）：{DECISION}",
         f"- 定義雜湊 `{report['definitions_sha256']}`",
         _members_line(),
         f"- 比較次數：本輪 {report['round_size']} 個、累計 {report['cumulative']} 個；另列："
@@ -1103,7 +1105,8 @@ def coverage_markdown(body: dict[str, Any]) -> str:
             "（M1、M2 同一份名單）",
             f"- 重現：`{body['command']}`",
             "- 有族群：母體中 T 日的成員表裡有族群的檔；可排名的族群：有值成員 ≥ "
-            f"{MIN_MEMBERS} 檔；沒有可排名的族群、湊不滿 {GROUP_COUNT} 個族群只數 TAIEX "
+            f"{MIN_MEMBERS} 檔；湊不滿 {GROUP_COUNT} 個族群數的是去重後選上的族群；"
+            "沒有可排名的族群、湊不滿的天數只數 TAIEX "
             "足夠的日子",
             "",
             *coverage_lines(body["coverage"]),

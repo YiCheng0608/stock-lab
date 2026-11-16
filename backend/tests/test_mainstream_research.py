@@ -585,6 +585,28 @@ def test_the_excluded_stocks_stay_in_the_population(context):
     assert d.retro == 5
 
 
+@pytest.mark.parametrize("t", [239, 240, NO_TAIEX, NO_TAIEX + 1, 299, 329])
+def test_the_taiex_return_is_the_products(fixture_db, context, t):
+    """``app.mainstream.index_window_return``: the same value, and None where
+    the product raises (no TAIEX bar on T, fewer than 241 closes)."""
+
+    day = trading_days()[t]
+    engine = create_engine(f"sqlite:///{fixture_db}")
+    try:
+        with Session(engine) as db:
+            try:
+                theirs = product.index_window_return(db, day)
+            except product.MainstreamDataError:
+                theirs = None
+    finally:
+        engine.dispose()
+    mine = tool.taiex_return(context, day)
+    if t in (239, NO_TAIEX):
+        assert theirs is None and mine is None
+    else:
+        assert mine == pytest.approx(theirs, rel=1e-12)
+
+
 def test_no_taiex_close_picks_nothing(context):
     d = tool.signal_day(context, NO_TAIEX)
     assert d.universe and not d.picks and not d.taiex and d.ranked > 0
@@ -724,7 +746,6 @@ def normalized(path: Path) -> str:
                 line
                 for line in text.splitlines()
                 if not line.startswith(VOLATILE_LINES)
-                and not line.startswith("- 族群來源")
             )
             + "\n"
         )
