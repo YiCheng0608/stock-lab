@@ -545,7 +545,14 @@ def test_close_sends_one_text_so_an_idle_terminal_closes(to: Harness) -> None:
     assert "已關舊 terminal：term_old" in _out(result)
 
 
-@pytest.mark.parametrize("env", [("TAKE_OVER_CLOSE_WAIT", "0"), ("TAKE_OVER_CLOSE_WAIT", "1m"), ("TAKE_OVER_CLOSE_SETTLE", "")])
+@pytest.mark.parametrize(
+    "env",
+    [
+        ("TAKE_OVER_CLOSE_WAIT", "0"),
+        ("TAKE_OVER_CLOSE_WAIT", "1m"),
+        ("TAKE_OVER_CLOSE_SETTLE", "x"),
+    ],
+)
 def test_take_over_refuses_a_close_wait_that_is_no_seconds(
     to: Harness, env: tuple
 ) -> None:
