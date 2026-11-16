@@ -1121,12 +1121,20 @@ def parse_integer(value: Any) -> int | None:
     return int(number) if number is not None else None
 
 
+# ``93年02月11日``: TWT49U writes ROC years before 100 with two digits
+# (#818).  Only this spelling is read as a two-digit year; a bare six-digit
+# number stays unread so it is not mistaken for another format.
+_ROC_YMD = re.compile(r"(\d{2,4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日")
+
+
 def parse_roc_date(value: Any) -> date | None:
     if value is None:
         return None
     text_value = str(value).strip().replace("-", "/")
     if not text_value:
         return None
+    if ymd := _ROC_YMD.fullmatch(text_value):
+        text_value = "/".join(ymd.groups())
     parts = text_value.split("/")
     try:
         if len(parts) == 3:
