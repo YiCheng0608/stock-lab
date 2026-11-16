@@ -8,6 +8,14 @@ seconds per host), so a stop loses at most the month in progress, and a rerun
 of the same range skips the months the progress file records as done (the
 backfill itself reuses its manifests too).
 
+``--weekend-sessions`` (Issue #790) runs one single-day backfill per official
+weekend session (``worker.sources.OFFICIAL_WEEKEND_SESSIONS``) in the range
+instead, newest first.  A finished month's backfill is not sent again (its
+request key is success), so the weekend sessions a month run never asked for
+need their own one-day request keys.  The pause, the progress file and the
+final check are the month mode's; its progress lines are ``weekend`` events,
+so neither mode takes the other's lines for finished pieces.
+
 Before each month it checks the Taipei time: from ``PAUSE_FROM`` (21:00, a
 month's length before the 21:15 no-request rule) to ``PAUSE_UNTIL`` (23:30) it
 sleeps until 23:30, so no request is sent while the production daily runs.
@@ -36,7 +44,7 @@ import time as time_module
 from calendar import monthrange
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 TAIPEI = timezone(timedelta(hours=8))
 PAUSE_FROM = time(21, 0)
@@ -77,8 +85,19 @@ def pause_seconds(now: datetime) -> float:
     return (resume - local).total_seconds()
 
 
-def done_months(progress: Path) -> set[tuple[str, str]]:
-    """Months a previous run finished with exit 0."""
+def weekend_sessions_newest_first(
+    first: date, last: date, sessions: Iterable[date]
+) -> list[tuple[date, date]]:
+    """One-day pieces for the listed weekend sessions in ``first``..``last``."""
+
+    if first > last:
+        raise ValueError(f"{first} is after {last}")
+    days = sorted((day for day in set(sessions) if first <= day <= last), reverse=True)
+    return [(day, day) for day in days]
+
+
+def done_months(progress: Path, event: str = "month") -> set[tuple[str, str]]:
+    """Pieces (``month`` or ``weekend`` lines) a previous run finished with exit 0."""
 
     if not progress.is_file():
         return set()
@@ -88,7 +107,7 @@ def done_months(progress: Path) -> set[tuple[str, str]]:
             entry = json.loads(line)
         except ValueError:
             continue
-        if entry.get("event") == "month" and entry.get("exit") == 0:
+        if entry.get("event") == event and entry.get("exit") == 0:
             done.add((entry["start"], entry["end"]))
     return done
 
@@ -131,6 +150,7 @@ def run(
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     sleep: Callable[[float], None] = time_module.sleep,
     integrity: Callable[[], dict] | None = None,
+    weekend_sessions: Iterable[date] | None = None,
 ) -> dict[str, int]:
     """Backfill the months not done yet, then check the whole database once.
 
@@ -141,9 +161,14 @@ def run(
     code head (#722), so this is where a damaged database fails.
     """
 
+    if weekend_sessions is None:
+        event, pieces = "month", months_newest_first(first, last)
+    else:
+        event = "weekend"
+        pieces = weekend_sessions_newest_first(first, last, weekend_sessions)
     progress = data_dir / "logs" / PROGRESS_NAME
     progress.parent.mkdir(parents=True, exist_ok=True)
-    finished = done_months(progress)
+    finished = done_months(progress, event)
     counts = {"done_before": 0, "ok": 0, "failed": 0}
 
     def log(entry: dict) -> None:
@@ -151,9 +176,16 @@ def run(
         with progress.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    log({"event": "start", "first": first.isoformat(), "last": last.isoformat()})
+    start_line = {
+        "event": "start",
+        "first": first.isoformat(),
+        "last": last.isoformat(),
+    }
+    if event == "weekend":
+        start_line["mode"] = "weekend_sessions"
+    log(start_line)
     try:
-        for start, end in months_newest_first(first, last):
+        for start, end in pieces:
             key = (start.isoformat(), end.isoformat())
             if key in finished:
                 counts["done_before"] += 1
@@ -165,7 +197,7 @@ def run(
             code, tail = backfill(start, end)
             log(
                 {
-                    "event": "month",
+                    "event": event,
                     "start": key[0],
                     "end": key[1],
                     "exit": code,
@@ -256,6 +288,13 @@ def _worker_backfill(start: date, end: date) -> tuple[int, str]:
     return completed.returncode, tail
 
 
+def _official_weekend_sessions() -> frozenset[date]:
+    # The container's backend is on sys.path (the tool runs next to worker.cli).
+    from worker.sources import OFFICIAL_WEEKEND_SESSIONS
+
+    return OFFICIAL_WEEKEND_SESSIONS
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -265,6 +304,11 @@ def main(
     parser = argparse.ArgumentParser(prog="history_backfill.py", description=__doc__)
     parser.add_argument("--from", dest="first", type=date.fromisoformat, required=True)
     parser.add_argument("--to", dest="last", type=date.fromisoformat, required=True)
+    parser.add_argument(
+        "--weekend-sessions",
+        action="store_true",
+        help="one single-day backfill per official weekend session in the range (#790)",
+    )
     args = parser.parse_args(argv)
     environ = dict(os.environ)
     data_dir = Path(environ.get("STOCK_DATA_DIR", "/data"))
@@ -280,6 +324,9 @@ def main(
         environ=environ,
         backfill=backfill or _worker_backfill,
         integrity=lambda: integrity(db),
+        weekend_sessions=_official_weekend_sessions()
+        if args.weekend_sessions
+        else None,
     )
     print(json.dumps(counts))
     if not counts.get("integrity_ok"):

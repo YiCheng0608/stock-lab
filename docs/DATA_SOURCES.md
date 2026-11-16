@@ -248,8 +248,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 回補 run 的 `target_met` 有三處：metadata 頂層、`coverage_manifest_summary`、`coverage`。這三處和 `/api/coverage` 的 `summary.target_met` 都用同一條規則（[#479](https://github.com/YiCheng0608/stock-lab/issues/479)）：
 
-- **目標**：`min(65, 窗口平日數 − 確定休市日)`，已驗證交易日（[TAIEX 交易日基準](#taiex-交易日基準)）達到目標就算達成。
-  - 回補 run 的窗口平日數含延伸補抓日；短範圍的上限是範圍內的平日數。
+- **目標**：`min(65, 窗口請求日數 − 確定休市日)`，已驗證交易日（[TAIEX 交易日基準](#taiex-交易日基準)）達到目標就算達成。
+  - 窗口請求日數是平日，加上清單裡的週末交易日（[交易日的判定與週末交易日](#交易日的判定與週末交易日)，#790）。
+  - 回補 run 的窗口請求日數含延伸補抓日；短範圍的上限是範圍內的請求日數。
   - run metadata 記 `target_sessions` 與 `confirmed_non_trading_dates`。
   - `/api/coverage` 的 summary 記 `target_ohlcv_taiex_sessions`（扣除後）、`target_ohlcv_taiex_cap`（扣除前）與 `confirmed_non_trading_dates`。
   - `coverage_targets.ohlcv_taiex_sessions` 仍是上限 65；要不要延伸補抓照舊看它，窗口還有空間就往前補。
@@ -261,6 +262,36 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
   只有當天一次 no-data、沒有確認的日子仍算缺資料。這條規則也決定 catchup 要不要補抓（[重跑與回補](ops/SCHEDULING.md#重跑與回補)），只寫在 `app.coverage.collect_states` 一處。官方休市表（[交易日曆](#交易日曆)）不讀：颱風等臨時休市不在表上（2026-10-23），官方 no-data 兩種都涵蓋。
 - **為什麼要扣**：延伸補抓不能早於迄日前 93 日。93 日的窗口約 66～67 個平日，扣掉休市日常湊不到 65 日。例如 run 2266（08/03～11/03）有 67 個平日、5 個確定休市日、驗證到 62 日：舊規則永遠「尚未達成」，新規則的目標是 62，已達成。
 - **日期表**：有回補 manifest 或指定了起訖時，`/api/coverage` 把確定休市日列為 `skipped_non_trading`，計入 `skipped_non_trading_dates`；當天有 MOPS 事件列也一樣，不顯示成 `partial`。完全沒有回補 manifest 的快照模式不扣休市日，目標維持 65。
+
+### 交易日的判定與週末交易日
+
+回補與 collect 要送哪些日子給官方來源，規則只有一條：`worker.sources.is_request_date`（[#790](https://github.com/YiCheng0608/stock-lab/issues/790)）。
+
+- **送出的日子**：週一到週五都送。週末只送 `OFFICIAL_WEEKEND_SESSIONS`（`backend/worker/sources.py`）列出的補行交易日，其他週末不送。
+- **誰是交易日**：由官方回應決定。平日回 no-data 就是休市，見上節[確定休市日](#回補目標與確定休市日)；週末交易日也一樣，送出後由回應核實。
+- **用到這條規則的地方**：
+  - backfill 的候選日與延伸補抓日：`calendar_weekday_dates`、`_extension_candidate_dates`。
+  - sources 的逐日請求：上市 `MI_INDEX`、上櫃 `dailyQuotes`、`fetch_index_history`。
+  - `pipeline.collect`：收到清單裡的週末時，用原日；其他週末照舊推回星期五。
+- **平日不受影響**：範圍裡、以及迄日前 93 日內都沒有清單日期時，送出的日子、延伸補抓的候選日和 request key，都和 #790 之前一樣。
+  - 延伸補抓看的是迄日前 93 日。所以清單日期在範圍外、但在這個窗口內時，會多一個延伸補抓候選日。例如 2016-06-06～08-31 會多出 2016-06-04。
+  - 這一天只有要延伸補抓時才會送；範圍內送出的日子不變。
+  - 正式 daily 只在週一到週五跑。
+  - 清單只到 2018-12，正式 DB 從 2024-09-30 開始，所以正式環境不會用到這份清單。
+- **清單從哪裡來**：TWSE `FMTQIK`（每日市場成交資訊）月表，`https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=<YYYYMM01>&response=json`。
+  - 每個月 1 個請求，`data` 每列是一個交易日（民國日期），其中星期六、星期日的列就是週末交易日。
+  - 2004-02～2018-12 共 179 個月，2026-11-16 產生。2012-05～2018-12 用研究 DB 已存的 raw，2004-02～2012-04 另發請求；每天出自哪個 raw，列在 #790 的 PR。
+  - 休市表（[交易日曆](#交易日曆)）不能用：2020 年以前回 `total 0`。
+- **只涵蓋到 2018-12**：2019 年起官方沒有週末交易日。以後若再有，要手動加進清單。
+  - **依據**：研究 DB 已存的官方月表。2019-01～2026-11 的 `index-bars backfill`（TWSE `MI_5MINS_HIST`、TPEx `indexInfo/inx` 月表）都沒有週末列：TPEx 指數 2019 年以後的 1,909 列沒有一天是週末，TWSE 也沒有任何週末的 `no_close_row`。
+  - 2026-11-16 在 #790 的研究 DB 副本上查，沒有另發請求。
+  - 2019 年以後的 FMTQIK 沒有逐月再核對。
+- **重產清單**：
+  1. 對要涵蓋的每個月抓一次 FMTQIK（研究 DB 有已存 raw 的月份讀 raw）。
+  2. 取 `data` 裡日期是週末的列。
+  3. 核對上櫃那天也有官方資料（`indexInfo/inx` 月表或 `dailyQuotes`）。
+  4. 更新 `OFFICIAL_WEEKEND_SESSIONS`，`backend/tests/test_sources.py` 會檢查每一天都是 2019 年以前的週末。
+- **研究 DB 怎麼補**：見 [RESEARCH_DB 的回補表](ops/RESEARCH_DB.md#跑一批)。
 
 ### 大盤概況
 
