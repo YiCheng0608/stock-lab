@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Turn hook of engineer sessions (Issue #595). What it does for the coordinator and its
-// known limits are written once, in docs/COORDINATOR.md 無人值守運作 (工程師 session 的
-// 狀態); the monitor's events from its files in docs/ops/MONITOR.md.
+// known limits are written once, in docs/ops/COORDINATOR_REFERENCE.md 工程師 session 的狀態
+// (#828); the monitor's events from its files in docs/ops/MONITOR.md.
 // .claude/settings.json runs it on Stop, StopFailure, SessionEnd and UserPromptSubmit
 // with the hook's JSON on stdin. It acts only in a session whose project is on a
 // task/<issue>-* branch (an engineer's worktree): on master (the coordinator), any other
