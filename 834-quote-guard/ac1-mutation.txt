@@ -1,5 +1,5 @@
-baseline: exit 0; 38 passed in 1.57s
-without templates.trade: exit 1; 11 failed, 27 passed in 1.11s
+baseline: exit 0; 52 passed in 2.23s
+without templates.trade: exit 1; 11 failed, 41 passed in 1.66s
     red: test_a_message_record_is_caught_even_when_escaped
     red: test_each_pattern_catches_its_case
     red: test_every_message_of_the_fixture_is_caught_and_passes_masked
@@ -7,55 +7,65 @@ without templates.trade: exit 1; 11 failed, 27 passed in 1.11s
     red: test_every_template_with_a_fugle_value_is_caught_and_passes_masked
     red: test_the_command_line
     red: test_the_fixture_dry_run_is_refused_and_passes_masked
-without templates.open: exit 1; 4 failed, 34 passed in 1.68s
+without templates.open: exit 1; 4 failed, 48 passed in 2.50s
     red: test_each_pattern_catches_its_case
     red: test_every_message_of_the_fixture_is_caught_and_passes_masked
     red: test_every_pattern_has_a_case
     red: test_every_template_with_a_fugle_value_is_caught_and_passes_masked
-without templates.bid: exit 1; 5 failed, 33 passed in 1.61s
+without templates.bid: exit 1; 5 failed, 47 passed in 2.77s
     red: test_each_pattern_catches_its_case
     red: test_every_message_of_the_fixture_is_caught_and_passes_masked
     red: test_every_pattern_has_a_case
     red: test_every_template_with_a_fugle_value_is_caught_and_passes_masked
     red: test_hits_name_the_line_and_pattern_never_the_quote
-without templates.ask: exit 1; 3 failed, 35 passed in 1.56s
+without templates.ask: exit 1; 3 failed, 49 passed in 5.01s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
     red: test_every_template_with_a_fugle_value_is_caught_and_passes_masked
-without fields.lastTrade: exit 1; 3 failed, 35 passed in 1.59s
+without fields.lastTrade: exit 1; 4 failed, 48 passed in 3.75s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
     red: test_mask_masks_a_fields_whole_value
-without fields.lastPrice: exit 1; 2 failed, 36 passed in 1.62s
+without fields.lastPrice: exit 1; 2 failed, 50 passed in 2.77s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without fields.highPrice: exit 1; 2 failed, 36 passed in 1.58s
+without fields.highPrice: exit 1; 2 failed, 50 passed in 3.17s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without fields.lowPrice: exit 1; 2 failed, 36 passed in 1.61s
+without fields.lowPrice: exit 1; 2 failed, 50 passed in 2.82s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without fields.openPrice: exit 1; 2 failed, 36 passed in 1.47s
+without fields.openPrice: exit 1; 2 failed, 50 passed in 2.72s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without fields.closePrice: exit 1; 2 failed, 36 passed in 1.58s
+without fields.closePrice: exit 1; 2 failed, 50 passed in 2.80s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without fields.bids: exit 1; 3 failed, 35 passed in 1.56s
+without fields.bids: exit 1; 4 failed, 48 passed in 2.29s
+    red: test_a_bracket_that_never_closes_is_masked_to_its_line_end
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
     red: test_mask_masks_a_fields_whole_value
-without fields.asks: exit 1; 2 failed, 36 passed in 1.58s
+without fields.asks: exit 1; 2 failed, 50 passed in 2.41s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without fields.lastUpdated: exit 1; 2 failed, 36 passed in 1.61s
+without fields.lastUpdated: exit 1; 2 failed, 50 passed in 2.61s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without fields.last_price: exit 1; 2 failed, 36 passed in 1.65s
+without fields.last_price: exit 1; 2 failed, 50 passed in 2.29s
     red: test_each_pattern_catches_its_case
     red: test_every_pattern_has_a_case
-without message: exit 1; 4 failed, 34 passed in 1.61s
+without record (message, levels): exit 1; 8 failed, 44 passed in 2.72s
     red: test_a_message_record_is_caught_even_when_escaped
     red: test_each_pattern_catches_its_case
+    red: test_mask_masks_every_value_of_a_quote_and_a_levels_record
     red: test_masked_text_and_the_rule_levels_pass
     red: test_the_fixture_dry_run_is_refused_and_passes_masked
+without repr: exit 1; 7 failed, 45 passed in 2.61s
+    red: test_each_pattern_catches_its_case
+    red: test_mask_masks_every_value_of_a_quote_and_a_levels_record
+without levels: exit 1; 4 failed, 48 passed in 2.58s
+    red: test_each_pattern_catches_its_case
+    red: test_mask_masks_every_value_of_a_quote_and_a_levels_record
+without scalar (field = number): exit 1; 6 failed, 46 passed in 2.46s
+    red: test_each_pattern_catches_its_case

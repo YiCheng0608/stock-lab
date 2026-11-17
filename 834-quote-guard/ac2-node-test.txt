@@ -96,18 +96,20 @@ ok 5 - .env rules
     ok 2 - gh issue and gh pr: --body and --body-file with a quote block, masked pass
     ok 3 - a body the hook cannot read blocks
     ok 4 - a body on stdin from a heredoc, or $(cat <<'EOF'), is read from the command
-    ok 5 - a body file a heredoc of the same command writes is read from the command
-    ok 6 - gh api to issues, pulls and comments: body, body-file and input
-    ok 7 - push_pr_assets.sh: the text files of --dir
-    ok 8 - git push to pr-assets/*: the text files the remote-tracking branch lacks
-    ok 9 - other commands are not read: no body, no other exit
-    ok 10 - the hook exits 2 on a hit, and on its own error (no quote_patterns.json)
+    ok 5 - stdin the hook cannot read blocks (review 6934157548 must-fix 1)
+    ok 6 - titles, every gh api field and graphql are checked (must-fix 2)
+    ok 7 - a body file a heredoc of the same command writes is read from the command
+    ok 8 - gh api to issues, pulls and comments: body, body-file and input
+    ok 9 - push_pr_assets.sh: every file of --dir but the images (must-fix 3c)
+    ok 10 - git push to pr-assets/*: the files the remote-tracking branch lacks
+    ok 11 - other commands are not read: no body, no other exit
+    ok 12 - the hook exits 2 on a hit, and on its own error (no quote_patterns.json)
 ok 6 - Fugle quotes
-# tests 93
+# tests 95
 # suites 6
-# pass 91
+# pass 93
 # fail 0
 # cancelled 0
 # skipped 2
 # todo 0
-# duration_ms 7135.9224
+# duration_ms 9662.2044
