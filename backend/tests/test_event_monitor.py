@@ -1478,6 +1478,31 @@ def test_the_comment_tool_refuses_bad_arguments_before_gh(
     assert result.stdout == "" and mon.calls("gh") == []
 
 
+def test_the_comment_tool_refuses_an_unmasked_fugle_quote_before_gh(
+    mon: Harness,
+) -> None:
+    """#834 AC-2: a body with a Fugle quote exits 65 without gh and without the quote in
+    what it prints; the masked body is posted."""
+    mon.answer("gh_comments", {"id": 77, "html_url": COMMENT_URL})
+    mon.write("gh_comments.hook", 'cat >"$FAKE_DIR/posted.json"\n')
+    raw = "回報：dry-run\n\n2618 觸及規則進場價 47.75（10:03 前後；10:02:41 成交 47.80）\n"
+    result = _comment_tool(mon, "440", body=raw)
+    assert result.returncode == 65, result.stdout + result.stderr
+    assert result.stdout == "" and mon.calls("gh") == []
+    assert ":3: template:trade" in result.stderr and "47.80" not in result.stderr
+    masked = raw.replace("10:02:41 成交 47.80", "<時間> 成交 <價>")
+    result = _comment_tool(mon, "440", body=masked)
+    assert result.returncode == 0, result.stdout + result.stderr
+    posted = json.loads((mon.fake / "posted.json").read_text(encoding="utf-8"))
+    assert posted["body"].startswith(masked.rstrip())
+    # The check cannot run (no quote_guard.py): refused as well, exit 2.
+    (mon.ops / "quote_guard.py").unlink()
+    result = _comment_tool(mon, "440", body=masked)
+    assert result.returncode == 2 and mon.calls("gh") == [
+        "api repos/YiCheng0608/stock-lab/issues/440/comments --method POST --input -"
+    ]
+
+
 def test_a_message_that_points_to_the_setup_heading_names_it_word_for_word() -> None:
     """#448: the messages said "docs/ops/SETUP.md claude 與 gh 認證", a title nobody
     could search for. Every mention of docs/ops/SETUP.md in what the monitor queues
