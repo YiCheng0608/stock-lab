@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # A new coordinator's mechanical take-over steps in one run (Issue #534; docs/COORDINATOR.md
 # 統籌 session): the handover text names this script instead of listing the steps, so none
-# is left to the model's memory. In order, each read back before the next:
+# is left to the model's memory. The handbook's account of the steps is in
+# docs/ops/COORDINATOR_REFERENCE.md 接手腳本的步驟 (#828). In order, each read back before
+# the next:
 #   heartbeat   patrol.sh --heartbeat-only --take-over: the heartbeat names this session
 #               and terminal, so the monitor and the wake listener wake this one
 #   listener    wake_listener_start.sh (kept when one runs)

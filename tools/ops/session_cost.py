@@ -5,7 +5,8 @@ Four subcommands, all read-only:
   context (--session-id ID | --transcript PATH)
       The context of the session's last model call (input + cache read + cache write
       tokens of the last assistant row that is not a sidechain, not <synthetic> and has a
-      usage), for patrol.sh's handoff condition (docs/COORDINATOR.md 自動換手機制).
+      usage), for patrol.sh's handoff condition (docs/ops/COORDINATOR_REFERENCE.md
+      換手偵測).
       Prints one line "<tokens> <path>" and exits 0; when the context cannot be read,
       one line with the reason and exits 3 (no transcript found) or 4 (no usable row,
       or the file cannot be read).
