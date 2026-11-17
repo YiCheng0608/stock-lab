@@ -1,0 +1,21 @@
+===== 2026-11-16T10:02:30+08:00 start job=intraday trigger=scheduler date=2026-11-16 configured=yes dry_run=yes
+--- targets tracks=4 list=4 tracking=0 both=0 symbols=4
+--- target key=signal:1 symbol=2618 sources=今日名單 type=breakout entry=47.75 stop=46.31 target_1=50.05 target_2=52.06 entered=no
+--- target key=signal:2 symbol=3374 sources=今日名單 type=breakout entry=519.00 stop=480.18 target_1=581.11 target_2=635.46 entered=no
+--- target key=signal:3 symbol=8099 sources=今日名單 type=breakout entry=182.00 stop=171.61 target_1=198.63 target_2=213.18 entered=no
+--- target key=signal:4 symbol=3162 sources=今日名單 type=pullback entry=72.89～76.94 stop=70.86 target_1=81.37 target_2=87.03 entered=no
+--- poll at=10:03:00 symbols=4 ok=4 codes=200:4 ms_median=120 ms_max=120 lag_median=5 lag_max=5
+--- event key=signal:1 symbol=2618 event=entry status=dry_run
+--- message {"at": "2026-11-16T10:03:00+08:00", "key": "signal:1", "symbol": "2618", "event": "entry", "status": "dry_run", "text": "2618 長榮航 觸及規則進場價 47.75（10:03 前後；<時間> 成交 <價>）\n來源：今日名單"}
+--- event key=signal:2 symbol=3374 event=stop_before_entry status=dry_run
+--- message {"at": "2026-11-16T10:03:00+08:00", "key": "signal:2", "symbol": "3374", "event": "stop_before_entry", "status": "dry_run", "text": "3374 精材 跌破停損 480.18，進場條件不再成立（10:03 前後；<時間> 成交 <價>）\n跌停鎖住（委買取不到，委賣 <價>）\n來源：今日名單"}
+--- event key=signal:3 symbol=8099 event=gap_above_target status=dry_run
+--- message {"at": "2026-11-16T10:03:00+08:00", "key": "signal:3", "symbol": "8099", "event": "gap_above_target", "status": "dry_run", "text": "8099 大世科 觸及規則進場價 182.00，但開盤 <價> 已在目標一 198.63 以上，依規則不算進場，今天這檔不再通知（10:03 前後；<時間> 成交 <價>）\n漲停鎖住（委買 <價>，委賣取不到）\n來源：今日名單"}
+--- event key=signal:4 symbol=3162 event=entry status=dry_run
+--- message {"at": "2026-11-16T10:03:00+08:00", "key": "signal:4", "symbol": "3162", "event": "entry", "status": "dry_run", "text": "3162 精確 觸及規則進場區 72.89～76.94（10:03 前後；<時間> 成交 <價>）\n來源：今日名單"}
+--- event key=signal:4 symbol=3162 event=stop status=dry_run
+--- message {"at": "2026-11-16T10:03:00+08:00", "key": "signal:4", "symbol": "3162", "event": "stop", "status": "dry_run", "text": "3162 精確 觸及停損 70.86（10:03 前後；<時間> 成交 <價>）\n來源：今日名單"}
+--- poll at=10:04:00 symbols=4 ok=4 codes=200:4 ms_median=120 ms_max=120 lag_median=65 lag_max=65
+--- result status=finished polls=2 ok_polls=2 events=5 symbols=4
+===== 2026-11-16T10:04:00+08:00 end exit=0 seconds=90
+intraday status=finished polls=2 ok_polls=2 events=5 symbols=4 exit=0 log=<tmp>

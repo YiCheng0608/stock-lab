@@ -1,0 +1,112 @@
+# Subtest: Bash rules
+    ok 1 - blocks git clean -x
+    ok 2 - blocks bare git stash
+    ok 3 - blocks git stash pop
+    ok 4 - blocks git stash clear
+    ok 5 - blocks force push
+    ok 6 - blocks data dir rm
+    ok 7 - allows the safe forms
+    ok 8 - ignores quoted text, heredoc bodies and comments
+    ok 9 - checks every segment
+    ok 10 - PowerShell quoting
+    ok 11 - the allow list overrides the rules for a matching segment only
+ok 1 - Bash rules
+# Subtest: path forms
+    ok 1 - C:\\, C:/ and /c/ are the same file on Windows
+    ok 2 - POSIX paths stay as given elsewhere
+ok 2 - path forms
+# Subtest: hook process
+    ok 1 - Write or Edit into a master checkout exits 2 with the reason
+    ok 2 - every path form of a master checkout is blocked on Windows
+    ok 3 - Write elsewhere exits 0
+    ok 4 - a relative path resolves against the session cwd
+    ok 5 - Bash: allowed 0, blocked 2 with the reason
+    ok 6 - other tools pass and broken input blocks the call
+    ok 7 - .claude/settings.json runs this script for every matched tool # SKIP Git Bash vs WSL bash on PATH; checked by hand
+ok 3 - hook process
+# Subtest: memory directory rules
+    ok 1 - an engineer session (task/*) writing the real location is blocked
+    ok 2 - an engineer session writing through the profile link is blocked
+    ok 3 - STOCK_MEMORY_DIR names a memory directory too
+    ok 4 - the management checkout (master) writes the memory directory
+    ok 5 - other paths are not affected
+ok 4 - memory directory rules
+# Subtest: .env rules
+    ok 1 - Read, Edit, Write and NotebookEdit block a .env file and pass .env.example
+    ok 2 - Read through a link to a .env file is blocked # SKIP no symlink permission
+    ok 3 - Grep blocks a .env path or glob and a directory whose .env it would read
+    ok 4 - Grep passes a search that leaves every .env out
+    ok 5 - Glob blocks a .env pattern or path
+    ok 6 - codebase-memory tools block a .env path; other MCP tools are not checked
+    ok 7 - Bash/PowerShell: cat of a .env path is blocked, of .env.example passes
+    ok 8 - Bash/PowerShell: type of a .env path is blocked, of .env.example passes
+    ok 9 - Bash/PowerShell: Get-Content of a .env path is blocked, of .env.example passes
+    ok 10 - Bash/PowerShell: less of a .env path is blocked, of .env.example passes
+    ok 11 - Bash/PowerShell: head of a .env path is blocked, of .env.example passes
+    ok 12 - Bash/PowerShell: tail of a .env path is blocked, of .env.example passes
+    ok 13 - Bash/PowerShell: grep of a .env path is blocked, of .env.example passes
+    ok 14 - Bash/PowerShell: rg of a .env path is blocked, of .env.example passes
+    ok 15 - Bash/PowerShell: Select-String of a .env path is blocked, of .env.example passes
+    ok 16 - Bash/PowerShell: cp of a .env path is blocked, of .env.example passes
+    ok 17 - Bash/PowerShell: Copy-Item of a .env path is blocked, of .env.example passes
+    ok 18 - Bash/PowerShell: source of a .env path is blocked, of .env.example passes
+    ok 19 - Bash/PowerShell: dot source of a .env path is blocked, of .env.example passes
+    ok 20 - Bash/PowerShell: python of a .env path is blocked, of .env.example passes
+    ok 21 - Bash/PowerShell: python heredoc of a .env path is blocked, of .env.example passes
+    ok 22 - Bash/PowerShell: docker cp of a .env path is blocked, of .env.example passes
+    ok 23 - Bash/PowerShell: input redirect of a .env path is blocked, of .env.example passes
+    ok 24 - Bash/PowerShell: output redirect of a .env path is blocked, of .env.example passes
+    ok 25 - Bash/PowerShell: rm of a .env path is blocked, of .env.example passes
+    ok 26 - bash: docker commands that print no environment pass (\#360)
+    ok 27 - bash: docker commands that print the environment are blocked (\#360)
+    ok 28 - powershell: docker commands that print no environment pass (\#360)
+    ok 29 - powershell: docker commands that print the environment are blocked (\#360)
+    ok 30 - bash: compose down -v of a project not named as a test project is blocked (\#341)
+    ok 31 - bash: compose down without -v, or of a test project, passes (\#341)
+    ok 32 - powershell: compose down -v of a project not named as a test project is blocked (\#341)
+    ok 33 - powershell: compose down without -v, or of a test project, passes (\#341)
+    ok 34 - bash: docker volume rm／prune and system prune --volumes of production are blocked (\#342)
+    ok 35 - bash: volume commands that keep production's volumes pass (\#342)
+    ok 36 - powershell: docker volume rm／prune and system prune --volumes of production are blocked (\#342)
+    ok 37 - powershell: volume commands that keep production's volumes pass (\#342)
+    ok 38 - a volume of the project STOCK_COMPOSE_PROJECT names is blocked (\#342)
+    ok 39 - the hook process blocks docker volume rm through Bash and PowerShell (\#342)
+    ok 40 - compose down -v of the project STOCK_COMPOSE_PROJECT names is blocked (\#341)
+    ok 41 - the hook process blocks compose down -v through Bash and PowerShell (\#341)
+    ok 42 - COMPOSE_PROJECT_NAME of the session is not read: compose down -v without -p is blocked (\#341)
+    ok 43 - the hook process allows compose config -q and blocks docker inspect (\#360)
+    ok 44 - Bash/PowerShell: a glob that expands to a .env file is blocked
+    ok 45 - Bash/PowerShell: a recursive read of a directory holding a .env file is blocked
+    ok 46 - Bash/PowerShell: commands that only look like .env pass
+    ok 47 - the hook process exits 2 on Read and cat of a fake .env file
+    ok 48 - a hook error or malformed input blocks the call
+    ok 49 - Monitor runs its command through the Bash rules
+    ok 50 - Artifact, ArtifactData and DesignSync block an upload of a .env file
+    ok 51 - uploads through a short name or a link to a .env file are blocked
+    ok 52 - a short 8.3 name of a .env file is blocked
+    ok 53 - git grep over untracked files and find -exec are recursive reads
+    ok 54 - fd -x/-X/--exec are recursive reads
+    ok 55 - a Grep walk that cannot finish blocks; node_modules counts unless git ignores it
+    ok 56 - powershell -EncodedCommand is blocked
+    ok 57 - long commands finish fast: no quadratic scan, and the size caps block
+    ok 58 - .claude/settings.json routes every file-reading tool to this script
+ok 5 - .env rules
+# Subtest: Fugle quotes
+    ok 1 - the shared cases hit as quote_guard.py hits them
+    ok 2 - gh issue and gh pr: --body and --body-file with a quote block, masked pass
+    ok 3 - a body the hook cannot read blocks
+    ok 4 - a body on stdin from a heredoc, or $(cat <<'EOF'), is read from the command
+    ok 5 - gh api to issues, pulls and comments: body, body-file and input
+    ok 6 - push_pr_assets.sh: the text files of --dir
+    ok 7 - git push to pr-assets/*: the text files the remote-tracking branch lacks
+    ok 8 - other commands are not read: no body, no other exit
+    ok 9 - the hook exits 2 on a hit, and on its own error (no quote_patterns.json)
+ok 6 - Fugle quotes
+# tests 92
+# suites 6
+# pass 90
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 6412.0967

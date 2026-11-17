@@ -1,0 +1,15 @@
+exit 1
+<out>/dryrun-raw.txt:9: message
+<out>/dryrun-raw.txt:9: template:trade
+<out>/dryrun-raw.txt:11: message
+<out>/dryrun-raw.txt:11: template:ask
+<out>/dryrun-raw.txt:11: template:trade
+<out>/dryrun-raw.txt:13: message
+<out>/dryrun-raw.txt:13: template:bid
+<out>/dryrun-raw.txt:13: template:open
+<out>/dryrun-raw.txt:13: template:trade
+<out>/dryrun-raw.txt:15: message
+<out>/dryrun-raw.txt:15: template:trade
+<out>/dryrun-raw.txt:17: message
+<out>/dryrun-raw.txt:17: template:trade
+quote_guard: 有沒遮的富果報價；先跑 quote_guard.py mask 再貼（docs/DATA_SOURCES.md 盤中報價）
