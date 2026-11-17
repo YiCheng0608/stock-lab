@@ -162,7 +162,12 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
   - `isLimitUpPrice` 等漲跌停旗標。
   - `lastUpdated`：記延遲。
 - **錯誤碼與處理**（#801）：401（key 無效）、403（方案不支援）、429（限流）當天停止讀取並通知；逾時（10 秒）、連線失敗與 5xx 這一分鐘這檔跳過、不重試；404（代號）與缺 `highPrice`／`lowPrice`／`lastTrade` 的回應只停那一檔；整輪連續 5 次沒有回應改成每 5 分鐘一輪（[SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）。
-- **延遲**：還沒實測，因為使用者還沒放好 key。#801 AC-6 會在放好 key 後的交易日盤中跑 `worker.cli intraday --dry-run` 30～60 分鐘，量每檔回應時間、`lastUpdated` 與實際時間的差、失敗率，和下面 MIS 的數字並列在這裡。
+- **延遲**（2026-11-17 實測，[#808 AC-1 6935599005](https://github.com/YiCheng0608/stock-lab/issues/808#issuecomment-6935599005)）：
+  - 做法：交易日 09:00～09:59 在任務容器跑 `worker.cli intraday --dry-run --minutes 60`，每分鐘一輪，每輪 7 檔（今日名單），共 60 輪、420 個請求。數字來自每輪的 `--- poll` 列。
+  - 失敗：2／420（0.48%），都是 10 秒逾時（09:00、09:08 各 1 檔），其餘都是 200。60 輪都至少有一檔成功；沒有 401／403／429、404、缺欄位與別天的報價（`--- stale_quote`）。
+  - 回應時間（每檔一個請求）：各輪中位數的中位數 158 ms、p90 508 ms；各輪最大值的中位數 595 ms，最大 10,178 ms（逾時）。第一輪 09:00 較慢（中位數 3,466 ms）。MIS 是中位數 1,474 ms、p90 4,009 ms。
+  - `lastUpdated` 的落後：`lag` 是這一輪開始的時間減 `lastUpdated`。主機與容器的時鐘當天比標準時間慢約 9～10 秒（`w32tm` 對 time.windows.com 量到 +9.99 秒，富果與 Google 回應的 `Date` 標頭也差 9～10 秒），所以記下的各輪 `lag_median` 是 −10～−4 秒（中位數 −8）。記下的值加約 9.5 秒才是實際落後：`lag_median` 的中位數 −8 秒，校正後約 1.5 秒；各輪 `lag_max` 的中位數 1.5 秒、p90 23 秒、最大 67 秒，校正後約 11 秒、33 秒、77 秒，大的是那一分鐘沒更新的檔。MIS 的報價時間落後中位數 66 秒。
+  - 換算成通知：每分鐘輪詢一次時，通知比觸及晚約 1 分鐘以內（輪詢間隔），報價本身的落後是秒級。
 - **不公開報價的守門員**（#834，使用者 2026-11-17 決定由 script 把關，[#1 6933304440](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6933304440)）：
   - 貼盤中輸出（`--dry-run` 的輸出、`intraday-*.log`、`intraday-*.jsonl`）到 Issue、PR 或 `pr-assets` 前，先跑 `python tools/ops/quote_guard.py mask <檔> > <遮好的檔>`，貼遮好的檔。成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`，富果回應欄位與 `Quote(...)` 的值換成 `<值>`，每輪 `levels` 紀錄的 `high`、`low`、`last` 換成 `<價>`；`--- poll`、`--- event` 列與規則價位（進場價、停損、目標）照原樣留著。
   - 守門員是 [`tools/ops/quote_guard.py`](../tools/ops/quote_guard.py)，樣式只寫在 [`quote_patterns.json`](../tools/ops/quote_patterns.json) 一份。它擋 `comment.sh`、`gh issue`／`gh pr` 的留言、開單、改本文、標題與 review、`gh api` 到 issues、pulls、comments、graphql 的欄位、推 `pr-assets`，以及 CI 的 PR 本文（規則 g）。命中時只印行號與哪一種樣式，不印報價。範圍與擋不到的情況見 [GUARDRAILS](GUARDRAILS.md) 的「沒遮的富果報價不上 GitHub」那一列。
