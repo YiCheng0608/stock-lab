@@ -689,6 +689,13 @@ def _dispatch(h: Harness, task: str | None = None) -> subprocess.CompletedProces
     )
 
 
+def _settings(folder: str) -> str:
+    """claude's --settings for the task directory (#835), as dispatch.sh writes it."""
+    return json.dumps(
+        {"permissions": {"additionalDirectories": [folder]}}, separators=(",", ":")
+    )
+
+
 def _notice(path: str) -> str:
     return (
         f"請用 Read 工具讀取任務檔 {path}（UTF-8），依其內容開工；"
@@ -720,8 +727,13 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
         "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282"
         " CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude"
         " --model claude-opus-5-5 --effort medium"
-        f' --add-dir "{dispatch.root.as_posix()}" --json'
+        f" --settings '{_settings(dispatch.root.as_posix())}' --json"
     )
+    assert "--add-dir" not in terminal
+    # The screen is read for a menu after the wait and before the send (#835).
+    screen = next(i for i, c in enumerate(orca) if "--screen" in c)
+    assert orca[screen].startswith("terminal read --terminal term_new")
+    assert wait < screen < send
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
         dispatch.calls("git")
     )
@@ -757,7 +769,7 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
     ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
     assert ran == (
         "task-282|1|--model claude-opus-5-5 --effort medium"
-        f" --add-dir {dispatch.task.parent.as_posix()}"
+        f" --settings {_settings(dispatch.task.parent.as_posix())}"
     )
     # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
     (create,) = [c for c in dispatch.calls("orca") if c.startswith("terminal create")]
@@ -793,17 +805,32 @@ def test_dispatch_sends_the_absolute_path_of_a_relative_task_file(
 def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
     dispatch: Harness,
 ) -> None:
-    """#327 review A: the directory goes to --add-dir in double quotes."""
+    """#327 review A: a space or CJK in the directory reaches claude whole; since #835
+    it is in the single-quoted --settings JSON, the CJK as \\u escapes (only ASCII is
+    typed for it), and claude gets back the directory as it is."""
     folder = dispatch.root / "t282" / "任務 檔"
     folder.mkdir(parents=True)
     task = folder / "task.md"
     shutil.copyfile(dispatch.task, task)
+    claude = dispatch.bin / "claude"
+    claude.write_text(
+        "#!/usr/bin/env bash\n"
+        'while [ $# -gt 0 ]; do [ "$1" = --settings ] && printf %s "$2"'
+        ' >"$FAKE_DIR/settings.json"; shift; done\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    claude.chmod(0o755)
+    dispatch.write("run_terminal_command", "")
     result = _dispatch(dispatch, task.as_posix())
     assert result.returncode == 0, result.stdout + result.stderr
     terminal = next(
         c for c in dispatch.calls("orca") if c.startswith("terminal create")
     )
-    assert f'--add-dir "{folder.as_posix()}" --json' in terminal
+    assert f"--settings '{_settings(folder.as_posix())}' --json" in terminal
+    assert "任務" not in terminal and "\\u4efb\\u52d9 \\u6a94" in terminal
+    settings = json.loads((dispatch.fake / "settings.json").read_text(encoding="utf-8"))
+    assert settings == {"permissions": {"additionalDirectories": [folder.as_posix()]}}
     sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
     assert sent == _notice(task.as_posix())
 
@@ -817,8 +844,9 @@ def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
         ("a%b/task.md", "任務檔目錄不能含"),
         ("a!b/task.md", "任務檔目錄不能含"),
         ("a`b/task.md", "任務檔目錄不能含"),
+        ("a'b/task.md", "任務檔目錄不能含"),
     ],
-    ids=["lf", "cr", "dollar", "percent", "bang", "backtick"],
+    ids=["lf", "cr", "dollar", "percent", "bang", "backtick", "single-quote"],
 )
 def test_dispatch_refuses_a_task_path_it_cannot_pass_on(
     dispatch: Harness, where: str, error: str
@@ -846,11 +874,99 @@ def test_dispatch_help_shows_the_line_it_sends(dispatch: Harness) -> None:
     help_text = dispatch.run("dispatch.sh", "--help")
     assert help_text.returncode == 0, help_text.stderr
     assert _notice("<path>") in help_text.stdout
-    assert "--add-dir" in help_text.stdout
+    assert "additionalDirectories" in help_text.stdout
     assert "30000" not in help_text.stdout
     workflow = (ROOT / "docs" / "WORKFLOW.md").read_text(encoding="utf-8")
     assert _notice("<path>") in workflow
-    assert '--effort <effort> --add-dir "<任務檔目錄>"' in workflow
+    assert (
+        '--effort <effort> --settings \'{\\"permissions\\":{\\"additionalDirectories\\":'
+        '[\\"<任務檔目錄>\\"]}}\'" --json' in workflow
+    )
+    assert "orca terminal read --terminal <handle> --screen --json" in workflow
+    # The allowance lives only in that claude process (#835 decision 6934230800): the
+    # resume command carries the same --settings.
+    assert (
+        "claude --resume <ID> --effort <原 level> --settings"
+        ' \'{"permissions":{"additionalDirectories":["<任務檔目錄>"]}}\'' in workflow
+    )
+
+
+# The screens a fresh session stopped at (#835): the trust menu as the coordinator read it
+# when #834 was dispatched (#835 comment 6933488869, AC-1 E1), and the read-permission
+# menu of a session in default mode (AC-1 E4b).
+TRUST_MENU = [
+    "$ claude --model claude-opus-5-5 --effort medium --add-dir"
+    ' "C:/Users/YiCheng/t834/task"',
+    " Adding a new directory:",
+    " C:\\Users\\YiCheng\\t834\\task",
+    " This session hasn't worked here before. Is this a directory you created or one"
+    " you trust?",
+    " Claude Code'll be able to read, edit, and execute files here. Your answer holds"
+    " for this session.",
+    " Security guide",
+    " ❯ No, exit",
+    "   Yes, add it",
+    " Enter to confirm · Esc to cancel",
+]
+PERMISSION_MENU = [
+    " Read(C:\\Users\\YiCheng\\t835\\exp\\new1\\f.md)",
+    " Do you want to proceed?",
+    " ❯ 1. Yes",
+    "   2. Yes, allow reading from /c/Users/YiCheng/t835/exp/new1 during this session",
+    "   3. No",
+    " Esc to cancel · Tab to amend",
+]
+
+
+@pytest.mark.parametrize(
+    "screen", [TRUST_MENU, PERMISSION_MENU], ids=["trust", "permission"]
+)
+def test_dispatch_stops_at_a_menu_without_sending(
+    dispatch: Harness, screen: list[str]
+) -> None:
+    """#835 AC-3: tui-idle is satisfied with the start-up trust menu open (AC-1 E1), and
+    an Enter there lands on "No, exit". A menu on the screen sends nothing, not even
+    Enter, and is exit 5 with the terminal and what the user is to choose."""
+    dispatch.answer("orca_terminal_read", _ok({"terminal": {"tail": screen}}))
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["sent"] is False and line["turn_started"] is False
+    assert line["terminal"] == "term_new"
+    assert "term_new" in line["error"] and "#282 dryrun" in line["error"]
+    assert "Yes, add it" in line["error"] and "No, exit" in line["error"]
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal send")]
+    assert not (dispatch.fake / "sent_text.txt").exists()
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+
+
+def test_dispatch_stops_when_orca_refuses_the_send_at_a_menu(
+    dispatch: Harness,
+) -> None:
+    """#835: a menu that opens between the read and the send: Orca refuses the text and
+    Enter with agent_prompt_blocked (#720), so nothing went in; exit 5, not 3."""
+    dispatch.answer(
+        "orca_terminal_send",
+        {"ok": False, "error": {"code": "agent_prompt_blocked", "message": "x"}},
+    )
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["sent"] is False and "agent_prompt_blocked" in line["error"]
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+
+
+def test_dispatch_does_not_send_when_the_screen_cannot_be_read(
+    dispatch: Harness,
+) -> None:
+    """#835: with no screen there is no knowing a menu is not open: nothing is sent."""
+    dispatch.answer(
+        "orca_terminal_read", {"ok": False, "error": {"code": "terminal_not_found"}}
+    )
+    result = _dispatch(dispatch)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _json_line(result)["sent"] is False
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal send")]
 
 
 @pytest.mark.parametrize(
