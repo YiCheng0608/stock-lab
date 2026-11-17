@@ -1,14 +1,23 @@
 """Context and token cost of a Claude Code session, read from its transcript (#710, #708).
 
-Two subcommands, both read-only:
+Four subcommands, all read-only:
 
   context (--session-id ID | --transcript PATH)
       The context of the session's last model call (input + cache read + cache write
       tokens of the last assistant row that is not a sidechain, not <synthetic> and has a
-      usage), for patrol.sh's handoff condition (docs/COORDINATOR.md 自動換手機制).
+      usage), for patrol.sh's handoff condition (docs/ops/COORDINATOR_REFERENCE.md
+      換手偵測).
       Prints one line "<tokens> <path>" and exits 0; when the context cannot be read,
       one line with the reason and exits 3 (no transcript found) or 4 (no usable row,
       or the file cannot be read).
+
+  compactions (--session-id ID | --transcript PATH)
+      The compactions of the session's main conversation (#811): the compact_boundary
+      rows of its transcript that are not a sidechain. A subagent's compactions are in
+      <session id>/subagents/, not read (the PreCompact hook gets the parent's session
+      id for them, so its count has them too). Prints "<count> <path>" and exits 0;
+      exits 3 (no transcript found) or 4 (the file cannot be read, or no line of it is
+      a JSON object) with one line saying why, as context does.
 
   report ID_OR_PATH...
       For each session (a session id, an id prefix of 8 or more characters, or a
@@ -20,9 +29,27 @@ Two subcommands, both read-only:
       compaction (#711 AC-6). #708's sub-tasks use it to show the numbers before and
       after a change.
 
+  takeover ID_OR_PATH...
+      For each coordinator session (#803): the context of the first call, of the call
+      after the take_over.sh result that printed "ok":true (a failed run continued with
+      --from is the 2nd or a later run; --closed-only runs are not counted), and of the
+      call after the first patrol.sh result after that (not --heartbeat-only; one in the
+      same command or batch of results as that run makes the 3rd point the 2nd).
+      From the first call to the 3rd point, the tool results by group (each repo file
+      read, #1, other Issues and PRs, take_over.sh, patrol.sh, other commands; a file
+      a command wrote or Claude Code
+      saved a long output to counts as that command's) with their bytes and the context
+      they added, the coordinator's own output, and bytes per token. What a call adds is
+      the next call's context minus its own: its output tokens (at most that) are its
+      own output, the rest is shared by the tool results in between in proportion to
+      their bytes. A point not found: one line saying which, no numbers, exit 5.
+
+report and takeover read a transcript still being written with undecodable bytes
+replaced (a line cut inside a character is then not JSON and skipped).
+
 A transcript is found under $CLAUDE_CONFIG_DIR/projects/*/<id>.jsonl first, then
 $HOME/.claude/projects/*/<id>.jsonl; several files for one id: the last modified one.
-STOCK_TRANSCRIPT, like --transcript, names the file directly (context only).
+STOCK_TRANSCRIPT, like --transcript, names the file directly (context and compactions).
 """
 
 from __future__ import annotations
@@ -115,7 +142,9 @@ def last_context(path: Path) -> int | None:
             size *= 4
 
 
-def cmd_context(args: list[str]) -> int:
+def transcript_of(args: list[str]) -> tuple[Path | None, int]:
+    """The transcript --session-id or --transcript (or STOCK_TRANSCRIPT) names, for
+    context and compactions; None and the exit code after printing why."""
     session = path = None
     while args:
         if args[0] in ("--session-id", "--transcript") and len(args) >= 2:
@@ -126,23 +155,29 @@ def cmd_context(args: list[str]) -> int:
             args = args[2:]
         else:
             print(f"未知參數：{args[0]}")
-            return 64
+            return None, 64
     path = path or os.environ.get("STOCK_TRANSCRIPT") or None
     if path:
         transcript = Path(path)
         if not transcript.is_file():
             print(f"找不到紀錄檔（{transcript.as_posix()}）")
-            return 3
-    elif session:
+            return None, 3
+        return transcript, 0
+    if session:
         found, looked = find(session)
         if found is None:
             where = "、".join(f"{r.as_posix()}/*/{session}.jsonl" for r in looked)
             print(f"找不到紀錄檔（找過 {where}）")
-            return 3
-        transcript = found
-    else:
-        print("要給 --session-id 或 --transcript")
-        return 64
+            return None, 3
+        return found, 0
+    print("要給 --session-id 或 --transcript")
+    return None, 64
+
+
+def cmd_context(args: list[str]) -> int:
+    transcript, code = transcript_of(args)
+    if transcript is None:
+        return code
     try:
         n = last_context(transcript)
     except OSError as e:
@@ -150,6 +185,46 @@ def cmd_context(args: list[str]) -> int:
         return 4
     if n is None:
         print(f"沒有 usage 列（{transcript.as_posix()}）")
+        return 4
+    print(n, transcript.as_posix())
+    return 0
+
+
+def main_compactions(path: Path) -> int | None:
+    """The compact_boundary rows not a sidechain; None when no line is a JSON object
+    (not a transcript). Only the lines naming compact_boundary are parsed."""
+    count = 0
+    understood = False
+    with open(path, "rb") as f:
+        for raw in f:
+            if not understood or b"compact_boundary" in raw:
+                try:
+                    row = json.loads(raw)
+                except ValueError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                understood = True
+                if (
+                    row.get("type") == "system"
+                    and row.get("subtype") == "compact_boundary"
+                    and not row.get("isSidechain")
+                ):
+                    count += 1
+    return count if understood else None
+
+
+def cmd_compactions(args: list[str]) -> int:
+    transcript, code = transcript_of(args)
+    if transcript is None:
+        return code
+    try:
+        n = main_compactions(transcript)
+    except OSError as e:
+        print(f"讀檔失敗（{transcript.as_posix()}：{e.strerror or e}）")
+        return 4
+    if n is None:
+        print(f"沒有 JSON 列（{transcript.as_posix()}）")
         return 4
     print(n, transcript.as_posix())
     return 0
@@ -174,7 +249,7 @@ def turns_of(path: Path) -> tuple[list[dict], list[dict]]:
     by_id: dict[str, dict] = {}
     cur = None
     n_calls = 0
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
                 row = json.loads(line)
@@ -325,11 +400,294 @@ def cmd_report(args: list[str]) -> int:
     return code
 
 
+# takeover (#803). A run of an ops script: "bash <path>/take_over.sh", or the path at
+# the start of a command; not a grep or sed that names the file.
+RUNS = (
+    r"(?:(?:^|[;&|(\n])\s*|(?<![^\s;&|(])(?:bash|sh)\s+)"
+    r"(?:[\w.:/-]*/)?{}(?=\s|$|[;&|)])"
+)
+TAKE_OVER = re.compile(RUNS.format(r"take_over\.sh"))
+PATROL = re.compile(RUNS.format(r"patrol\.sh"))
+TAKE_OVER_OK = re.compile(r'\{"ok":\s*true\b')
+ISSUE_1 = re.compile(
+    r"gh issue view\s+(?:-R\s+\S+\s+)?#?1\b(?!\d)|issue\(number:\s*1\)|/issues/1(?:/|\b)(?!\d)"
+)
+GITHUB = re.compile(r"\bgh\s+(?:issue|pr|api|search)\b")
+SHOW = re.compile(r"^(?:cat|head|tail|sed|nl|less)\b")
+SAVED = re.compile(r"Full output saved to: (.+?)\s*$", re.M)
+WRITES = re.compile(r"""(?:>>?|\btee(?:\s+-a)?)\s+("[^"]+"|'[^']+'|[^\s;&|<>]+)""")
+CD = re.compile(r"""^cd\s+("[^"]+"|'[^']+'|\S+)\s*&&\s*""")
+OWN = "統籌自己的輸出"
+OTHER = "其他（提示、附件）"
+
+
+def norm(path: str) -> str:
+    """A path as a key: quotes off, / separators, MSYS /c/ as C:/, lower case."""
+    p = path.strip().strip("\"'").replace("\\", "/")
+    if m := re.match(r"^/([a-zA-Z])/", p):
+        p = f"{m.group(1)}:/{p[3:]}"
+    return p.lower()
+
+
+def result_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    return "\n".join(
+        b.get("text", "") if isinstance(b, dict) and b.get("type") == "text" else ""
+        for b in content or []
+    )
+
+
+def file_group(path: str, cwd: str, saved: dict[str, str]) -> str:
+    key = norm(path)
+    if key in saved:
+        return saved[key]
+    shown = path.strip().strip("\"'").replace("\\", "/")
+    root = norm(cwd).rstrip("/") + "/" if cwd else ""
+    if root and key.startswith(root):
+        return "讀檔：" + shown[len(root) :]
+    # A relative path is the repo's (the session's cwd).
+    if not re.match(r"^(?:[a-z]:)?/|^~", key):
+        return "讀檔：" + re.sub(r"^\./", "", shown)
+    return "讀 repo 外的檔：" + shown.split("/")[-1]
+
+
+def command_group(command: str, cwd: str, saved: dict[str, str]) -> str:
+    if TAKE_OVER.search(command):
+        return "take_over.sh 輸出"
+    if PATROL.search(command):
+        return "patrol.sh 輸出"
+    if ISSUE_1.search(command):
+        return "讀 #1"
+    if GITHUB.search(command):
+        return "讀其他 Issue／PR"
+    # A command that only shows one file (cat, sed -n, head ...; cd, echo, wc beside).
+    shown = set()
+    for part in re.split(r"&&|\|\|?|;|\n", command):
+        part = CD.sub("", part.strip())
+        if not part or re.match(r"^(?:cd|echo|wc|date)\b", part):
+            continue
+        if not SHOW.match(part):
+            return "其他命令"
+        args = [a for a in part.split()[1:] if not a.startswith("-")]
+        if part.startswith("sed") and args:
+            args = args[1:]  # the sed script
+        shown.update(a for a in args if not re.fullmatch(r"\d+", a))
+    if len(shown) == 1:
+        return file_group(shown.pop(), cwd, saved)
+    return "其他命令"
+
+
+def takeover(path: Path) -> tuple[list[str], bool]:
+    """The context at the 3 points of a coordinator's take over, and what the tool
+    results between the first call and the 3rd point added (#803)."""
+    calls: list[dict] = []  # each model call: its context, output and what it added
+    by_id: dict[str, dict] = {}
+    uses: dict[str, tuple[str, str]] = {}  # tool_use id -> (group, kind)
+    saved: dict[str, str] = {}  # file written by a command (or a saved output) -> group
+    runs: list[dict] = []  # take_over.sh results
+    point2 = point3 = None  # index of the call right after that tool result
+    pending: list[tuple[str, int]] = []  # tool results since the last call
+    waiting2 = waiting3 = False
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict) or row.get("isSidechain"):
+                continue
+            kind = row.get("type")
+            message = row.get("message") or {}
+            content = message.get("content")
+            cwd = row.get("cwd") or ""
+            if kind == "assistant":
+                mid = message.get("id")
+                n = usage_context(row)
+                call = by_id.get(mid) if mid else None
+                if call is None and n is not None:
+                    usage = message["usage"]
+                    call = {
+                        "ctx": n,
+                        "out": usage.get("output_tokens") or 0,
+                        "own": 0,
+                        "added": pending,
+                        "at": row.get("timestamp"),
+                    }
+                    pending = []
+                    calls.append(call)
+                    if mid:
+                        by_id[mid] = call
+                    if waiting2:
+                        point2, waiting2 = len(calls) - 1, False
+                    if waiting3:
+                        point3, waiting3 = len(calls) - 1, False
+                elif call is not None and n is not None:
+                    call["out"] = message["usage"].get("output_tokens") or 0
+                for b in content or []:
+                    if not isinstance(b, dict):
+                        continue
+                    if call is not None:
+                        text = b.get("text") or b.get("thinking") or ""
+                        if b.get("type") == "tool_use":
+                            text = json.dumps(b.get("input"), ensure_ascii=False)
+                        call["own"] += len(text.encode())
+                    if b.get("type") != "tool_use":
+                        continue
+                    i = b.get("input") or {}
+                    command = i.get("command")
+                    if isinstance(command, str):
+                        group = command_group(command, cwd, saved)
+                        for target in WRITES.findall(command):
+                            if norm(target) not in ("/dev/null", "&1", "&2"):
+                                saved[norm(target)] = group
+                    elif b.get("name") == "Read" and i.get("file_path"):
+                        group = file_group(str(i["file_path"]), cwd, saved)
+                    else:
+                        group = f"其他工具：{b.get('name')}"
+                    uses[b.get("id")] = (
+                        group,
+                        command if isinstance(command, str) else "",
+                    )
+            elif kind == "user" and isinstance(content, list):
+                for b in content:
+                    if not isinstance(b, dict) or b.get("type") != "tool_result":
+                        continue
+                    text = result_text(b.get("content"))
+                    group, command = uses.get(b.get("tool_use_id"), ("其他工具：?", ""))
+                    for target in SAVED.findall(text):
+                        saved[norm(target)] = group
+                    pending.append((group, len(text.encode())))
+                    if point2 is None and not waiting2 and TAKE_OVER.search(command):
+                        if "--closed-only" not in command:
+                            runs.append({"ok": bool(TAKE_OVER_OK.search(text))})
+                            waiting2 = runs[-1]["ok"]
+                    # A patrol.sh in the same command as the ok run, or in the same
+                    # batch of results before the next call: the 3rd point is the 2nd.
+                    if (
+                        (point2 is not None or waiting2)
+                        and point3 is None
+                        and not waiting3
+                        and PATROL.search(command)
+                        and "--heartbeat-only" not in command
+                    ):
+                        waiting3 = True
+    head = f"== {path.stem[:8]}（{path.as_posix()}）"
+    if not calls:
+        return [head, "沒有 usage 列"], False
+    missing = []
+    if not runs:
+        missing.append("找不到 take_over.sh 的工具結果")
+    elif point2 is None and not waiting2:
+        missing.append(f'take_over.sh 執行 {len(runs)} 次，沒有一次印出 "ok":true')
+    elif point2 is None:
+        missing.append("take_over.sh 之後還沒有呼叫")
+    elif point3 is None and not waiting3:
+        missing.append("找不到 take_over.sh 之後的 patrol.sh 工具結果")
+    elif point3 is None:
+        missing.append("patrol.sh 之後還沒有呼叫")
+    if missing:
+        return [head, *missing], False
+    ctx = [c["ctx"] for c in calls]
+    nth = next(i for i, r in enumerate(runs) if r["ok"]) + 1
+    lines = [
+        head,
+        f"接手時間：{calls[0]['at']}（第 1 次呼叫）",
+        f"context：第 1 次呼叫 {ctx[0]:,}、take_over.sh 之後 {ctx[point2]:,}"
+        f'（第 {nth} 次執行、印出 "ok":true；共執行 {len(runs)} 次）、'
+        f"patrol.sh 之後 {ctx[point3]:,}",
+        f"增量：第 1 次呼叫 → take_over.sh {ctx[point2] - ctx[0]:,}、"
+        f"take_over.sh → patrol.sh {ctx[point3] - ctx[point2]:,}、"
+        f"合計 {ctx[point3] - ctx[0]:,}",
+    ]
+    # What each call added: its own output (its output tokens, at most the increment),
+    # the rest shared by the tool results before the next call in proportion to their
+    # bytes; with no tool result, it is the prompts and attachments.
+    groups: dict[str, list[float]] = {}
+
+    def add(group: str, size: int, tokens: float) -> None:
+        g = groups.setdefault(group, [0, 0.0])
+        g[0] += size
+        g[1] += tokens
+
+    for k in range(point3):
+        delta = max(0, ctx[k + 1] - ctx[k])
+        own = min(calls[k]["out"], delta)
+        add(OWN, calls[k]["own"], own)
+        added = calls[k + 1]["added"]
+        total = sum(size for _, size in added)
+        if total:
+            for group, size in added:
+                add(group, size, (delta - own) * size / total)
+        else:
+            add(OTHER, 0, delta - own)
+
+    def ratio(size: float, tokens: float) -> str:
+        return f"{size / tokens:.2f}" if size and tokens >= 1 else "—"
+
+    lines.append(
+        "分組（第 1 次呼叫到 patrol.sh 之後；位元組、context 增量、位元組／token）："
+    )
+    order = sorted(groups, key=lambda g: (g in (OWN, OTHER), -groups[g][1]))
+    for group in order:
+        size, tokens = groups[group]
+        lines.append(f"  {group}：{size:,} B、{tokens:,.0f}、{ratio(size, tokens)}")
+    tool = [groups[g] for g in groups if g not in (OWN, OTHER)]
+    size = sum(g[0] for g in tool)
+    tokens = sum(g[1] for g in tool)
+    repo = [groups[g] for g in groups if g.startswith("讀檔：")]
+    lines.append(
+        f"位元組／token：工具結果 {size:,} B ÷ {tokens:,.0f} = {ratio(size, tokens)}"
+        + (
+            f"；其中讀 repo 檔案 {ratio(sum(g[0] for g in repo), sum(g[1] for g in repo))}"
+            if repo
+            else ""
+        )
+    )
+    return lines, True
+
+
+def cmd_takeover(args: list[str]) -> int:
+    if not args:
+        print("要給 session id 或紀錄檔路徑")
+        return 64
+    code = 0
+    for arg in args:
+        path = Path(arg)
+        if not path.is_file():
+            found, _ = (
+                find(arg, prefix=True)
+                if re.fullmatch(r"[A-Za-z0-9_-]{8,}", arg)
+                else (None, [])
+            )
+            if found is None:
+                print(f"{arg}：找不到紀錄檔")
+                code = 3
+                continue
+            path = found
+        try:
+            lines, ok = takeover(path)
+        except OSError as e:
+            print(f"{arg}：讀檔失敗（{e}）")
+            code = 4
+            continue
+        print("\n".join(lines))
+        if not ok:
+            code = code or 5
+    return code
+
+
 def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("context", "report"):
+    commands = {
+        "context": cmd_context,
+        "compactions": cmd_compactions,
+        "report": cmd_report,
+        "takeover": cmd_takeover,
+    }
+    if not argv or argv[0] not in commands:
         print(__doc__.strip())
         return 64
-    return (cmd_context if argv[0] == "context" else cmd_report)(argv[1:])
+    return commands[argv[0]](argv[1:])
 
 
 if __name__ == "__main__":

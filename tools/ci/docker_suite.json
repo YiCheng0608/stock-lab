@@ -42,7 +42,7 @@
     },
     {
       "select": "tests/test_notify_card.py::test_the_images_chromium_draws_the_card",
-      "reason": "the daily Telegram card is drawn by the image's /usr/bin/chromium and fonts-noto-cjk (#754); the runner has neither at that path"
+      "reason": "the daily Telegram card is drawn by the image's /usr/bin/chromium and fonts-noto-cjk (#754); the runner has a /usr/bin/chromium of its own, so the backend job runs it too (#824)"
     }
   ],
   "skipped_everywhere": [

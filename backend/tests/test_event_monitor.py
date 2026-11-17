@@ -804,20 +804,39 @@ def test_one_monitor_at_a_time(mon: Harness) -> None:
 
 
 def test_compaction_hook_logs_each_compaction_time(tmp_path) -> None:
-    """AC-4: <session>.log keeps one time per compaction next to the count."""
+    """AC-4: <session>.log keeps one time per compaction next to the count, and which
+    conversation compacted (#811): a subagent's input has the parent's session_id
+    with agent_id and agent_type (the inputs as measured on Claude Code 2.1.325)."""
     h = Harness(tmp_path)
     hook = (h.ops / "compact_hook.sh").as_posix()
-    for at, trigger in ((NOW, "auto"), (NOW + 90, "manual")):
+    base = {
+        "session_id": "sess-9",
+        "transcript_path": "C:\\x\\projects\\C--proj\\sess-9.jsonl",
+        "cwd": "C:\\proj",
+        "prompt_id": "p-1",
+        "hook_event_name": "PreCompact",
+        "custom_instructions": None,
+    }
+    sub = {"agent_id": "a345b3b2b5e3588b8", "agent_type": "general-purpose"}
+    for at, extra in (
+        (NOW, {**sub, "trigger": "auto"}),
+        (NOW + 90, {"trigger": "manual"}),
+        (NOW + 120, {"agent_id": "a/b", "agent_type": "x y", "trigger": "auto"}),
+    ):
         result = h.run_bash(
-            f'printf \'%s\' \'{{"session_id":"sess-9","trigger":"{trigger}"}}\' | bash "$1"',
+            'printf \'%s\' "$2" | bash "$1"',
             hook,
+            json.dumps({**base, **extra}),
             COMPACT_HOOK_NOW=str(at),
         )
         assert result.returncode == 0, result.stdout + result.stderr
     folder = h.data / "logs" / "compactions"
-    assert (folder / "sess-9.count").read_text(encoding="utf-8") == "2\n"
+    assert (folder / "sess-9.count").read_text(encoding="utf-8") == "3\n"
     assert (folder / "sess-9.log").read_text(encoding="utf-8") == (
-        "2026-10-25T12:00:00Z trigger=auto\n2026-10-25T12:01:30Z trigger=manual\n"
+        "2026-10-25T12:00:00Z trigger=auto agent_id=a345b3b2b5e3588b8"
+        " agent_type=general-purpose\n"
+        "2026-10-25T12:01:30Z trigger=manual agent_id=none\n"
+        "2026-10-25T12:02:00Z trigger=auto agent_id=unknown agent_type=unknown\n"
     )
 
 
@@ -1457,6 +1476,31 @@ def test_the_comment_tool_refuses_bad_arguments_before_gh(
     result = _comment_tool(mon, *args, body=body)
     assert result.returncode == 64, result.stdout + result.stderr
     assert result.stdout == "" and mon.calls("gh") == []
+
+
+def test_the_comment_tool_refuses_an_unmasked_fugle_quote_before_gh(
+    mon: Harness,
+) -> None:
+    """#834 AC-2: a body with a Fugle quote exits 65 without gh and without the quote in
+    what it prints; the masked body is posted."""
+    mon.answer("gh_comments", {"id": 77, "html_url": COMMENT_URL})
+    mon.write("gh_comments.hook", 'cat >"$FAKE_DIR/posted.json"\n')
+    raw = "回報：dry-run\n\n2618 觸及規則進場價 47.75（10:03 前後；10:02:41 成交 47.80）\n"
+    result = _comment_tool(mon, "440", body=raw)
+    assert result.returncode == 65, result.stdout + result.stderr
+    assert result.stdout == "" and mon.calls("gh") == []
+    assert ":3: template:trade" in result.stderr and "47.80" not in result.stderr
+    masked = raw.replace("10:02:41 成交 47.80", "<時間> 成交 <價>")
+    result = _comment_tool(mon, "440", body=masked)
+    assert result.returncode == 0, result.stdout + result.stderr
+    posted = json.loads((mon.fake / "posted.json").read_text(encoding="utf-8"))
+    assert posted["body"].startswith(masked.rstrip())
+    # The check cannot run (no quote_guard.py): refused as well, exit 2.
+    (mon.ops / "quote_guard.py").unlink()
+    result = _comment_tool(mon, "440", body=masked)
+    assert result.returncode == 2 and mon.calls("gh") == [
+        "api repos/YiCheng0608/stock-lab/issues/440/comments --method POST --input -"
+    ]
 
 
 def test_a_message_that_points_to_the_setup_heading_names_it_word_for_word() -> None:

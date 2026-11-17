@@ -2990,6 +2990,20 @@ def action_factor_check(
     }
 
 
+def reference_factor_only(action: ActionRecord | CorporateAction) -> bool:
+    """A TWT49U ex-right TWSE published without its breakdown (#821).
+
+    Its fields are empty on purpose, so the write guard has nothing to
+    compare; its factor is the published 除權息參考價 / 除權息前收盤價.
+    """
+    from worker.sources import TWSE_REFERENCE_FACTOR_SOURCE
+
+    details = (
+        action.details if isinstance(action, ActionRecord) else action.details_json
+    ) or {}
+    return details.get("factor_source") == TWSE_REFERENCE_FACTOR_SOURCE
+
+
 def _upsert_action(
     db: Session,
     action: ActionRecord,
@@ -3006,7 +3020,7 @@ def _upsert_action(
             CorporateAction.action_type == action.action_type,
         )
     )
-    check = action_factor_check(action)
+    check = None if reference_factor_only(action) else action_factor_check(action)
     if check is None and row is not None:
         stored_check = action_factor_check(row)
         if stored_check is not None and stored_check["passed"]:

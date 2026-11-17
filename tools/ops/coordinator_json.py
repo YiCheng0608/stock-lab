@@ -24,6 +24,11 @@ value is missing or the condition is false, so a script can test the exit code.
                       Lines start with "#"; a line starting with "未查完" says what was
                       not read (more than a page of threads or comments); exit 1 when
                       the answer has no data.repository (a GraphQL error)
+  governance LIMIT    #1's body against its comments in the same answer (governance_check,
+                      #807): the header lines (the body's size when above LIMIT bytes,
+                      "#1 漏同步：N 則" or 未查完), then one indented line per comment
+                      missing from the body ("<createdAt> <id> <first line>"); exit 12
+                      when one is, 1 when the answer has no data.repository
   questions-query     the GraphQL query whose answer questions reads (no stdin)
   closed-query        the GraphQL query whose answer closed-check reads (no stdin); its
                       $after is the cursor closed-next printed (none for page 1)
@@ -386,17 +391,23 @@ def _run_state(run) -> str:
 
 
 # The fields unanswered_questions reads of each thread; slots.py (#727) builds its query
-# from this too, so a field added here reaches the query patrol.sh sends.
+# from this too, so a field added here reaches the query patrol.sh sends. The title, body
+# and milestone are for overview.py (patrol.sh --overview, #804), read in the same call.
 THREAD_FIELDS = (
     "number state comments(last:{n}){{totalCount nodes{{url createdAt body}}}}"
+    " title body milestone{{title}}"
 )
 _THREAD = "nodes{{" + THREAD_FIELDS + "}}"
 # One gh call reads every open Issue and PR with its latest comments (patrol.sh). Issues
 # and PRs share the number space, so "#<number>" names either.
 PAGE = 100
+# The governance Issue's body, for governance_check (#807): an alias read once, so the
+# body of no other thread is asked for. Its comments are the ones in the issues list.
+GOVERNANCE_FIELDS = "governance:issue(number:1){body}"
 QUESTIONS_QUERY = (
     "query OpenQuestions($owner:String!,$name:String!){"
     "repository(owner:$owner,name:$name){"
+    f"{GOVERNANCE_FIELDS} "
     f"issues(states:OPEN,first:{PAGE}){{totalCount {_THREAD.format(n=PAGE)}}}"
     f"pullRequests(states:OPEN,first:{PAGE}){{totalCount {_THREAD.format(n=PAGE)}}}"
     "}}"
@@ -476,6 +487,128 @@ def unanswered_questions(doc, now: int) -> list[str]:
         age = _elapsed(now - created) if created is not None else "時間不明"
         lines.append(f"#{number} 經過 {age} {c.get('url', '')}")
     return lines + notes
+
+
+# --- #1's body against its comments (patrol.sh, #807; docs/COORDINATOR.md 決策落地) ----
+# The body indexes the decisions still in force, each with the id of its comment
+# (…issuecomment-<id> or the bare id). A comment that should be there: its first line is
+# a 決定 (also 決定（補充…）) or a 統籌承諾, or it has no coordinator mark (the user, a
+# cloud session relaying the user). Left out, unmarked as they are: the scripts' own
+# comments (monitor's 請開統籌 and 統籌停在確認框, the watchdog's, deploy.sh's: each says
+# "`tools/ops/<script>` 自動留言") and the types that are no decision (部署：, 回報：統籌
+# session 更換, 回報：開工, 回報：收到).
+_SYNCED = re.compile(r"\s*(?:決定[：:（(]|統籌承諾[：:])")
+_NOT_DECISIONS = re.compile(
+    r"\s*(?:部署[：:]|回報[：:]\s*(?:統籌 ?session 更換|開工|收到))"
+)
+_SCRIPT_COMMENT = re.compile(r"`tools/ops/[\w.]+` 自動留言")
+# An id in the body: in a comment link, or bare ([6911025182]) when 6 digits or more, so a
+# date or a PR number is not taken for one.
+_BODY_ID = re.compile(r"(?<!\d)(\d{6,})(?!\d)")
+# The archive line (#794 AC-1, PR #810 review 6912088904): the one line of the body that
+# starts with 歸檔：, holding one link to a #1 comment, the earlier body. Every comment up
+# to it is covered; comment ids grow with time, so "up to" is an id at most the archive's
+# (true as well of a comment not among those read).
+_ARCHIVE_LINE = re.compile(r"\s*歸檔[：:]")
+_ARCHIVE_LINK = re.compile(r"/issues/1#issuecomment-(\d+)")
+# A one-off 決定 or 統籌承諾 of the coordinator (a merge agreed, a check done) says so on a
+# line of its own: 本文：不同步（<why>）. A comment such a covered one names (回覆 [id]) is
+# covered too, one level down: the user's 同意 it answers.
+_NOT_SYNCED = re.compile(r"^\s*本文[：:]\s*不同步", re.MULTILINE)
+# patrol.sh's exit when a comment is missing (after the handoff's 10 and the slots' 11).
+GOVERNANCE_EXIT = 12
+
+
+def _ids(text: str) -> set[str]:
+    return set(_BODY_ID.findall(text)) | set(_COMMENT_LINK.findall(text))
+
+
+def _archive(body: str) -> tuple[int | None, str | None]:
+    """(the archive comment's id or None, why it cannot be told or None)."""
+    lines = [ln for ln in body.splitlines() if _ARCHIVE_LINE.match(ln)]
+    if not lines:
+        return None, None
+    if len(lines) > 1:
+        return None, f"歸檔：開頭的行有 {len(lines)} 行"
+    links = _ARCHIVE_LINK.findall(lines[0])
+    if len(set(links)) != 1:
+        return None, (
+            f"歸檔行有 {len(set(links))} 個 #1 留言連結"
+            if links
+            else "歸檔行沒有 #1 留言連結"
+        )
+    return int(links[0]), None
+
+
+def governance_check(doc, limit: int) -> tuple[list[str], list[str]]:
+    """(header lines, one line per comment missing from #1's body).
+
+    The header says the body's size when above LIMIT bytes, and how many comments are
+    missing, or 未查完 with why when the body, #1's comments or the archive line could not
+    be read: then no comment is listed, never 0 taken for an answer.
+    """
+    repo = get(doc, "data.repository") or {}
+    body = (repo.get("governance") or {}).get("body")
+    thread = next(
+        (
+            t
+            for t in (repo.get("issues") or {}).get("nodes") or []
+            if t.get("number") == GOVERNANCE_ISSUE
+        ),
+        None,
+    )
+    if not isinstance(body, str):
+        return ["#1 漏同步：未查完（沒讀到 #1 本文）"], []
+    header = []
+    size = len(body.encode("utf-8"))
+    if size > limit:
+        header.append(
+            f"#1 本文 {size:,} 位元組（{size / 1024:.1f} KB），超過上限 {limit:,}"
+        )
+    comments = (thread or {}).get("comments")
+    nodes = comments.get("nodes") if isinstance(comments, dict) else None
+    if not isinstance(nodes, list):
+        return header + ["#1 漏同步：未查完（沒讀到 #1 的留言）"], []
+    archive, why = _archive(body)
+    if why:
+        return header + [f"#1 漏同步：未查完（{why}）"], []
+    in_body = _ids(body)
+
+    def comment_id(c: dict) -> str:
+        return (_COMMENT_LINK.findall(c.get("url") or "") or [""])[0]
+
+    def covered(cid: str) -> bool:
+        return cid in in_body or (archive is not None and int(cid) <= archive)
+
+    candidates, covering = [], set()
+    for c in nodes:
+        if not isinstance(c, dict):
+            continue
+        text = (c.get("body") or "").lstrip("\ufeff")
+        cid = comment_id(c)
+        if not cid:
+            continue
+        marked = coordinator_comment(text)
+        if marked and (covered(cid) or _NOT_SYNCED.search(text)):
+            covering |= _ids(without_mark(text)) - {cid}
+        if not marked:
+            if _SCRIPT_COMMENT.search(text) or _NOT_DECISIONS.match(text):
+                continue
+        elif not _SYNCED.match(text) or _NOT_SYNCED.search(text):
+            continue
+        candidates.append((c, cid, text))
+    missing = []
+    for c, cid, text in candidates:
+        if covered(cid) or cid in covering:
+            continue
+        first = next((ln for ln in without_mark(text).splitlines() if ln.strip()), "")
+        missing.append((c.get("createdAt") or "", cid, one_line(first, 60)))
+    missing.sort()
+    header.append(
+        f"#1 漏同步：{len(missing)} 則（最近 {len(nodes)} 則留言裡，id 不在本文"
+        f"{f'、也不早於歸檔留言 {archive}' if archive is not None else ''}）"
+    )
+    return header, [f"{at} {cid} {first}" for at, cid, first in missing]
 
 
 # --- closed Issues and merged PRs of the last 48 hours (take_over.sh closed, #713) -----
@@ -1126,6 +1259,15 @@ def main(argv: list[str]) -> int:
         for line in unanswered_questions(doc, int(args[0])):
             print(line)
         return 0
+    if command == "governance":
+        if get(doc, "data.repository") is None:
+            return 1
+        header, missing = governance_check(doc, int(args[0]))
+        for line in header:
+            print(line)
+        for line in missing:
+            print(f"  {line}")
+        return GOVERNANCE_EXIT if missing else 0
     print(f"unknown command: {command}", file=sys.stderr)
     return 64
 
