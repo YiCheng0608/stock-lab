@@ -690,6 +690,13 @@ function quoteBody(value, file, ctx, command, shell) {
     try {
       return { text: fs.readFileSync(target, 'utf8'), label: value };
     } catch (error) {
+      // Not written yet: a heredoc earlier in this command writes it (cat > f <<'EOF' ... ; gh
+      // ... --body-file f), so its text is all in the command.
+      const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const file = String.raw`>\s*['"]?${escaped}['"]?(?=[\s;&|]|$)`;
+      const heredoc = String.raw`<<-?\s*['"]?[A-Za-z_]`;
+      const written = new RegExp(`${file}[^\\n]*${heredoc}|${heredoc}[^\\n]*${file}`);
+      if (error.code === 'ENOENT' && shell === 'bash' && written.test(command)) return { text: command, label: value };
       return { denial: `${QUOTE_UNREADABLE}（${value}：${error.code || error.message}）` };
     }
   }

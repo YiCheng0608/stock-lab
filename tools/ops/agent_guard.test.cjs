@@ -1092,6 +1092,18 @@ describe('Fugle quotes', () => {
     assert.match(deny(`@'\n${RAW}'@ | gh issue comment 5 -F -`, 'powershell') || '', QUOTE);
   });
 
+  test('a body file a heredoc of the same command writes is read from the command', () => {
+    const quoted = "<<'EOF'";
+    const file = `${tmp.replace(/\\/g, '/')}/later.md`;
+    for (const write of [`cat > ${file} ${quoted}`, `cat ${quoted} > "${file}"`]) {
+      assert.match(deny(`${write}\n${RAW}EOF\ngh issue comment 5 --body-file ${file}`) || '', QUOTE, write);
+      assert.equal(deny(`${write}\n${MASKED}EOF\ngh issue comment 5 --body-file ${file}`), null, write);
+    }
+    // Written by something the hook cannot read, or another file: still unreadable.
+    assert.match(deny(`cp x.md ${file} && gh issue comment 5 --body-file ${file}`) || '', UNREADABLE);
+    assert.match(deny(`cat > ${file}.bak ${quoted}\n${MASKED}EOF\ngh issue comment 5 --body-file ${file}`) || '', UNREADABLE);
+  });
+
   test('gh api to issues, pulls and comments: body, body-file and input', () => {
     let n = 0;
     const json = (body) => {
