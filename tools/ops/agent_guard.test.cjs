@@ -1086,10 +1086,45 @@ describe('Fugle quotes', () => {
     const quoted = "<<'EOF'";
     assert.match(deny(`gh issue comment 5 -F - ${quoted}\n${RAW}EOF`) || '', QUOTE);
     assert.equal(deny(`gh issue comment 5 -F - ${quoted}\n${MASKED}EOF`), null);
-    assert.match(deny(`cat ${quoted} | gh issue comment 5 --body-file -\n${RAW}EOF`) || '', QUOTE);
+    assert.equal(deny(`gh issue comment 5 -F - <<"EOF"\n${MASKED}EOF`), null, 'a double-quoted delimiter expands nothing either');
     assert.match(deny(`gh pr create --title x --body "$(cat ${quoted}\n${RAW}EOF\n)"`) || '', QUOTE);
     assert.equal(deny(`gh pr create --title x --body "$(cat ${quoted}\n${MASKED}EOF\n)"`), null);
     assert.match(deny(`@'\n${RAW}'@ | gh issue comment 5 -F -`, 'powershell') || '', QUOTE);
+    assert.equal(deny(`@'\n${MASKED}'@ | gh issue comment 5 -F -`, 'powershell'), null);
+  });
+
+  test('stdin the hook cannot read blocks (review 6934157548 must-fix 1)', () => {
+    const quoted = "<<'EOF'";
+    for (const [command, shell] of [
+      // Unquoted delimiter: the shell expands $(...) before gh reads it.
+      [`gh issue comment 5 -F - <<EOF\n$(cat ${raw})\nEOF`, 'bash'],
+      // A pipe feeds gh; the heredoc is another command's.
+      [`cat ${raw} | gh issue comment 5 -F - ; cat <<'X' > y.md\n${MASKED}X`, 'bash'],
+      [`cat ${quoted} | gh issue comment 5 --body-file -\n${MASKED}EOF`, 'bash'],
+      [`gh issue comment 5 -F - <<< "${MASKED}"`, 'bash'],
+      [`@"\n${MASKED}"@ | gh issue comment 5 -F -`, 'powershell'],
+      [`Get-Content ${raw} | gh issue comment 5 -F -`, 'powershell'],
+    ]) {
+      assert.match(deny(command, shell) || '', UNREADABLE, command);
+    }
+  });
+
+  test('titles, every gh api field and graphql are checked (must-fix 2)', () => {
+    for (const sub of ['issue create', 'issue new', 'issue edit 5', 'pr create', 'pr edit 5']) {
+      for (const flag of ['--title ', '-t ', '--title=']) {
+        assert.match(deny(`gh ${sub} ${flag}"委買 47.75" --body x`) || '', QUOTE, `${sub} ${flag}`);
+        assert.equal(deny(`gh ${sub} ${flag}"委買 <價>" --body x`), null, `${sub} ${flag}`);
+      }
+      assert.match(deny(`gh ${sub} --title "$TITLE" --body x`) || '', UNREADABLE);
+    }
+    const trade = '10:02:41 成交 47.80';
+    assert.match(deny(`gh api repos/o/r/pulls/5/reviews -f 'comments[][body]=${trade}'`) || '', QUOTE);
+    assert.match(deny(`gh api repos/o/r/issues/5 -X PATCH -f title='${trade}'`) || '', QUOTE);
+    assert.equal(deny("gh api repos/o/r/pulls/5/reviews -f 'comments[][body]=<時間> 成交 <價>' -F per_page=100"), null);
+    const mutation = (body) => `gh api graphql -f query='mutation($id:ID!){addComment(input:{subjectId:$id,body:"${body}"}){clientMutationId}}' -f id=I_1`;
+    assert.match(deny(mutation(trade)) || '', QUOTE);
+    assert.equal(deny(mutation('<時間> 成交 <價>')), null, 'a $ inside single quotes is no variable');
+    assert.match(deny(`gh api graphql -F body=@${raw} -f query='x'`) || '', QUOTE);
   });
 
   test('a body file a heredoc of the same command writes is read from the command', () => {
@@ -1102,6 +1137,8 @@ describe('Fugle quotes', () => {
     // Written by something the hook cannot read, or another file: still unreadable.
     assert.match(deny(`cp x.md ${file} && gh issue comment 5 --body-file ${file}`) || '', UNREADABLE);
     assert.match(deny(`cat > ${file}.bak ${quoted}\n${MASKED}EOF\ngh issue comment 5 --body-file ${file}`) || '', UNREADABLE);
+    const expanded = `cat > ${file} <<EOF\n$(cat ${raw})\nEOF\ngh issue comment 5 --body-file ${file}`;
+    assert.match(deny(expanded) || '', UNREADABLE, 'an unquoted delimiter expands');
   });
 
   test('gh api to issues, pulls and comments: body, body-file and input', () => {
@@ -1140,15 +1177,17 @@ describe('Fugle quotes', () => {
     assert.equal(deny('gh api repos/o/r/issues/5/comments -f title=x -F per_page=100'), null);
   });
 
-  test('push_pr_assets.sh: the text files of --dir', () => {
+  test('push_pr_assets.sh: every file of --dir but the images (must-fix 3c)', () => {
     const dir = path.join(tmp, 'assets');
     fs.mkdirSync(path.join(dir, 'sub'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'shot.png'), RAW); // not a text file
+    for (const image of ['shot.png', 'a.JPG', 'b.jpeg', 'c.gif', 'd.webp']) fs.writeFileSync(path.join(dir, image), RAW);
     fs.writeFileSync(path.join(dir, '.hidden.md'), RAW); // hidden: the script skips it
+    fs.mkdirSync(path.join(dir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.git', 'x.log'), RAW);
     fs.writeFileSync(path.join(dir, 'sub', 'dryrun.log'), MASKED);
     const command = `bash tools/ops/push_pr_assets.sh --issue 834 --dir ${dir.replace(/\\/g, '/')}`;
     assert.equal(deny(command), null);
-    for (const name of ['a.md', 'a.txt', 'a.json', 'a.jsonl', 'sub/a.log']) {
+    for (const name of ['a.md', 'a.txt', 'a.json', 'a.jsonl', 'sub/a.log', 'dryrun.out', 'a.csv', 'a.html', 'sub/dryrun']) {
       fs.writeFileSync(path.join(dir, name), RAW);
       const reason = deny(command);
       assert.match(reason || '', QUOTE, name);
@@ -1157,11 +1196,14 @@ describe('Fugle quotes', () => {
       fs.writeFileSync(path.join(dir, name), MASKED);
       assert.equal(deny(command), null, name);
     }
+    fs.writeFileSync(path.join(dir, 'blob.bin'), Buffer.from([0xff, 0xfe, 0x00]));
+    assert.match(deny(command) || '', /blob\.bin：不是 UTF-8/);
+    fs.rmSync(path.join(dir, 'blob.bin'));
     assert.match(deny('bash tools/ops/push_pr_assets.sh --issue 834 --dir "$OUT"') || '', UNREADABLE);
     assert.match(deny(`bash tools/ops/push_pr_assets.sh --issue 834 --dir ${tmp.replace(/\\/g, '/')}/missing`) || '', UNREADABLE);
   });
 
-  test('git push to pr-assets/*: the text files the remote-tracking branch lacks', () => {
+  test('git push to pr-assets/*: the files the remote-tracking branch lacks', () => {
     const repo = path.join(tmp, 'repo');
     fs.mkdirSync(repo);
     git(repo, 'init', '-q', '-b', 'master');
@@ -1170,26 +1212,50 @@ describe('Fugle quotes', () => {
     git(repo, 'add', '.');
     git(repo, 'commit', '-q', '-m', 'masked');
     const clean = git(repo, 'rev-parse', 'HEAD');
-    const push = (src) => commandDenial(`git push --quiet origin ${src}:refs/heads/pr-assets/834`, 'bash', [], repo);
+    const at = (command) => commandDenial(command, 'bash', [], repo);
+    const push = (src) => at(`git push --quiet origin ${src}:refs/heads/pr-assets/834`);
     assert.equal(push(clean), null);
-    fs.writeFileSync(path.join(repo, 'dryrun.jsonl'), RAW);
+    fs.writeFileSync(path.join(repo, 'dryrun.out'), RAW); // no text extension: checked all the same
     git(repo, 'add', '.');
     git(repo, 'commit', '-q', '-m', 'raw');
     const dirty = git(repo, 'rev-parse', 'HEAD');
-    assert.match(push(dirty) || '', /dryrun\.jsonl 3: template:trade/);
+    assert.match(push(dirty) || '', /dryrun\.out 3: template:trade/);
     assert.match(push('HEAD') || '', QUOTE);
     assert.match(commandDenial(`git -C ${repo.replace(/\\/g, '/')} push origin HEAD:pr-assets/834`, 'bash', [], tmp) || '', QUOTE);
+    assert.match(at('git push -o ci.skip --push-option=x origin HEAD:pr-assets/834') || '', QUOTE, 'option values are no remote');
     git(repo, 'branch', 'pr-assets/834', dirty);
-    assert.match(commandDenial('git push origin pr-assets/834', 'bash', [], repo) || '', QUOTE);
+    assert.match(at('git push origin pr-assets/834') || '', QUOTE);
+    // Without pr-assets on the command (must-fix 3b): --all, --mirror, and the current branch.
+    for (const command of ['git push --all origin', 'git push --mirror origin', 'git push --branches']) {
+      assert.match(at(command) || '', QUOTE, command);
+    }
+    assert.equal(at('git push origin master'), null);
+    git(repo, 'checkout', '-q', 'pr-assets/834');
+    for (const command of ['git push', 'git push origin', 'git push origin HEAD', 'git push -u origin HEAD']) {
+      assert.match(at(command) || '', QUOTE, command);
+    }
+    git(repo, 'checkout', '-q', '-b', 'work', 'master');
+    git(repo, 'remote', 'add', 'origin', path.join(tmp, 'nowhere.git')); // never fetched or pushed
+    git(repo, 'config', 'branch.work.remote', 'origin');
+    git(repo, 'config', 'branch.work.merge', 'refs/heads/pr-assets/834');
+    git(repo, 'update-ref', 'refs/remotes/origin/pr-assets/834', clean);
+    git(repo, 'reset', '-q', '--hard', dirty);
+    assert.match(at('git push') || '', QUOTE, 'the upstream is pr-assets/*');
+    git(repo, 'checkout', '-q', 'master');
     // What the remote already has is not pushed again: only the files changed since.
     git(repo, 'update-ref', 'refs/remotes/origin/pr-assets/834', dirty);
     fs.writeFileSync(path.join(repo, 'more.md'), MASKED);
     git(repo, 'add', '.');
     git(repo, 'commit', '-q', '-m', 'more');
     assert.equal(push('HEAD'), null);
-    assert.match(push('"$commit"') || '', UNREADABLE);
+    // A rename of a file the remote has with a quote is a new file there (must-fix 3a).
+    git(repo, 'mv', 'dryrun.out', 'renamed.jsonl');
+    git(repo, 'commit', '-q', '-m', 'rename');
+    assert.match(push('HEAD') || '', /renamed\.jsonl 3: template:trade/);
+    assert.match(push('"$commit"') || '', UNREADABLE, 'a pushed commit held in a variable');
+    assert.match(at('git push origin "$commit:refs/heads/pr-assets/834"') || '', UNREADABLE);
     assert.equal(push(''), null, 'a deletion pushes no file');
-    assert.equal(commandDenial(`git push origin ${dirty}:refs/heads/task/834-x`, 'bash', [], repo), null, 'not pr-assets');
+    assert.equal(at(`git push origin ${dirty}:refs/heads/task/834-x`), null, 'not pr-assets');
   });
 
   test('other commands are not read: no body, no other exit', () => {

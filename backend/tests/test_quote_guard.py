@@ -119,7 +119,7 @@ def test_every_pattern_has_a_case():
     assert covered == (
         {f"template:{key}" for key in PATTERNS["templates"]}
         | {f"field:{name}" for name in PATTERNS["fields"]}
-        | {"message"}
+        | {"message", "repr:Quote", "levels"}
     )
 
 
@@ -226,6 +226,48 @@ def test_mask_masks_a_fields_whole_value():
     masked = quote_guard.mask(raw)
     assert quote_guard.hits(masked) == []
     assert not any(value in masked for value in ("47.75", "47.8", "47.7", "1794790830"))
+
+
+def test_mask_masks_every_value_of_a_quote_and_a_levels_record():
+    quote = _quote(1, "2618")
+    printed = repr(quote)
+    assert "high=47.8" in printed and "datetime.datetime(" in printed
+    masked = quote_guard.mask(printed)
+    assert quote_guard.hits(masked) == []
+    assert "symbol='2618'" in masked and "47.8" not in masked
+    assert "datetime.datetime(<值>" in masked and "47.75" not in masked
+    # PR #812's round record (intraday _record_levels): high, low, last masked, the rule
+    # levels of each entry kept.
+    record = {
+        "at": "2026-11-16T10:03:00+08:00",
+        "levels": {
+            "signal:1": {
+                "high": 47.85,
+                "low": 47.6,
+                "last": 47.8,
+                "levels": [47.75, 46.31],
+            }
+        },
+    }
+    masked = json.loads(quote_guard.mask(json.dumps(record)))
+    assert masked["levels"]["signal:1"] == {
+        "high": "<價>",
+        "low": "<價>",
+        "last": "<價>",
+        "levels": [47.75, 46.31],
+    }
+
+
+def test_a_bracket_that_never_closes_is_masked_to_its_line_end():
+    """A log cut off by head: the lines after stay as printed (review 6934157548)."""
+    text = '"bids": [{"price": 47.7, "size": 3\n--- poll at=10:03:00 ms_median=120\n觸及停損 46.31'
+    masked = quote_guard.mask(text)
+    assert masked.split("\n") == [
+        '"bids": [{"price": <值>, "size": <值>',
+        "--- poll at=10:03:00 ms_median=120",
+        "觸及停損 46.31",
+    ]
+    assert quote_guard.hits(masked) == []
 
 
 def test_the_command_line(tmp_path):

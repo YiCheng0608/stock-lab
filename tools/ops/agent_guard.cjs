@@ -607,22 +607,33 @@ function envSegmentDenial(segment, shell, ctx) {
 
 // --- Fugle quotes (#834; tools/ops/quote_guard.py, docs/DATA_SOURCES.md 盤中報價) -----------
 // Text on its way to GitHub must hold no unmasked Fugle quote. Checked, and only these (any other
-// command skips this section on one regex): gh issue comment|create|new|edit and gh pr
-// comment|create|new|edit|review with --body/-b or --body-file/-F; gh api to issues, pulls or
-// comments (or an endpoint held in a variable) with -f/--raw-field body=, -F/--field body= or
-// body=@<file>, and --input <file> (its JSON's strings too); bash tools/ops/push_pr_assets.sh
-// --dir <dir> (not --dry-run): its .md .txt .json .jsonl .log files; git push of a refspec to
-// pr-assets/*: those files of the pushed commit that the remote-tracking branch lacks (all of
-// them without one). A body the hook cannot read blocks: a file it cannot open, a value with a
-// variable or command substitution (except $(cat <<'WORD' ... WORD), whose text is all there),
-// stdin without a heredoc or here-string on the command. The patterns are quote_patterns.json,
-// the one copy quote_guard.py reads too; a hit names the line and pattern, never the quote.
-const QUOTE_EXIT = /(?:^|[\s(&;|'"`/\\])gh(?:\.exe)?['"]?\s|pr-assets|push_pr_assets/i;
+// command skips this section on one regex):
+// - gh issue comment|create|new|edit and gh pr comment|create|new|edit|review: --body/-b,
+//   --body-file/-F, and the --title/-t of create, new and edit.
+// - gh api to issues, pulls, comments or graphql (or an endpoint held in a variable): every
+//   -f/--raw-field and -F/--field value (key=@<file> read), and --input <file> (its JSON's
+//   strings decoded too).
+// - bash tools/ops/push_pr_assets.sh --dir <dir> (not --dry-run): every file it would push but
+//   the images (.png .jpg .jpeg .gif .webp), as UTF-8.
+// - git push whose target is pr-assets/*: a refspec naming it, the current branch or its push
+//   target or upstream without a refspec, --all/--branches/--mirror with local pr-assets/*
+//   branches. The files of the pushed commit the remote-tracking branch lacks (all without
+//   one), renames and copies included, images left out.
+// A body the hook cannot read blocks: a file it cannot open or decode, a value the shell expands
+// (a variable or command substitution outside single quotes; $(cat <<'WORD' ... WORD) is read,
+// its delimiter being quoted), stdin other than a heredoc with a quoted delimiter on the gh
+// command itself (or, in PowerShell, a single-quoted here-string piped straight into it), a body
+// file this command has not written yet unless a heredoc with a quoted delimiter writes it, a
+// pushed refspec held in a variable that mentions pr-assets. The patterns are
+// quote_patterns.json, the one copy quote_guard.py reads too; a hit names the line and pattern,
+// never the quote.
+const QUOTE_EXIT = /(?:^|[\s(&;|'"`/\\])(?:gh|git)(?:\.exe)?['"]?\s|pr-assets|push_pr_assets/i;
 const QUOTE_REASON =
   '本文有沒遮的富果報價，不得送上 GitHub；先跑 python tools/ops/quote_guard.py mask <檔> 再貼（docs/DATA_SOURCES.md 盤中報價）';
 const QUOTE_UNREADABLE = '要送上 GitHub 的本文 hook 讀不到，無法檢查有沒有富果報價；改用 --body-file <檔>';
-const QUOTE_TEXT_FILE = /\.(?:md|txt|json|jsonl|log)$/i;
+const QUOTE_IMAGE = /\.(?:png|jpe?g|gif|webp)$/i;
 const QUOTE_MAX_FILES = 2000;
+const OPENERS = { '[': ']', '{': '}', '(': ')' };
 let quoteCompiled = null;
 
 function quotePatterns() {
@@ -631,30 +642,78 @@ function quotePatterns() {
     const names = data.fields.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
     quoteCompiled = {
       templates: Object.entries(data.templates).map(([key, rx]) => [key, new RegExp(rx)]),
-      fields: new RegExp(`(?<![A-Za-z0-9_])(${names})${data.field_value}`, 'g'),
-      message: new RegExp(data.message),
+      fields: new RegExp(`(?<![A-Za-z0-9_])(${names})${data.field_head}`, 'g'),
+      scalar: new RegExp(data.scalar, 'y'),
+      reprOpen: new RegExp(data.repr.open, 'g'),
+      reprValue: new RegExp(data.repr.value),
+      record: new RegExp(data.record),
+      levels: data.levels,
     };
   }
   return quoteCompiled;
 }
 
+// quote_guard.py value_end: the balanced close of the bracket at `start`, quotes skipped, or the
+// end of its line when it never closes.
+function quoteValueEnd(text, start) {
+  const stack = [];
+  let quote = '';
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = '';
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (OPENERS[ch]) stack.push(OPENERS[ch]);
+    else if (stack.length && ch === stack[stack.length - 1]) {
+      stack.pop();
+      if (!stack.length) return i + 1;
+    }
+  }
+  const lineEnd = text.indexOf('\n', start);
+  return lineEnd < 0 ? text.length : lineEnd;
+}
+
+const isNumber = (v) => typeof v === 'number';
+
 // Every hit of `text` as `<line>: <kind>`, the rules of quote_guard.py hits().
 function quoteHits(text) {
-  const { templates, fields, message } = quotePatterns();
-  const templateHits = (line) => templates.filter(([, re]) => re.test(line)).map(([key]) => `template:${key}`);
+  const c = quotePatterns();
+  const templateHits = (line) => c.templates.filter(([, re]) => re.test(line)).map(([key]) => `template:${key}`);
   const found = new Set();
   text.split('\n').forEach((line, i) => {
-    for (const kind of templateHits(line)) found.add(`${i + 1}: ${kind}`);
-    const record = message.exec(line);
-    let value = null;
+    const add = (kind) => found.add(`${i + 1}: ${kind}`);
+    templateHits(line).forEach(add);
+    const match = c.record.exec(line);
+    let record = null;
     try {
-      value = record && JSON.parse(record[1]);
+      const value = match && JSON.parse(match[1]);
+      if (value && typeof value === 'object' && !Array.isArray(value)) record = value;
     } catch {}
-    // A --- message line that is no record cannot be vouched for.
-    const isRecord = value && typeof value === 'object' && typeof value.text === 'string';
-    if (isRecord ? templateHits(value.text).length : line.startsWith('--- message ')) found.add(`${i + 1}: message`);
+    if (record && typeof record.text === 'string') {
+      if (templateHits(record.text).length) add('message');
+    } else if (line.startsWith('--- message ')) add('message');
+    const levels = record && record[c.levels.key];
+    if (levels && typeof levels === 'object' && !Array.isArray(levels)) {
+      const entries = Object.values(levels).filter((e) => e && typeof e === 'object');
+      if (entries.some((e) => c.levels.quotes.some((name) => isNumber(e[name])))) add('levels');
+    }
   });
-  for (const match of text.matchAll(fields)) found.add(`${text.slice(0, match.index).split('\n').length}: field:${match[1]}`);
+  const lineOf = (at) => text.slice(0, at).split('\n').length;
+  for (const match of text.matchAll(c.fields)) {
+    const at = match.index + match[0].length;
+    let hit;
+    if (OPENERS[text[at]]) hit = /[0-9]/.test(text.slice(at, quoteValueEnd(text, at)));
+    else {
+      c.scalar.lastIndex = at;
+      hit = c.scalar.test(text);
+    }
+    if (hit) found.add(`${lineOf(match.index)}: field:${match[1]}`);
+  }
+  for (const match of text.matchAll(c.reprOpen)) {
+    const open = match.index + match[0].length;
+    if (c.reprValue.test(text.slice(open, quoteValueEnd(text, open - 1)))) found.add(`${lineOf(match.index)}: repr:Quote`);
+  }
   return [...found];
 }
 
@@ -677,81 +736,210 @@ function withJsonStrings(text) {
   return [text, ...strings].join('\n');
 }
 
-// The text of a body given as `value` (a literal; `file` true for a file path, `-` stdin), or
-// a denial when the hook cannot read it.
-function quoteBody(value, file, ctx, command, shell) {
+// Words of a segment as words() reads them, each with `dynamic` set when the shell expands
+// something in it: $ or a backtick outside single quotes (bash), $ outside single quotes
+// (PowerShell, whose escape is the backtick).
+function quoteWords(raw, shell) {
+  const escape = shell === 'powershell' ? '`' : '\\';
+  const out = [];
+  let word = null;
+  const start = () => (word = word || { text: '', dynamic: false });
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (/\s/.test(ch)) {
+      if (word) out.push(word);
+      word = null;
+      continue;
+    }
+    start();
+    if (ch === escape && i + 1 < raw.length) {
+      word.text += raw[i + 1];
+      i += 1;
+    } else if (ch === "'") {
+      const end = raw.indexOf("'", i + 1);
+      const stop = end < 0 ? raw.length : end;
+      word.text += raw.slice(i + 1, stop);
+      i = stop;
+    } else if (ch === '"') {
+      let j = i + 1;
+      while (j < raw.length && raw[j] !== '"') {
+        // In bash's double quotes \ escapes only $ ` " \ and a newline.
+        if (raw[j] === escape && j + 1 < raw.length && (shell === 'powershell' || '$`"\\\n'.includes(raw[j + 1]))) {
+          word.text += raw[j + 1];
+          j += 2;
+          continue;
+        }
+        if (raw[j] === '$' || (shell === 'bash' && raw[j] === '`')) word.dynamic = true;
+        word.text += raw[j];
+        j += 1;
+      }
+      i = j;
+    } else {
+      if (ch === '$' || (shell === 'bash' && ch === '`')) word.dynamic = true;
+      word.text += ch;
+    }
+  }
+  if (word) out.push(word);
+  return out;
+}
+
+// The body of the heredoc whose operator ends at `at` in `command` (`word` its delimiter, `strip`
+// for <<-): the lines after the operator's line, up to the delimiter's line.
+function heredocBody(command, at, word, strip) {
+  const lines = [];
+  let i = command.indexOf('\n', at);
+  if (i < 0) return '';
+  i += 1;
+  while (i <= command.length) {
+    const eol = command.indexOf('\n', i);
+    const line = command.slice(i, eol < 0 ? command.length : eol).replace(/\r$/, '');
+    if ((strip ? line.replace(/^\t+/, '') : line) === word) break;
+    lines.push(line);
+    if (eol < 0) break;
+    i = eol + 1;
+  }
+  return lines.join('\n');
+}
+
+const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][\w-]*)\2/;
+
+// The text the heredoc operator on `line` (at offset `at` of `command`) feeds, or null when its
+// delimiter is not quoted (the shell expands the body) or there is none.
+function quotedHeredocOn(command, at, line) {
+  const op = HEREDOC.exec(line);
+  if (!op || !op[2] || line.includes('<<<')) return null;
+  return heredocBody(command, at + op.index + op[0].length, op[3], op[1] === '-');
+}
+
+// The heredoc `segment` (found at offset `from` of `command`) has itself, as quotedHeredocOn
+// reads it; null without one. segments() keeps a heredoc operator in the raw text of its own
+// segment, so the first operator after the segment's start is that one.
+function segmentHeredoc(command, from, segment) {
+  if (!segment.raw.includes('<<')) return null;
+  const at = command.indexOf(segment.raw.split(/<<|\r?\n/)[0], from);
+  if (at < 0) return null;
+  const eol = command.indexOf('\n', at);
+  return quotedHeredocOn(command, at, command.slice(at, eol < 0 ? command.length : eol));
+}
+
+// The text gh reads on stdin for `segment`, or null when the hook cannot read it.
+function stdinBody(segment, command, shell) {
+  if (shell === 'powershell') {
+    const at = command.indexOf(segment.raw.split(/\r?\n/)[0]);
+    const here = at < 0 ? null : /@'\r?\n([\s\S]*?)\r?\n'@\s*\|\s*$/.exec(command.slice(0, at));
+    return here ? here[1] : null;
+  }
+  return segmentHeredoc(command, 0, segment);
+}
+
+// The body a heredoc with a quoted delimiter writes to `file` in `command` (the same segment
+// redirects to the file and has the heredoc), or null.
+function writtenBody(command, file) {
+  const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const target = new RegExp(String.raw`>\s*['"]?${escaped}['"]?(?=[\s;&|]|$)`);
+  let at = 0;
+  for (const line of command.split('\n')) {
+    for (const segment of segments(line, 'bash')) {
+      if (target.test(segment.raw)) return segmentHeredoc(command, at, segment);
+    }
+    at += line.length + 1;
+  }
+  return null;
+}
+
+// The text of one value to publish ({ text, dynamic, file, json }), or a denial.
+function quoteBody(entry, ctx, segment, command, shell) {
+  const { text: value, file } = entry;
   if (file) {
     if (value === '-') {
-      const fed = shell === 'powershell' ? /@['"]\r?\n/.test(command) : /<<-?\s*['"]?[A-Za-z_]/.test(command);
-      return fed ? { text: command, label: 'stdin' } : { denial: `${QUOTE_UNREADABLE}（本文來自 stdin）` };
+      const body = stdinBody(segment, command, shell);
+      return body === null ? { denial: `${QUOTE_UNREADABLE}（本文來自 stdin，只讀得到 gh 這段命令上分隔字加引號的 heredoc）` } : { text: body, label: 'stdin' };
     }
     const target = resolveWord(value, ctx.cwd);
-    if (!target) return { denial: `${QUOTE_UNREADABLE}（${value}）` };
+    if (!target || entry.dynamic) return { denial: `${QUOTE_UNREADABLE}（${value}）` };
     try {
-      return { text: fs.readFileSync(target, 'utf8'), label: value };
+      return { text: new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(target)), label: value };
     } catch (error) {
       // Not written yet: a heredoc earlier in this command writes it (cat > f <<'EOF' ... ; gh
-      // ... --body-file f), so its text is all in the command.
-      const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const file = String.raw`>\s*['"]?${escaped}['"]?(?=[\s;&|]|$)`;
-      const heredoc = String.raw`<<-?\s*['"]?[A-Za-z_]`;
-      const written = new RegExp(`${file}[^\\n]*${heredoc}|${heredoc}[^\\n]*${file}`);
-      if (error.code === 'ENOENT' && shell === 'bash' && written.test(command)) return { text: command, label: value };
+      // ... --body-file f), with its body all in the command.
+      const body = error.code === 'ENOENT' && shell === 'bash' ? writtenBody(command, value) : null;
+      if (body !== null) return { text: body, label: value };
       return { denial: `${QUOTE_UNREADABLE}（${value}：${error.code || error.message}）` };
     }
   }
-  // A quoted heredoc delimiter: the shell expands nothing in the body, which is all in `value`.
-  if (/[$`]/.test(value) && !/^\$\(cat\s+<<-?\s*(['"])[A-Za-z_]\w*\1/.test(value)) return { denial: `${QUOTE_UNREADABLE}（本文含變數或命令替換）` };
-  return { text: value, label: 'body' };
+  if (!entry.dynamic) return { text: value, label: 'body' };
+  // $(cat <<'WORD' ... WORD): a quoted delimiter, so the shell expands nothing in the body.
+  const cat = /^\$\(cat\s+<<-?\s*(['"])([A-Za-z_][\w-]*)\1[^\n]*\n([\s\S]*)\n[\t ]*\2[\t ]*\n?\s*\)$/.exec(value);
+  return cat ? { text: cat[3], label: 'body' } : { denial: `${QUOTE_UNREADABLE}（本文含變數或命令替換）` };
 }
 
 const GH_BODY = { '--body': false, '-b': false, '--body-file': true, '-F': true };
 const GH_ACTIONS = { issue: /^(?:comment|create|new|edit)$/, pr: /^(?:comment|create|new|edit|review)$/ };
+const GH_TITLED = /^(?:create|new|edit)$/;
 const GH_API_VALUE = /^(?:-X|--method|-H|--header|-f|--raw-field|-F|--field|--input|-q|--jq|-t|--template|--hostname|-p|--preview|--cache)$/;
-const GH_API_ENDPOINT = /(?:^|\/)(?:issues|pulls|comments)(?:[/?]|$)|[$`]/;
+const GH_API_ENDPOINT = /(?:^|\/)(?:issues|pulls|comments|graphql)(?:[/?]|$)/;
 
-// The bodies of a gh command (`args` the words after gh) as [value, isFile, isJson] (--input's
-// file is a JSON request).
+// The values a gh command (`args` the words after gh, as quoteWords gives them) publishes:
+// { text, dynamic, file, json } (--input's file is a JSON request).
 function ghBodies(args) {
   const out = [];
-  const [group, action] = args;
+  const [group, action] = args.map((w) => w.text);
+  const entry = (word, text, file = false, json = false) => ({ text, dynamic: word.dynamic, file, json });
   if (GH_ACTIONS[group] && GH_ACTIONS[group].test(action || '')) {
+    const titled = GH_TITLED.test(action);
     for (let i = 2; i < args.length; i += 1) {
-      const arg = args[i];
-      const eq = /^(--body(?:-file)?)=([\s\S]*)$/.exec(arg);
-      if (eq) out.push([eq[2], eq[1] === '--body-file']);
-      else if (Object.hasOwn(GH_BODY, arg)) {
-        out.push([args[i + 1] ?? '', GH_BODY[arg]]);
+      const arg = args[i].text;
+      const eq = /^(--body(?:-file)?|--title)=([\s\S]*)$/.exec(arg);
+      if (eq && (eq[1] !== '--title' || titled)) out.push(entry(args[i], eq[2], eq[1] === '--body-file'));
+      else if (Object.hasOwn(GH_BODY, arg) || (titled && (arg === '--title' || arg === '-t'))) {
+        if (args[i + 1]) out.push(entry(args[i + 1], args[i + 1].text, GH_BODY[arg] === true));
         i += 1;
-      } else if (/^-[bF]./.test(arg)) out.push([arg.slice(2), arg[1] === 'F']);
+      } else if (/^-[bF]./.test(arg) || (titled && /^-t./.test(arg))) out.push(entry(args[i], arg.slice(2), arg[1] === 'F'));
     }
     return out;
   }
   if (group !== 'api') return out;
   let endpoint = null;
-  const fields = [];
   for (let i = 1; i < args.length; i += 1) {
-    const arg = args[i];
-    const long = /^(--[\w-]+)=([\s\S]*)$/.exec(arg);
-    const [flag, value, step] = long ? [long[1], long[2], 0] : GH_API_VALUE.test(arg) ? [arg, args[i + 1] ?? '', 1] : /^-[fF]./.test(arg) ? [arg.slice(0, 2), arg.slice(2), 0] : [arg, null, 0];
-    i += step;
+    const word = args[i];
+    const long = /^(--[\w-]+)=([\s\S]*)$/.exec(word.text);
+    let flag = word.text;
+    let value = null;
+    let source = word;
+    if (long) [flag, value] = [long[1], long[2]];
+    else if (GH_API_VALUE.test(word.text)) {
+      source = args[i + 1] || { text: '', dynamic: false };
+      value = source.text;
+      i += 1;
+    } else if (/^-[fF]./.test(word.text)) [flag, value] = [word.text.slice(0, 2), word.text.slice(2)];
     if (value === null) {
-      if (endpoint === null && !arg.startsWith('-')) endpoint = arg;
+      if (endpoint === null && !word.text.startsWith('-')) endpoint = word;
       continue;
     }
-    if (flag === '--input') fields.push([value, true, true]);
+    if (flag === '--input') out.push(entry(source, value, true, true));
     else if (/^(?:-f|--raw-field|-F|--field)$/.test(flag)) {
-      const field = /^([^=]*)=([\s\S]*)$/.exec(value);
-      if (!field || field[1] !== 'body') continue;
+      const field = /^[^=]*=([\s\S]*)$/.exec(value);
+      if (!field) continue;
       const typed = flag === '-F' || flag === '--field';
-      if (typed && field[2].startsWith('@')) fields.push([field[2].slice(1), true]);
-      else fields.push([field[2], false]);
+      if (typed && field[1].startsWith('@')) out.push(entry(source, field[1].slice(1), true));
+      else out.push(entry(source, field[1]));
     }
   }
-  return endpoint !== null && GH_API_ENDPOINT.test(endpoint) ? fields : out;
+  if (!endpoint || !(endpoint.dynamic || GH_API_ENDPOINT.test(endpoint.text))) return [];
+  return out;
 }
 
-// The text files a push_pr_assets.sh --dir would push, or a denial.
+// The text of a file as UTF-8, or an Error.
+function utf8(bytes) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new Error('不是 UTF-8');
+  }
+}
+
+// The files a push_pr_assets.sh --dir would push (hidden ones skipped, as the script does), but
+// the images.
 function assetFiles(dir) {
   const files = [];
   const walk = (current) => {
@@ -759,39 +947,87 @@ function assetFiles(dir) {
       if (entry.name.startsWith('.')) continue;
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && QUOTE_TEXT_FILE.test(entry.name)) files.push(full);
-      if (files.length > QUOTE_MAX_FILES) throw new Error(`超過 ${QUOTE_MAX_FILES} 個文字檔`);
+      else if (!QUOTE_IMAGE.test(entry.name)) files.push(full);
+      if (files.length > QUOTE_MAX_FILES) throw new Error(`超過 ${QUOTE_MAX_FILES} 個檔`);
     }
   };
   walk(dir);
   return files;
 }
 
-const runGit = (cwd, args) =>
-  spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: 10000, maxBuffer: 256 * 1024 * 1024 });
+const runGit = (cwd, args, encoding = 'utf8') =>
+  spawnSync('git', ['-C', cwd, ...args], { encoding, timeout: 10000, maxBuffer: 256 * 1024 * 1024 });
+const gitOut = (cwd, args) => {
+  const result = runGit(cwd, args);
+  return result.status === 0 ? result.stdout.trim() : '';
+};
+// git push options that take a value as the next word.
+const PUSH_VALUE = /^(?:-o|--push-option|--repo|--receive-pack|--exec)$/;
+const PUSH_ALL = /^(?:--all|--branches|--mirror)$/;
 
-// The reason a git push to pr-assets/* (`args` the words after push) carries a quote, or null.
+// The [src, dst branch] pairs of a git push (`args` the words after push) that go to pr-assets/*,
+// with the remote; a denial when a target cannot be read.
+function prAssetsTargets(args, cwd) {
+  const plain = [];
+  let all = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (PUSH_VALUE.test(arg.text)) i += 1;
+    else if (PUSH_ALL.test(arg.text)) all = true;
+    else if (!arg.text.startsWith('-')) plain.push(arg);
+  }
+  const [remoteWord, ...refspecs] = plain;
+  const remote = remoteWord ? remoteWord.text : 'origin';
+  const current = gitOut(cwd, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
+  const targets = [];
+  const add = (src, dst) => dst.startsWith('pr-assets/') && targets.push([src, dst]);
+  if (all) {
+    for (const branch of gitOut(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/pr-assets/']).split('\n')) {
+      if (branch) add(branch, branch);
+    }
+  }
+  if (!refspecs.length && !all) {
+    const upstreams = ['@{push}', '@{upstream}'].map((ref) => gitOut(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', ref]));
+    for (const dst of [current, ...upstreams.map((u) => u.replace(/^[^/]+\//, ''))]) {
+      if (dst && dst.startsWith('pr-assets/')) {
+        add('HEAD', dst);
+        break;
+      }
+    }
+  }
+  for (const word of refspecs) {
+    if (word.dynamic) {
+      if (/pr-assets/.test(word.text)) return { denial: `${QUOTE_UNREADABLE}（推送的 ${word.text} 含變數，看不出推什麼；改用 bash tools/ops/push_pr_assets.sh）` };
+      continue;
+    }
+    const colon = word.text.lastIndexOf(':');
+    const src = colon < 0 ? word.text : word.text.slice(0, colon);
+    let dst = (colon < 0 ? word.text : word.text.slice(colon + 1)).replace(/^refs\/heads\//, '');
+    if (dst === 'HEAD') dst = current;
+    if (src) add(src, dst); // an empty src deletes: no file is pushed
+  }
+  return { remote, targets };
+}
+
+// The reason a git push to pr-assets/* carries a quote, or null.
 function prAssetsPushDenial(args, cwd) {
-  const plain = args.filter((a) => !a.startsWith('-'));
-  const [remote, ...refspecs] = plain;
-  for (const refspec of refspecs.filter((r) => r.includes('pr-assets/'))) {
-    const colon = refspec.lastIndexOf(':');
-    const src = colon < 0 ? refspec : refspec.slice(0, colon);
-    const dst = (colon < 0 ? refspec : refspec.slice(colon + 1)).replace(/^refs\/heads\//, '');
-    if (!src) continue; // a deletion pushes no file
-    if (/[$`]/.test(src) || !cwd) return `${QUOTE_UNREADABLE}（推送的 ${refspec} 含變數，看不出推什麼；改用 bash tools/ops/push_pr_assets.sh）`;
+  if (!cwd) return `${QUOTE_UNREADABLE}（git 的工作目錄讀不出）`;
+  const { denial: unreadable, remote, targets } = prAssetsTargets(args, cwd);
+  if (unreadable) return unreadable;
+  for (const [src, dst] of targets) {
     const tracking = `refs/remotes/${remote}/${dst}`;
     const known = runGit(cwd, ['rev-parse', '--verify', '--quiet', tracking]).status === 0;
     const list = known
-      ? runGit(cwd, ['diff', '--name-only', '-z', '--diff-filter=AM', tracking, src, '--'])
+      ? runGit(cwd, ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=d', tracking, src, '--'])
       : runGit(cwd, ['ls-tree', '-r', '-z', '--name-only', src]);
     if (list.status !== 0) return `${QUOTE_UNREADABLE}（git 讀不出 ${src} 的檔案）`;
-    const files = list.stdout.split('\0').filter((f) => f && QUOTE_TEXT_FILE.test(f));
-    if (files.length > QUOTE_MAX_FILES) return `${QUOTE_UNREADABLE}（${src} 超過 ${QUOTE_MAX_FILES} 個文字檔）`;
+    const files = list.stdout.split('\0').filter((f) => f && !QUOTE_IMAGE.test(f));
+    if (files.length > QUOTE_MAX_FILES) return `${QUOTE_UNREADABLE}（${src} 超過 ${QUOTE_MAX_FILES} 個檔）`;
     for (const file of files) {
-      const shown = runGit(cwd, ['show', `${src}:${file}`]);
-      if (shown.status !== 0) return `${QUOTE_UNREADABLE}（git 讀不出 ${src}:${file}）`;
-      const reason = quoteTextDenial(file, shown.stdout);
+      const shown = runGit(cwd, ['show', `${src}:${file}`], 'buffer');
+      const text = shown.status === 0 ? utf8(shown.stdout) : new Error('git 讀不出');
+      if (text instanceof Error) return `${QUOTE_UNREADABLE}（${src}:${file}：${text.message}）`;
+      const reason = quoteTextDenial(file, text);
       if (reason) return reason;
     }
   }
@@ -802,21 +1038,22 @@ function prAssetsPushDenial(args, cwd) {
 function quoteSegmentDenial(segment, shell, ctx, command) {
   if (!QUOTE_EXIT.test(segment.raw)) return null;
   // Values as written (a body of "$(cat x)" must stay unreadable); command names as the shell runs them.
-  const texts = words(segment.raw, shell).map((w) => w.text);
+  const list = quoteWords(segment.raw, shell);
+  const texts = list.map((w) => w.text);
   const base = (t) => path.basename(normalizeTarget(unwrap(t))).toLowerCase();
   const gh = texts.findIndex((t) => /^gh(?:\.exe)?$/.test(base(t)));
   if (gh >= 0) {
-    for (const [value, file, json] of ghBodies(texts.slice(gh + 1))) {
-      const body = quoteBody(value, file, ctx, command, shell);
+    for (const entry of ghBodies(list.slice(gh + 1))) {
+      const body = quoteBody(entry, ctx, segment, command, shell);
       if (body.denial) return body.denial;
-      const reason = quoteTextDenial(body.label, json ? withJsonStrings(body.text) : body.text);
+      const reason = quoteTextDenial(body.label, entry.json ? withJsonStrings(body.text) : body.text);
       if (reason) return reason;
     }
   }
   const assets = texts.findIndex((t) => base(t) === 'push_pr_assets.sh');
   if (assets >= 0 && !texts.includes('--dry-run')) {
     const at = texts.indexOf('--dir', assets);
-    const dir = at >= 0 ? resolveWord(texts[at + 1] || '', ctx.cwd) : null;
+    const dir = at >= 0 && !list[at + 1]?.dynamic ? resolveWord(texts[at + 1] || '', ctx.cwd) : null;
     if (!dir) return `${QUOTE_UNREADABLE}（push_pr_assets.sh 的 --dir 讀不出）`;
     let files;
     try {
@@ -827,24 +1064,25 @@ function quoteSegmentDenial(segment, shell, ctx, command) {
     for (const file of files) {
       let text;
       try {
-        text = fs.readFileSync(file, 'utf8');
+        text = utf8(fs.readFileSync(file));
       } catch (error) {
-        return `${QUOTE_UNREADABLE}（${file}：${error.code || error.message}）`;
+        text = new Error(error.code || error.message);
       }
+      if (text instanceof Error) return `${QUOTE_UNREADABLE}（${file}：${text.message}）`;
       const reason = quoteTextDenial(path.relative(dir, file), text);
       if (reason) return reason;
     }
   }
   const git = texts.findIndex((t) => /^git(?:\.exe)?$/.test(base(t)));
-  if (git >= 0 && segment.raw.includes('pr-assets')) {
+  if (git >= 0) {
     // git's global options (-C <dir>, -c <k=v>) before the subcommand.
     let i = git + 1;
     let cwd = ctx.cwd;
     while (i < texts.length && texts[i].startsWith('-')) {
-      if (texts[i] === '-C') cwd = resolveWord(texts[i + 1] || '', cwd);
+      if (texts[i] === '-C') cwd = list[i + 1]?.dynamic ? null : resolveWord(texts[i + 1] || '', cwd);
       i += /^(?:-C|-c|--git-dir|--work-tree)$/.test(texts[i]) ? 2 : 1;
     }
-    if (texts[i] === 'push') return prAssetsPushDenial(texts.slice(i + 1), cwd);
+    if (texts[i] === 'push') return prAssetsPushDenial(list.slice(i + 1), cwd);
   }
   return null;
 }

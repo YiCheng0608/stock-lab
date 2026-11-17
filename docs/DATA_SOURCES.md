@@ -164,9 +164,9 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - **錯誤碼與處理**（#801）：401（key 無效）、403（方案不支援）、429（限流）當天停止讀取並通知；逾時（10 秒）、連線失敗與 5xx 這一分鐘這檔跳過、不重試；404（代號）與缺 `highPrice`／`lowPrice`／`lastTrade` 的回應只停那一檔；整輪連續 5 次沒有回應改成每 5 分鐘一輪（[SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）。
 - **延遲**：還沒實測，因為使用者還沒放好 key。#801 AC-6 會在放好 key 後的交易日盤中跑 `worker.cli intraday --dry-run` 30～60 分鐘，量每檔回應時間、`lastUpdated` 與實際時間的差、失敗率，和下面 MIS 的數字並列在這裡。
 - **不公開報價的守門員**（#834，使用者 2026-11-17 決定由 script 把關，[#1 6933304440](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6933304440)）：
-  - 貼盤中輸出（`--dry-run` 的輸出、`intraday-*.log`、`intraday-*.jsonl`）到 Issue、PR 或 `pr-assets` 前，先跑 `python tools/ops/quote_guard.py mask <檔> > <遮好的檔>`，貼遮好的檔。成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`，富果回應欄位的值換成 `<值>`；`--- poll`、`--- event` 列與規則價位（進場價、停損、目標）照原樣留著。
-  - 守門員是 [`tools/ops/quote_guard.py`](../tools/ops/quote_guard.py)，樣式只寫在 [`quote_patterns.json`](../tools/ops/quote_patterns.json) 一份。它擋 `comment.sh`、`gh issue`／`gh pr` 的留言、開單、改本文與 review、`gh api` 的留言與本文、推 `pr-assets`，以及 CI 的 PR 本文（規則 g）。命中時只印行號與哪一種樣式，不印報價。範圍與擋不到的情況見 [GUARDRAILS](GUARDRAILS.md) 的「沒遮的富果報價不上 GitHub」那一列。
-  - 樣式抓的是 `TEMPLATES` 帶富果值的片段（`<時間> 成交 <價>`、`開盤`、`委買`、`委賣` 後面接數字）、上面「讀的欄位」與 `openPrice`、`closePrice`、`lastPrice`、`bids`、`asks` 帶數值，以及 `--- message` 列。日線的開盤價寫成「開盤價 X」、無成交與成交量寫成「無成交 N」「成交 N 股」不會被擋。
+  - 貼盤中輸出（`--dry-run` 的輸出、`intraday-*.log`、`intraday-*.jsonl`）到 Issue、PR 或 `pr-assets` 前，先跑 `python tools/ops/quote_guard.py mask <檔> > <遮好的檔>`，貼遮好的檔。成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`，富果回應欄位與 `Quote(...)` 的值換成 `<值>`，每輪 `levels` 紀錄的 `high`、`low`、`last` 換成 `<價>`；`--- poll`、`--- event` 列與規則價位（進場價、停損、目標）照原樣留著。
+  - 守門員是 [`tools/ops/quote_guard.py`](../tools/ops/quote_guard.py)，樣式只寫在 [`quote_patterns.json`](../tools/ops/quote_patterns.json) 一份。它擋 `comment.sh`、`gh issue`／`gh pr` 的留言、開單、改本文、標題與 review、`gh api` 到 issues、pulls、comments、graphql 的欄位、推 `pr-assets`，以及 CI 的 PR 本文（規則 g）。命中時只印行號與哪一種樣式，不印報價。範圍與擋不到的情況見 [GUARDRAILS](GUARDRAILS.md) 的「沒遮的富果報價不上 GitHub」那一列。
+  - 樣式抓的是 `TEMPLATES` 帶富果值的片段（`<時間> 成交 <價>`、`開盤`、`委買`、`委賣` 後面接數字）、上面「讀的欄位」與 `openPrice`、`closePrice`、`lastPrice`、`bids`、`asks` 帶數值（值是 `[…]`／`{…}` 時裡面有任何數字就算），`fugle.Quote(...)` 印出來的 `key=數字`，`--- message` 列，以及每輪 `levels` 紀錄（[#808](https://github.com/YiCheng0608/stock-lab/issues/808) 的 jsonl）各檔帶數字的 `high`、`low`、`last`；各檔自己的規則價位清單放行。日線的開盤價寫成「開盤價 X」、無成交與成交量寫成「無成交 N」「成交 N 股」不會被擋。
   - 源頭遮罩（intraday 本身預設遮掉輸出）是 [#833](https://github.com/YiCheng0608/stock-lab/issues/833)，兩層各自獨立。
 
 ### 沒採用的來源
