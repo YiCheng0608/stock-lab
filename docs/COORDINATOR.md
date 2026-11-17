@@ -24,7 +24,7 @@
 
 `take_over.sh` 中途停下要續跑，或要知道它某一步做什麼（舊 handle 的核對、各步驟的順序與失敗條件、`--from`、`--closed-only`）時讀[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)。
 
-**resume 統籌**（#710）：重開機、terminal 被關要接回原統籌 session 時讀[參考「resume 統籌」](ops/COORDINATOR_REFERENCE.md#resume-統籌)：要帶回開啟時的旗標。
+**resume 統籌**（#710）：重開機、terminal 被關要接回原統籌 session 時讀[參考「resume 統籌」](ops/COORDINATOR_REFERENCE.md#resume-統籌)：要帶回開啟時的旗標，`claude --resume <session id> --model claude-opus-5-5 --effort xhigh --autocompact 400k`。
 
 **自動換手機制**（統籌 session 自己執行，不需要人在場）：
 

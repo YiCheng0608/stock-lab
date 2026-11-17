@@ -76,7 +76,7 @@
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Environment: STOCK_CONTEXT_LIMIT, the context in tokens above which the handoff
-#   condition holds, default 450000 (docs/COORDINATOR.md 自動換手機制);
+#   condition holds, default 450000 (docs/ops/COORDINATOR_REFERENCE.md 換手偵測);
 #   STOCK_GOVERNANCE_BODY_LIMIT, #1's body in UTF-8 bytes above which the header says so,
 #   default 14336 (14 KB).
 # Test hook: PATROL_NOW (epoch seconds).
