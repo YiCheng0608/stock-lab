@@ -9,9 +9,11 @@
 #
 # One gh call: POST repos/<repo>/issues/<number>/comments (a PR is an issue there), the body
 # as a JSON request on stdin. Prints the comment URL. Exit 64 on bad arguments or a body
-# that is empty without the mark (gh is not called), 1 when gh fails or answers without
-# the URL (the comment may then be posted: look on GitHub before posting it again), 2
-# without a Python.
+# that is empty without the mark (gh is not called), 65 when the body holds an unmasked Fugle
+# quote (tools/ops/quote_guard.py check, #834; gh is not called: mask it first with
+# quote_guard.py mask), 1 when gh fails or answers without the URL (the comment may then be
+# posted: look on GitHub before posting it again), 2 without a Python or when the check
+# cannot run.
 #
 # Usage: comment.sh NUMBER --body-file FILE [--python EXE]
 #   NUMBER            the Issue or PR number
@@ -47,6 +49,12 @@ case "$number" in '' | *[!0-9]* | 0*) die "要給 Issue 或 PR 編號（正整�
 [ -f "$body_file" ] || die "找不到本文檔：$body_file" 64
 find_python
 cj utf8 "$body_file" || die "本文檔是空的或不是 UTF-8：$body_file" 64
+"$python" -X utf8 "$script_dir/quote_guard.py" check "$body_file"
+case $? in
+  0) ;;
+  1) die "本文有沒遮的富果報價（上面是行號與樣式），沒有送出；先跑 quote_guard.py mask" 65 ;;
+  *) die "quote_guard.py 檢查不了本文，沒有送出：$body_file" 2 ;;
+esac
 
 payload="$(cj comment-body "$body_file")" || die "本文檔讀不了或除了標記之外是空的：$body_file" 64
 # The pipeline's status is gh's: a gh that answered without reading all of stdin succeeded.
