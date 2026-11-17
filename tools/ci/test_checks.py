@@ -413,6 +413,25 @@ class PrGateTests(unittest.TestCase):
             self.assertIn("no 「會過期的記憶」 line", errors[0])
             self.assertIn("'- 會過期的記憶：無'", errors[0])
 
+    def test_g_an_unmasked_fugle_quote_in_the_body_fails(self):
+        """#834: the body as GitHub keeps it, HTML comments included; the error names
+        the line and the pattern, never the quote. The numbers are the fixture's."""
+        raw = "2618 觸及規則進場價 47.75（10:03 前後；10:02:41 成交 47.80）\n"
+        masked = raw.replace("10:02:41 成交 47.80", "<時間> 成交 <價>")
+        self.assertEqual(self.check(GOOD_BODY + masked, API), [])
+        for body in (GOOD_BODY + raw, GOOD_BODY + f"<!-- {raw} -->", raw + GOOD_BODY):
+            errors = self.check(body, ["docs/ROADMAP.md"])
+            self.assertEqual(rules(errors), ["g"], body)
+            self.assertIn("template:trade", errors[0])
+            self.assertNotIn("47.80", errors[0])
+        self.assertIn("line 1 ", self.check(raw + GOOD_BODY)[0])
+        quotes = '{"bids": [{"price": 47.75}]}\n漲停鎖住（委買 200.00'
+        errors = self.check(GOOD_BODY + quotes)
+        self.assertEqual(
+            sorted(error.split("(")[1].split(")")[0] for error in errors),
+            ["field:bids", "template:bid"],
+        )
+
     def test_f_applies_only_when_a_does(self):
         body = GOOD_BODY.replace("- 會過期的記憶：無", "")
         self.assertEqual(self.check(body, ["docs/ROADMAP.md"]), [])

@@ -19,6 +19,17 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def quote_hits(text: str) -> list[tuple[int, str]]:
+    """Rule g: tools/ops/quote_guard.py hits, the one copy of the Fugle quote patterns
+    (#834). Imported here, not at the top: the other modes run where tools/ops is not."""
+    sys.path.insert(0, str(ROOT / "tools" / "ops"))
+    try:
+        import quote_guard
+    finally:
+        sys.path.remove(str(ROOT / "tools" / "ops"))
+    return quote_guard.hits(text)
+
+
 def git(*args: str, cwd: Path = ROOT) -> bytes:
     return subprocess.check_output(["git", *args], cwd=cwd)
 
@@ -503,9 +514,14 @@ def stale_memories(body: str) -> str | None:
 def pr_errors(
     body: str, paths: list[str], labels: list[str], commits: dict[str, str]
 ) -> list[str]:
-    """Rules a-f of the PR gate; commits maps each non-merge commit to its message."""
+    """Rules a-g of the PR gate; commits maps each non-merge commit to its message."""
+    # g: no unmasked Fugle quote (#834), in the body as GitHub keeps it, comments included.
+    errors = [
+        f"g: line {number} of the body has an unmasked Fugle quote ({kind}); "
+        "mask it with tools/ops/quote_guard.py mask (docs/DATA_SOURCES.md 盤中報價)"
+        for number, kind in quote_hits(body)
+    ]
     body = re.sub(r"<!--.*?-->", "", body, flags=re.S)  # template guidance
-    errors = []
     product = needs_issue(paths)
     if product and not CLOSES.search(body):
         errors.append(

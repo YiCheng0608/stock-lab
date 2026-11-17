@@ -69,6 +69,9 @@ SCRIPTS = (
     "slots.py",
     # #804: the overview page of patrol.sh --overview
     "overview.py",
+    # #834: comment.sh checks the body for Fugle quotes first
+    "quote_guard.py",
+    "quote_patterns.json",
 )
 # The sandbox memory directory every run gets (STOCK_MEMORY_DIR, #705): one memory, indexed,
 # no backticked path, so memory_check.py passes without asking git.

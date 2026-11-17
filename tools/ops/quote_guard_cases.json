@@ -1,0 +1,36 @@
+{
+  "note": "Cases of quote_patterns.json (#834) that both implementations must agree on: backend/tests/test_quote_guard.py runs them through quote_guard.py hits(), tools/ops/agent_guard.test.cjs through agent_guard.cjs quoteHits(). hit: the text and every kind it hits; pass: texts that hit nothing. The numbers are the fixture's (backend/tests/fixtures/fugle_intraday) or made up.",
+  "hit": [
+    {"text": "10:02:41 成交 47.80", "kinds": ["template:trade"]},
+    {"text": "（10:03 前後；10:02:41 成交 <價>）", "kinds": ["template:trade"]},
+    {"text": "最近成交 1,234.5", "kinds": ["template:trade"]},
+    {"text": "但開盤 200.00 已在目標一 198.63 以上", "kinds": ["template:open"]},
+    {"text": "漲停鎖住（委買 200.00，委賣取不到）", "kinds": ["template:bid"]},
+    {"text": "跌停鎖住（委買取不到，委賣 467.50）", "kinds": ["template:ask"]},
+    {"text": "{\"highPrice\": 47.85, \"lowPrice\": 47.6}", "kinds": ["field:highPrice", "field:lowPrice"]},
+    {"text": "{\"openPrice\": 47.8}", "kinds": ["field:openPrice"]},
+    {"text": "{\"closePrice\": 47.8}", "kinds": ["field:closePrice"]},
+    {"text": "{\"lastPrice\": 47.8}", "kinds": ["field:lastPrice"]},
+    {"text": "{\"lastTrade\": {\"bid\": 47.75, \"price\": 47.8}}", "kinds": ["field:lastTrade"]},
+    {"text": "\"bids\": [\n  {\n    \"price\": 47.75,\n    \"size\": 3\n  }\n]", "kinds": ["field:bids"]},
+    {"text": "{'asks': [{'price': 47.8}]}", "kinds": ["field:asks"]},
+    {"text": "lastUpdated=1794790855000000", "kinds": ["field:lastUpdated"]},
+    {"text": "Quote(symbol='2618', last_price=47.8)", "kinds": ["field:last_price"]},
+    {"text": "{\"key\": \"signal:2618\", \"event\": \"entry\", \"text\": \"2618 \\u89f8\\u53ca 47.75\\uff0810:03 \\u524d\\u5f8c\\uff1b10:02:41 \\u6210\\u4ea4 47.80\\uff09\"}", "kinds": ["message"]},
+    {"text": "--- message {\"key\": \"signal:2618\", \"event\": \"entry\", \"text\": \"\\u6210\\u4ea4 47.80\"}", "kinds": ["message"]},
+    {"text": "--- message {\"text\": \"x\"", "kinds": ["message"]}
+  ],
+  "pass": [
+    "2618 長榮航 觸及規則進場價 47.75（10:03 前後；<時間> 成交 <價>）",
+    "漲停鎖住（委買 <價>，委賣取不到）",
+    "但開盤 <價> 已在目標一 198.63 以上",
+    "{\"lastTrade\": {\"price\": \"<值>\"}, \"bids\": [<值>]}",
+    "3374 精材 跌破停損 480.18，進場條件不再成立（10:03 前後；成交價取不到）",
+    "2618 長榮航 觸及目標一 50.05（10:20 前後；<時間> 成交 <價>）",
+    "3162 精確 觸及規則進場區 72.89～76.94（10:03 前後；成交價取不到）",
+    "無成交 14 列；006202（成交 0 股）；成交 1,000 張",
+    "以開盤價 30.97 買進；`lastTrade.price`／`lastTrade.time`、`lastUpdated` 記延遲",
+    "--- poll at=10:03:00 symbols=4 ok=4 codes=200:4 ms_median=120 lag_max=5",
+    "--- message {\"key\": \"signal:2618\", \"event\": \"entry\", \"text\": \"\\u6210\\u4ea4 <\\u50f9>\"}"
+  ]
+}

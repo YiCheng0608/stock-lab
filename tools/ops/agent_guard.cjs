@@ -605,6 +605,242 @@ function envSegmentDenial(segment, shell, ctx) {
   return null;
 }
 
+// --- Fugle quotes (#834; tools/ops/quote_guard.py, docs/DATA_SOURCES.md 盤中報價) -----------
+// Text on its way to GitHub must hold no unmasked Fugle quote. Checked, and only these (any other
+// command skips this section on one regex): gh issue comment|create|new|edit and gh pr
+// comment|create|new|edit|review with --body/-b or --body-file/-F; gh api to issues, pulls or
+// comments (or an endpoint held in a variable) with -f/--raw-field body=, -F/--field body= or
+// body=@<file>, and --input <file> (its JSON's strings too); bash tools/ops/push_pr_assets.sh
+// --dir <dir> (not --dry-run): its .md .txt .json .jsonl .log files; git push of a refspec to
+// pr-assets/*: those files of the pushed commit that the remote-tracking branch lacks (all of
+// them without one). A body the hook cannot read blocks: a file it cannot open, a value with a
+// variable or command substitution (except $(cat <<'WORD' ... WORD), whose text is all there),
+// stdin without a heredoc or here-string on the command. The patterns are quote_patterns.json,
+// the one copy quote_guard.py reads too; a hit names the line and pattern, never the quote.
+const QUOTE_EXIT = /(?:^|[\s(&;|'"`/\\])gh(?:\.exe)?['"]?\s|pr-assets|push_pr_assets/i;
+const QUOTE_REASON =
+  '本文有沒遮的富果報價，不得送上 GitHub；先跑 python tools/ops/quote_guard.py mask <檔> 再貼（docs/DATA_SOURCES.md 盤中報價）';
+const QUOTE_UNREADABLE = '要送上 GitHub 的本文 hook 讀不到，無法檢查有沒有富果報價；改用 --body-file <檔>';
+const QUOTE_TEXT_FILE = /\.(?:md|txt|json|jsonl|log)$/i;
+const QUOTE_MAX_FILES = 2000;
+let quoteCompiled = null;
+
+function quotePatterns() {
+  if (!quoteCompiled) {
+    const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'quote_patterns.json'), 'utf8'));
+    const names = data.fields.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    quoteCompiled = {
+      templates: Object.entries(data.templates).map(([key, rx]) => [key, new RegExp(rx)]),
+      fields: new RegExp(`(?<![A-Za-z0-9_])(${names})${data.field_value}`, 'g'),
+      message: new RegExp(data.message),
+    };
+  }
+  return quoteCompiled;
+}
+
+// Every hit of `text` as `<line>: <kind>`, the rules of quote_guard.py hits().
+function quoteHits(text) {
+  const { templates, fields, message } = quotePatterns();
+  const templateHits = (line) => templates.filter(([, re]) => re.test(line)).map(([key]) => `template:${key}`);
+  const found = new Set();
+  text.split('\n').forEach((line, i) => {
+    for (const kind of templateHits(line)) found.add(`${i + 1}: ${kind}`);
+    const record = message.exec(line);
+    let value = null;
+    try {
+      value = record && JSON.parse(record[1]);
+    } catch {}
+    // A --- message line that is no record cannot be vouched for.
+    const isRecord = value && typeof value === 'object' && typeof value.text === 'string';
+    if (isRecord ? templateHits(value.text).length : line.startsWith('--- message ')) found.add(`${i + 1}: message`);
+  });
+  for (const match of text.matchAll(fields)) found.add(`${text.slice(0, match.index).split('\n').length}: field:${match[1]}`);
+  return [...found];
+}
+
+// The reason `text` (from `label`) may not go out, or null.
+function quoteTextDenial(label, text) {
+  const hits = quoteHits(text);
+  return hits.length ? `${QUOTE_REASON}（${label} ${hits.slice(0, 5).join('、')}）` : null;
+}
+
+// A JSON file's strings (a \u escape decoded) after its raw text, so both are checked.
+function withJsonStrings(text) {
+  const strings = [];
+  const walk = (v) => {
+    if (typeof v === 'string') strings.push(v);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  try {
+    walk(JSON.parse(text));
+  } catch {}
+  return [text, ...strings].join('\n');
+}
+
+// The text of a body given as `value` (a literal; `file` true for a file path, `-` stdin), or
+// a denial when the hook cannot read it.
+function quoteBody(value, file, ctx, command, shell) {
+  if (file) {
+    if (value === '-') {
+      const fed = shell === 'powershell' ? /@['"]\r?\n/.test(command) : /<<-?\s*['"]?[A-Za-z_]/.test(command);
+      return fed ? { text: command, label: 'stdin' } : { denial: `${QUOTE_UNREADABLE}（本文來自 stdin）` };
+    }
+    const target = resolveWord(value, ctx.cwd);
+    if (!target) return { denial: `${QUOTE_UNREADABLE}（${value}）` };
+    try {
+      return { text: fs.readFileSync(target, 'utf8'), label: value };
+    } catch (error) {
+      return { denial: `${QUOTE_UNREADABLE}（${value}：${error.code || error.message}）` };
+    }
+  }
+  // A quoted heredoc delimiter: the shell expands nothing in the body, which is all in `value`.
+  if (/[$`]/.test(value) && !/^\$\(cat\s+<<-?\s*(['"])[A-Za-z_]\w*\1/.test(value)) return { denial: `${QUOTE_UNREADABLE}（本文含變數或命令替換）` };
+  return { text: value, label: 'body' };
+}
+
+const GH_BODY = { '--body': false, '-b': false, '--body-file': true, '-F': true };
+const GH_ACTIONS = { issue: /^(?:comment|create|new|edit)$/, pr: /^(?:comment|create|new|edit|review)$/ };
+const GH_API_VALUE = /^(?:-X|--method|-H|--header|-f|--raw-field|-F|--field|--input|-q|--jq|-t|--template|--hostname|-p|--preview|--cache)$/;
+const GH_API_ENDPOINT = /(?:^|\/)(?:issues|pulls|comments)(?:[/?]|$)|[$`]/;
+
+// The bodies of a gh command (`args` the words after gh) as [value, isFile] pairs.
+function ghBodies(args) {
+  const out = [];
+  const [group, action] = args;
+  if (GH_ACTIONS[group] && GH_ACTIONS[group].test(action || '')) {
+    for (let i = 2; i < args.length; i += 1) {
+      const arg = args[i];
+      const eq = /^(--body(?:-file)?)=([\s\S]*)$/.exec(arg);
+      if (eq) out.push([eq[2], eq[1] === '--body-file']);
+      else if (Object.hasOwn(GH_BODY, arg)) {
+        out.push([args[i + 1] ?? '', GH_BODY[arg]]);
+        i += 1;
+      } else if (/^-[bF]./.test(arg)) out.push([arg.slice(2), arg[1] === 'F']);
+    }
+    return out;
+  }
+  if (group !== 'api') return out;
+  let endpoint = null;
+  const fields = [];
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+    const long = /^(--[\w-]+)=([\s\S]*)$/.exec(arg);
+    const [flag, value, step] = long ? [long[1], long[2], 0] : GH_API_VALUE.test(arg) ? [arg, args[i + 1] ?? '', 1] : /^-[fF]./.test(arg) ? [arg.slice(0, 2), arg.slice(2), 0] : [arg, null, 0];
+    i += step;
+    if (value === null) {
+      if (endpoint === null && !arg.startsWith('-')) endpoint = arg;
+      continue;
+    }
+    if (flag === '--input') fields.push([value, true, true]);
+    else if (/^(?:-f|--raw-field|-F|--field)$/.test(flag)) {
+      const field = /^([^=]*)=([\s\S]*)$/.exec(value);
+      if (!field || field[1] !== 'body') continue;
+      const typed = flag === '-F' || flag === '--field';
+      if (typed && field[2].startsWith('@')) fields.push([field[2].slice(1), true]);
+      else fields.push([field[2], false]);
+    }
+  }
+  return endpoint !== null && GH_API_ENDPOINT.test(endpoint) ? fields : out;
+}
+
+// The text files a push_pr_assets.sh --dir would push, or a denial.
+function assetFiles(dir) {
+  const files = [];
+  const walk = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && QUOTE_TEXT_FILE.test(entry.name)) files.push(full);
+      if (files.length > QUOTE_MAX_FILES) throw new Error(`超過 ${QUOTE_MAX_FILES} 個文字檔`);
+    }
+  };
+  walk(dir);
+  return files;
+}
+
+const runGit = (cwd, args) =>
+  spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: 10000, maxBuffer: 256 * 1024 * 1024 });
+
+// The reason a git push to pr-assets/* (`args` the words after push) carries a quote, or null.
+function prAssetsPushDenial(args, cwd) {
+  const plain = args.filter((a) => !a.startsWith('-'));
+  const [remote, ...refspecs] = plain;
+  for (const refspec of refspecs.filter((r) => r.includes('pr-assets/'))) {
+    const colon = refspec.lastIndexOf(':');
+    const src = colon < 0 ? refspec : refspec.slice(0, colon);
+    const dst = (colon < 0 ? refspec : refspec.slice(colon + 1)).replace(/^refs\/heads\//, '');
+    if (!src) continue; // a deletion pushes no file
+    if (/[$`]/.test(src) || !cwd) return `${QUOTE_UNREADABLE}（推送的 ${refspec} 含變數，看不出推什麼；改用 bash tools/ops/push_pr_assets.sh）`;
+    const tracking = `refs/remotes/${remote}/${dst}`;
+    const known = runGit(cwd, ['rev-parse', '--verify', '--quiet', tracking]).status === 0;
+    const list = known
+      ? runGit(cwd, ['diff', '--name-only', '-z', '--diff-filter=AM', tracking, src, '--'])
+      : runGit(cwd, ['ls-tree', '-r', '-z', '--name-only', src]);
+    if (list.status !== 0) return `${QUOTE_UNREADABLE}（git 讀不出 ${src} 的檔案）`;
+    const files = list.stdout.split('\0').filter((f) => f && QUOTE_TEXT_FILE.test(f));
+    if (files.length > QUOTE_MAX_FILES) return `${QUOTE_UNREADABLE}（${src} 超過 ${QUOTE_MAX_FILES} 個文字檔）`;
+    for (const file of files) {
+      const shown = runGit(cwd, ['show', `${src}:${file}`]);
+      if (shown.status !== 0) return `${QUOTE_UNREADABLE}（git 讀不出 ${src}:${file}）`;
+      const reason = quoteTextDenial(file, shown.stdout);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
+// The reason one segment would publish a Fugle quote, or null.
+function quoteSegmentDenial(segment, shell, ctx, command) {
+  if (!QUOTE_EXIT.test(segment.raw)) return null;
+  // Values as written (a body of "$(cat x)" must stay unreadable); command names as the shell runs them.
+  const texts = words(segment.raw, shell).map((w) => w.text);
+  const base = (t) => path.basename(normalizeTarget(unwrap(t))).toLowerCase();
+  const gh = texts.findIndex((t) => /^gh(?:\.exe)?$/.test(base(t)));
+  if (gh >= 0) {
+    for (const [value, file, json] of ghBodies(texts.slice(gh + 1))) {
+      const body = quoteBody(value, file, ctx, command, shell);
+      if (body.denial) return body.denial;
+      const reason = quoteTextDenial(body.label, json ? withJsonStrings(body.text) : body.text);
+      if (reason) return reason;
+    }
+  }
+  const assets = texts.findIndex((t) => base(t) === 'push_pr_assets.sh');
+  if (assets >= 0 && !texts.includes('--dry-run')) {
+    const at = texts.indexOf('--dir', assets);
+    const dir = at >= 0 ? resolveWord(texts[at + 1] || '', ctx.cwd) : null;
+    if (!dir) return `${QUOTE_UNREADABLE}（push_pr_assets.sh 的 --dir 讀不出）`;
+    let files;
+    try {
+      files = assetFiles(dir);
+    } catch (error) {
+      return `${QUOTE_UNREADABLE}（${dir}：${error.code || error.message}）`;
+    }
+    for (const file of files) {
+      let text;
+      try {
+        text = fs.readFileSync(file, 'utf8');
+      } catch (error) {
+        return `${QUOTE_UNREADABLE}（${file}：${error.code || error.message}）`;
+      }
+      const reason = quoteTextDenial(path.relative(dir, file), text);
+      if (reason) return reason;
+    }
+  }
+  const git = texts.findIndex((t) => /^git(?:\.exe)?$/.test(base(t)));
+  if (git >= 0 && segment.raw.includes('pr-assets')) {
+    // git's global options (-C <dir>, -c <k=v>) before the subcommand.
+    let i = git + 1;
+    let cwd = ctx.cwd;
+    while (i < texts.length && texts[i].startsWith('-')) {
+      if (texts[i] === '-C') cwd = resolveWord(texts[i + 1] || '', cwd);
+      i += /^(?:-C|-c|--git-dir|--work-tree)$/.test(texts[i]) ? 2 : 1;
+    }
+    if (texts[i] === 'push') return prAssetsPushDenial(texts.slice(i + 1), cwd);
+  }
+  return null;
+}
+
 // Past these sizes the checks could outrun the hook timeout, and Claude Code runs a call whose
 // hook timed out (checked by hand, #353): block instead. Heredoc bodies count only toward the
 // first; they are dropped before the per-word checks.
@@ -638,6 +874,8 @@ function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd
     ctx.piped = index < lastReader;
     const reason = envSegmentDenial(segment, shell, ctx);
     if (reason) return `擋下「${segment.raw}」：${reason}。真的需要時請使用者執行`;
+    const quote = quoteSegmentDenial(segment, shell, ctx, command);
+    if (quote) return `擋下：${quote}`;
     const [head, ...rest] = words(segment.raw, shell).map((w) => w.text);
     if (head && CHDIR.test(head)) {
       const target = rest.find((w) => !/^-\w/.test(w)) || '~';
@@ -877,4 +1115,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { ALLOW, commandDenial, denial, envFilesUnder, envMention, normalizeTarget, segments };
+module.exports = { ALLOW, commandDenial, denial, envFilesUnder, envMention, normalizeTarget, quoteHits, segments };
