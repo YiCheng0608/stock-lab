@@ -9,7 +9,7 @@
 # "agent_id=<id> agent_type=<type>"; the main conversation's has "agent_id=none". The
 # count still has both, so the coordinator's patrol counts its main conversation's
 # compactions in its transcript and reads this count only when that cannot be read
-# (docs/COORDINATOR.md, "統籌 session"). Every session writes them, engineers too; the
+# (docs/ops/COORDINATOR_REFERENCE.md, "換手偵測"). Every session writes them, engineers too; the
 # coordinator's are the ones whose session id its heartbeat names.
 # Test hook: COMPACT_HOOK_NOW (epoch seconds).
 set -u

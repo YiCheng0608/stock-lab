@@ -83,7 +83,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
 | `review：` | 統籌、獨立 review | 有必修時工程師修 | head、結論（可合併／有必修）、必修清單 |
 | `統籌承諾：` | 統籌 | 統籌日後兌現 | 還沒做的事、時點、保留的資源 |
 
-- 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。背景工作被系統停掉、或任何要等統籌才能繼續的情況也一樣，以 `提問：` 留在 Issue。工程師 session 的回合結束時，[turn hook](COORDINATOR.md#無人值守運作)會檢查這一回合有沒有在 Issue／PR 留言，沒有就擋一次並提醒（#595）。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
+- 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。背景工作被系統停掉、或任何要等統籌才能繼續的情況也一樣，以 `提問：` 留在 Issue。工程師 session 的回合結束時，[turn hook](ops/COORDINATOR_REFERENCE.md#工程師-session-的狀態)會檢查這一回合有沒有在 Issue／PR 留言，沒有就擋一次並提醒（#595）。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
 - 統籌的留言經 [`comment.sh`](../tools/ops/comment.sh) 發，本文最後一行會帶不顯示的統籌標記，事件 monitor 不為它喚醒統籌（[統籌留言](COORDINATOR.md#無人值守運作)）。只有統籌用它：工程師與獨立 review 用了，留言就不會喚醒統籌。
 - 留言、PR 本文與 `pr-assets` 要放盤中通知的輸出（`intraday --dry-run`、`intraday-*.log`、`intraday-*.jsonl`）時，先跑 `python tools/ops/quote_guard.py mask <檔>`，貼遮好的版本：富果條款不准公開報價（[DATA_SOURCES 盤中報價](DATA_SOURCES.md#盤中報價)）。沒遮的會被擋下（#834）：`comment.sh` 以 65 結束，hook 擋 `gh issue`／`gh pr` 的留言、開單、改本文與標題、review，`gh api` 到 issues、pulls、comments、graphql 的欄位，以及推 `pr-assets`（`push_pr_assets.sh` 與任何目標是 `pr-assets/*` 的 `git push`，圖片以外的檔都查），CI `pr` 規則 g 擋 PR 本文。本文要用 `--body-file <檔>`、`$(cat <<'EOF' … EOF)`，或 gh 那段命令自己帶、分隔字加引號的 heredoc（`gh … -F - <<'EOF'`）。hook 看不到內容的一律擋：本文放在變數裡、從管線讀、heredoc 分隔字沒加引號（shell 會展開裡面的 `$(…)`）。範圍與擋不到的情況見 [GUARDRAILS](GUARDRAILS.md) 的「沒遮的富果報價不上 GitHub」那一列。
 - 一則留言只放一種類型；一次問好幾件事就分成好幾則 `提問：`，各自等 `決定：`。

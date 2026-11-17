@@ -4126,8 +4126,8 @@ def _row(rows: list[dict], mid: str) -> dict:
 def test_session_cost_takeover_counts_only_runs_of_the_scripts(
     h: Harness, case: str, points: tuple[int, int, int]
 ) -> None:
-    """#803 AC-1 and the definitions in docs/COORDINATOR.md: which tool results are the
-    2nd and 3rd points."""
+    """#803 AC-1 and the definitions in docs/ops/COORDINATOR_REFERENCE.md 換手偵測: which
+    tool results are the 2nd and 3rd points."""
     rows = _takeover_rows()
     m4, m6, m7 = (_row(rows, m) for m in ("m4", "m6", "m7"))
     at = rows.index(m4) + 1
