@@ -670,7 +670,10 @@ def dispatch(h: Harness) -> Harness:
             }
         ),
     )
-    h.answer("orca_terminal_read", _ok({"terminal": {"tail": ["❯ 你好"]}}))
+    h.answer(
+        "orca_terminal_read",
+        _ok({"terminal": {"tail": ["❯ 你好"], "source": "screen"}}),
+    )
     task = h.root / "task.md"
     # Over the old 30,000-byte limit, with quotes, $, backticks and CRLF line ends: none of
     # it reaches the terminal, only the path does (#315).
@@ -689,6 +692,13 @@ def dispatch(h: Harness) -> Harness:
 def _dispatch(h: Harness, task: str | None = None) -> subprocess.CompletedProcess:
     return h.run(
         "dispatch.sh", "282", "dryrun", "--task-file", task or h.task.as_posix()
+    )
+
+
+def _settings(folder: str) -> str:
+    """claude's --settings for the task directory (#835), as dispatch.sh writes it."""
+    return json.dumps(
+        {"permissions": {"additionalDirectories": [folder]}}, separators=(",", ":")
     )
 
 
@@ -723,8 +733,15 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
         "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282"
         " CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude"
         " --model claude-opus-5-5 --effort medium"
-        f' --add-dir "{dispatch.root.as_posix()}" --json'
+        f" --settings '{_settings(dispatch.root.as_posix())}' --json"
     )
+    assert "--add-dir" not in terminal
+    # The same string in the JSON, for a resume to copy (review 6934849677 suggestion 3).
+    assert line["settings"] == _settings(dispatch.root.as_posix())
+    # The screen is read for a menu after the wait and before the send (#835).
+    screen = next(i for i, c in enumerate(orca) if "--screen" in c)
+    assert orca[screen].startswith("terminal read --terminal term_new")
+    assert wait < screen < send
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
         dispatch.calls("git")
     )
@@ -760,7 +777,7 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
     ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
     assert ran == (
         "task-282|1|--model claude-opus-5-5 --effort medium"
-        f" --add-dir {dispatch.task.parent.as_posix()}"
+        f" --settings {_settings(dispatch.task.parent.as_posix())}"
     )
     # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
     (create,) = [c for c in dispatch.calls("orca") if c.startswith("terminal create")]
@@ -796,17 +813,32 @@ def test_dispatch_sends_the_absolute_path_of_a_relative_task_file(
 def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
     dispatch: Harness,
 ) -> None:
-    """#327 review A: the directory goes to --add-dir in double quotes."""
+    """#327 review A: a space or CJK in the directory reaches claude whole; since #835
+    it is in the single-quoted --settings JSON, the CJK as \\u escapes (only ASCII is
+    typed for it), and claude gets back the directory as it is."""
     folder = dispatch.root / "t282" / "任務 檔"
     folder.mkdir(parents=True)
     task = folder / "task.md"
     shutil.copyfile(dispatch.task, task)
+    claude = dispatch.bin / "claude"
+    claude.write_text(
+        "#!/usr/bin/env bash\n"
+        'while [ $# -gt 0 ]; do [ "$1" = --settings ] && printf %s "$2"'
+        ' >"$FAKE_DIR/settings.json"; shift; done\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    claude.chmod(0o755)
+    dispatch.write("run_terminal_command", "")
     result = _dispatch(dispatch, task.as_posix())
     assert result.returncode == 0, result.stdout + result.stderr
     terminal = next(
         c for c in dispatch.calls("orca") if c.startswith("terminal create")
     )
-    assert f'--add-dir "{folder.as_posix()}" --json' in terminal
+    assert f"--settings '{_settings(folder.as_posix())}' --json" in terminal
+    assert "任務" not in terminal and "\\u4efb\\u52d9 \\u6a94" in terminal
+    settings = json.loads((dispatch.fake / "settings.json").read_text(encoding="utf-8"))
+    assert settings == {"permissions": {"additionalDirectories": [folder.as_posix()]}}
     sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
     assert sent == _notice(task.as_posix())
 
@@ -820,8 +852,9 @@ def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
         ("a%b/task.md", "任務檔目錄不能含"),
         ("a!b/task.md", "任務檔目錄不能含"),
         ("a`b/task.md", "任務檔目錄不能含"),
+        ("a'b/task.md", "任務檔目錄不能含"),
     ],
-    ids=["lf", "cr", "dollar", "percent", "bang", "backtick"],
+    ids=["lf", "cr", "dollar", "percent", "bang", "backtick", "single-quote"],
 )
 def test_dispatch_refuses_a_task_path_it_cannot_pass_on(
     dispatch: Harness, where: str, error: str
@@ -849,11 +882,175 @@ def test_dispatch_help_shows_the_line_it_sends(dispatch: Harness) -> None:
     help_text = dispatch.run("dispatch.sh", "--help")
     assert help_text.returncode == 0, help_text.stderr
     assert _notice("<path>") in help_text.stdout
-    assert "--add-dir" in help_text.stdout
+    assert "additionalDirectories" in help_text.stdout
     assert "30000" not in help_text.stdout
     workflow = (ROOT / "docs" / "WORKFLOW.md").read_text(encoding="utf-8")
     assert _notice("<path>") in workflow
-    assert '--effort <effort> --add-dir "<任務檔目錄>"' in workflow
+    assert (
+        '--effort <effort> --settings \'{\\"permissions\\":{\\"additionalDirectories\\":'
+        '[\\"<任務檔目錄>\\"]}}\'" --json' in workflow
+    )
+    assert "orca terminal read --terminal <handle> --screen --json" in workflow
+    # The allowance lives only in that claude process (#835 decision 6934230800): the
+    # resume command carries the same --settings.
+    assert (
+        "claude --resume <ID> --effort <原 level> --settings"
+        ' \'{"permissions":{"additionalDirectories":["<任務檔目錄>"]}}\'' in workflow
+    )
+
+
+# The screens a fresh session stopped at (#835): the trust menu as the coordinator read it
+# when #834 was dispatched (#835 comment 6933488869, AC-1 E1), and the read-permission
+# menu of a session in default mode (AC-1 E4b).
+TRUST_MENU = [
+    "$ claude --model claude-opus-5-5 --effort medium --add-dir"
+    ' "C:/Users/YiCheng/t834/task"',
+    " Adding a new directory:",
+    " C:\\Users\\YiCheng\\t834\\task",
+    " This session hasn't worked here before. Is this a directory you created or one"
+    " you trust?",
+    " Claude Code'll be able to read, edit, and execute files here. Your answer holds"
+    " for this session.",
+    " Security guide",
+    " ❯ No, exit",
+    "   Yes, add it",
+    " Enter to confirm · Esc to cancel",
+]
+PERMISSION_MENU = [
+    " Read(C:\\Users\\YiCheng\\t835\\exp\\new1\\f.md)",
+    " Do you want to proceed?",
+    " ❯ 1. Yes",
+    "   2. Yes, allow reading from /c/Users/YiCheng/t835/exp/new1 during this session",
+    "   3. No",
+    " Esc to cancel · Tab to amend",
+]
+
+
+def _screen(tail: list[str], wrapped: list[bool] | None = None, **terminal) -> dict:
+    """An `orca terminal read --screen` answer; tailRows as Orca gives them."""
+    rows = [
+        {"wrapped": w, "trailingSpaces": 0} for w in (wrapped or [False] * len(tail))
+    ]
+    return _ok(
+        {"terminal": {"tail": tail, "tailRows": rows, "source": "screen"} | terminal}
+    )
+
+
+def _assert_not_sent(dispatch: Harness, result: subprocess.CompletedProcess) -> dict:
+    line = _json_line(result)
+    assert line["sent"] is False and line["turn_started"] is False
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal send")]
+    assert not (dispatch.fake / "sent_text.txt").exists()
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+    return line
+
+
+@pytest.mark.parametrize(
+    "screen, kind",
+    [(TRUST_MENU, "信任框"), (PERMISSION_MENU, "確認框")],
+    ids=["trust", "permission"],
+)
+def test_dispatch_stops_at_a_menu_without_sending(
+    dispatch: Harness, screen: list[str], kind: str
+) -> None:
+    """#835 AC-3: tui-idle is satisfied with the start-up trust menu open (AC-1 E1), and
+    an Enter there lands on "No, exit". A menu on the screen sends nothing, not even
+    Enter, and is exit 5 with the terminal and what the user is to choose, for the
+    kind of menu it is (review 6934849677 suggestion 2)."""
+    dispatch.answer("orca_terminal_read", _screen(screen))
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    line = _assert_not_sent(dispatch, result)
+    assert line["terminal"] == "term_new"
+    assert "term_new" in line["error"] and "#282 dryrun" in line["error"]
+    assert f"停在{kind}" in line["error"]
+    if screen is TRUST_MENU:
+        assert "Yes, add it" in line["error"] and "No, exit" in line["error"]
+    else:
+        assert "Yes, add it" not in line["error"]
+        assert (
+            "Do you want to proceed?" in line["error"] and "3 不允許" in line["error"]
+        )
+
+
+@pytest.mark.parametrize(
+    "tail, wrapped",
+    [
+        # The terminal wrapped the row: tailRows[1].wrapped says row 1 goes on row 0.
+        (
+            [
+                " This session hasn't worked here before. Is this a directory you created or one you tr",
+                "ust?",
+            ],
+            [False, True],
+        ),
+        # Claude Code broke the line itself: two rows, the words apart by the break.
+        ([" Is this a directory you created or one you", "   trust?"], [False, False]),
+    ],
+    ids=["terminal-wrap", "tui-line-break"],
+)
+def test_dispatch_finds_a_mark_split_over_rows(
+    dispatch: Harness, tail: list[str], wrapped: list[bool]
+) -> None:
+    """#835 review 6934849677 suggestion 1: a narrow pane splits "one you trust" over
+    rows; the rows are joined back (wrapped) and blanks made one space before matching."""
+    dispatch.answer("orca_terminal_read", _screen(tail, wrapped))
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    assert "one you trust" in _assert_not_sent(dispatch, result)["error"]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # Orca could not render the screen and gave the accumulated output instead, where
+        # a TUI's cursor-drawn spaces are gone (orca terminal read --help).
+        _screen(["Entertoconfirm·Esctocancel"], source="screen-unavailable"),
+        # An older host: no source at all.
+        _ok({"terminal": {"tail": ["❯ No, exit"]}}),
+        _screen([]),
+        _screen(["", "   ", ""]),
+    ],
+    ids=["screen-unavailable", "no-source", "empty", "blank-rows"],
+)
+def test_dispatch_does_not_send_without_a_rendered_screen(
+    dispatch: Harness, answer: dict
+) -> None:
+    """#835 review 6934849677 must-fix 1: only a rendered screen with text on it can show
+    that no menu is open; anything else is "the screen could not be read", exit 1."""
+    dispatch.answer("orca_terminal_read", answer)
+    result = _dispatch(dispatch)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "讀不到 terminal 畫面" in _assert_not_sent(dispatch, result)["error"]
+
+
+def test_dispatch_stops_when_orca_refuses_the_send_at_a_menu(
+    dispatch: Harness,
+) -> None:
+    """#835: a menu that opens between the read and the send: Orca refuses the text and
+    Enter with agent_prompt_blocked (#720), so nothing went in; exit 5, not 3."""
+    dispatch.answer(
+        "orca_terminal_send",
+        {"ok": False, "error": {"code": "agent_prompt_blocked", "message": "x"}},
+    )
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["sent"] is False and "agent_prompt_blocked" in line["error"]
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+
+
+def test_dispatch_does_not_send_when_the_screen_cannot_be_read(
+    dispatch: Harness,
+) -> None:
+    """#835: with no screen there is no knowing a menu is not open: nothing is sent."""
+    dispatch.answer(
+        "orca_terminal_read", {"ok": False, "error": {"code": "terminal_not_found"}}
+    )
+    result = _dispatch(dispatch)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _json_line(result)["sent"] is False
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal send")]
 
 
 @pytest.mark.parametrize(
