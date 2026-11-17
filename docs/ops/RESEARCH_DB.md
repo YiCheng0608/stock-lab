@@ -233,6 +233,65 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 - **另一份副本的逐日比對**（19:44 取的研究副本，用 `replay819.py repair` 刪除並重建，不是本節的腳本）：用新程式重放這段 1,146 天已存的 TPEx `dailyQuotes` raw，比對剩下的 615,959 根 TPEx 日線：列數、開高低收、成交股數、成交金額與 `turnover_status` 逐列相同。沒有標的因此變成沒有日線。
 - 腳本與輸出：`C:/Users/YiCheng/stock-lab-data/evidence/819/`（`SHA256SUMS`）。
 
+### 舊日期 collect 不改寫標的類型與狀態（#838）
+
+官方名單一律是今天抓的：上市、上櫃的公司主檔、ETF 清單，以及上市的 `company/newlisting`（保留 2011 年以來的每一筆上市）。[#838](https://github.com/YiCheng0608/stock-lab/issues/838) 之前，collect 用回補的那一天判斷「上市 60 天內」，再把結果寫回每個既有標的：
+
+- 上市日在回補日前 60 天內的公司，被標成 `ipo`；回補越早的月份越後跑，類型停在最後一次被改的那天。
+- 名單上的每個代號，包括 `newlisting` 有、主檔已經沒有的下市公司，狀態都被改回 `active`。
+
+#702 批 5 因此把 8 檔 `ipo delisted` 改回 `active`，另有 23 檔的 `stock`／`ipo` 被翻過來，#786 少寫 194 列 EPS（[#702 提問](https://github.com/YiCheng0608/stock-lab/issues/702#issuecomment-6934972606)）。
+
+**規則**：`pipeline.lists_are_current(score_date)`。
+
+- collect 的日子早於 `latest_weekday(今天)`（台北日期；週末時是上一個星期五）時，名單只用來建新標的。既有標的不改 `instrument_type` 與 `status`；名稱、產業、上市日照舊更新。
+- 每日 collect（今天，週末交易日也算）照舊改寫。
+- 日線、籌碼的寫入不受影響。dormant 標的的恢復照 `reactivate_dormant` 自己的規則。
+
+**修復已被改掉的列**：[`tools/research/restore_instruments.py`](../../tools/research/restore_instruments.py)。
+
+- 狀態：照 `data_quality` 最新一列 `instrument_status`。每次狀態改變、每個回補建的標的都有這一列，舊的改寫沒有寫。
+- 類型（只限 `stock`／`ipo`）：用 DB 裡最新一份名單 capture，以收到那天判斷 60 天內上市（`instrument_repair._latest_lists`，和那天的每日 collect 相同）。名單上沒有的標的不改類型。
+- 只改這兩欄；沒有研究標記 `research-db.json` 時 exit 2，正式 DB 不能用它修。
+- 預設 dry-run。`--apply --expect-changes N` 在一個 transaction 裡寫入，列數不是 N 就不寫、exit 1。
+- `--reference <正式 DB 唯讀副本>` 在每一列附上正式 DB 的值，並列出修完後兩邊共有、類型或狀態仍不同的標的（`differs_from_reference_after`）。正式 DB 每天照今天的名單重寫類型，所以兩邊應該相同。
+- 重跑冪等。
+
+**代跑步驟**（研究 DB 同時只有一個寫入者，由 #702 的工程師做；IMG＝含 #838 的 image）：
+
+1. 前提同 [#819 第 1 步](#上櫃舊版-000-價格的修正819)：沒有其他寫入容器，開維護模式。
+2. 取一份新的正式 DB 唯讀副本 `$D`（[LOCAL](LOCAL.md#取正式-db-的唯讀副本)），在 21:00 前開始。
+3. dry-run：
+
+   ```bash
+   MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data -v "$D":/prod:ro "$IMG" \
+     sh -c 'python -B tools/research/restore_instruments.py --reference /prod/stock.db > /data/logs/restore-838-plan.json'
+   ```
+
+   - 預期 `differs_from_reference_after` 是空的，每一列的 `reference` 都等於修後的值。
+   - 不是時不要 apply，把輸出貼在 #702 問統籌。
+   - 名單 capture 與正式副本差一天以上時，剛過 60 天的公司可能一邊是 `ipo`、一邊是 `stock`，要逐列看。
+4. apply：同一行加 `--apply --expect-changes <第 3 步的 count>`，輸出寫 `/data/logs/restore-838-apply.json`。
+5. 再跑第 3 步一次，預期 `count: 0`、`differs_from_reference_after` 空的，然後關維護模式。
+6. 之後才補跑 #786 的 `xbrl-apply` 與 `company-classify`。
+
+**副本演練**（2026-11-17）：
+
+- 研究副本：09:56 用 `copy_db.py` 取的研究副本，volume `t838-research-copy`，2,838 檔；raw 以 `--mount …,volume-subpath=raw,readonly` 掛研究 volume 的 `raw/`；名單 capture 是 11/16 收的。
+- 正式副本：AC-2 那份，2,450 檔，最新交易日 2026-11-16。
+- 結果：
+  - dry-run 53 列，apply 53 列，再跑 0 列。只動 `instrument_type`／`status`，其他欄位與檔數不變。
+  - 兩邊共有的 2,450 檔：修前類型或狀態有 53 檔不同，修後 0 檔。
+- 53 列的組成：
+  - **批 5 的 32 列**：
+    - 狀態都回到 #786 副本（批 5 之前）的值，8 檔 `ipo delisted` 都回到 `delisted`。
+    - 類型有 23 列回到副本的值。另外 9 列，副本本身就是批 4 回補 2012 年留下的 `ipo`（2012-03～04 上市，例如 2727 王品）；研究 DB 現在的 `stock` 和正式 DB 相同，工具不動它們。
+  - **批 1～4 留下的 30 列**：
+    - 17 檔 2012～2021 年上市、已下市或轉板的公司被改回 `active`，例如 2867 三商壽、3682 亞太電。
+    - 13 檔 2026-09～11 上市的 `ipo` 被改成 `stock`。
+
+正式 DB 沒有這種殘留：比對 `instruments` 與 `data_quality` 最新狀態，0 列不一致（[#838 AC-2](https://github.com/YiCheng0608/stock-lab/issues/838#issuecomment-6935482280)）。每日 collect 每天都會改回類型；正式 DB 也沒有回補到會把下市公司改回 `active` 的日子。
+
 ### 研究工具的分段
 
 研究工具預設的分段是探索段 2024-09-30～2025-12-31、驗證段 2026-01-01 起（`evidence_lib.SEGMENTS`）。要在研究 DB 上用回補的範圍，兩段都要以 `--segment` 給（`<exploration|validation>:<第一天>:[最後一天]`，探索段要在驗證段開始前結束）：

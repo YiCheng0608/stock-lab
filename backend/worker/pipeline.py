@@ -124,6 +124,7 @@ from worker.sources import (
     OFFICIAL_WEEKEND_SESSIONS,
     OfficialMarketDataAdapter,
     OfficialBatch,
+    taipei_today,
     TWSE_CHIP_ENDPOINT,
     TWSE_LISTED_ENDPOINT,
     TWSE_NEW_LISTING_ENDPOINT,
@@ -232,7 +233,17 @@ def get_or_create_instrument(
     exchange: str = "TWSE",
     industry: str | None = None,
     source: str | None = None,
+    current: bool = True,
 ) -> Instrument:
+    """The stored instrument of the code, created from these values if missing.
+
+    ``current=False`` (Issue #838): the official lists were fetched today but
+    describe a session in the past (a backfill or a re-run of an old date).
+    Their ``ipo`` classification is relative to that session, and a code they
+    list is listed today, not on it; so an existing instrument keeps its
+    ``instrument_type`` and ``status``, and only a new instrument takes them.
+    """
+
     item = db.scalar(
         select(Instrument).where(
             Instrument.market == "TW",
@@ -247,13 +258,14 @@ def get_or_create_instrument(
             item.name = name
         if source == "official":
             item.exchange = exchange
-            item.instrument_type = instrument_type
+            if current:
+                item.instrument_type = instrument_type
             item.etf_category = etf_category
             item.industry = industry or item.industry
             item.listing_date = listing_date or item.listing_date
             # Being listed again ends delisted/transferred; dormant (listed but
             # without quote rows) ends only when a quote row returns.
-            if item.status != "dormant":
+            if current and item.status != "dormant":
                 item.status = "active"
         return item
     item = Instrument(
@@ -2473,7 +2485,20 @@ def _restore_cited_raw_file(row: RawPayload, payload: FetchedPayload) -> None:
         )
 
 
-def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instrument:
+def lists_are_current(score_date: date) -> bool:
+    """Whether today's official lists describe the collected session (Issue #838).
+
+    The daily collect asks for today's session (or, on a weekend, the last
+    weekday's), which is the session the lists describe.  Any older session is
+    a backfill or a re-run, for which they only say what is listed today.
+    """
+
+    return score_date >= latest_weekday(taipei_today())
+
+
+def _upsert_official_instrument(
+    db: Session, record: InstrumentRecord, *, current: bool = True
+) -> Instrument:
     return get_or_create_instrument(
         db,
         record.symbol,
@@ -2484,6 +2509,7 @@ def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instru
         exchange=record.exchange,
         industry=record.industry,
         source="official",
+        current=current,
     )
 
 
@@ -5046,9 +5072,10 @@ def collect(
             # auditable instead of disappearing in the rollback.
             db.commit()
             instruments: dict[tuple[str, str], Instrument] = {}
+            current_lists = lists_are_current(score_date)
             for record in batch.instruments:
                 instruments[(record.exchange, record.symbol)] = (
-                    _upsert_official_instrument(db, record)
+                    _upsert_official_instrument(db, record, current=current_lists)
                 )
             normalized_bars = 0
             normalized_non_index_bars = 0
