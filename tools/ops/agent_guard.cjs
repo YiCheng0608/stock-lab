@@ -703,7 +703,8 @@ const GH_ACTIONS = { issue: /^(?:comment|create|new|edit)$/, pr: /^(?:comment|cr
 const GH_API_VALUE = /^(?:-X|--method|-H|--header|-f|--raw-field|-F|--field|--input|-q|--jq|-t|--template|--hostname|-p|--preview|--cache)$/;
 const GH_API_ENDPOINT = /(?:^|\/)(?:issues|pulls|comments)(?:[/?]|$)|[$`]/;
 
-// The bodies of a gh command (`args` the words after gh) as [value, isFile] pairs.
+// The bodies of a gh command (`args` the words after gh) as [value, isFile, isJson] (--input's
+// file is a JSON request).
 function ghBodies(args) {
   const out = [];
   const [group, action] = args;
