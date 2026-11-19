@@ -2,10 +2,11 @@
 
 AC-1: each kind of pattern (a filled-in template, a field of Fugle's answer, a message
 record) has a case it catches; masked text and the rule levels pass; the patterns are bound
-to backend/worker/intraday.py TEMPLATES. AC-3: the fixture day's ``--dry-run`` output is
-refused as printed and passes once masked, its ``--- poll`` and ``--- event`` lines and
-rule levels kept. The numbers are the fixture's (backend/tests/fixtures/fugle_intraday)
-or plainly made up.
+to backend/worker/intraday.py TEMPLATES. AC-3: the fixture day's ``--dry-run`` output
+passes as printed (intraday masks it itself since #833) and its ``--raw-file`` is refused
+and passes once masked; the ``--- poll`` and ``--- event`` lines and the rule levels are
+kept. The numbers are the fixture's (backend/tests/fixtures/fugle_intraday) or plainly
+made up.
 """
 
 from __future__ import annotations
@@ -294,20 +295,24 @@ def test_the_command_line(tmp_path):
 # --- AC-3: the fixture day's --dry-run ------------------------------------------------------
 
 
-def test_the_fixture_dry_run_is_refused_and_passes_masked(env):  # noqa: F811 (fixture)
+def test_the_fixture_dry_run_is_refused_and_passes_masked(env, tmp_path):  # noqa: F811
+    # Since #833 the dry run masks what it prints itself: the output passes as printed,
+    # and the values are only in its --raw-file, which is refused and passes once masked.
     _listed(env.db)
-    result = _run(env, start="10:02:30", mode="--dry-run", extra=("--minutes", "2"))
-    out = result.out
-    found = quote_guard.hits(out)
-    assert {kind for _, kind in found} >= {"message", "template:trade"}
-    masked = quote_guard.mask(out)
-    assert quote_guard.hits(masked) == []
-    # Only the message lines change; --- poll and --- event lines stay as printed.
-    before, after = out.split("\n"), masked.split("\n")
-    assert len(before) == len(after)
-    for old, new in zip(before, after):
-        if not old.startswith("--- message "):
-            assert new == old
+    raw = tmp_path / "raw.jsonl"
+    result = _run(
+        env,
+        start="10:02:30",
+        mode="--dry-run",
+        extra=("--minutes", "2", "--raw-file", str(raw)),
+    )
+    after = result.out.split("\n")
+    assert quote_guard.hits(result.out) == []
+    assert quote_guard.mask(result.out) == result.out
+    raw_text = raw.read_text(encoding="utf-8")
+    found = quote_guard.hits(raw_text)
+    assert {kind for _, kind in found} >= {"message", "levels"}
+    assert quote_guard.hits(quote_guard.mask(raw_text)) == []
     assert sum(line.startswith("--- poll ") for line in after) == 2
     assert sum(line.startswith("--- event ") for line in after) == 5
     # The rule levels are still in the messages.

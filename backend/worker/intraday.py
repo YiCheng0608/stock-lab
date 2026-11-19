@@ -42,6 +42,16 @@ once a minute (``worker.fugle``) and sends a Telegram message to the user's own 
 log lines and the messages go to stdout; ``--minutes`` ends it early. It takes no lock, so
 it must not run beside the scheduled run (both would count against the key's 60 a minute).
 
+- **Masked** (#833): Fugle's terms forbid passing its quotes on, and the repo is public.
+  What the terminal and the log show has none of Fugle's values: a message as shown
+  (a dry run's ``--- message`` line) has ``<價>`` for the trade's price, the open, the bid
+  and the ask, and ``<時間>`` for the trade's time (``message(masked=True)``); the log has
+  no message text and no ``levels`` line. The rule levels, our minute polled and the
+  ``--- poll`` numbers stay. The values are only in the day's jsonl (the messages as sent
+  and the ``levels`` lines), and in a dry run only in ``--raw-file <path>`` when given
+  (the same lines, appended; a path outside any git checkout). The Telegram text is the
+  message unmasked, as before.
+
 Only the standard library at the top: serve imports the log reading here.
 """
 
@@ -167,6 +177,12 @@ TEMPLATES = {
         "略過 {skipped_count} 檔：{skipped}"
     ),
 }
+# What the terminal and the log show for a value of Fugle's answer (#833): Fugle's terms
+# forbid passing its quotes on, and a dry run's output or a log is pasted to the public
+# repo's Issues. The values themselves are only in the day's jsonl (and a dry run's
+# --raw-file), local files outside the repo.
+MASKED_PRICE = "<價>"
+MASKED_TIME = "<時間>"
 STOP_WHY = {
     "key_invalid": "API key 無效",
     "plan_not_allowed": "方案不支援",
@@ -428,10 +444,17 @@ def _taipei(moment: datetime) -> datetime:
     return moment.astimezone(job.TAIPEI)
 
 
-def _when(polled: datetime, quote: fugle.Quote) -> str:
+def _quoted(value: float | None, masked: bool) -> str:
+    """A price of Fugle's answer: MASKED_PRICE in what is shown (#833), else as _fmt."""
+
+    return MASKED_PRICE if masked and _price(value) else _fmt(value)
+
+
+def _when(polled: datetime, quote: fugle.Quote, masked: bool = False) -> str:
     if _price(quote.last_price) and quote.last_time is not None:
         trade = TEMPLATES["trade"].format(
-            time=f"{_taipei(quote.last_time):%H:%M:%S}", price=_fmt(quote.last_price)
+            time=MASKED_TIME if masked else f"{_taipei(quote.last_time):%H:%M:%S}",
+            price=_quoted(quote.last_price, masked),
         )
     else:
         trade = TEMPLATES["no_trade"]
@@ -444,8 +467,18 @@ def _entry(track: Track) -> str:
     return f"{_fmt(track.zone_low)}～{_fmt(track.zone_high)}"
 
 
-def message(track: Track, event: str, quote: fugle.Quote, polled: datetime) -> str:
-    """The Telegram text of EVENT (parse_mode HTML: the name is escaped)."""
+def message(
+    track: Track,
+    event: str,
+    quote: fugle.Quote,
+    polled: datetime,
+    *,
+    masked: bool = False,
+) -> str:
+    """The Telegram text of EVENT (parse_mode HTML: the name is escaped). MASKED: the
+    same text with Fugle's values (the trade's time and price, the open, the bid and
+    the ask) as MASKED_TIME and MASKED_PRICE, as the terminal and the log show it
+    (#833); the rule levels and the minute polled are ours and stay."""
 
     template = TEMPLATES[f"{ENTRY}:{track.entry_type}" if event == ENTRY else event]
     line = template.format(
@@ -455,14 +488,14 @@ def message(track: Track, event: str, quote: fugle.Quote, polled: datetime) -> s
         stop=_fmt(track.invalid),
         target_1=_fmt(track.target_1),
         target_2=_fmt(track.target_2),
-        open=_fmt(quote.open),
-        when=_when(polled, quote),
+        open=_quoted(quote.open, masked),
+        when=_when(polled, quote, masked),
     )
     lines = [line]
     if quote.locked_up or quote.locked_down:
         # What the quote has, as it is: no price is inferred for a missing side.
         sides = {
-            side: TEMPLATES[side].format(price=_fmt(value))
+            side: TEMPLATES[side].format(price=_quoted(value, masked))
             if _price(value)
             else TEMPLATES[f"{side}_none"]
             for side, value in (("bid", quote.bid), ("ask", quote.ask))
@@ -708,7 +741,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     mode.add_argument(
         "--dry-run",
         action="store_true",
-        help="照常讀富果、判斷，但不送 Telegram、不寫日誌與 jsonl（印到 stdout）、不取鎖",
+        help=(
+            "照常讀富果、判斷，但不送 Telegram、不寫日誌與 jsonl（印到 stdout，富果的值"
+            "遮成 <價>／<時間>；原始值要看時加 --raw-file）、不取鎖"
+        ),
     )
     mode.add_argument(
         "--send", action="store_true", help="送出（鎖、日誌、jsonl 同排程）"
@@ -727,11 +763,29 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--minutes", type=int, help="只配 --dry-run：跑幾分鐘就結束（AC-6 實測用）"
     )
+    parser.add_argument(
+        "--raw-file",
+        help=(
+            "只配 --dry-run：訊息與每輪 levels 的原始值（含富果報價）以 jsonl 追加到這個"
+            "本機檔，不印到終端；不能在 git checkout 裡（#833）"
+        ),
+    )
+
+
+def _in_checkout(path: Path) -> bool:
+    """Whether PATH is inside a git checkout (a directory above it has ``.git``)."""
+
+    return any((parent / ".git").exists() for parent in path.resolve().parents)
 
 
 def argument_problem(args: argparse.Namespace) -> str | None:
     if args.minutes is not None and not args.dry_run:
         return "--minutes goes with --dry-run only"
+    if args.raw_file is not None and not args.dry_run:
+        return "--raw-file goes with --dry-run only (--send keeps them in the jsonl)"
+    if args.raw_file is not None and _in_checkout(Path(args.raw_file)):
+        # The repo is public: Fugle's values must not land where they can be committed.
+        return "--raw-file must be outside a git checkout"
     if args.minutes is not None and args.minutes <= 0:
         return "--minutes must be positive"
     if args.now:
@@ -851,26 +905,48 @@ class Run:
         with open(self.path, "a", encoding="utf-8", newline="") as log:
             log.write(text + "\n")
 
-    def record(self, key: str, symbol: str, event: str, text: str, status: str) -> None:
-        self.sent.setdefault(key, []).append(event)
-        line = json.dumps(
-            {
-                "at": self.clock().isoformat(timespec="seconds"),
-                "key": key,
-                "symbol": symbol,
-                "event": event,
-                "status": status,
-                "text": text,
-            },
-            ensure_ascii=False,
-        )
-        if self.args.dry_run:
-            print(f"--- message {line}", file=self.out, flush=True)
-            return
-        _append(self.events, self.mask(line))
+    def _raw(self, line: str) -> None:
+        """LINE, which has Fugle's values, to the local file they may be in: the day's
+        jsonl, or a dry run's --raw-file (none: nowhere). Never the terminal (#833)."""
 
-    def deliver(self, key: str, symbol: str, event: str, text: str) -> None:
-        """Send TEXT once a day per (KEY, EVENT); log and record it."""
+        if not self.args.dry_run:
+            _append(self.events, self.mask(line))
+        elif self.args.raw_file:
+            _append(Path(self.args.raw_file), self.mask(line))
+
+    def record(
+        self,
+        key: str,
+        symbol: str,
+        event: str,
+        text: str,
+        status: str,
+        shown: str | None = None,
+    ) -> None:
+        """The jsonl's line of an event, with TEXT as sent; a dry run prints it as a
+        ``--- message`` line with SHOWN, the text masked (#833), instead."""
+
+        self.sent.setdefault(key, []).append(event)
+        fields = {
+            "at": self.clock().isoformat(timespec="seconds"),
+            "key": key,
+            "symbol": symbol,
+            "event": event,
+            "status": status,
+            "text": text,
+        }
+        self._raw(json.dumps(fields, ensure_ascii=False))
+        if self.args.dry_run:
+            fields["text"] = text if shown is None else shown
+            line = json.dumps(fields, ensure_ascii=False)
+            print(self.mask(f"--- message {line}"), file=self.out, flush=True)
+
+    def deliver(
+        self, key: str, symbol: str, event: str, text: str, shown: str | None = None
+    ) -> None:
+        """Send TEXT once a day per (KEY, EVENT); log and record it. SHOWN is TEXT
+        masked (``message(masked=True)``) when TEXT has Fugle's values; the run's own
+        notices have none."""
 
         if event in self.sent.get(key, []):
             return
@@ -885,13 +961,15 @@ class Run:
                     f" reasons={'|'.join(outcome.get('reasons') or []) or '-'}"
                 )
         self.log(f"--- event key={key} symbol={symbol} event={event} status={status}")
-        self.record(key, symbol, event, text, status)
+        self.record(key, symbol, event, text, status, shown)
 
     # The steps.
 
     def run(self) -> int:
         if not self.args.dry_run:
             self.log_dir.mkdir(parents=True, exist_ok=True)
+        elif self.args.raw_file:
+            Path(self.args.raw_file).parent.mkdir(parents=True, exist_ok=True)
         started = self.clock()
         lock = job.FileLock(job.lock_path(self.data_dir, LOCK))
         locked = True if self.args.dry_run else lock.acquire()
@@ -916,8 +994,13 @@ class Run:
             if locked and not self.args.dry_run:
                 lock.release()
                 self._remove_old_logs()
+        raw = (
+            f" raw={self.args.raw_file}"
+            if self.args.dry_run and self.args.raw_file
+            else ""
+        )
         print(
-            self.mask(f"intraday {result} exit={code} log={self.path}"),
+            self.mask(f"intraday {result} exit={code} log={self.path}{raw}"),
             file=self.out,
             flush=True,
         )
@@ -1147,13 +1230,15 @@ class Run:
                 watched.symbol,
                 event,
                 message(watched, event, quote, polled),
+                message(watched, event, quote, polled, masked=True),
             )
 
     def _record_levels(self, judged: list[Track], states: dict[str, State]) -> None:
         """One jsonl line of the round: the high, low and last trade of each track
         JUDGED on it and still watched, with the levels it was judged by, which a
-        restarted run reads back (``day_levels``, #808 AC-3). Not in a dry run (it
-        writes no file)."""
+        restarted run reads back (``day_levels``, #808 AC-3). The high, low and last are
+        Fugle's: the line goes to the jsonl, or a dry run's --raw-file, and never to the
+        terminal or the log (#833)."""
 
         levels = {
             item.key: {
@@ -1165,13 +1250,13 @@ class Run:
             for item in judged
             if (state := states[item.key]).high is not None and not state.done
         }
-        if self.args.dry_run or not levels:
+        if not levels:
             return
         line = json.dumps(
             {"at": self.clock().isoformat(timespec="seconds"), LEVELS: levels},
             ensure_ascii=False,
         )
-        _append(self.events, line)
+        self._raw(line)
 
     def _sleep_until(self, due: datetime) -> None:
         while True:
