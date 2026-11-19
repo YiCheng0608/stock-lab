@@ -369,6 +369,73 @@ def test_patrols_ci_and_the_slots_agree_on_the_cancelled_run(case) -> None:
     assert slots.ci_red(pr) is red is (ci == "failure")
 
 
+PR842 = json.loads(
+    (Path(__file__).parent / "fixtures" / "ci_runs" / "pr842_1db353cd.json").read_text(
+        encoding="utf-8"
+    )
+)["check_runs"]
+PR842_CANCELLED, PR842_KEPT = 44524775078, 44524774753
+
+
+def _pr842_nodes(runs=None, gate=None) -> list[dict]:
+    """PR #842's check runs (#843) as slots.QUERY reads them: the higher id cancelled,
+    its `required` SUCCESS. gate finishes the kept run with a `required` of that
+    conclusion; runs keeps only those run ids."""
+    rows = [c for c in PR842 if not runs or c["run"] in runs]
+    if gate:
+        rows = [
+            {**c, "conclusion": c["conclusion"] or "SUCCESS"}
+            if c["run"] == PR842_KEPT
+            else c
+            for c in rows
+        ] + [
+            {
+                "name": "required",
+                "run": PR842_KEPT,
+                "conclusion": gate,
+                "workflowName": "CI",
+            }
+        ]
+    return [
+        {
+            "__typename": "CheckRun",
+            "name": c["name"],
+            "conclusion": c["conclusion"] or None,
+            "startedAt": None,
+            "detailsUrl": f"{REPO}/actions/runs/{c['run']}/job/{i}",
+            "checkSuite": {"workflowRun": {"workflow": {"name": c["workflowName"]}}},
+        }
+        for i, c in enumerate(rows)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("runs", "gate", "red"),
+    [
+        (None, None, False),
+        (None, "SUCCESS", False),
+        (None, "FAILURE", True),
+        ({PR842_KEPT}, "FAILURE", True),
+        ({PR842_KEPT}, "SUCCESS", False),
+        ({PR842_CANCELLED}, None, True),
+    ],
+    ids=[
+        "kept-going",
+        "kept-success",
+        "kept-failure",
+        "one-run-failure",
+        "one-run-success",
+        "all-cancelled",
+    ],
+)
+def test_the_slots_read_the_run_concurrency_kept(runs, gate, red) -> None:
+    """#843 AC-3: on PR #842 the run concurrency cancelled had the higher id, and its
+    `required` passed (#421). CI 紅 reads the kept run, as ci= does: before the fix a
+    failed kept run was not red. Every run cancelled is red, as ci= is failure."""
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=_pr842_nodes(runs, gate))
+    assert slots.ci_red(pr) is red
+
+
 def test_a_newer_runs_required_not_read_falls_back_to_the_rollup() -> None:
     """PR #829 review 6926278317 必修 1: more check runs than CONTEXTS. The newest run's
     `required` is not among those read, so the rollup state decides (判定不了 is

@@ -54,6 +54,7 @@ from coordinator_json import (
     GOVERNANCE_FIELDS,
     PAGE,
     THREAD_FIELDS,
+    cancelled_run,
     coordinator_comment,
     get,
     latest_checks,
@@ -204,7 +205,9 @@ def ci_red(pr: dict) -> bool:
     Of that run's `required` checks the newest is latest_checks's, as for ci= (a queued
     re-run with no time yet is the newest). Checks with no run id (no detailsUrl) are
     all taken. With no `required` among the runs read and more left, the rollup state
-    decides (判定不了 is counted, PR #829 review 6926278317); with all read, not red."""
+    decides (判定不了 is counted, PR #829 review 6926278317); with all read, not red.
+    newest_ci_run skips a run concurrency cancelled (PR #842, #843); when every run was
+    cancelled, the newest one is red whatever its `required` says, as ci= is failure."""
     tip = get(pr, "tip.nodes") or []
     rollup = (get(tip[0], "commit.statusCheckRollup") or {}) if tip else {}
     contexts = rollup.get("contexts") or {}
@@ -212,6 +215,8 @@ def ci_red(pr: dict) -> bool:
     checks = [_check(n) for n in nodes if n.get("name")]
     runs = [c for c in checks if c["name"] == GATE]
     newest = newest_ci_run(checks)
+    if newest is not None and cancelled_run(checks, newest[1]):
+        return True
     if newest is not None:
         # A run id is unique in the repository (event_queue.ci_result compares it alone).
         runs = [c for c in runs if run_id(c) == newest[1]]
