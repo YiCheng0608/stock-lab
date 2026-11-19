@@ -8,11 +8,11 @@
 - 排下一張任務、判斷範圍與 gate、更新產品方向：[ROADMAP](ROADMAP.md)；已完成能力：[CAPABILITIES](CAPABILITIES.md)。
 - review 改到檢查、hook 或 CI 的 PR，規則表要補列，或查某條規則由什麼擋：[GUARDRAILS](GUARDRAILS.md)。
 - 發佈與部署：[RELEASE](RELEASE.md)。
-- 接手與每次巡邏用不到的段落（開統籌與接手文、`take_over.sh` 的步驟、換手的偵測與執行、monitor 與 patrol 的判定細節、工程師 session）：[統籌手冊參考](ops/COORDINATOR_REFERENCE.md)（本文原處各有一行指過去）。
+- 接手與每次巡邏用不到的段落：[統籌手冊參考](ops/COORDINATOR_REFERENCE.md)（本文原處各有一行指過去）。
 
 ## 統籌 session
 
-同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時使用者對任一 Claude session 說「開統籌」。要開統籌時（先讀心跳檔決定開不開、開可見 terminal 的四行命令、原文送出的接手文、`--autocompact 400k` 與新統籌第一次呼叫的 context 門檻）讀[參考「開啟命令」](ops/COORDINATOR_REFERENCE.md#開啟命令)。本文的 `<資料目錄>` 換成 [LOCAL](ops/LOCAL.md#正式位置使用者決定)「正式位置」表的「正式資料目錄」，`<資料目錄>/logs` 就是該表的「統籌的資料目錄的 `logs/`」；心跳檔是 `<資料目錄>/logs/coordinator-heartbeat.json`。
+同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時使用者對任一 Claude session 說「開統籌」。要開統籌時（讀心跳檔、四行命令、原文送出的接手文）讀[參考「開啟命令」](ops/COORDINATOR_REFERENCE.md#開啟命令)。本文的 `<資料目錄>` 換成 [LOCAL](ops/LOCAL.md#正式位置使用者決定)「正式位置」表的「正式資料目錄」，`<資料目錄>/logs` 就是該表的「統籌的資料目錄的 `logs/`」；心跳檔是 `<資料目錄>/logs/coordinator-heartbeat.json`。
 
 `take_over.sh` 中途停下要續跑，或要知道它某一步做什麼（含 `--from`、`--closed-only`）時讀[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)。
 
@@ -23,8 +23,8 @@
 1. 偵測：由 `patrol.sh` 做，達下面「統籌換手」的條件時表頭與最後一行印「已達換手條件」、exit 10。壓縮次數與 context 怎麼數、讀不到時印什麼，以及量接手加了多少 context（`session_cost.py takeover`）時讀[參考「換手偵測」](ops/COORDINATOR_REFERENCE.md#換手偵測)。
 2. 執行（含換手空窗）：要換手時讀[參考「執行換手」](ops/COORDINATOR_REFERENCE.md#執行換手)。
 3. 接回：新 session 沒接上時，同上。
-4. 收尾：由新統籌的 [`take_over.sh`](../tools/ops/take_over.sh) 做（步驟見[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)）。`close` 步驟對舊 terminal 送短訊之前，腳本會印出舊 terminal 的畫面與 `draft`（輸入框裡還沒送出的字，短訊送出後就沒了；有字時多印一行提示），新統籌照印出的內容看最後一個回合與 `draft`：有使用者交代、而舊統籌沒照第 2 點（換手空窗）留到 #1 的事，由新統籌在 #1 補一則 `決定：` 並照常處理；只是問進度就在回覆使用者時一併回答。讀舊 terminal 那一步就失敗、沒有印出畫面時，讀[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)。
-5. 換手不通知工程師：同第 2 點。
+4. 收尾：由新統籌的 [`take_over.sh`](../tools/ops/take_over.sh) 做。`close` 步驟對舊 terminal 送短訊之前，腳本會印出舊 terminal 的畫面與 `draft`（輸入框裡還沒送出的字，短訊送出後就沒了；有字時多印一行提示），新統籌照印出的內容看最後一個回合與 `draft`：有使用者交代、而舊統籌沒照第 2 點（換手空窗）留到 #1 的事，由新統籌在 #1 補一則 `決定：` 並照常處理；只是問進度就在回覆使用者時一併回答。讀舊 terminal 那一步就失敗、沒有印出畫面時，讀[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)。
+5. 換手不通知工程師（細節同第 2 點）。新統籌之後給工程師的留言仍照[開工](WORKFLOW.md#任務流程)的反方向規則通知 terminal。
 
 ## 無人值守運作
 

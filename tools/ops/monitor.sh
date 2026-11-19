@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Coordinator event monitor (Issue #316; docs/COORDINATOR.md 無人值守運作,
+# Coordinator event monitor (Issue #316; docs/COORDINATOR.md 無人值守運作 and
+# docs/ops/COORDINATOR_REFERENCE.md 事件 monitor,
 # docs/ops/MONITOR.md): one poll a minute (--once) as a job of the scheduler
 # container's `worker.cli serve` (#338); without --once it stays resident, as it did
 # under Windows Task Scheduler before the cutover (task and script removed, #683).

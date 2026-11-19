@@ -526,7 +526,7 @@ def unanswered_questions(doc, now: int) -> list[str]:
     return lines + notes
 
 
-# --- #1's body against its comments (patrol.sh, #807; docs/COORDINATOR.md 決策落地) ----
+# --- #1's body against its comments (patrol.sh, #807; COORDINATOR_REFERENCE.md 決策落地的比對)
 # The body indexes the decisions still in force, each with the id of its comment
 # (…issuecomment-<id> or the bare id). A comment that should be there: its first line is
 # a 決定 (also 決定（補充…）) or a 統籌承諾, or it has no coordinator mark (the user, a

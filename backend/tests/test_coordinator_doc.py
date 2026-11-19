@@ -72,6 +72,13 @@ REQUIRED: dict[str, tuple[str, str, str]] = {
         "觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；"
         "最後一次呼叫的 context 超過門檻（預設 450K",
     ),
+    # #850 review 7017916742: a new coordinator never runs the handoff, so this line from
+    # 自動換手 5 stays in the handbook instead of only in the reference's 執行換手.
+    "notify-engineer-terminal": (
+        "docs/COORDINATOR.md",
+        "統籌 session",
+        "新統籌之後給工程師的留言仍照[開工](WORKFLOW.md#任務流程)的反方向規則通知 terminal",
+    ),
     "read-before-acting": (
         "docs/ops/COORDINATOR_REFERENCE.md",
         "接手文",
