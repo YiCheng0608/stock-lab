@@ -916,7 +916,9 @@ US_PAGE_ROW = (
 )
 # Issue 633: the page lists the three Taiwan rows; the API (_indexes) still has the US rows.
 # #661 (decision 6835320079 D-c): no 資料日 column; a row of another day than the page date
-# (2026/10/22) has its 「資料 …」 line under the name, so the cells follow on that line.
+# (2026/10/22) has its 「資料 …」 line under the name.  #861: that line is a block (the
+# name cell's last <div>), so innerText breaks after it too and the cells start a line of
+# their own with a tab (#858's market-1280.txt lines 45-46).
 # #666: the 來源 sentence is the first line of the table's 資料說明, not under the table.
 INDEX_PAGE = (
     "大盤概況\n指數總表\n資料說明\n"
@@ -924,7 +926,7 @@ INDEX_PAGE = (
     f"{ATTRIBUTION}\n"
     "指數\t收盤（點）\t漲跌\t漲跌幅\t相對季線（MA60）\t來源\n"
     "加權指數\t46,041.43\t-846.34\t-1.81%\t之上 季線 44,012.50\t臺灣證券交易所\n"
-    "櫃買指數\n資料 2026/10/21 非最新\t395.42\t+2.10\t+0.53%\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
+    "櫃買指數\n資料 2026/10/21 非最新\n\t395.42\t+2.10\t+0.53%\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
     "台指期近月 合約 2026/11\t46,110\t換月\t換月\t之下 季線 46,502\t臺灣期貨交易所\n"
     "台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌\n"
     "點一列，下方圖表切換為該指數的日 K\n"
@@ -941,7 +943,7 @@ def test_t16_passes_on_the_index_table(tmp_path):
     summary = page_checks.t16(run)
     assert summary.endswith("；沒有美股列")
     assert f"`{TX_ROW.strip()}`" in summary
-    assert "`櫃買指數 ⏎ 資料 2026/10/21 非最新\t395.42" in summary
+    assert "`櫃買指數 ⏎ 資料 2026/10/21 非最新 ⏎ \t395.42" in summary
     assert "費城半導體指數" not in summary
 
 
@@ -951,15 +953,26 @@ def test_t16_states_only_a_row_of_another_day(tmp_path):
     late_tx = _indexes(tx={"trading_date": "2026-10-21", "freshness": "stale"})
     page = INDEX_PAGE.replace(
         TX_ROW,
-        TX_ROW.replace("合約 2026/11\t", "合約 2026/11\n資料 2026/10/21 非最新\t"),
+        TX_ROW.replace("合約 2026/11\t", "合約 2026/11\n資料 2026/10/21 非最新\n\t"),
     )
-    assert "台指期近月 合約 2026/11 ⏎ 資料 2026/10/21 非最新" in page_checks.t16(
-        FakeRun(tmp_path, late_tx, {"market-1280": page})
+    assert (
+        "台指期近月 合約 2026/11 ⏎ 資料 2026/10/21 非最新 ⏎ \t46,110"
+        in page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": page}))
     )
     with pytest.raises(page_checks.Fail, match="tx：缺整行"):
         page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": INDEX_PAGE}))
+    # #861: the 資料 line and the cells on one line (what index_row_line expected before;
+    # innerText breaks after the name cell's <div>) fail.
     page = INDEX_PAGE.replace(
-        "加權指數\t46,041.43", "加權指數\n資料 2026/10/22\t46,041.43"
+        TX_ROW,
+        TX_ROW.replace("合約 2026/11\t", "合約 2026/11\n資料 2026/10/21 非最新\t"),
+    )
+    with pytest.raises(
+        page_checks.Fail, match="tx：`台指期近月 合約 2026/11` 下一行是"
+    ):
+        page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": page}))
+    page = INDEX_PAGE.replace(
+        "加權指數\t46,041.43", "加權指數\n資料 2026/10/22\n\t46,041.43"
     )
     with pytest.raises(page_checks.Fail, match="taiex：缺整行"):
         page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
@@ -971,6 +984,32 @@ def test_t16_states_only_a_row_of_another_day(tmp_path):
     )
     with pytest.raises(page_checks.Fail, match="2 行，預期 1 行"):
         page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+
+
+def test_t16_reads_a_missing_row_as_three_lines(tmp_path):
+    # #861: the missing-data reason is the same <div> as the 資料 line, so the cells
+    # start their own line too; the reason and the cells on one line fail.
+    missing = {
+        "status": "unavailable",
+        "reason": "fetch_failed",
+        "last_attempt_date": "2026-10-22",
+        "ma60": None,
+    }
+    old = "櫃買指數\n資料 2026/10/21 非最新\n\t395.42\t+2.10\t+0.53%\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
+    reason = "無資料：最近一次擷取失敗（2026/10/22）"
+    page = INDEX_PAGE.replace(
+        old, f"櫃買指數\n{reason}\n\t—\t—\t—\t—\t證券櫃檯買賣中心\n"
+    )
+    assert f"`櫃買指數 ⏎ {reason} ⏎ \t—\t—" in page_checks.t16(
+        FakeRun(tmp_path, _indexes(tpex=missing), {"market-1280": page})
+    )
+    page = INDEX_PAGE.replace(
+        old, f"櫃買指數\n{reason}\t—\t—\t—\t—\t證券櫃檯買賣中心\n"
+    )
+    with pytest.raises(page_checks.Fail, match="tpex：`櫃買指數` 下一行是"):
+        page_checks.t16(
+            FakeRun(tmp_path, _indexes(tpex=missing), {"market-1280": page})
+        )
 
 
 def test_t16_needs_the_source_in_the_table_explanation(tmp_path):

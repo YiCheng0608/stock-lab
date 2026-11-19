@@ -165,7 +165,10 @@ PRICE_PLAN = {
     "SOX": (6000.0, 0.0008, 0),
 }
 # TX accumulates from its first collect (open data has only the latest
-# session, Issue #552): its last TX_SESSIONS sessions, in whole points.
+# session, Issue #552): TX_SESSIONS sessions, in whole points.  They end at
+# T - 1: the near month is often a day behind (docs/DATA_SOURCES.md), so the
+# market page's TX row is ``stale`` and its name cell has a 「資料 … 非最新」
+# line (#858, #861: page_checks T16's two-line row).
 TX_SESSIONS = 10
 # Non-stock series and their bar source (the TAIEX one marks itself as test
 # data for coverage.verified_taiex_sessions; the fixture has no MI_INDEX files).
@@ -271,7 +274,7 @@ def _series(symbol: str) -> list[dict[str, Any]]:
                     for key in ("open", "high", "low", "close")
                 },
             }
-            for row in rows[-TX_SESSIONS:]
+            for row in rows[-TX_SESSIONS - 1 : -1]
         ]
     if symbol in BREAKS_OUT:
         prior = rows[-21:-1]
@@ -2228,6 +2231,17 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         # The market page's index table (Issues #564, #681): the three Taiwan rows.
         ("dashboard", "market_overview.indexes[].key", ["taiex", "tpex", "tx"]),
         ("dashboard", "market_overview.indexes[].status", ["available"] * 3),
+        # TX ends at T - 1 (#861): its row is stale, so T16 checks a two-line row.
+        (
+            "dashboard",
+            "market_overview.indexes[].freshness",
+            ["latest", "latest", "stale"],
+        ),
+        (
+            "dashboard",
+            "market_overview.indexes.2.trading_date",
+            SESSIONS[-2].isoformat(),
+        ),
         ("stocks/US/SPX/bars?interval=day&limit=250", "bars", len(SERIES["SPX"])),
         ("stocks/US/SPX/bars?interval=day&limit=250", "sources", ["fred_close"]),
         ("themes?board=industry&limit=5", "meta.trading_date", D),
