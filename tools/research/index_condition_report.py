@@ -1058,6 +1058,7 @@ def markdown(result: dict[str, Any], command: str) -> str:
             "",
             "</details>",
         ]
+    rolls_start = len(lines)
     rolls = result["market"]["tx_rolls"]
     jumps = [item["basis_jump"] for item in rolls if "basis_jump" in item]
     lines += [
@@ -1088,8 +1089,11 @@ def markdown(result: dict[str, Any], command: str) -> str:
             f"{item.get('basis_jump', 0):+,.1f} |"
         )
     lines += ["", "</details>"]
+    if only_overnight:
+        del lines[rolls_start:]
     if overnight:
         lines += overnight_alignment_lines(result, tag)
+    c4_start = len(lines)
     lines += ["", f"### 美股日期對齊（#567 的 C4，{tag}）", ""]
     for key, item in result["market"]["us_alignment"].items():
         gaps = "、".join(
@@ -1100,6 +1104,8 @@ def markdown(result: dict[str, Any], command: str) -> str:
             f"- {key}：訊號日與所讀美股列相差 {gaps}；訊號日當天也有美股列（不讀）"
             f" {item['score_dates_with_a_same_date_us_row_not_read']} 日。"
         )
+    if only_overnight:  # #567 only: the TX rolls and C4's US dates
+        del lines[c4_start:]
 
     head = (
         "| 版本 | 列數 | data_incomplete | 可行動 | "

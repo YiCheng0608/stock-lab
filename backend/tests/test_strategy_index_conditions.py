@@ -1166,5 +1166,7 @@ def test_a_report_of_an_overnight_run_on_the_fixture(backtest_db, tmp_path):
     assert summary.startswith("# 隔夜美股條件研究（#855）")
     assert "隔夜條件判定" in summary and "隔夜美股讀哪一列" in summary
     assert "依成交日" in summary and "比較次數：隔夜條件 4 組" in summary
+    # #567's TX rolls and C4 US dates are not this run's.
+    assert "台指期換月" not in summary and "美股日期對齊" not in summary
     csv_text = (out / "overnight.csv").read_text(encoding="utf-8")
     assert csv_text.startswith("series,score_date,entry_session,us_date")
