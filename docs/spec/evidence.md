@@ -829,6 +829,52 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 - 再加一個測試：240 日報酬和 `app.mainstream.universe_returns` 比，除了上面三個邊角，結果要相同。
 - `--coverage-only` 要列依年的成員覆蓋率（母體中 T 日有族群的比例）、可排名的族群數、湊不滿 5 個族群的天數，以及 TAIEX 不足而不選的天數。
 
+## 隔夜美股條件研究
+
+這一段回答：T+1 開盤前才知道的隔夜美股漲跌，能不能分辨今日名單之後的結果（[#855](https://github.com/YiCheng0608/stock-lab/issues/855)，#567 的隔夜版）。設計在看任何結果前以提問 [7018248685](https://github.com/YiCheng0608/stock-lab/issues/855#issuecomment-7018248685) 貼出，統籌決定 [7018301183](https://github.com/YiCheng0608/stock-lab/issues/855#issuecomment-7018301183) 核准並加了一層「有優勢」。研究只產報告，不改評分、排序、08:45 通知或 `candidate_score`；美股依 #547 仍只顯示。
+
+**條件**（`app.strategies.index_conditions.OVERNIGHT_CONDITIONS`；6 個條件 × 2 個策略＝12 組）
+
+| 代號 | 指數 | 成立（T+1 照常進場） | 不成立（T 的名單在 T+1 不採用） |
+| --- | --- | --- | --- |
+| `o1`／`o2`／`o3` | SOX（`^SOX`） | r > −2%／r > −1%／r < +1% | r ≤ −2%／r ≤ −1%／r ≥ +1% |
+| `o4`／`o5`／`o6` | SPX（`^GSPC`） | 同上 | 同上 |
+
+- **r**：隔夜那一列美股收盤 ÷ 前一筆已存收盤 − 1（`market_bars.close`），和今日名單「隔夜美股」的 `change_pct` 同一個算法。不加 IXIC：它和 SPX、SOX 高度重疊，多 6 組只會增加碰巧通過的組數。
+- **基底**：`OVERNIGHT_BASES`，也就是 `breakout_v3`、`pullback_v4`，08:45 名單用的版本（`candidate_score_v7`）。#567 的 `BASES`（v3）與 `c1`～`c7` 不變，run 2759 照樣重現得出來。
+- **用法**：同 #567 的 `--index-condition`。條件不成立，整筆訊號就 `rejected`（`index_condition_<代號>_not_met`）。tracking_v2 在 T+1 之後才成交的那幾筆也一起拿掉。
+
+**日期對應**（`IndexView.overnight_row`）
+- T 是訊號日。E 是 T 之後第一個台股交易日（`worker.pipeline.taiwan_bar_dates`，與回測的 score dates 同一份）。
+- 讀日期落在 [T, E) 的最新一列。美股日期 D 的收盤在台北 D+1 約 04:00～05:00，所以 D < E 的列都在 E 的 09:00 以前收盤。**日期 ≥ E 的列一律不讀**。日期 < T 的列在 T 的 21:30 名單前就已收盤，不算隔夜。
+- 週末：週五的 T 讀週五那一列。台股休市時 [T, E) 有多列，取最新一列的單日 r，不累加。
+- 美股休市：[T, E) 沒有列、但之後還有列，就是休市。這時沒有隔夜收盤，條件成立，不濾。
+- **缺值**記 `data_incomplete`，比照 #567，研究版本那筆不進場；報告分開列出。情況有四種：
+  - [T, E) 沒有列，之後也沒有：`us_<序列>_overnight_pending`。
+  - 前一筆已存列早於隔夜列超過 7 個日曆日：`us_<序列>_bar_stale`。
+  - 收盤不是有限的正數：`us_<序列>_close_missing_or_non_finite`。
+  - 找不到 E（副本的最後一個交易日）：`next_session_unknown`。這一天本來就沒有 T+20。
+
+**判定**（`judge_improved`／`judge_edge`，看結果前固定）
+- 每組（策略 × 條件 × 段）比較研究版本與 baseline。
+  - **(a)**：run 的 T+20 模擬報酬逐筆平均，tracking_v2 的口徑，扣 30 bps。
+  - **(b)**：每筆 (a) 減同一訊號日母體的等權平均，再逐筆平均。母體照[共同口徑](#共同口徑)，`evidence_lib.universe`；母體報酬是 T+1 開盤含 5 bps 到 T+20 收盤，也扣 30 bps，兩邊成本相同。
+- **改善**：先過樣本門檻：濾掉的 baseline 可行動訊號 ≥ 30 筆、分布在 ≥ 5 個訊號日，研究版本的 T+20 可用報酬 ≥ 100 筆。過了之後，研究版本的 (a) 與 (b) 都要嚴格大於 baseline。
+- **有優勢**：先符合「改善」，而且研究版本的 (a)（改扣共同口徑的來回 58.5 bps）與 (b) 都 > 0。只比 baseline 的話，baseline 本身是負的時，濾完仍然虧錢也算改善。
+- 兩層都要探索段（2024-09-30～2025-12-31）與驗證段（2026-01-01 起）都過；門檻不足記「無法判定」，不算過。
+- 只列、不判定的有：中位數、invalidated 比例、T+5、「濾掉的那組」、被濾掉的訊號依成交日分組（E 當天、E 之後、沒成交），以及 (b) 逐日平均的 t（日數 ÷ 20）。
+- 比較次數：12 組 × 2 段。同一檔指數的三個門檻是巢狀的，各組不獨立。
+- **之後怎麼用**：只有「有優勢」的組，由統籌在 #1 提案；只有「改善」的組只回報使用者，不提案改評分。
+
+**工具**
+- 回測：`backtest_research.py --index-condition overnight`。報告：`index_condition_report.py`，加印兩層判定、成交日分組，以及每個 T 讀了哪一列（`overnight.csv`）。命令見 [CLI](../ops/CLI.md#測試與驗證)。
+
+**隔夜新聞**（AC-4，只量樣本）：`tools/research/overnight_news_sample.py` 用 `app.preopen_news.check_rows` 重建過去每份名單在 E 08:20 的隔夜新聞，數名單日、列數、有隔夜新聞的列與 AI 方向。
+- 參考線事先固定：「可能負向」≥ 100 列、≥ 60 個名單日，以最近 60 個名單日的速率推估日期。這只是參考線，不做判定。
+- 限制：AI 方向是現在讀到的判讀，不是當時 08:20 看到的。
+
+**結果**：見本節末的「結果（run 3667）」。
+
 ## 限制
 
 - 歷史只有 2024-09-30 起的一段，驗證段只有一段；結論可能只適用這段市況。
