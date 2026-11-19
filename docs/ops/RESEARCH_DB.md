@@ -37,6 +37,8 @@
   - **轉板**：`revenue transfers --apply` 把上櫃標的範圍內的月份從上市標的複製過來（0 個請求）。2026-11-15 在研究 DB 副本上實測（日線從 2017-03 起）：21 檔都通過同一家公司的核對，寫 1,360 列，重跑全部 `unchanged`，和上市標的逐列比對沒有不同。批 3～5 把日線往前補之後要再跑一次，補上新增的月份。
   - **下市股**：`revenue company-classify`，接著 `revenue company-backfill`，用 MOPS 單一公司查詢，只有仍公開發行的公司查得到。破產、合併消滅等「不繼續公開發行」的公司補不到，這部分的缺口會留下來，偏差方向仍對假設有利。等 #702 批 4 建完標的再發請求，請求數先貼在執行單，經統籌核准才補。
   - **怎麼跑**：三個命令都要 `research-db.json`，沒有就 exit 2；請求間隔、不發的時段、中止條件都寫在 DATA_SOURCES。研究 DB 同時只有一個 writer，由回補執行單（#702）的工程師在批次之間代跑，用 `--max-requests` 切成小段；被時段或失敗中止時 exit 2（`partial`），重跑接續。
+  - **分類與 backfill**（[DATA_SOURCES 的下市股分類](../DATA_SOURCES.md#下市與轉板公司的月營收)）：`company-classify` 把每檔分成 `found`、`not_public`、`delisted_notice`（「該 … 上市公司已下市！」）、`foreign_exempt`（「外國發行人免申報本項資訊」）、`no_data`（「查無資料」「資料庫中查無需求資料。」）、`name_mismatch`。只有 `found` 由 `company-backfill` 補，其他各類都不發請求，`company-backfill --plan` 的 `classes` 列出各類檔數。固定頁面不算失敗；KY 的雙幣別表讀新台幣那欄（[#854](https://github.com/YiCheng0608/stock-lab/issues/854)）。
+  - **run 8795 的重跑**（2026-11-20 01:36–01:49，`partial`，連續 3 次失敗停在 3697）：用 #854 的程式在研究 DB 副本重讀這次存下的 141 個回應，`failed` 16 只剩 TWSE 3638 2014-09 的 502；其餘 15 檔是 `foreign_exempt` 11、`delisted_notice` 2（3598、3682）、`no_data` 1（TPEx 5371）、`found` 1（1592 英瑞-KY）。副本上 `company-classify --plan` 是 167 檔、27 個請求：3638 與 3697 之後還沒問的 26 檔上市代號；已有存檔回應的 140 檔在 `answered`，不再問。舊程式同一副本是 42 個（多出的 15 檔回應認不得，會再問）。
   - **轉板後又下市**：上櫃 `transferred`、上市 `delisted` 的公司，`transfers` 的輸出列在 `twin_delisted`。上市那段由 `company-backfill` 補，補完再跑一次 `transfers`，上櫃那段才複製得到。
   - **剩下的缺口**：補完後，由執行單（統籌在 #782 合併後開）貼分年、分市場「有日線、沒有月營收」的比例，並寫進這一段。
 
