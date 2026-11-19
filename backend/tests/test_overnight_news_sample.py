@@ -130,6 +130,16 @@ def test_a_rebuilt_list_counts_the_preopen_window(db):
     totals = result["totals"]
     assert totals["lists"] == 1 and totals["first_list_with_news"] == T
     assert totals["rows_with_negative"] == 1 and totals["news"] == 3
+    # All linked news from the list to the check, overnight or not (only listed):
+    # the item collected before the list and the one after the check are outside.
+    assert result["all_directions"] == {
+        "positive": 1,
+        "negative": 1,
+        "mixed": 0,
+        "unknown": 0,
+        "unscored": 1,
+    }
+    assert result["unreadable_lists"] == []
 
     # The stored check of the same run sits beside the rebuild.
     replace_check(db, run, check_rows(db, run, CHECKED))
@@ -228,3 +238,15 @@ def test_the_cli_refuses_the_production_database(tmp_path):
 @pytest.mark.parametrize("day", [datetime(2026, 9, 7), None])
 def test_taipei_formatting(day):
     assert sample._taipei(day) == ("2026-09-07 08:00" if day else "—")
+
+
+def test_a_list_of_a_version_the_page_no_longer_reads_is_left_out(db):
+    from app.models import CandidateRun
+
+    _list(db)
+    old = date(2026, 9, 3)
+    db.add(CandidateRun(trading_date=old, score_version="candidate_score_v0"))
+    db.commit()
+    result = sample.build(db)
+    assert result["unreadable_lists"] == [old]
+    assert [item["list_date"] for item in result["lists"]] == [T]

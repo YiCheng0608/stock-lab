@@ -217,6 +217,51 @@ def estimate(lists: list[dict[str, Any]], db) -> dict[str, Any]:
     return result
 
 
+def unreadable_lists(db) -> list[date]:
+    """List dates whose runs are all of a score version the page no longer reads."""
+
+    from sqlalchemy import select
+
+    from app.models import CandidateRun
+
+    every = set(db.scalars(select(CandidateRun.trading_date).distinct()))
+    return sorted(every - set(list_dates(db)))
+
+
+def all_directions(db, start: datetime, end: datetime) -> dict[str, int]:
+    """The AI direction of every active news item linked to a stock, collected in [start, end].
+
+    Only listed for comparison (the overnight share against all news); not
+    part of the reference line.
+    """
+
+    from sqlalchemy import select
+
+    from app.models import NewsItem
+    from app.preopen_news import _prompt, direction_of
+
+    ids = [
+        news_id
+        for news_id, symbols in db.execute(
+            select(NewsItem.id, NewsItem.symbols_json).where(
+                NewsItem.status == "active",
+                NewsItem.collected_at >= start,
+                NewsItem.collected_at <= end,
+            )
+        )
+        if symbols
+    ]
+    version, done_results = _prompt()
+    counts = {name: 0 for name in (*DIRECTIONS, "unscored")}
+    for at in range(0, len(ids), 5000):
+        chunk = ids[at : at + 5000]
+        results = done_results(db, chunk, version)
+        for news_id in chunk:
+            direction = direction_of(results.get(news_id))
+            counts[direction or "unscored"] += 1
+    return counts
+
+
 def news_span(db) -> dict[str, Any]:
     from sqlalchemy import func, select
 
@@ -253,6 +298,12 @@ def build(db) -> dict[str, Any]:
     compared = [item for item in done if item["stored"]]
     return {
         "news": span,
+        "unreadable_lists": unreadable_lists(db),
+        "all_directions": (
+            all_directions(db, done[0]["computed_at"], done[-1]["checked_at"])
+            if done
+            else None
+        ),
         "totals": totals,
         "estimate": estimate(lists, db),
         "stored_compared": {
@@ -305,6 +356,9 @@ def markdown(result: dict[str, Any], command: str) -> str:
         f"| 有「可能負向」隔夜新聞的列 | {totals['rows_with_negative']:,}（{_pct(totals['rows_with_negative'], totals['rows'])}） |",
         f"| 隔夜新聞（則・列） | {news:,} |",
         "",
+        "- 頁面讀不到的舊評分版本名單（`CANDIDATE_SCORE_READ_VERSIONS` 以外，不重建）："
+        + ("、".join(map(str, result["unreadable_lists"])) or "無"),
+        "",
         "## AI 方向分布（每則每檔算一次）",
         "",
         "| 方向 | 則數 | 比例 |",
@@ -314,6 +368,23 @@ def markdown(result: dict[str, Any], command: str) -> str:
         lines.append(
             f"| {DIRECTION_ZH[name]} | {totals[name]:,} | {_pct(totals[name], news)} |"
         )
+    every = result.get("all_directions")
+    if every:
+        whole = sum(every.values())
+        lines += [
+            "",
+            "## 同期全部新聞的 AI 方向（只列、不判定）",
+            "",
+            "第一份名單的 `computed_at` 到最後一份完整名單的檢查時點之間收進、有關聯個股的有效新聞，"
+            "不分是否隔夜，給隔夜新聞的比例對照。",
+            "",
+            "| 方向 | 則數 | 比例 |",
+            "| --- | ---: | ---: |",
+        ]
+        for name in (*DIRECTIONS, "unscored"):
+            lines.append(
+                f"| {DIRECTION_ZH[name]} | {every[name]:,} | {_pct(every[name], whole)} |"
+            )
     lines += [
         "",
         "## 要累積到哪一天（參考線，不是判定）",
