@@ -15,7 +15,9 @@ the lists.  Two ways fill part of that:
   copies a corrected TWSE row again.
 * **The single-company page** ``ajax_t05st10_ifrs``, one request per company
   and month.  It answers for a company still 公開發行 after it delisted, and
-  「不繼續公開發行」 for one that is not (bankrupt, merged away; #781 AC-2).
+  「不繼續公開發行」 for one that is not (bankrupt, merged away; #781 AC-2);
+  a delisted TWSE company, a foreign issuer and a month without a filing get
+  fixed pages of their own, classes too and not failures (#854).
   ``classify_companies`` asks once per delisted instrument, for its last month
   with a bar; ``backfill_companies`` asks the rest of the range of the ones
   found.  A page naming another company (a code given to a later one) is
@@ -95,8 +97,19 @@ TAIPEI = timezone(timedelta(hours=8))
 MARKER_NAME = "research-db.json"
 MARKER_PURPOSE = "research_history"
 NOT_PUBLIC_MARKER = "公開發行公司不繼續公開發行"
-NO_DATA_MARKER = "查無資料"
+# Pages without a table that answer the asked company and month: the filing is
+# not there.  「資料庫中查無需求資料。」 is what run 8795 got for TPEx 5371
+# 2026-08, past its deadline, on the same bare page as the other fixed answers
+# (#854).
+NO_DATA_MARKERS = ("查無資料", "資料庫中查無需求資料")
+# A foreign issuer (KY and F- companies) is exempt from this page (#854: 11
+# companies in run 8795, e.g. TPEx 1258, TWSE 3697).
+FOREIGN_EXEMPT_MARKER = "外國發行人免申報本項資訊"
+# 「該 3682 上市公司已下市！」: the page answers nothing for a company delisted
+# from TWSE (#854: TWSE 3598, 3682).
+DELISTED_MARKER = "上市公司已下市"
 FOUND, NOT_PUBLIC, NO_DATA = "found", "not_public", "no_data"
+FOREIGN_EXEMPT, DELISTED_NOTICE = "foreign_exempt", "delisted_notice"
 NAME_MISMATCH = "name_mismatch"
 # The table's row labels in order and the data_json key of each value.
 ROWS = (
@@ -111,6 +124,14 @@ ROWS = (
 )
 TABLE_HEADER = ("項目", "營業收入淨額")
 NOTE_LABEL = "備註 / 營收變化原因說明"
+# The KY layout (TWSE 1592 2021-06, #854): one row of sub-headers under
+# 「合併營業收入淨額」, the NT$ column and the functional currency's, two rows
+# of exchange rates after the eight, and 「備註」.  It has no hidden ``Q1V``/
+# ``Q2V``.  Only the NT$ column is read, into the same fields.
+DUAL_HEADER = ("項目", "合併營業收入淨額")
+DUAL_NT_COLUMN = "新台幣"
+DUAL_RATE_SUFFIX = "換算匯率："
+DUAL_NOTE_LABEL = "備註"
 # NT$ thousands, as t21sc03 (whitespace removed).
 UNIT = "單位：新台幣仟元"
 _PROVIDER = re.compile(r"本資料由(?:\((?P<kind>[^)]*)\))?(?P<name>.+?)公司提供")
@@ -439,7 +460,8 @@ class _PageParser(HTMLParser):
 
 @dataclass(frozen=True)
 class CompanyPage:
-    """One answer: ``kind`` is ``FOUND``, ``NOT_PUBLIC`` or ``NO_DATA``."""
+    """One answer: ``kind`` is ``FOUND``, ``NOT_PUBLIC``, ``NO_DATA``,
+    ``FOREIGN_EXEMPT`` or ``DELISTED_NOTICE``."""
 
     kind: str
     name: str | None = None
@@ -480,7 +502,11 @@ def parse_company_page(html: str, code: str, month: Month) -> CompanyPage:
     """Read one ``t05st10_ifrs`` answer; raise ``OfficialDataError`` when it cannot be trusted.
 
     A found page must be the asked code and month (the hidden ``Q1V``/``Q2V``
-    and the printed 民國 month) and have the table's eight rows in order.
+    and the printed 民國 month) and have the table's eight rows in order.  The
+    KY layout (``DUAL_HEADER``) has no hidden inputs, so only its printed month
+    is checked; the company is checked by name, as every found page
+    (``_classification``).  A page without a table is one of the fixed answers
+    (``NOT_PUBLIC``, ``DELISTED_NOTICE``, ``FOREIGN_EXEMPT``, ``NO_DATA``).
     """
 
     label = f"MOPS t05st10 {code} {month.label}"
@@ -493,15 +519,20 @@ def parse_company_page(html: str, code: str, month: Month) -> CompanyPage:
     text = "".join("".join(parser.text).split())
     if f"該{code}{NOT_PUBLIC_MARKER}" in text:
         return CompanyPage(kind=NOT_PUBLIC)
-    if not parser.cells:
-        if NO_DATA_MARKER in text:
+    cells = parser.cells
+    if not cells:
+        if f"該{code}{DELISTED_MARKER}" in text:
+            return CompanyPage(kind=DELISTED_NOTICE)
+        if FOREIGN_EXEMPT_MARKER in text:
+            return CompanyPage(kind=FOREIGN_EXEMPT)
+        if any(marker in text for marker in NO_DATA_MARKERS):
             return CompanyPage(kind=NO_DATA)
         raise OfficialDataError(f"{label} has no revenue table")
+    dual = tuple(cells[: len(DUAL_HEADER)]) == DUAL_HEADER
     roc = f"{month.year - 1911}{month.month:02d}"
-    if parser.inputs.get("Q1V") != code or parser.inputs.get("Q2V") != roc:
-        raise OfficialDataError(
-            f"{label} answered {parser.inputs.get('Q1V')!r} {parser.inputs.get('Q2V')!r}"
-        )
+    hidden = parser.inputs.get("Q1V"), parser.inputs.get("Q2V")
+    if not (dual and hidden == (None, None)) and hidden != (code, roc):
+        raise OfficialDataError(f"{label} answered {hidden[0]!r} {hidden[1]!r}")
     printed = f"民國{month.year - 1911}年{month.month:02d}月"
     if printed not in text:
         raise OfficialDataError(f"{label} does not print {printed}")
@@ -510,16 +541,7 @@ def parse_company_page(html: str, code: str, month: Month) -> CompanyPage:
     provider = _PROVIDER.search(text)
     if provider is None:
         raise OfficialDataError(f"{label} does not name the company")
-    cells = parser.cells
-    expected = len(TABLE_HEADER) + 2 * len(ROWS) + 2
-    if (
-        len(cells) != expected
-        or tuple(cells[:2]) != TABLE_HEADER
-        or tuple(cells[2 : 2 + 2 * len(ROWS) : 2]) != tuple(name for name, _ in ROWS)
-        or cells[-2] != NOTE_LABEL
-    ):
-        raise OfficialDataError(f"{label} columns changed: {cells[:4]!r}")
-    values = {key: cells[3 + 2 * index] for index, (_, key) in enumerate(ROWS)}
+    values = _dual_values(cells, label) if dual else _single_values(cells, label)
     if parse_number(values["本月"]) is None:
         raise OfficialDataError(f"{label} has no 本月 value")
     return CompanyPage(
@@ -530,8 +552,61 @@ def parse_company_page(html: str, code: str, month: Month) -> CompanyPage:
         prior_year_revenue=parse_number(values["去年同期"]),
         yoy=parse_number(values["本月增減百分比"]),
         cumulative_revenue=parse_number(values["本年累計"]),
-        cells={**values, "備註": cells[-1]},
+        cells=values,
     )
+
+
+def _single_values(cells: list[str], label: str) -> dict[str, str]:
+    """The eight values and the note of the one-column table."""
+
+    expected = len(TABLE_HEADER) + 2 * len(ROWS) + 2
+    if (
+        len(cells) != expected
+        or tuple(cells[:2]) != TABLE_HEADER
+        or tuple(cells[2 : 2 + 2 * len(ROWS) : 2]) != tuple(name for name, _ in ROWS)
+        or cells[-2] != NOTE_LABEL
+    ):
+        raise OfficialDataError(f"{label} columns changed: {cells[:4]!r}")
+    values = {key: cells[3 + 2 * index] for index, (_, key) in enumerate(ROWS)}
+    return {**values, "備註": cells[-1]}
+
+
+def _dual_values(cells: list[str], label: str) -> dict[str, str]:
+    """The NT$ column of the KY table (``DUAL_HEADER``), its note and its rates.
+
+    No NT$ column fails: the other column is another currency (#854).
+    """
+
+    if ROWS[0][0] not in cells:
+        raise OfficialDataError(f"{label} columns changed: {cells[:4]!r}")
+    heads = cells[len(DUAL_HEADER) : cells.index(ROWS[0][0])]
+    if DUAL_NT_COLUMN not in heads:
+        raise OfficialDataError(f"{label} has no {DUAL_NT_COLUMN} column: {heads!r}")
+    column = 1 + heads.index(DUAL_NT_COLUMN)
+    width = 1 + len(heads)
+    start = len(DUAL_HEADER) + len(heads)
+    rows = [cells[index : index + width] for index in range(start, len(cells), width)]
+    body, rest = rows[: len(ROWS)], rows[len(ROWS) :]
+    if (
+        (len(cells) - start) % width
+        or tuple(row[0] for row in body) != tuple(name for name, _ in ROWS)
+        or not rest
+        or rest[-1][0] != DUAL_NOTE_LABEL
+        or not all(row[0].endswith(DUAL_RATE_SUFFIX) for row in rest[:-1])
+    ):
+        raise OfficialDataError(f"{label} columns changed: {cells[:4]!r}")
+    values = {key: row[column] for row, (_, key) in zip(body, ROWS)}
+    others = [index for index in range(1, width) if index != column]
+    return {
+        **values,
+        "備註": " ".join(cell for cell in rest[-1][1:] if cell),
+        "幣別": DUAL_NT_COLUMN,
+        "功能性貨幣": " ".join(heads[index - 1] for index in others),
+        **{
+            row[0].removesuffix("："): " ".join(row[index] for index in others)
+            for row in rest[:-1]
+        },
+    }
 
 
 def fetch_company_page(form: dict[str, str], *, timeout_seconds: float = 60.0) -> bytes:
@@ -861,17 +936,25 @@ def classify_companies(
 ) -> dict[str, Any]:
     """Ask each delisted company's last month with a bar; ``found`` ones are written.
 
-    ``plan`` sends nothing: the companies and how many have no kept answer.
+    ``plan`` sends nothing: the companies and how many have no kept answer;
+    the ones with one are counted by their class (``answered``), which a run
+    reads back instead of asking.
     """
 
     last = last_askable_month(db, _taipei(utcnow()).date())
     companies, skipped = delisted_companies(db, last)
     if plan:
-        pending = [
-            company
-            for company in companies
-            if _stored_answer(db, company.instrument.symbol, company.ask_month) is None
-        ]
+        pending: list[_Company] = []
+        answered: dict[str, int] = {}
+        for company in companies:
+            instrument = company.instrument
+            stored = _stored_answer(db, instrument.symbol, company.ask_month)
+            if stored is None:
+                pending.append(company)
+                continue
+            page = parse_company_page(stored[1], instrument.symbol, company.ask_month)
+            kind = _classification(page, instrument)
+            answered[kind] = answered.get(kind, 0) + 1
         db.rollback()
         return {
             "status": "success",
@@ -879,6 +962,7 @@ def classify_companies(
             "companies": len(companies),
             "requests": len(pending),
             "skipped": skipped,
+            "answered": dict(sorted(answered.items())),
             "by_exchange": _by_exchange(pending),
         }
     run = _new_run(db, RUN_CLASSIFY, {"companies": len(companies), "skipped": skipped})

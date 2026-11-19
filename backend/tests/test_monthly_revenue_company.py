@@ -4,6 +4,12 @@ The single-company page fixtures are the #781 AC-2 probe's answers
 (requests 1 and 2: 2384 勝華, still 公開發行; 2475 華映, not), trimmed of
 their trailing script and blank space.  The tests compare the parsed values
 with the page's own cells instead of spelling the amounts out.
+
+The #854 fixtures are answers of run 8795 in the research DB (2026-11-20),
+trimmed the same way: 1258 其祥-KY 112/05 「外國發行人免申報本項資訊」, 3682
+亞太電 112/12 「該 3682 上市公司已下市！」, 5371 中光電 115/08
+「資料庫中查無需求資料。」 and 1592 英瑞-KY 110/06, the KY table with a NT$
+and a functional currency column.
 """
 
 from __future__ import annotations
@@ -28,6 +34,13 @@ from worker.monthly_revenue import Month
 PAGES = Path(__file__).resolve().parent / "fixtures" / "mops_t05st10"
 FOUND_HTML = (PAGES / "2384_103_06.html").read_text(encoding="utf-8")
 NOT_PUBLIC_HTML = (PAGES / "2475_103_06_not_public.html").read_text(encoding="utf-8")
+FOREIGN_EXEMPT_HTML = (PAGES / "1258_112_05_foreign_exempt.html").read_text(
+    encoding="utf-8"
+)
+DELISTED_HTML = (PAGES / "3682_112_12_delisted.html").read_text(encoding="utf-8")
+NO_DATA_HTML = (PAGES / "5371_115_08_no_data.html").read_text(encoding="utf-8")
+DUAL_HTML = (PAGES / "1592_110_06_dual_currency.html").read_text(encoding="utf-8")
+JUNE_2021 = Month(2021, 6)
 JUNE_2014 = Month(2014, 6)
 # 2026-11-06 12:00 Taipei: outside the quiet hours.
 NOW = datetime(2026, 11, 6, 4, 0)
@@ -48,8 +61,21 @@ def not_public_page(code: str) -> str:
     return NOT_PUBLIC_HTML.replace("該 2475 公開", f"該 {code} 公開")
 
 
+def delisted_page(code: str) -> str:
+    return DELISTED_HTML.replace("該 3682 上市", f"該 {code} 上市")
+
+
+# The fixed pages of #854 by the Fetcher answer that gives them.
+FIXED_PAGES = {
+    "foreign_exempt": lambda _code: FOREIGN_EXEMPT_HTML,
+    "delisted_notice": delisted_page,
+    "no_data": lambda _code: NO_DATA_HTML,
+}
+
+
 class Fetcher:
-    """Answers each form by its code: ``found``, ``not_public`` or an error."""
+    """Answers each form by its code: ``found``, ``not_public``, a fixed page
+    (``FIXED_PAGES``), a whole page or an error."""
 
     def __init__(self, answers: dict[str, str]):
         self.answers = answers
@@ -64,6 +90,10 @@ class Fetcher:
             return found_page(code, month).encode("utf-8")
         if answer == "not_public":
             return not_public_page(code).encode("utf-8")
+        if answer in FIXED_PAGES:
+            return FIXED_PAGES[answer](code).encode("utf-8")
+        if answer.startswith("<html>"):
+            return answer.encode("utf-8")
         if answer == "empty":
             return b""
         raise sources.OfficialDataError(answer)
@@ -230,6 +260,99 @@ def test_a_not_public_answer_for_another_code_is_not_this_ones():
 def test_a_page_with_no_filing_is_no_data():
     html = "<html><body><div id='div01'><center><h3>查無資料！</h3></div></body></html>"
     assert mc.parse_company_page(html, "2384", JUNE_2014).kind == mc.NO_DATA
+
+
+@pytest.mark.parametrize(
+    "html, code, month, kind",
+    [
+        # The page does not name the code: every foreign issuer gets it.
+        (FOREIGN_EXEMPT_HTML, "1258", Month(2023, 5), "foreign_exempt"),
+        (FOREIGN_EXEMPT_HTML, "3697", Month(2014, 1), "foreign_exempt"),
+        (DELISTED_HTML, "3682", Month(2023, 12), "delisted_notice"),
+        (delisted_page("3598"), "3598", Month(2016, 5), "delisted_notice"),
+        # 「資料庫中查無需求資料。」 is 「查無資料」: no filing for the month.
+        (NO_DATA_HTML, "5371", Month(2026, 8), mc.NO_DATA),
+    ],
+    ids=["1258", "3697", "3682", "3598", "5371"],
+)
+def test_the_fixed_pages_of_run_8795_are_answers(html, code, month, kind):
+    page = mc.parse_company_page(html, code, month)
+    assert page.kind == kind
+    assert page.revenue is None and page.name is None
+
+
+def test_a_delisted_notice_for_another_code_is_not_this_ones():
+    with pytest.raises(sources.OfficialDataError, match="no revenue table"):
+        mc.parse_company_page(DELISTED_HTML, "3598", Month(2016, 5))
+
+
+def test_the_ky_table_is_read_from_its_nt_column():
+    page = mc.parse_company_page(DUAL_HTML, "1592", JUNE_2021)
+    assert page.kind == mc.FOUND
+    assert page.name == "英瑞-KY"
+    assert page.company_kind == "公開發行公司"
+    cells = page.cells
+    assert cells["幣別"] == "新台幣" and cells["功能性貨幣"] == "功能性貨幣(美元)"
+    assert cells["備註"] == "因購料資金不足，影響生產及出貨"
+    assert {"本月換算匯率", "本年累計換算匯率"} <= set(cells)
+    assert page.revenue == sources.parse_number(cells["本月"])
+    assert page.prior_year_revenue == sources.parse_number(cells["去年同期"])
+    assert page.cumulative_revenue == sources.parse_number(cells["本年累計"])
+    assert page.yoy == sources.parse_number(cells["本月增減百分比"])
+    # The NT$ column, not the US$ one: the table's own arithmetic in NT$ and
+    # 註1 (NT$ = US$ × the month's rate, rounded to the thousand).
+    change = sources.parse_number(cells["本月增減金額"])
+    assert page.revenue - page.prior_year_revenue == pytest.approx(change)
+    usd = 2884.0
+    rate = sources.parse_number(cells["本月換算匯率"])
+    assert page.revenue == pytest.approx(usd * rate, abs=1)
+    total_change = sources.parse_number(cells["累計增減金額"])
+    assert page.cumulative_revenue - sources.parse_number(
+        cells["去年累計"]
+    ) == pytest.approx(total_change)
+
+
+@pytest.mark.parametrize(
+    "html, code, month, message",
+    [
+        # No NT$ column: still a failure, the other column is not guessed.
+        (
+            DUAL_HTML.replace(">新台幣</TD>", ">人民幣</TD>"),
+            "1592",
+            JUNE_2021,
+            "has no 新台幣 column",
+        ),
+        (DUAL_HTML, "1592", Month(2021, 7), "does not print"),
+        (
+            DUAL_HTML.replace("<td class='tblHead'>去年同期</td>", "<td>上月</td>"),
+            "1592",
+            JUNE_2021,
+            "columns changed",
+        ),
+        (
+            DUAL_HTML.replace("<td class='tblHead'>備註</td>", "<td>其他</td>"),
+            "1592",
+            JUNE_2021,
+            "columns changed",
+        ),
+        # Hidden inputs of another code are not this one's, in this layout too.
+        (
+            DUAL_HTML.replace(
+                "<table class='hasBorder'>",
+                "<input type='hidden' name='Q1V' value='2330'>"
+                "<input type='hidden' name='Q2V' value='11006'><table class='hasBorder'>",
+            ),
+            "1592",
+            JUNE_2021,
+            "answered",
+        ),
+    ],
+    ids=["no-nt-column", "month", "rows", "note", "hidden-code"],
+)
+def test_a_ky_table_that_cannot_be_trusted_is_rejected(html, code, month, message):
+    assert html != DUAL_HTML or month != JUNE_2021  # the replacement took
+    with pytest.raises(sources.OfficialDataError, match=message):
+        mc.parse_company_page(html, code, month)
 
 
 @pytest.mark.parametrize(
@@ -556,6 +679,100 @@ def test_a_failure_is_asked_again_on_the_next_run(factory):
     fetcher = Fetcher(ANSWERS)
     assert classify(factory, fetcher)["status"] == "success"
     assert fetcher.asked == [("2475", "108/05")]
+
+
+FIXED_ANSWERS = {"9999": "foreign_exempt", "2384": "delisted_notice", "2475": "no_data"}
+
+
+def test_three_fixed_pages_in_a_row_do_not_stop_the_run(factory):
+    """Run 8795 stopped on them (#854): they are answers, not failures."""
+
+    delisted_db(factory)
+    fetcher = Fetcher(FIXED_ANSWERS)
+    result = classify(factory, fetcher)
+    assert result["status"] == "success" and result["aborted"] is None
+    assert result["failed"] == 0 and len(fetcher.forms) == 3
+    assert result["classes"] == {
+        "delisted_notice": 1,
+        "foreign_exempt": 1,
+        "no_data": 1,
+    }
+    assert result["listed"] == {
+        "delisted_notice": ["TWSE:2384"],
+        "foreign_exempt": ["TPEx:9999"],
+        "no_data": ["TWSE:2475"],
+    }
+    with factory() as db:
+        assert not db.scalars(select(MonthlyRevenue)).all()
+        run = db.get(IngestionRun, result["run_id"])
+        manifest = run.metadata_json["manifest"]
+        assert {entry["class"] for entry in manifest.values()} == set(result["classes"])
+        # Backfill asks none of them.
+        planned = mc.backfill_companies(db, plan=True)
+    assert planned["classes"] == result["classes"]
+    assert (planned["companies"], planned["requests"]) == (0, 0)
+
+
+def test_a_failure_between_fixed_pages_does_not_count_three(factory):
+    """A fixed page ends a run of failures as any answer does."""
+
+    delisted_db(factory)
+    fetcher = Fetcher({**FIXED_ANSWERS, "9999": "empty", "2475": "empty"})
+    result = classify(factory, fetcher)
+    assert result["status"] == "partial" and result["aborted"] is None
+    assert result["failed"] == 2 and len(fetcher.forms) == 3
+
+
+def test_a_rerun_reads_back_the_classified_and_asks_only_the_failed(factory):
+    """#854 scope 3: the plan counts the kept answers by class."""
+
+    delisted_db(factory)
+    first = classify(factory, Fetcher({**FIXED_ANSWERS, "2475": "empty"}))
+    assert first["failed"] == 1
+    with factory() as db:
+        planned = mc.classify_companies(db, plan=True)
+    assert planned["requests"] == 1
+    assert planned["answered"] == {"delisted_notice": 1, "foreign_exempt": 1}
+    assert planned["by_exchange"] == {"TWSE stock": 1}
+    fetcher = Fetcher(ANSWERS)
+    second = classify(factory, fetcher)
+    assert fetcher.asked == [("2475", "108/05")]
+    assert second["classes"] == {
+        "delisted_notice": 1,
+        "foreign_exempt": 1,
+        "not_public": 1,
+    }
+    with factory() as db:
+        planned = mc.classify_companies(db, plan=True)
+    assert planned["requests"] == 0
+    assert planned["answered"] == second["classes"]
+
+
+def test_classify_writes_the_ky_tables_nt_column(factory):
+    with factory() as db:
+        item = instrument(
+            db,
+            "TWSE",
+            "1592",
+            "英瑞-KY",
+            "delisted",
+            date(2014, 10, 16),
+            date(2021, 6, 15),
+        )
+        db.commit()
+    page = mc.parse_company_page(DUAL_HTML, "1592", JUNE_2021)
+    result = classify(factory, Fetcher({"1592": DUAL_HTML}))
+    assert result["classes"] == {"found": 1} and result["inserted"] == 1
+    with factory() as db:
+        row = months_of(db, db.get(Instrument, item.id))["2021-06"]
+        assert (row.revenue, row.prior_year_revenue, row.yoy) == (
+            page.revenue,
+            page.prior_year_revenue,
+            page.yoy,
+        )
+        assert row.cumulative_revenue == page.cumulative_revenue
+        assert row.data_json["幣別"] == "新台幣"
+        assert row.data_json["公司名稱"] == "英瑞-KY"
 
 
 def test_requests_keep_the_interval(factory):
