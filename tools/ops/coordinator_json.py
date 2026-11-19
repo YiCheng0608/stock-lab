@@ -332,21 +332,58 @@ def run_id(check: dict) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def run_gate(rollup, run: int) -> dict | None:
+    """The GATE check of run `run`, the newest by latest_checks (a re-run of GATE in the
+    same run replaces the earlier one), or None while the run lists none. ci_result,
+    check_state and slots.ci_red read the same one (#843 review 7010099051)."""
+    gates = [c for c in rollup or [] if run_id(c) == run and c.get("name") == GATE]
+    return next(iter(latest_checks(gates)), None)
+
+
+def cancelled_run(rollup, run: int) -> bool:
+    """A job of run `run` ended CANCELLED (its newest check by latest_checks, so a
+    re-run job replaces its cancelled attempt). That is the run concurrency cancelled:
+    its GATE still runs (always()) and passes, handing the result to the run kept
+    (ci.yml `required`, #421), so its GATE=SUCCESS is no CI result (PR #842,
+    2026-11-19, #843); cancelled once only GATE was left, GATE itself is CANCELLED. The
+    rollup has no workflow-run conclusion, and every job of a run cancelled early but
+    GATE ends CANCELLED, so the jobs tell. A job past its timeout-minutes is CANCELLED
+    too (run 40374422949's verify, 2026-10-26), so a timed-out run looks cancelled."""
+    return any(
+        (c.get("conclusion") or "").upper() == "CANCELLED"
+        for c in latest_checks([c for c in rollup or [] if run_id(c) == run])
+    )
+
+
+def _failed_gate(rollup, run: int) -> bool:
+    """Run `run`'s GATE ended other than SUCCESS or CANCELLED (FAILURE, TIMED_OUT…)."""
+    gate = run_gate(rollup, run) or {}
+    return (gate.get("conclusion") or "").upper() not in ("", "SUCCESS", "CANCELLED")
+
+
 def newest_ci_run(rollup) -> tuple[str, int] | None:
     """(workflow name, run id) of the newest run of the gate's workflow, or None.
 
     The gate's workflow is the one of the newest GATE check; its newest run is the
-    highest run id among that workflow's checks, whether or not that run lists GATE
-    yet. A run cancelled by a newer one leaves failed jobs behind, and the newer run
-    lists a job only once it is queued (PR #328, 2026-10-28; PR #735 and #737,
-    2026-11-15). event_queue.ci_result and check_state both read the run from here
-    (#740)."""
+    highest run id among that workflow's runs that are not cancelled (cancelled_run),
+    whether or not that run lists GATE yet. Ids do not order runs created the same
+    second: on PR #432 and PR #842 the higher id was the one concurrency cancelled, the
+    lower one went on (#843). With every run cancelled (a timed-out job is CANCELLED as
+    well), the highest id of those whose GATE failed, so the CI event names the run that
+    failed rather than the one cancelled for it; with none failed, the highest id. A run
+    cancelled by a newer one leaves failed jobs behind, and the newer run lists a job
+    only once it is queued (PR #328, 2026-10-28; PR #735 and #737, 2026-11-15).
+    event_queue.ci_result, check_state and slots.ci_red all read the run from here
+    (#740, #817)."""
     runs = [(r, c) for c in rollup or [] if (r := run_id(c)) is not None]
     gates = [(r, c) for r, c in runs if c.get("name") == GATE]
     if not gates:
         return None
     workflow = max(gates, key=lambda g: g[0])[1].get("workflowName")
-    return workflow, max(r for r, c in runs if c.get("workflowName") == workflow)
+    ids = {r for r, c in runs if c.get("workflowName") == workflow}
+    kept = {r for r in ids if not cancelled_run(rollup, r)}
+    failed = {r for r in ids if _failed_gate(rollup, r)}
+    return workflow, max(kept or failed or ids)
 
 
 def check_state(rollup) -> str:

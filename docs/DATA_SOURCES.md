@@ -172,7 +172,13 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
   - 貼盤中輸出（`--dry-run` 的輸出、`intraday-*.log`、`intraday-*.jsonl`）到 Issue、PR 或 `pr-assets` 前，先跑 `python tools/ops/quote_guard.py mask <檔> > <遮好的檔>`，貼遮好的檔。成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`，富果回應欄位與 `Quote(...)` 的值換成 `<值>`，每輪 `levels` 紀錄的 `high`、`low`、`last` 換成 `<價>`；`--- poll`、`--- event` 列與規則價位（進場價、停損、目標）照原樣留著。
   - 守門員是 [`tools/ops/quote_guard.py`](../tools/ops/quote_guard.py)，樣式只寫在 [`quote_patterns.json`](../tools/ops/quote_patterns.json) 一份。它擋 `comment.sh`、`gh issue`／`gh pr` 的留言、開單、改本文、標題與 review、`gh api` 到 issues、pulls、comments、graphql 的欄位、推 `pr-assets`，以及 CI 的 PR 本文（規則 g）。命中時只印行號與哪一種樣式，不印報價。範圍與擋不到的情況見 [GUARDRAILS](GUARDRAILS.md) 的「沒遮的富果報價不上 GitHub」那一列。
   - 樣式抓的是 `TEMPLATES` 帶富果值的片段（`<時間> 成交 <價>`、`開盤`、`委買`、`委賣` 後面接數字）、上面「讀的欄位」與 `openPrice`、`closePrice`、`lastPrice`、`bids`、`asks` 帶數值（值是 `[…]`／`{…}` 時裡面有任何數字就算），`fugle.Quote(...)` 印出來的 `key=數字`，`--- message` 列，以及每輪 `levels` 紀錄（[#808](https://github.com/YiCheng0608/stock-lab/issues/808) 的 jsonl）各檔帶數字的 `high`、`low`、`last`；各檔自己的規則價位清單放行。日線的開盤價寫成「開盤價 X」、無成交與成交量寫成「無成交 N」「成交 N 股」不會被擋。
-  - 源頭遮罩（intraday 本身預設遮掉輸出）是 [#833](https://github.com/YiCheng0608/stock-lab/issues/833)，兩層各自獨立。
+  - 源頭遮罩（下一點）是 [#833](https://github.com/YiCheng0608/stock-lab/issues/833)，兩層各自獨立、不共用程式。
+- **源頭遮罩**（#833）：`intraday` 印到終端與寫進 `intraday-YYYYMMDD.log` 的內容預設沒有富果的值。
+  - 遮哪些：訊息裡從富果來的成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`（`message(masked=True)` 依欄位產生，不是事後比對字串）。`--dry-run` 印的 `--- message` 列就是遮過的全文，例如 `2618 長榮航 觸及規則進場價 47.75（09:01 前後；<時間> 成交 <價>）`。`.log` 本來就不寫訊息全文，也不寫每輪的 `levels`（最高、最低、成交價）。
+  - 不遮的：`--- poll` 列（`ok`、`codes`、`ms_*`、`lag_*`）、`--- event`、`--- target`、`--- levels_restored` 列，規則價位（進場、停損、目標）與我們自己的輪詢時間。
+  - 原始值在哪：只在本機資料目錄（repo 外）的 `intraday-YYYYMMDD.jsonl`，訊息照送出的全文、每輪 `levels` 照原值，重啟還原照舊讀它。`--dry-run` 不寫 jsonl；要看原始值時加 `--raw-file <路徑>`，同樣的 jsonl 列追加到那個檔、不印到終端。`--raw-file` 只配 `--dry-run`；空值、路徑在任何 git checkout 裡、檔名是 `intraday-*.jsonl`／`intraday-*.log` 或落在 logs 目錄底下都拒絕（後兩種會被排程那次當成自己的紀錄讀回，把 dry-run 的事件當成已送）。
+  - Telegram 送到私人對話的訊息照舊帶真實報價，逐字不變（只送私人對話由 `chat_not_private` 擋）。
+  - 要貼 jsonl 或 raw 檔的內容時，仍先過上一點的 `quote_guard.py mask`。
 
 ### 沒採用的來源
 
