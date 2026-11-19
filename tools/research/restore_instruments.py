@@ -17,9 +17,21 @@ flipped 23 others between ``stock`` and ``ipo``.  This tool puts back:
   (``worker.instrument_repair._latest_lists``, as a daily collect of that day
   would).  An instrument the lists do not carry keeps its type.
 
+Two limits, both caught by ``--reference`` (so apply only when
+``differs_from_reference_after`` is empty):
+
+- A re-listing (a delisted or transferred code listed again) turns the
+  instrument ``active`` without an ``instrument_status`` row; this tool would
+  put the older ``delisted``/``transferred`` back.
+- The type is judged on the day of the newest list capture.  When that is
+  older than today, a company close to the 60-day line may come out ``ipo``
+  here and ``stock`` in production; ``lists.<exchange>.age_days`` gives the
+  age, and ``warnings`` names a capture older than one day.
+
 Dry-run is the default; ``--apply`` writes every change in one transaction,
 and with ``--expect-changes N`` only when there are exactly N (else it writes
-nothing and exits 1).  A second run finds nothing to change.
+nothing and exits 1).  A second run finds nothing to change.  A failure to
+read the lists, their raw files or the reference prints ``error`` and exits 3.
 ``--reference <db>`` (a read-only copy of the production database, whose
 daily collect applies the same rule to today's lists) adds what it holds for
 each change and lists the instruments both databases have whose type or
@@ -77,13 +89,20 @@ def latest_statuses(session: Any) -> dict[str, str]:
     return latest
 
 
-def plan(session: Any) -> dict[str, Any]:
+STALE_LIST_DAYS = 1
+ERROR_EXIT = 3
+
+
+def plan(session: Any, today: Any = None) -> dict[str, Any]:
     """The changes, and which list captures the types come from."""
 
     from sqlalchemy import select
 
     from app.models import Instrument
     from worker.instrument_repair import _latest_lists
+    from worker.sources import taipei_today
+
+    today = today or taipei_today()
 
     records, evidence, raw_ids = _latest_lists(session)
     listed = {(item.exchange, item.symbol): item.instrument_type for item in records}
@@ -106,16 +125,21 @@ def plan(session: Any) -> dict[str, Any]:
                     "status": [item.status, new_status],
                 }
             )
-    return {
-        "lists": {
-            exchange: {
-                "observed_date": value["observed_date"].isoformat(),
-                "raw_payload_ids": [c["raw_payload_id"] for c in value["captures"]],
-            }
-            for exchange, value in evidence.items()
-        },
-        "changes": changes,
+    lists = {
+        exchange: {
+            "observed_date": value["observed_date"].isoformat(),
+            "age_days": (today - value["observed_date"]).days,
+            "raw_payload_ids": [c["raw_payload_id"] for c in value["captures"]],
+        }
+        for exchange, value in evidence.items()
     }
+    warnings = [
+        f"{exchange} lists were captured {item['observed_date']}, "
+        f"{item['age_days']} days ago: compare the ipo/stock types with --reference"
+        for exchange, item in lists.items()
+        if item["age_days"] > STALE_LIST_DAYS
+    ]
+    return {"lists": lists, "warnings": warnings, "changes": changes}
 
 
 def held(path: Path) -> dict[str, list[str]]:
@@ -162,24 +186,34 @@ def run(
     if problem:
         return 2, {"refused": problem}
 
+    import sqlite3
+
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
     from app.models import Instrument
+    from worker.instrument_repair import InstrumentRepairError
 
     engine = create_engine(f"sqlite:///{db}")
     try:
         with Session(engine) as session:
-            result = plan(session)
-            changes = result["changes"]
-            summary = {
-                "db": str(db),
-                **result,
-                "count": len(changes),
-                "mode": "apply" if apply else "dry_run",
-            }
-            if reference is not None:
-                summary = compare(summary, held(reference), held(db))
+            try:
+                result = plan(session)
+                changes = result["changes"]
+                summary = {
+                    "db": str(db),
+                    **result,
+                    "count": len(changes),
+                    "mode": "apply" if apply else "dry_run",
+                }
+                if reference is not None:
+                    summary = compare(summary, held(reference), held(db))
+            except (InstrumentRepairError, OSError, ValueError, sqlite3.Error) as exc:
+                return ERROR_EXIT, {
+                    "db": str(db),
+                    "status": "error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
             if expect is not None and len(changes) != expect:
                 return 1, {**summary, "status": "unexpected", "expected": expect}
             if not apply:

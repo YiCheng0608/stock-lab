@@ -245,6 +245,10 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 **規則**：`pipeline.lists_are_current(score_date)`。
 
 - collect 的日子早於 `latest_weekday(今天)`（台北日期；週末時是上一個星期五）時，名單只用來建新標的。既有標的不改 `instrument_type` 與 `status`；名稱、產業、上市日照舊更新。
+- 「今天」在 collect 開始、送請求之前取一次。所以當天的 collect 拖過午夜才寫入，仍算當天。
+- 舊日期 collect 建新標的時，`newlisting` 有、主檔沒有、上市日離今天超過 60 天的代號，已經不在今天的名單上。這種標的照 `create_history_instrument` 的規則建成 `transferred`（另一交易所有同代號）或 `delisted`，並寫一列 `instrument_status`；類型照那筆紀錄。
+  - 這樣做是因為狀態同步（`plan_instrument_status`）只在 `snapshot_feeds` 的 collect 跑，回補與 catch-up 不跑，不然它們會一直停在 `active`（[#840 review](https://github.com/YiCheng0608/stock-lab/pull/840#issuecomment-7007687965)）。
+  - 上市日在 60 天內的，是主檔還沒收錄的新上市，照舊建成 `active`。
 - 每日 collect（今天，週末交易日也算）照舊改寫。
 - 日線、籌碼的寫入不受影響。dormant 標的的恢復照 `reactivate_dormant` 自己的規則。
 
@@ -255,7 +259,11 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 - 只改這兩欄；沒有研究標記 `research-db.json` 時 exit 2，正式 DB 不能用它修。
 - 預設 dry-run。`--apply --expect-changes N` 在一個 transaction 裡寫入，列數不是 N 就不寫、exit 1。
 - `--reference <正式 DB 唯讀副本>` 在每一列附上正式 DB 的值，並列出修完後兩邊共有、類型或狀態仍不同的標的（`differs_from_reference_after`）。正式 DB 每天照今天的名單重寫類型，所以兩邊應該相同。
+- 讀不到名單 capture、raw 檔或 reference 時，印 `error`、exit 3，不寫入；列數不符是 exit 1。
 - 重跑冪等。
+- **為什麼一定要看 reference**：有兩種情況，工具自己判斷不了，都要靠 reference 比對擋下。
+  - **重新上市**：下市或轉板的代號重新上市時，狀態變回 `active`，但不會寫 `instrument_status` 列。工具照最新一列，會把它改回 `delisted`／`transferred`。
+  - **名單 capture 舊了**：類型以最新一份名單 capture 的日子判斷。capture 比今天舊時，接近 60 天邊界的公司可能這邊是 `ipo`、正式 DB 是 `stock`。輸出的 `lists.<交易所>.age_days` 是 capture 距今的天數，超過 1 天時 `warnings` 會列出來。
 
 **代跑步驟**（研究 DB 同時只有一個寫入者，由 #702 的工程師做；IMG＝含 #838 的 image）：
 
@@ -270,7 +278,8 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 
    - 預期 `differs_from_reference_after` 是空的，每一列的 `reference` 都等於修後的值。
    - 不是時不要 apply，把輸出貼在 #702 問統籌。
-   - 名單 capture 與正式副本差一天以上時，剛過 60 天的公司可能一邊是 `ipo`、一邊是 `stock`，要逐列看。
+   - 有 `warnings`（名單 capture 超過 1 天）時，逐列看 `ipo`／`stock` 不同的是不是剛跨過 60 天。
+   - exit 3（`error`）時不要重跑 apply，把輸出貼在 #702。
 4. apply：同一行加 `--apply --expect-changes <第 3 步的 count>`，輸出寫 `/data/logs/restore-838-apply.json`。
 5. 再跑第 3 步一次，預期 `count: 0`、`differs_from_reference_after` 空的，然後關維護模式。
 6. 之後才補跑 #786 的 `xbrl-apply` 與 `company-classify`。

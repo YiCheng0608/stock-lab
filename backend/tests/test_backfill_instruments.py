@@ -20,7 +20,7 @@ import worker.pipeline as pipeline
 import worker.sources as sources
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
-from app.models import Instrument, MarketBar
+from app.models import DataQuality, Instrument, MarketBar
 
 TODAY = date(2026, 11, 17)  # a Tuesday
 OLD_SESSION = date(2011, 3, 1)
@@ -58,15 +58,23 @@ def _batch(day: date) -> sources.OfficialBatch:
         day.isoformat(),
         collected_at=datetime(2026, 11, 17, 10, 0),
     )
+    newlisting = sources.capture_payload(
+        "twse",
+        sources.TWSE_NEW_LISTING_ENDPOINT,
+        {"fixture": "newlisting"},
+        day.isoformat(),
+        collected_at=datetime(2026, 11, 17, 10, 0),
+    )
 
-    def record(symbol, instrument_type, exchange="TWSE"):
+    def record(symbol, instrument_type, exchange="TWSE", listed=None, payload=capture):
         return sources.InstrumentRecord(
             symbol,
             f"{symbol} official",
             exchange=exchange,
             instrument_type=instrument_type,
+            listing_date=listed,
             industry="24",
-            payload_sha256=capture.sha256,
+            payload_sha256=payload.sha256,
         )
 
     def bar(symbol, exchange="TWSE"):
@@ -100,9 +108,14 @@ def _batch(day: date) -> sources.OfficialBatch:
             record("8047", "ipo", exchange="TPEx"),
             # not stored yet: a new instrument
             record("9999", "ipo"),
+            # newlisting rows only, not stored: left the master since (one
+            # moved to TPEx), and one listed last week, not in the master yet
+            record("8888", "ipo", listed=date(2011, 2, 1), payload=newlisting),
+            record("7777", "ipo", listed=date(2011, 2, 15), payload=newlisting),
+            record("6666", "ipo", listed=date(2026, 11, 10), payload=newlisting),
         ],
         bars=[bar("TAIEX"), bar("6505"), bar("9999")],
-        payloads=[capture],
+        payloads=[capture, newlisting],
         data_as_of=day.isoformat(),
         snapshot_feeds=False,
     )
@@ -114,7 +127,10 @@ STORED = {
     ("TWSE", "1339"): ("ipo", "active"),
     ("TWSE", "1589"): ("ipo", "dormant"),
     ("TPEx", "8047"): ("stock", "transferred"),
+    ("TPEx", "7777"): ("stock", "active"),
 }
+# What a collect creates from the newlisting rows either way.
+PENDING_LISTING = {("TWSE", "6666"): ("ipo", "active")}
 
 
 def _seed(factory) -> None:
@@ -152,10 +168,26 @@ def test_old_session_keeps_stored_types_and_statuses_and_creates_new_ones(
     assert result["status"] == "success"
     assert _state(pipeline_env) == {
         **STORED,
+        **PENDING_LISTING,
         # a new instrument still takes the record's values
         ("TWSE", "9999"): ("ipo", "active"),
+        # unless the lists say it has left them (#840 review)
+        ("TWSE", "8888"): ("ipo", "delisted"),
+        ("TWSE", "7777"): ("ipo", "transferred"),
     }
     with pipeline_env() as db:
+        evidence = {
+            row.entity_key: (row.status, row.as_of_date, row.checks_json["reason"])
+            for row in db.scalars(
+                select(DataQuality).where(
+                    DataQuality.entity_type == "instrument_status"
+                )
+            )
+        }
+        assert evidence == {
+            "TWSE:8888": ("delisted", OLD_SESSION, "absent_from_official_lists"),
+            "TWSE:7777": ("transferred", OLD_SESSION, "listed_on_other_exchange"),
+        }
         # the session's quotes are written as before
         assert set(
             db.scalars(
@@ -184,7 +216,11 @@ def test_todays_session_rewrites_types_and_statuses_as_before(pipeline_env):
         # dormant ends only when a quote row returns
         ("TWSE", "1589"): ("stock", "dormant"),
         ("TPEx", "8047"): ("ipo", "active"),
+        ("TPEx", "7777"): ("stock", "active"),
         ("TWSE", "9999"): ("ipo", "active"),
+        ("TWSE", "8888"): ("ipo", "active"),
+        ("TWSE", "7777"): ("ipo", "active"),
+        **PENDING_LISTING,
     }
 
 
@@ -205,3 +241,20 @@ def test_on_a_weekend_the_last_weekday_is_current(monkeypatch):
     assert pipeline.lists_are_current(date(2026, 11, 20))  # Friday
     assert pipeline.lists_are_current(date(2026, 11, 21))  # a weekend session
     assert not pipeline.lists_are_current(date(2026, 11, 19))
+
+
+def test_a_daily_collect_that_upserts_after_midnight_keeps_its_day(
+    pipeline_env, monkeypatch
+):
+    _seed(pipeline_env)
+
+    class PastMidnight(FakeAdapter):
+        def fetch(self, start, end):
+            # Wednesday 00:05 Taipei: the fetch of Tuesday's session ran late
+            monkeypatch.setattr(pipeline, "taipei_today", lambda: date(2026, 11, 18))
+            return self.batch
+
+    pipeline.collect(TODAY, adapter=PastMidnight(_batch(TODAY)))
+
+    assert _state(pipeline_env)[("TWSE", "6505")] == ("ipo", "active")
+    assert _state(pipeline_env)[("TWSE", "8427")] == ("ipo", "active")

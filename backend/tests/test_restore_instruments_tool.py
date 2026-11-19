@@ -13,6 +13,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 import worker.instrument_repair as instrument_repair
+import worker.sources as sources
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import DataQuality, Instrument
@@ -105,6 +106,7 @@ def research_db(tmp_path, monkeypatch):
     monkeypatch.setattr(
         instrument_repair, "_latest_lists", lambda session: (LISTS, evidence, {})
     )
+    monkeypatch.setattr(sources, "taipei_today", lambda: date(2026, 11, 17))
     return db
 
 
@@ -145,8 +147,9 @@ def test_dry_run_plans_the_restore_and_writes_nothing(research_db):
         "TPEx:8047",
     }
     assert summary["lists"] == {
-        "TWSE": {"observed_date": "2026-11-16", "raw_payload_ids": [7]}
+        "TWSE": {"observed_date": "2026-11-16", "age_days": 1, "raw_payload_ids": [7]}
     }
+    assert summary["warnings"] == []
     assert _state(research_db) == before
 
 
@@ -211,3 +214,37 @@ def test_reference_shows_its_values_and_what_still_differs(research_db, tmp_path
     assert by_code["TWSE:6505"] == ["ipo", "active"]
     assert summary["reference_common"] == len(RESTORED)
     assert summary["differs_from_reference_after"] == ["TWSE:6505"]
+
+
+def test_lists_older_than_a_day_are_warned_about(research_db, monkeypatch):
+    monkeypatch.setattr(sources, "taipei_today", lambda: date(2026, 11, 19))
+
+    code, summary = tool.run(research_db, apply=False, expect=None)
+
+    assert code == 0
+    assert summary["lists"]["TWSE"]["age_days"] == 3
+    assert summary["warnings"] == [
+        "TWSE lists were captured 2026-11-16, 3 days ago: "
+        "compare the ipo/stock types with --reference"
+    ]
+
+
+def test_unreadable_lists_or_reference_exit_3_and_write_nothing(
+    research_db, monkeypatch, tmp_path
+):
+    before = _state(research_db)
+
+    code, summary = tool.run(
+        research_db, apply=True, expect=None, reference=tmp_path / "none" / "x.db"
+    )
+    assert code == tool.ERROR_EXIT and summary["status"] == "error"
+    assert summary["error"].startswith("OperationalError")
+
+    def broken(session):
+        raise instrument_repair.InstrumentRepairError(["no stored capture of X"])
+
+    monkeypatch.setattr(instrument_repair, "_latest_lists", broken)
+    code, summary = tool.run(research_db, apply=True, expect=None)
+    assert code == tool.ERROR_EXIT
+    assert summary["error"] == "InstrumentRepairError: no stored capture of X"
+    assert _state(research_db) == before
