@@ -176,7 +176,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - **源頭遮罩**（#833）：`intraday` 印到終端與寫進 `intraday-YYYYMMDD.log` 的內容預設沒有富果的值。
   - 遮哪些：訊息裡從富果來的成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`（`message(masked=True)` 依欄位產生，不是事後比對字串）。`--dry-run` 印的 `--- message` 列就是遮過的全文，例如 `2618 長榮航 觸及規則進場價 47.75（09:01 前後；<時間> 成交 <價>）`。`.log` 本來就不寫訊息全文，也不寫每輪的 `levels`（最高、最低、成交價）。
   - 不遮的：`--- poll` 列（`ok`、`codes`、`ms_*`、`lag_*`）、`--- event`、`--- target`、`--- levels_restored` 列，規則價位（進場、停損、目標）與我們自己的輪詢時間。
-  - 原始值在哪：只在本機資料目錄（repo 外）的 `intraday-YYYYMMDD.jsonl`，訊息照送出的全文、每輪 `levels` 照原值，重啟還原照舊讀它。`--dry-run` 不寫 jsonl；要看原始值時加 `--raw-file <路徑>`，同樣的 jsonl 列追加到那個檔、不印到終端。`--raw-file` 只配 `--dry-run`，路徑在任何 git checkout 裡就拒絕。
+  - 原始值在哪：只在本機資料目錄（repo 外）的 `intraday-YYYYMMDD.jsonl`，訊息照送出的全文、每輪 `levels` 照原值，重啟還原照舊讀它。`--dry-run` 不寫 jsonl；要看原始值時加 `--raw-file <路徑>`，同樣的 jsonl 列追加到那個檔、不印到終端。`--raw-file` 只配 `--dry-run`；空值、路徑在任何 git checkout 裡、檔名是 `intraday-*.jsonl`／`intraday-*.log` 或落在 logs 目錄底下都拒絕（後兩種會被排程那次當成自己的紀錄讀回，把 dry-run 的事件當成已送）。
   - Telegram 送到私人對話的訊息照舊帶真實報價，逐字不變（只送私人對話由 `chat_not_private` 擋）。
   - 要貼 jsonl 或 raw 檔的內容時，仍先過上一點的 `quote_guard.py mask`。
 

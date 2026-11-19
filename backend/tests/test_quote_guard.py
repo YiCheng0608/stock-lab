@@ -311,7 +311,7 @@ def test_the_fixture_dry_run_is_refused_and_passes_masked(env, tmp_path):  # noq
     assert quote_guard.mask(result.out) == result.out
     raw_text = raw.read_text(encoding="utf-8")
     found = quote_guard.hits(raw_text)
-    assert {kind for _, kind in found} >= {"message", "levels"}
+    assert {kind for _, kind in found} >= {"message", "template:trade", "levels"}
     assert quote_guard.hits(quote_guard.mask(raw_text)) == []
     assert sum(line.startswith("--- poll ") for line in after) == 2
     assert sum(line.startswith("--- event ") for line in after) == 5

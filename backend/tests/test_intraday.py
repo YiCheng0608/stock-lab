@@ -1386,6 +1386,12 @@ def test_a_dry_run_shows_no_quote_of_fugle(env):
         "跌停鎖住（委買取不到，委賣 <價>）\n來源：今日名單",
         "3162 精確 觸及停損 70.86（10:03 前後；<時間> 成交 <價>）\n來源：今日名單",
     ]
+    # Where a Fugle value goes, a placeholder is, whatever the value (_shown_values
+    # leaves out a quote equal to a rule level and a trade at a whole minute).
+    for message in messages:
+        text = message["text"]
+        assert re.search(r"（[0-9]{2}:[0-9]{2} 前後；<時間> 成交 <價>）", text), text
+        assert not re.search(r"(?:開盤|委買|委賣|成交) (?!<價>)[0-9]", text), text
     assert sum(line.startswith("--- poll at=") for line in lines) == 70
     assert sum(line.startswith("--- event key=") for line in lines) == 5
     assert "--- target key=signal:" in dry.out and "stop=46.31" in dry.out
@@ -1432,7 +1438,7 @@ def test_a_raw_file_has_the_values_and_the_terminal_does_not(env, tmp_path):
     the terminal the masked ones; without it a dry run writes no file."""
 
     _listed(env.db)
-    raw = tmp_path / "raw" / "intraday-dry.jsonl"
+    raw = tmp_path / "raw" / "dry-raw.jsonl"
     dry = _run(env, mode="--dry-run", extra=("--minutes", "70", "--raw-file", str(raw)))
     assert _shown_values(dry.out) == []
     assert f"raw={raw}" in dry.out.splitlines()[-1]
@@ -1446,7 +1452,8 @@ def test_a_raw_file_has_the_values_and_the_terminal_does_not(env, tmp_path):
     assert ENV[fugle.KEY_ENV] not in raw.read_text("utf-8")
 
 
-def test_a_raw_file_goes_with_a_dry_run_outside_a_checkout(tmp_path):
+def test_a_raw_file_goes_with_a_dry_run_outside_a_checkout(tmp_path, monkeypatch):
+    monkeypatch.setenv("STOCK_DATA_DIR", str(tmp_path / "data"))
     parser = argparse.ArgumentParser()
     intraday.add_arguments(parser)
     outside = str(tmp_path / "raw.jsonl")
@@ -1461,6 +1468,47 @@ def test_a_raw_file_goes_with_a_dry_run_outside_a_checkout(tmp_path):
     assert (
         intraday.argument_problem(args) == "--raw-file must be outside a git checkout"
     )
+    # Empty (an unset shell variable): it would write nothing and say nothing.
+    for empty in ("", " "):
+        args = parser.parse_args(["--dry-run", "--raw-file", empty])
+        assert intraday.argument_problem(args) == "--raw-file must not be empty"
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "elsewhere/intraday-20261116.jsonl",  # named as the day's jsonl
+        "elsewhere/intraday-20261116.log",
+        "data/logs/raw.jsonl",  # under the scheduled run's logs
+        "data/logs/sub/raw.jsonl",
+        "mine/raw.jsonl",  # under this run's --log-dir
+    ],
+)
+def test_a_raw_file_is_never_a_file_the_scheduled_run_reads(
+    tmp_path, monkeypatch, where
+):
+    # #842 review: the scheduled run would read a dry run's lines as its own (its
+    # dry_run events as sent, its high and low as the last round).
+    monkeypatch.setenv("STOCK_DATA_DIR", str(tmp_path / "data"))
+    parser = argparse.ArgumentParser()
+    intraday.add_arguments(parser)
+    argv = ["--dry-run", "--log-dir", str(tmp_path / "mine")]
+    args = parser.parse_args([*argv, "--raw-file", str(tmp_path / where)])
+    assert intraday.argument_problem(args) == (
+        "--raw-file must not be a log or jsonl of intraday, nor in the logs"
+    )
+    args = parser.parse_args([*argv, "--raw-file", str(tmp_path / "other/raw.jsonl")])
+    assert intraday.argument_problem(args) is None
+
+
+@linux_only
+def test_a_raw_file_that_cannot_be_made_ends_with_a_result_line(env, tmp_path):
+    _listed(env.db)
+    (tmp_path / "a_file").write_text("", encoding="utf-8")
+    raw = tmp_path / "a_file" / "raw.jsonl"
+    dry = _run(env, mode="--dry-run", extra=("--minutes", "2", "--raw-file", str(raw)))
+    assert dry.code == 1
+    assert "--- result status=failed reason=error:" in dry.out
 
 
 def test_the_arguments():

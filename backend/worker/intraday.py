@@ -49,8 +49,9 @@ it must not run beside the scheduled run (both would count against the key's 60 
   no message text and no ``levels`` line. The rule levels, our minute polled and the
   ``--- poll`` numbers stay. The values are only in the day's jsonl (the messages as sent
   and the ``levels`` lines), and in a dry run only in ``--raw-file <path>`` when given
-  (the same lines, appended; a path outside any git checkout). The Telegram text is the
-  message unmasked, as before.
+  (the same lines, appended; not empty, outside any git checkout, and no log or jsonl
+  of intraday nor in the logs, which the scheduled run would read as its own). The
+  Telegram text is the message unmasked, as before.
 
 Only the standard library at the top: serve imports the log reading here.
 """
@@ -767,7 +768,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--raw-file",
         help=(
             "只配 --dry-run：訊息與每輪 levels 的原始值（含富果報價）以 jsonl 追加到這個"
-            "本機檔，不印到終端；不能在 git checkout 裡（#833）"
+            "本機檔，不印到終端；不能空、不能在 git checkout 裡，也不能是 intraday 的日誌或 jsonl、不能在 logs 目錄下（#833）"
         ),
     )
 
@@ -778,14 +779,44 @@ def _in_checkout(path: Path) -> bool:
     return any((parent / ".git").exists() for parent in path.resolve().parents)
 
 
+def _own_file(path: Path, args: argparse.Namespace) -> bool:
+    """Whether PATH is a file of the run's record: named as the day's log or jsonl, or
+    under the logs directory (this run's --log-dir, or the scheduled run's default).
+    A dry run's lines there would be read by the scheduled run as its own (#842 review:
+    a ``dry_run`` event taken as sent, a dry run's high and low as the last round)."""
+
+    if re.fullmatch(rf"{LOG_PREFIX}-.*\.(?:jsonl|log)", path.name):
+        return True
+    resolved = path.resolve()
+    dirs = {Path(os.path.abspath(job.resolve_data_dir(None) / "logs"))}
+    if args.log_dir:
+        dirs.add(Path(os.path.abspath(args.log_dir)))
+    return any(resolved.is_relative_to(folder.resolve()) for folder in dirs)
+
+
+def raw_path(args: argparse.Namespace) -> Path | None:
+    """Where a dry run writes Fugle's values (--raw-file), or None: nowhere."""
+
+    return Path(args.raw_file) if args.dry_run and args.raw_file else None
+
+
 def argument_problem(args: argparse.Namespace) -> str | None:
     if args.minutes is not None and not args.dry_run:
         return "--minutes goes with --dry-run only"
-    if args.raw_file is not None and not args.dry_run:
-        return "--raw-file goes with --dry-run only (--send keeps them in the jsonl)"
-    if args.raw_file is not None and _in_checkout(Path(args.raw_file)):
-        # The repo is public: Fugle's values must not land where they can be committed.
-        return "--raw-file must be outside a git checkout"
+    if args.raw_file is not None:
+        if not args.dry_run:
+            return (
+                "--raw-file goes with --dry-run only (--send keeps them in the jsonl)"
+            )
+        if not args.raw_file.strip():
+            # An unset shell variable: the run would write nothing and say nothing.
+            return "--raw-file must not be empty"
+        path = Path(args.raw_file)
+        if _in_checkout(path):
+            # The repo is public: Fugle's values must not land where they can be committed.
+            return "--raw-file must be outside a git checkout"
+        if _own_file(path, args):
+            return "--raw-file must not be a log or jsonl of intraday, nor in the logs"
     if args.minutes is not None and args.minutes <= 0:
         return "--minutes must be positive"
     if args.now:
@@ -888,6 +919,7 @@ class Run:
         self.log_dir = Path(os.path.abspath(args.log_dir or self.data_dir / "logs"))
         self.path = log_path(self.log_dir, self.today)
         self.events = events_path(self.log_dir, self.today)
+        self.raw = raw_path(args)
         self.sent: dict[str, list[str]] = {}
         self.telegram_token = environ.get(notify.TOKEN_ENV, "").strip()
 
@@ -909,10 +941,9 @@ class Run:
         """LINE, which has Fugle's values, to the local file they may be in: the day's
         jsonl, or a dry run's --raw-file (none: nowhere). Never the terminal (#833)."""
 
-        if not self.args.dry_run:
-            _append(self.events, self.mask(line))
-        elif self.args.raw_file:
-            _append(Path(self.args.raw_file), self.mask(line))
+        path = self.events if not self.args.dry_run else self.raw
+        if path is not None:
+            _append(path, self.mask(line))
 
     def record(
         self,
@@ -968,8 +999,6 @@ class Run:
     def run(self) -> int:
         if not self.args.dry_run:
             self.log_dir.mkdir(parents=True, exist_ok=True)
-        elif self.args.raw_file:
-            Path(self.args.raw_file).parent.mkdir(parents=True, exist_ok=True)
         started = self.clock()
         lock = job.FileLock(job.lock_path(self.data_dir, LOCK))
         locked = True if self.args.dry_run else lock.acquire()
@@ -994,11 +1023,7 @@ class Run:
             if locked and not self.args.dry_run:
                 lock.release()
                 self._remove_old_logs()
-        raw = (
-            f" raw={self.args.raw_file}"
-            if self.args.dry_run and self.args.raw_file
-            else ""
-        )
+        raw = f" raw={self.raw}" if self.raw is not None else ""
         print(
             self.mask(f"intraday {result} exit={code} log={self.path}{raw}"),
             file=self.out,
@@ -1019,6 +1044,9 @@ class Run:
     def _run(self, locked: bool) -> tuple[int, str]:
         if not locked:
             return 0, f"status={SKIPPED} reason=already_running"
+        if self.raw is not None:
+            # In the try of run(): a directory it may not make ends as a result line.
+            self.raw.parent.mkdir(parents=True, exist_ok=True)
         with _session() as db:
             if not notify.is_trading_day(db, self.today):
                 return 0, f"status={SKIPPED} reason=non_trading_day"
@@ -1230,7 +1258,10 @@ class Run:
                 watched.symbol,
                 event,
                 message(watched, event, quote, polled),
-                message(watched, event, quote, polled, masked=True),
+                # Shown only by a dry run (the log has no message text).
+                message(watched, event, quote, polled, masked=True)
+                if self.args.dry_run
+                else None,
             )
 
     def _record_levels(self, judged: list[Track], states: dict[str, State]) -> None:
@@ -1240,6 +1271,8 @@ class Run:
         Fugle's: the line goes to the jsonl, or a dry run's --raw-file, and never to the
         terminal or the log (#833)."""
 
+        if self.args.dry_run and self.raw is None:
+            return
         levels = {
             item.key: {
                 "high": state.high,
