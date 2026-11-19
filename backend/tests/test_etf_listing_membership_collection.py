@@ -815,3 +815,136 @@ def test_collect_failure_after_helper_rolls_back_normalized_writes(env, monkeypa
         assert len(db.scalars(select(RawPayload)).all()) == 5
         run = db.get(IngestionRun, result["run_id"])
         assert run.status == "failed" and "after memberships" in run.error
+
+
+# Issue #846: TPEx 6874 read DateOfListing 2026-10-05 on 11/18 and
+# 2022-12-14 on 11/19; the 11/19 daily raised on the window opened on 11/18.
+def test_revised_listing_date_out_of_window_closes_the_day_before(env):
+    with env() as db:
+        apply(
+            db,
+            *observation(
+                kind="ipo", exchange="TPEx", listing_date=D - timedelta(days=44)
+            ),
+        )
+        result = apply(
+            db,
+            *observation(
+                kind="stock",
+                exchange="TPEx",
+                day=D + timedelta(days=1),
+                listing_date=date(2022, 12, 14),
+            ),
+        )
+        assert [p[1:3] for p in periods(db, "newlisting")] == [(D, D)]
+        receipt = result["newlisting"]["observations"][0]
+        assert receipt["action"] == "closed_listing_date_revised"
+        assert receipt["listing_date_revision"] == {
+            "previous_valid_from": D.isoformat(),
+            "previous_valid_to": (D + timedelta(days=16)).isoformat(),
+            "closed_valid_to": D.isoformat(),
+        }
+        before = snapshot(db)
+        apply(
+            db,
+            *observation(
+                kind="stock",
+                exchange="TPEx",
+                day=D + timedelta(days=2),
+                listing_date=date(2022, 12, 14),
+            ),
+        )
+        assert snapshot(db) == before
+        # The closed period is not reopened when the date flips back.
+        with pytest.raises(sources.OfficialDataError, match="closed history: TPEx AAA"):
+            apply(
+                db,
+                *observation(
+                    kind="ipo",
+                    exchange="TPEx",
+                    day=D + timedelta(days=3),
+                    listing_date=D - timedelta(days=44),
+                ),
+            )
+        assert snapshot(db) == before
+
+
+def test_revised_listing_date_in_window_opens_the_new_window(env):
+    with env() as db:
+        apply(db, *observation(kind="ipo", listing_date=D - timedelta(days=10)))
+        result = apply(
+            db,
+            *observation(
+                kind="ipo",
+                day=D + timedelta(days=1),
+                listing_date=D - timedelta(days=5),
+            ),
+        )
+        assert [p[1:3] for p in periods(db, "newlisting")] == [
+            (D, D),
+            (D + timedelta(days=1), D + timedelta(days=55)),
+        ]
+        receipt = result["newlisting"]["observations"][0]
+        assert receipt["action"] == "transitioned_listing_date_revised"
+        assert (
+            receipt["listing_date_revision"]["previous_valid_to"]
+            == (D + timedelta(days=50)).isoformat()
+        )
+
+
+def _two_rows(db):
+    return list(
+        db.scalars(
+            select(GroupMembership)
+            .where(GroupMembership.group_id == HOT)
+            .order_by(GroupMembership.valid_from)
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "conflict,match",
+    [
+        ("same_day", "closed newlisting period"),
+        ("overlap", "overlapping"),
+        ("group", "identity conflict"),
+        ("exchange", "exchange conflict"),
+        ("etf", "closed newlisting period"),
+    ],
+)
+def test_revised_listing_date_still_rejects_real_conflicts(env, conflict, match):
+    with env() as db:
+        apply(db, *observation(kind="ipo", listing_date=D - timedelta(days=10)))
+        day = D + timedelta(days=1)
+        kind = "stock"
+        if conflict == "same_day":
+            day = D
+        elif conflict == "overlap":
+            row = _two_rows(db)[0]
+            db.add(
+                GroupMembership(
+                    group_id=HOT,
+                    instrument_id=row.instrument_id,
+                    valid_from=D - timedelta(days=1),
+                    valid_to=D,
+                    role="member",
+                    confidence=1.0,
+                    source=row.source,
+                )
+            )
+            db.flush()
+        elif conflict == "group":
+            db.get(ThemeGroup, HOT).name = "Other"
+            db.flush()
+        elif conflict == "exchange":
+            _two_rows(db)[0].source = f"{OFFICIAL}; exchange=TPEx"
+            db.flush()
+        else:
+            kind = "etf"
+        before = snapshot(db)
+        with pytest.raises(sources.OfficialDataError, match=match):
+            apply(
+                db,
+                *observation(kind=kind, day=day, listing_date=date(2022, 12, 14)),
+            )
+        assert snapshot(db) == before
