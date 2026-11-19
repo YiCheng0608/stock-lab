@@ -327,6 +327,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - `evidence_lib.load_panel`：`feature_evidence`、`candidate_scorecard`。
 - `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`。
 - `research_report` 的基準一。
+- 另外直接數 `market_bars` 的三處，也用 `research_report.excluded_bar_counts`／`last_kept_bars` 扣掉清單裡的列：`trade_research` 的 `bar_count`（起日前的日線數）與下市、轉板股的最後一根日線，以及 `explore_research.delisted_count`。研究 DB 上有 13 檔上櫃股的日線全在 2007-04-23～11-30，工具讀不到它們。
 
 被排除的那幾天，這些標的就是沒有日線：前瞻報酬照「N 個交易日都要有日線」不可比；回看用的是剩下的日線根數。不讀這兩個函式的工具不受清單影響：
 - `exit_research`、`backtest_research` 讀產品訊號的日線。
