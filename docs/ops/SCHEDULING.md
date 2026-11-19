@@ -225,6 +225,12 @@ daily 的 evaluate 步驟（`pipeline.evaluate`）照 [Tracking 口徑](../spec/
 - 休市判定依官方 no-data 回應；來源暫時失敗的日期記為缺日，不推定休市。
 - 全市場 analyze＋evaluate 單次約 4～6 分鐘、峰值約 0.2 GB，連同 candidates／indicators 約 6 分鐘、0.3 GB（2026-10-18，正式 DB 副本：2,409 檔、2024-09-30～2026-10-16 共 496 個交易日；[#184](https://github.com/YiCheng0608/stock-lab/issues/184)）。analyze 每 200 檔 commit 一次 features、group scores 寫完再 commit，每次持有寫入鎖約 2 秒內，與 news 同時執行不會等到 30 秒 busy timeout；analyze 中途失敗時已 commit 的 features／group scores 都是由日線重算的值，重跑會寫出相同結果。group scores 先於 signals commit，所以 analyze 進行中（約 1～2 分鐘）或中途失敗時，API 可能看到新日期族群分數與舊日期訊號並存，重跑 analyze 即一致。
 - daily 的 evaluate 每 2,000 個訊號 commit 一次（[Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 7 點，[#640](https://github.com/YiCheng0608/stock-lab/issues/640)），每批持有的物件數固定；隨追蹤中的訊號數成長的只有開頭取的 id 清單（6 萬多個整數）與耗時。2026-11-11 正式 DB 副本要重算 63,395 個訊號（大多是 `observation`，每個交易日約 3,900 個，視窗滿 20 根才結束，所以約是最近 20 個交易日的量）：2g 上限下 994 秒、cgroup anon 峰值 289 MB；1g 上限下 953 秒、anon 峰值 280 MB、`memory.peak` 350 MB（evaluation 與 settlement 全部重寫的情況）。#640 以前整個 evaluate 是一個 transaction，訊號與寫出的 evaluation／settlement 都留在 session 直到結束：同一副本在 4g 上限下 18 分鐘被 OOM 結束，正式 scheduler 11/10、11/11 在 2g 上限被結束。
+- [#841](https://github.com/YiCheng0608/stock-lab/issues/841) 改成每個訊號只讀一次輸入、已結算的訊號跳過（[evaluate 的增量規則與全量重算](#evaluate-的增量規則與全量重算)）。2026-11-18 正式 DB 副本，75,918 個被選中的訊號，2g 上限，三份獨立副本跑同一天：
+  - #841 以前（master 8e5d593a）：1,650 秒，行程 RSS 峰值 324 MiB，`memory.peak` 964 MiB。
+  - 增量：308 秒，跳過 133 個，RSS 峰值 324 MiB，`memory.peak` 1,395 MiB。
+  - `--force`：297 秒，RSS 峰值 323 MiB，`memory.peak` 1,493 MiB。
+  - 三份的 `signal_evaluations`、`signal_settlements`、`signals` 逐列相同。`memory.peak` 含 page cache，行程本身的峰值三者相同。
+  - 增量與 `--force` 的耗時差不多：同一天跳過的只有 0.2%，變快主要來自讀取合併。增量規則讓成交後停在清單裡的訊號不再每晚重算，這一群會一直累積。
 
 ## scheduler 容器的排程（serve）
 
