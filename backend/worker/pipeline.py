@@ -3902,7 +3902,25 @@ def _nonindustry_observations(
             ]
             current = active[0] if active else None
             if current and current.valid_to is not None:
-                if not (
+                # Issue #846: the official listing date of a stock changed
+                # while its bounded window covers the day (TPEx 6874 read
+                # 2026-10-05 on 11/18 and 2022-12-14 on 11/19).  The observed
+                # days stay: the period closes the day before, and a new one
+                # opens only if the new date still covers the day.  A period
+                # that opened today cannot close the day before, so it is
+                # still rejected.
+                if (
+                    domain == "newlisting"
+                    and record.instrument_type in {"stock", "ipo"}
+                    and current.valid_to != expiry
+                    and current.valid_from < day
+                ):
+                    receipt["listing_date_revision"] = {
+                        "previous_valid_from": current.valid_from.isoformat(),
+                        "previous_valid_to": current.valid_to.isoformat(),
+                        "closed_valid_to": (day - timedelta(days=1)).isoformat(),
+                    }
+                elif not (
                     domain == "newlisting"
                     and current.valid_to == expiry
                     and (
@@ -3911,10 +3929,12 @@ def _nonindustry_observations(
                 ):
                     raise OfficialDataError(
                         f"closed {domain} period overlaps observation or conflicts with expiry"
+                        f": {record.exchange} {record.symbol}"
                     )
             if current and current.group_id != target_id and current.valid_from == day:
                 raise OfficialDataError(
                     f"same-day {domain} transition cannot preserve daily history"
+                    f": {record.exchange} {record.symbol}"
                 )
             # An expired bounded listing row is immutable evidence.  Re-observing
             # the same known event must not extend it into a second interval.
@@ -3922,6 +3942,7 @@ def _nonindustry_observations(
                 if history[-1].valid_to != expiry:
                     raise OfficialDataError(
                         "newlisting expiry conflicts with closed history"
+                        f": {record.exchange} {record.symbol}"
                     )
             plans.append(
                 (
@@ -3952,7 +3973,8 @@ def _nonindustry_observations(
         source,
         receipt,
     ) in plans:
-        if current and current.group_id == target_id:
+        revised = "listing_date_revision" in receipt
+        if current and current.group_id == target_id and not revised:
             if domain == "newlisting" and current.valid_to is None:
                 current.valid_to = expiry
                 receipt["action"] = "legacy_window_cap"
@@ -3963,7 +3985,9 @@ def _nonindustry_observations(
         if current:
             current.valid_to = day - timedelta(days=1)
             receipt["action"] = "closed_at_observation"
-            if domain == "newlisting" and expiry is not None and day > expiry:
+            if revised:
+                receipt["action"] = "closed_listing_date_revised"
+            elif domain == "newlisting" and expiry is not None and day > expiry:
                 receipt["action"] = "legacy_forward_close"
                 receipt["historical_limit"] = (
                     "past_out_of_window_membership_retained_not_rewritten"
@@ -4012,7 +4036,13 @@ def _nonindustry_observations(
                 source=source,
             )
         )
-        receipt["action"] = "transitioned" if current else "opened"
+        receipt["action"] = (
+            "transitioned_listing_date_revised"
+            if revised
+            else "transitioned"
+            if current
+            else "opened"
+        )
         db.flush()
     for result in results.values():
         result["skipped_count"] = sum(
