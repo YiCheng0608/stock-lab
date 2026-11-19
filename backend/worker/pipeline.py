@@ -3651,8 +3651,13 @@ def _nonindustry_observations(
     score_date: date,
     observed_now: datetime,
     run_id: int | None,
+    previous_listing_dates: dict[tuple[str, str], date | None] | None = None,
 ) -> dict[str, Any]:
-    """Project ETF heuristics and bounded listing observations in separate domains."""
+    """Project ETF heuristics and bounded listing observations in separate domains.
+
+    ``previous_listing_dates`` are the instruments' listing dates before this
+    collect wrote them (Issue #848); without it, the stored instrument's.
+    """
     official = "TWSE/TPEx official OpenAPI"
     hot_id = canonical_group_id("new-listings", "new-listings")
     results: dict[str, Any] = {
@@ -3663,10 +3668,14 @@ def _nonindustry_observations(
             "status": "observed",
             "skipped_count": 0,
             "unresolved_count": 0,
+            "warnings": [],
         }
         for domain in ("etf", "newlisting")
     }
     plans = []
+    # Issue #848: one plan per instrument and domain, so two records of one
+    # instrument in a collect cannot both open a period.
+    planned: dict[tuple[str, int], tuple[str | None, date | None]] = {}
 
     def utc(value: datetime) -> datetime:
         if not isinstance(value, datetime):
@@ -3682,6 +3691,7 @@ def _nonindustry_observations(
     now = utc(observed_now)
     for record in records:
         key = (record.exchange, record.symbol)
+        who = f": {record.exchange} {record.symbol}"
         if record.instrument_type == "index":
             for domain in results:
                 results[domain]["observations"].append(
@@ -3810,6 +3820,16 @@ def _nonindustry_observations(
                 and record.listing_date
             ):
                 expiry = record.listing_date + timedelta(days=60)
+            if domain == "newlisting":
+                plan_key = (domain, instrument.id)
+                if plan_key in planned:
+                    if planned[plan_key] != (target_id, expiry):
+                        raise OfficialDataError(
+                            f"conflicting {domain} records for one instrument{who}"
+                        )
+                    receipt["action"] = "duplicate_record"
+                    continue
+                planned[plan_key] = (target_id, expiry)
             group = db.get(ThemeGroup, target_id) if target_id else None
             if group and (
                 group.name != name
@@ -3818,7 +3838,9 @@ def _nonindustry_observations(
                 or group.source != official
                 or not group.active
             ):
-                raise OfficialDataError(f"canonical {domain} group identity conflict")
+                raise OfficialDataError(
+                    f"canonical {domain} group identity conflict{who}"
+                )
             history = []
             expected_source = f"{official}; exchange={record.exchange}"
             for membership, parent in db.execute(
@@ -3839,6 +3861,7 @@ def _nonindustry_observations(
                     ):
                         raise OfficialDataError(
                             f"manual membership conflicts with {domain} observation"
+                            f"{who}"
                         )
                     continue
                 in_domain = (
@@ -3868,25 +3891,25 @@ def _nonindustry_observations(
                     or parent.name != expected_name
                 ):
                     raise OfficialDataError(
-                        f"canonical {domain} history identity conflict"
+                        f"canonical {domain} history identity conflict{who}"
                     )
                 if membership.source not in {official, expected_source}:
                     raise OfficialDataError(
-                        f"official {domain} membership exchange conflict"
+                        f"official {domain} membership exchange conflict{who}"
                     )
                 if membership.valid_from > day or (
                     membership.valid_to is not None
                     and membership.valid_to < membership.valid_from
                 ):
                     raise OfficialDataError(
-                        f"future or inverted {domain} membership period"
+                        f"future or inverted {domain} membership period{who}"
                     )
                 history.append(membership)
             history.sort(key=lambda row: row.valid_from)
             for previous, current in zip(history, history[1:]):
                 if previous.valid_to is None or previous.valid_to >= current.valid_from:
                     raise OfficialDataError(
-                        f"overlapping official {domain} membership periods"
+                        f"overlapping official {domain} membership periods{who}"
                     )
             if (
                 record.instrument_type in {"stock", "ipo"}
@@ -3895,7 +3918,7 @@ def _nonindustry_observations(
                 and history
             ):
                 raise OfficialDataError(
-                    f"future listing date conflicts with existing {domain} history"
+                    f"future listing date conflicts with existing {domain} history{who}"
                 )
             active = [
                 row for row in history if row.valid_to is None or row.valid_to >= day
@@ -3905,20 +3928,37 @@ def _nonindustry_observations(
                 # Issue #846: the official listing date of a stock changed
                 # while its bounded window covers the day (TPEx 6874 read
                 # 2026-10-05 on 11/18 and 2022-12-14 on 11/19).  The observed
-                # days stay: the period closes the day before, and a new one
-                # opens only if the new date still covers the day.  A period
-                # that opened today cannot close the day before, so it is
-                # still rejected.
+                # days stay: out of the new window, the period closes the day
+                # before; still in it, only its unobserved end moves to the new
+                # expiry (Issue #848), so a date flipping between two values
+                # in the window keeps one period.  It is a revision only when
+                # the date differs from the one adopted before this collect; a
+                # period that does not match an unchanged date, or that opened
+                # today, is still rejected.
+                previous = (
+                    previous_listing_dates.get(key)
+                    if previous_listing_dates is not None
+                    else instrument.listing_date
+                )
                 if (
                     domain == "newlisting"
                     and record.instrument_type in {"stock", "ipo"}
                     and current.valid_to != expiry
                     and current.valid_from < day
+                    and previous is not None
+                    and previous != record.listing_date
                 ):
                     receipt["listing_date_revision"] = {
+                        "previous_listing_date": previous.isoformat(),
                         "previous_valid_from": current.valid_from.isoformat(),
                         "previous_valid_to": current.valid_to.isoformat(),
-                        "closed_valid_to": (day - timedelta(days=1)).isoformat(),
+                        **(
+                            {"revised_valid_to": expiry.isoformat()}
+                            if target_id
+                            else {
+                                "closed_valid_to": (day - timedelta(days=1)).isoformat()
+                            }
+                        ),
                     }
                 elif not (
                     domain == "newlisting"
@@ -3938,12 +3978,39 @@ def _nonindustry_observations(
                 )
             # An expired bounded listing row is immutable evidence.  Re-observing
             # the same known event must not extend it into a second interval.
-            if domain == "newlisting" and target_id and not current and history:
-                if history[-1].valid_to != expiry:
-                    raise OfficialDataError(
-                        "newlisting expiry conflicts with closed history"
-                        f": {record.exchange} {record.symbol}"
-                    )
+            # A date that puts the day back in a window after its period closed
+            # (TPEx 6874's date flipping back, Issue #848) stops at this one
+            # instrument: no period is reopened or rewritten, and the collect
+            # records a warning and a data_quality row instead of failing.
+            if (
+                domain == "newlisting"
+                and target_id
+                and not current
+                and history
+                and history[-1].valid_to != expiry
+            ):
+                receipt["status"] = "unresolved_closed_history_conflict"
+                receipt["closed_history"] = {
+                    "valid_from": history[-1].valid_from.isoformat(),
+                    "valid_to": history[-1].valid_to.isoformat(),
+                }
+                results[domain]["warnings"].append(
+                    "newlisting expiry conflicts with closed history"
+                    f"{who}: listing date {record.listing_date.isoformat()} "
+                    f"ends {expiry.isoformat()}, period closed on "
+                    f"{history[-1].valid_to.isoformat()}; not reopened"
+                )
+                _upsert_quality(
+                    db,
+                    "newlisting_membership",
+                    f"{record.exchange}:{record.symbol}",
+                    day,
+                    "conflict",
+                    ["group_membership"],
+                    receipt,
+                    source=capture.source,
+                )
+                continue
             plans.append(
                 (
                     domain,
@@ -3974,6 +4041,10 @@ def _nonindustry_observations(
         receipt,
     ) in plans:
         revised = "listing_date_revision" in receipt
+        if revised and target_id:
+            current.valid_to = expiry
+            receipt["action"] = "expiry_listing_date_revised"
+            continue
         if current and current.group_id == target_id and not revised:
             if domain == "newlisting" and current.valid_to is None:
                 current.valid_to = expiry
@@ -4036,13 +4107,7 @@ def _nonindustry_observations(
                 source=source,
             )
         )
-        receipt["action"] = (
-            "transitioned_listing_date_revised"
-            if revised
-            else "transitioned"
-            if current
-            else "opened"
-        )
+        receipt["action"] = "transitioned" if current else "opened"
         db.flush()
     for result in results.values():
         result["skipped_count"] = sum(
@@ -4069,6 +4134,7 @@ def _ensure_official_groups(
     payloads: Iterable[FetchedPayload],
     observed_now: datetime,
     run_id: int | None = None,
+    previous_listing_dates: dict[tuple[str, str], date | None] | None = None,
 ) -> dict[str, Any]:
     """Atomically project independently scoped industry, ETF and listing evidence.
 
@@ -4093,7 +4159,14 @@ def _ensure_official_groups(
         )
         result.update(
             _nonindustry_observations(
-                db, records, instruments, captures, score_date, observed_now, run_id
+                db,
+                records,
+                instruments,
+                captures,
+                score_date,
+                observed_now,
+                run_id,
+                previous_listing_dates,
             )
         )
         db.flush()
@@ -5184,6 +5257,17 @@ def collect(
             # auditable instead of disappearing in the rollback.
             db.commit()
             instruments: dict[tuple[str, str], Instrument] = {}
+            # The listing dates this collect is about to overwrite: the new
+            # listing membership sync tells a revised official date from a
+            # bad period by them (Issue #848).
+            previous_listing_dates = {
+                (exchange, symbol): listing_date
+                for exchange, symbol, listing_date in db.execute(
+                    select(
+                        Instrument.exchange, Instrument.symbol, Instrument.listing_date
+                    ).where(Instrument.market == "TW")
+                )
+            }
             newlisting_digests = {
                 item.sha256
                 for item in batch.payloads
@@ -5422,7 +5506,9 @@ def collect(
                     payloads=batch.payloads,
                     observed_now=utcnow(),
                     run_id=run.id,
+                    previous_listing_dates=previous_listing_dates,
                 )
+                batch.warnings.extend(industry_result["newlisting"]["warnings"])
                 # Only today's lists say what is listed now; a historical
                 # batch carries no such observation of its sessions.
                 status_result = apply_instrument_status(
