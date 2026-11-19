@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Coordinator patrol (Issue #282, #316, #401; docs/COORDINATOR.md 無人值守運作), in
+# Coordinator patrol (Issue #282, #316, #401; docs/COORDINATOR.md 無人值守運作; its output in
+# docs/ops/COORDINATOR_REFERENCE.md patrol 的輸出), in
 # the handbook's order: write the heartbeat, read this session's compaction count and
 # handoff marker, then the event queue the monitor (tools/ops/monitor.sh) keeps: its
 # heartbeat, its last open PR snapshot, the schedule jobs' latest log lines as it read them,
@@ -36,7 +37,7 @@
 # it goes before the handoff line (exit 10). GitHub not read (gh failed,
 # --max-gh 0): every task is counted as 判定不了 and no vacancy is claimed.
 #
-# #1's body (#807, docs/COORDINATOR.md 決策落地), from the same answer (its body is the
+# #1's body (#807, docs/ops/COORDINATOR_REFERENCE.md 決策落地的比對), from the same answer (its body is the
 # one extra field, its latest 100 comments are already there): above
 # STOCK_GOVERNANCE_BODY_LIMIT bytes the header says "#1 本文 N 位元組（K KB），超過上限 M"
 # (a hint only). The 決定 and 統籌承諾 comments and the ones without the coordinator mark

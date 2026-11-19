@@ -1,9 +1,10 @@
 """The coordinator's overview page, printed by `patrol.sh --overview` (#804).
 
-A new coordinator reads this page instead of every open thread whole (docs/COORDINATOR.md
-接手文). It is built by this script, no LLM, from the answer of patrol's one GraphQL call
-(slots.QUERY: THREAD_FIELDS with title, body and milestone), the local task worktrees, the
-commitments file and the engineer sessions' state files. It is an index, not the source:
+A new coordinator reads this page instead of every open thread whole (the 接手文 in
+docs/ops/COORDINATOR_REFERENCE.md 開啟命令, #850). It is built by this script, no LLM,
+from the answer of patrol's one GraphQL call (slots.QUERY: THREAD_FIELDS with title, body
+and milestone), the local task worktrees, the commitments file and the engineer sessions'
+state files. It is an index, not the source:
 before acting on a thread the coordinator reads that thread's body and the comments the
 action touches (the 接手文 says which).
 
@@ -448,7 +449,7 @@ class Page:
             out.append(
                 "本頁是索引，不是依據：對某張單動作前，先跑 patrol.sh --overview <單號> 看那張單的"
                 "完整段落（每則留言一行、未勾 AC、內文更正），再照接手文讀原文"
-                "（docs/COORDINATOR.md）。"
+                "（docs/ops/COORDINATOR_REFERENCE.md「開啟命令」）。"
             )
         else:
             shown = " ".join(f"#{n}" for n in self.numbers)

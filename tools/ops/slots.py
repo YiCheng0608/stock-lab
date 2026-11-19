@@ -1,6 +1,6 @@
 """The parallel task slots, counted by patrol.sh (#727; AGENTS.md 任務生命週期).
 
-The rules are the 決定 on #727 (6882324819); docs/COORDINATOR.md 處理佇列 names them:
+The rules are the 決定 on #727 (6882324819); docs/ops/COORDINATOR_REFERENCE.md 並行名額的判定 names them:
 
 - A task is an Issue with a local `task/<n>-*` worktree (`git worktree list`); several
   worktrees of one Issue are one task.

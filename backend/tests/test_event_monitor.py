@@ -1322,10 +1322,18 @@ def _section(text: str, heading: str) -> str:
 
 def test_the_coordinator_keeps_no_polling_of_its_own() -> None:
     """AC-2: the handbook's 統籌 session (with the handoff text) and 無人值守運作 no
-    longer tell the coordinator to keep a GitHub watch or a patrol cron."""
+    longer tell the coordinator to keep a GitHub watch or a patrol cron. The handoff text
+    is in 開啟命令 of the reference since #850, so that section is read too."""
     text = (ROOT / "docs" / "COORDINATOR.md").read_text(encoding="utf-8")
-    for heading in ("統籌 session", "無人值守運作"):
-        section = _section(text, heading)
+    reference = (ROOT / "docs" / "ops" / "COORDINATOR_REFERENCE.md").read_text(
+        encoding="utf-8"
+    )
+    sections = {
+        heading: _section(text, heading) for heading in ("統籌 session", "無人值守運作")
+    }
+    sections["開啟命令"] = _section(reference, "開啟命令")
+    assert "接手文固定如下" in sections["開啟命令"]
+    for heading, section in sections.items():
         for word in ("監看", "巡檢 cron", "定時巡檢", "cron"):
             assert word not in section, (heading, word)
         assert "patrol.sh" in section

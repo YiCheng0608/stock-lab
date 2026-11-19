@@ -4,8 +4,10 @@ docs/COORDINATOR.md keeps only what a take-over needs; the rest is in
 docs/ops/COORDINATOR_REFERENCE.md behind a line that says when to read it. The rules below
 have no moment that would send the coordinator there, so each must stay in the part it
 reads at take-over (AGENTS.md, docs/COORDINATOR.md and, for the comment rules of PR #815,
-docs/WORKFLOW.md 留言類型), in its own section. One keyword each: a later move or rewrite
-that takes one out turns its test red.
+docs/WORKFLOW.md 留言類型), in its own section. The handover text itself is in 開啟命令 of
+the reference (#850 決定 7016472613): it is the new coordinator's first prompt, so its rules
+are read at take-over without a second read of the handbook. One keyword each: a later move
+or rewrite that takes one out turns its test red.
 """
 
 from __future__ import annotations
@@ -70,8 +72,15 @@ REQUIRED: dict[str, tuple[str, str, str]] = {
         "觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；"
         "最後一次呼叫的 context 超過門檻（預設 450K",
     ),
-    "read-before-acting": (
+    # #850 review 7017916742: a new coordinator never runs the handoff, so this line from
+    # 自動換手 5 stays in the handbook instead of only in the reference's 執行換手.
+    "notify-engineer-terminal": (
         "docs/COORDINATOR.md",
+        "統籌 session",
+        "新統籌之後給工程師的留言仍照[開工](WORKFLOW.md#任務流程)的反方向規則通知 terminal",
+    ),
+    "read-before-acting": (
+        "docs/ops/COORDINATOR_REFERENCE.md",
         "接手文",
         "現況頁是索引，不是依據：對某張單留言、決定、review、合併、派工、勾 AC 或兌現承諾之前，"
         "先跑 bash tools/ops/patrol.sh --overview <單號>",
@@ -90,8 +99,10 @@ REQUIRED: dict[str, tuple[str, str, str]] = {
 
 
 def _part(text: str, where: str) -> str:
-    """The "## <where>" section of text, or the handover text; "" when there is none."""
+    """The "## <where>" section of text, or the handover text in its 開啟命令; "" when there
+    is none."""
     if where == "接手文":
+        text = _part(text, "開啟命令")
         if "接手文固定如下" not in text:
             return ""
         rest = text.split("接手文固定如下", 1)[1]
@@ -142,3 +153,13 @@ def test_a_keyword_moved_to_the_reference_is_caught() -> None:
     path, _, keyword = REQUIRED["no-own-polling"]
     texts[path] = texts[path].replace(keyword, "") + "\n## 附錄\n" + keyword + "\n"
     assert missing(texts) == ["no-own-polling"]
+
+
+def test_the_handover_text_is_kept_once() -> None:
+    """#850: the handbook keeps no copy of the handover text, which the new coordinator
+    gets as its first prompt; a copy back in the handbook would be read twice again."""
+    handbook = (ROOT / "docs/COORDINATOR.md").read_text(encoding="utf-8")
+    reference = (ROOT / "docs/ops/COORDINATOR_REFERENCE.md").read_text(encoding="utf-8")
+    assert "接手文固定如下" not in handbook
+    assert reference.count("接手文固定如下") == 1
+    assert _part(reference, "接手文").startswith("你是 stock-lab 的統籌。")
