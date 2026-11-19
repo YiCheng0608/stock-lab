@@ -485,8 +485,9 @@ fi
 
 # --- the memory directory (#705; memory_check in coordinator_lib.sh) -----------------
 # Read only, after the cleanup and the index: a memory this task made stale fails here,
-# and the coordinator fixes it once the task is closed (docs/COORDINATOR.md 記憶). Exit 3
-# with every step above in "steps", the board as it was; rerun with --pr <n> after.
+# and the coordinator fixes it once the task is closed (docs/ops/COORDINATOR_REFERENCE.md
+# 記憶的檢查). Exit 3 with every step above in "steps", the board as it was; rerun with
+# --pr <n> after.
 if memory_check; then
   steps+=("memory_ok")
 else
