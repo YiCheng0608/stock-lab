@@ -1,0 +1,214 @@
+{
+  "rule": "/news?category=domestic&limit=100（依 next_cursor 往後最多 5 頁）中台北發布日 = D（2026-11-19）且有 AI 判讀的前 5 則，API 順序",
+  "items": [
+    {
+      "id": "34597",
+      "title": "金管會出重手穩台股是為了下周六選舉嗎？官員：不予置評",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/%E9%87%91%E7%AE%A1%E6%9C%83%E5%87%BA%E9%87%8D%E6%89%8B%E7%A9%A9%E5%8F%B0%E8%82%A1%E6%98%AF%E7%82%BA%E4%BA%86%E4%B8%8B%E5%91%A8%E5%85%AD%E9%81%B8%E8%88%89%E5%97%8E-%E5%AE%98%E5%93%A1-%E4%B8%8D%E4%BA%88%E7%BD%AE%E8%A9%95-152326025.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-19T15:23:26+00:00",
+      "summary": "台股近日雖然急跌，但仍在3萬8的歷史高檔；台股借券賣出占市場成交值在金管會第一波限空令發出後，已大幅走低至11月18日的1.25%；台股信用交易的整戶擔保維持率18日亦在163.16%的安全水位。台股",
+      "description": "台股近日雖然急跌，但仍在3萬8的歷史高檔；台股借券賣出占市場成交值在金管會第一波限空令發出後，已大幅走低至11月18日的1.25%；台股信用交易的整戶擔保維持率18日亦在163.16%的安全水位。台股",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股近日急跌但仍在3萬8歷史高檔；借券賣出占成交值在金管會第一波限空令後降至11月18日的1.25%，整戶擔保維持率163.16%。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "unknown",
+        "impact_scope": "market",
+        "impact_rationale": "原文為市場數據與金管會措施描述，未明示對後市的方向。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "e3c059f3ff190d38d3aac3cdc40d2376c104b28ef31c2bb392b56a451fa2a882",
+        "generated_at": "2026-11-19T16:00:56.008441+00:00"
+      }
+    },
+    {
+      "id": "34598",
+      "title": "台股失守年線別慌！杜金龍曝「個人持股拉高至9成」：台積電買點曝光",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/%E5%8F%B0%E8%82%A1%E5%A4%B1%E5%AE%88%E5%B9%B4%E7%B7%9A%E5%88%A5%E6%85%8C-%E6%9D%9C%E9%87%91%E9%BE%8D%E6%9B%9D-%E5%80%8B%E4%BA%BA%E6%8C%81%E8%82%A1%E6%8B%89%E9%AB%98%E8%87%B39%E6%88%90-%E5%8F%B0%E7%A9%8D%E9%9B%BB%E8%B2%B7%E9%BB%9E%E6%9B%9D%E5%85%89-150000345.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-19T15:00:00+00:00",
+      "summary": "台股11月19日重挫1768點，跌破年線收在38426點。股市老先覺杜金龍看好W底第二隻腳成形，透露逆勢加碼台積電（2330），認為2020元附近具支撐，明年5月台股有機會挑戰5萬3千點。(記者唐家興",
+      "description": "台股11月19日重挫1768點，跌破年線收在38426點。股市老先覺杜金龍看好W底第二隻腳成形，透露逆勢加碼台積電（2330），認為2020元附近具支撐，明年5月台股有機會挑戰5萬3千點。(記者唐家興",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股11月19日重挫1768點、收38426點跌破年線；杜金龍看好W底第二隻腳成形，並逆勢加碼台積電。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "杜金龍透露逆勢加碼台積電，認為2020元附近具支撐",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          }
+        ],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "mixed",
+        "impact_scope": "market",
+        "impact_rationale": "大盤重挫跌破年線，但杜金龍看好W底並加碼台積電，多空並存。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "07928fc42ec51e40492a93169d67c981aff0fa8eb3c33fbdfeab332ba9df7ea1",
+        "generated_at": "2026-11-19T16:00:56.008441+00:00"
+      }
+    },
+    {
+      "id": "34599",
+      "title": "超車SpaceX奪史上最大IPO！Anthropic今掛牌上市、美股四大指數全開高　台積電ADR漲3.14%",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.stock.yahoo.com/news/%E8%B6%85%E8%BB%8Aspacex%E5%A5%AA%E5%8F%B2%E4%B8%8A%E6%9C%80%E5%A4%A7ipo-anthropic%E4%BB%8A%E6%8E%9B%E7%89%8C%E4%B8%8A%E5%B8%82-%E7%BE%8E%E8%82%A1%E5%9B%9B%E5%A4%A7%E6%8C%87%E6%95%B8%E5%85%A8%E9%96%8B%E9%AB%98-%E5%8F%B0%E7%A9%8D%E9%9B%BBadr%E6%BC%B23-14-145500610.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-19T14:55:00+00:00",
+      "summary": "[FTNN新聞網]記者陳思穎／綜合報導美股四大指數今（19）日全數上漲，截至台灣時間22時45分左右，道瓊工業指數報50225.65點，上漲0.11%；標普500指數報7401.44...",
+      "description": "[FTNN新聞網]記者陳思穎／綜合報導美股四大指數今（19）日全數上漲，截至台灣時間22時45分左右，道瓊工業指數報50225.65點，上漲0.11%；標普500指數報7401.44...",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "Anthropic今掛牌上市，報導稱超車SpaceX成史上最大IPO；美股四大指數全數上漲，台積電ADR漲3.14%。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "標題寫台積電ADR漲3.14%",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          }
+        ],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "positive",
+        "impact_scope": "theme",
+        "impact_rationale": "美股四大指數開高且台積電ADR上漲，對AI相關台股偏正面。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "3ae1f4d95b6a347de8b588575e20162755ef7df3512331514641123f0ace1013",
+        "generated_at": "2026-11-19T16:00:56.008441+00:00"
+      }
+    },
+    {
+      "id": "34590",
+      "title": "Anthropic掛牌上市提振AI交易　美股開盤走高",
+      "source": {
+        "name": "中央社",
+        "url": "https://www.cna.com.tw/news/afe/202611190391.aspx",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-19T14:53:17+00:00",
+      "summary": "（中央社紐約19日綜合外電報導）人工智慧（AI）巨擘Anthropic掛牌上市發行價高過先前公布目標區間，不僅讓投資人預期會有強勁表現，也加強市場對於AI相關類股的信心，美國股市主要指數今天開盤走揚。",
+      "description": "（中央社紐約19日綜合外電報導）人工智慧（AI）巨擘Anthropic掛牌上市發行價高過先前公布目標區間，不僅讓投資人預期會有強勁表現，也加強市場對於AI相關類股的信心，美國股市主要指數今天開盤走揚。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "Anthropic掛牌發行價高過先前公布的目標區間，加強市場對AI相關類股的信心，美股主要指數開盤走揚。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "positive",
+        "impact_scope": "theme",
+        "impact_rationale": "原文稱IPO提振市場對AI相關類股信心，指數開盤走揚。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "7a3a4f82b1fe76dee9385d90c5aef64249b0212bd3f26440089fed8f26a16f66",
+        "generated_at": "2026-11-19T16:00:56.008441+00:00"
+      }
+    },
+    {
+      "id": "34600",
+      "title": "美國擴大晶片出口管制！FT：台積電、三星暫停部分中國客戶出貨，多手機品牌恐受波及",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/%E7%BE%8E%E5%9C%8B%E6%93%B4%E5%A4%A7%E6%99%B6%E7%89%87%E5%87%BA%E5%8F%A3%E7%AE%A1%E5%88%B6-ft-%E5%8F%B0%E7%A9%8D%E9%9B%BB-%E4%B8%89%E6%98%9F%E6%9A%AB%E5%81%9C%E9%83%A8%E5%88%86%E4%B8%AD%E5%9C%8B%E5%AE%A2%E6%88%B6%E5%87%BA%E8%B2%A8-%E5%A4%9A%E6%89%8B%E6%A9%9F%E5%93%81%E7%89%8C%E6%81%90%E5%8F%97%E6%B3%A2%E5%8F%8A-145000994.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-19T14:50:00+00:00",
+      "summary": "美國政府祭出新一輪半導體出口管制措施，試圖限制中國人工智慧（AI）產業發展，繼輝達新團隊做出新決定後，台積電（TSMC）與南韓三星電子（Samsung Electronics）也暫停向「部分中國客戶」",
+      "description": "美國政府祭出新一輪半導體出口管制措施，試圖限制中國人工智慧（AI）產業發展，繼輝達新團隊做出新決定後，台積電（TSMC）與南韓三星電子（Samsung Electronics）也暫停向「部分中國客戶」",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "FT報導，美國新一輪晶片出口管制後，繼輝達新團隊決定，台積電與三星暫停向部分中國客戶出貨，多手機品牌恐受波及。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "標題寫台積電暫停部分中國客戶出貨",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          }
+        ],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "negative",
+        "impact_scope": "instrument",
+        "impact_rationale": "台積電暫停部分中國客戶出貨，出貨受限屬負面。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "e9ff28ab9c55a98d4fe0845d1c2263e37945fe35d4f39aab7d1d30a83bc69e18",
+        "generated_at": "2026-11-19T16:00:56.008441+00:00"
+      }
+    }
+  ]
+}

@@ -1,0 +1,261 @@
+{
+  "id": "34599",
+  "canonical_key": "news:yahoo_tw:c14b058aa6b7dfa5bbc57a8e75a55c533b7ac9f18929af07aaa7e239848e3334",
+  "dedupe_cluster_id": "news-title:e04b3c91d6ecadb2d746ec6f838197c9",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.stock.yahoo.com/news/%E8%B6%85%E8%BB%8Aspacex%E5%A5%AA%E5%8F%B2%E4%B8%8A%E6%9C%80%E5%A4%A7ipo-anthropic%E4%BB%8A%E6%8E%9B%E7%89%8C%E4%B8%8A%E5%B8%82-%E7%BE%8E%E8%82%A1%E5%9B%9B%E5%A4%A7%E6%8C%87%E6%95%B8%E5%85%A8%E9%96%8B%E9%AB%98-%E5%8F%B0%E7%A9%8D%E9%9B%BBadr%E6%BC%B23-14-145500610.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "超車SpaceX奪史上最大IPO！Anthropic今掛牌上市、美股四大指數全開高　台積電ADR漲3.14%",
+  "summary": "[FTNN新聞網]記者陳思穎／綜合報導美股四大指數今（19）日全數上漲，截至台灣時間22時45分左右，道瓊工業指數報50225.65點，上漲0.11%；標普500指數報7401.44...",
+  "description": "[FTNN新聞網]記者陳思穎／綜合報導美股四大指數今（19）日全數上漲，截至台灣時間22時45分左右，道瓊工業指數報50225.65點，上漲0.11%；標普500指數報7401.44...",
+  "summary_preview": "[FTNN新聞網]記者陳思穎／綜合報導美股四大指數今（19）日全數上漲，截至台灣時間22時45分左右，道瓊工業指數報50225.65點，上漲0.11%；標普500指數報7401.44...",
+  "language": "zh-Hant",
+  "published_at": "2026-11-19T14:55:00+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-19T14:55:00+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-19T14:55:00+00:00",
+        "utc": "2026-11-19T14:55:00+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-19T16:00:12.076063+00:00",
+        "utc": "2026-11-19T16:00:12.076063+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-19T22:22:19.407115+00:00",
+    "legacy": {
+      "published_at": "2026-11-19T14:55:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-19T14:55:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-19T16:00:12.076063+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-19T22:22:19.407115+00:00",
+  "collected_at": "2026-11-19T16:00:12.076063+00:00",
+  "symbols": [
+    "TWSE:2330"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v3",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "41e241279fa4966f2f75db65658ac36b7f6f8cbea78bd698177879303fb562b9",
+  "detail_url": "/news/34599",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "Anthropic今掛牌上市，報導稱超車SpaceX成史上最大IPO；美股四大指數全數上漲，台積電ADR漲3.14%。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "listing": "listed",
+        "exchange_corrected": false,
+        "reason": "標題寫台積電ADR漲3.14%",
+        "confidence": "high",
+        "verified": false,
+        "source_check": "mentioned"
+      }
+    ],
+    "hidden_symbol_candidates": [],
+    "candidate_check_version": "ai-candidate-source/v2",
+    "theme_candidates": [],
+    "impact_direction": "positive",
+    "impact_scope": "theme",
+    "impact_rationale": "美股四大指數開高且台積電ADR上漲，對AI相關台股偏正面。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v4",
+    "input_hash": "3ae1f4d95b6a347de8b588575e20162755ef7df3512331514641123f0ace1013",
+    "generated_at": "2026-11-19T16:00:56.008441+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 12767,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-11-19T16:00:12.076063"
+  }
+}

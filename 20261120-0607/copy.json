@@ -1,0 +1,10 @@
+{
+  "copy": "/out/stock.db",
+  "source": "/data/stock.db",
+  "source_latest_trading_date": "2026-11-19",
+  "alembic_version": "0033_mainstream_lists",
+  "source_open": "ro",
+  "quick_check": "ok",
+  "bytes": 4036165632,
+  "seconds": 523.5
+}
