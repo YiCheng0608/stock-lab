@@ -2663,8 +2663,10 @@ def index_row_line(row: dict, page: str | None = None) -> str:
     """One table row as the page text has it (cells tab-separated; IndexTableView in market/MarketViews.tsx).
 
     #661 (decision 6835320079 D-c): no 資料日 column. The name cell ends with a line of its own (the
-    missing-data reason, or 「資料 YYYY/MM/DD」 plus 非最新 for a row not of the page date), so such a
-    row reads `name` and then `<that line><TAB><cells>`; a row of the page date is one line.
+    missing-data reason, or 「資料 YYYY/MM/DD」 plus 非最新 for a row not of the page date): the
+    `<div class="market-index-asof">` RowDateLine draws last in the cell.  innerText breaks after
+    that block, before the next cell's tab, so such a row is three lines: `name`, `<that line>` and
+    `<TAB><cells>` (#861; #858's market-1280.txt lines 45-46).  A row of the page date is one line.
     """
 
     name, digits = INDEX_SPECS[row["key"]]
@@ -2674,8 +2676,8 @@ def index_row_line(row: dict, page: str | None = None) -> str:
         name += f" 合約 {shown}"
     source = (row.get("source") or {}).get("label") or "—"
     if row.get("status") != "available" or not row.get("trading_date"):
-        return f"{name}\n" + "\t".join(
-            [index_missing_text(row), "—", "—", "—", "—", source]
+        return f"{name}\n{index_missing_text(row)}\n\t" + "\t".join(
+            ["—", "—", "—", "—", source]
         )
     close, change, pct = row.get("close"), row.get("change"), row.get("change_pct")
     roll = row.get("change_status") == "contract_roll"
@@ -2692,7 +2694,7 @@ def index_row_line(row: dict, page: str | None = None) -> str:
             source,
         ]
     )
-    return f"{name}\t{cells}" if date is None else f"{name}\n{date}\t{cells}"
+    return f"{name}\t{cells}" if date is None else f"{name}\n{date}\n\t{cells}"
 
 
 @check("today", "T16")
