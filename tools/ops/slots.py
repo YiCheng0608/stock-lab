@@ -206,16 +206,21 @@ def ci_red(pr: dict) -> bool:
     re-run with no time yet is the newest). Checks with no run id (no detailsUrl) are
     all taken. With no `required` among the runs read and more left, the rollup state
     decides (判定不了 is counted, PR #829 review 6926278317); with all read, not red.
-    newest_ci_run skips a run concurrency cancelled (PR #842, #843); when every run was
-    cancelled, the newest one is red whatever its `required` says, as ci= is failure."""
+    newest_ci_run skips a run concurrency cancelled (PR #842, #843); when every run read
+    was cancelled, the newest one is red whatever its `required` says, as ci= is
+    failure, but only with all read: with more left the kept run may be among those not
+    read, so the rollup state decides (PR #845 review 7010099051)."""
     tip = get(pr, "tip.nodes") or []
     rollup = (get(tip[0], "commit.statusCheckRollup") or {}) if tip else {}
     contexts = rollup.get("contexts") or {}
     nodes = contexts.get("nodes") or []
+    unread = (contexts.get("totalCount") or 0) > len(nodes)
     checks = [_check(n) for n in nodes if n.get("name")]
     runs = [c for c in checks if c["name"] == GATE]
     newest = newest_ci_run(checks)
     if newest is not None and cancelled_run(checks, newest[1]):
+        if unread:
+            return (rollup.get("state") or "").upper() in ("FAILURE", "ERROR")
         return True
     if newest is not None:
         # A run id is unique in the repository (event_queue.ci_result compares it alone).
@@ -224,7 +229,7 @@ def ci_red(pr: dict) -> bool:
         return any(
             (c.get("conclusion") or "").upper() in _RED for c in latest_checks(runs)
         )
-    if (contexts.get("totalCount") or 0) > len(nodes):
+    if unread:
         return (rollup.get("state") or "").upper() in ("FAILURE", "ERROR")
     return False
 

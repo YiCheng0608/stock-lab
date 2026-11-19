@@ -284,6 +284,42 @@ def _pr842(runs=None, done: str | None = None, swap: bool = False) -> list[dict]
     ]
 
 
+def _of(row: dict, run: int) -> bool:
+    return f"/runs/{run}/" in row["detailsUrl"]
+
+
+def _late_cancel(done: str | None = None) -> list[dict]:
+    """PR #845 review 7010099051 建議 2: the run cancelled once only required was left;
+    its other jobs passed and its required is CANCELLED."""
+    rows = _pr842(done=done)
+    for c in rows:
+        if _of(c, PR842_CANCELLED):
+            c["conclusion"] = "CANCELLED" if c["name"] == "required" else "SUCCESS"
+    return rows
+
+
+def _timed_out() -> list[dict]:
+    """PR #845 review 7010099051 建議 1 and 3: a job of the kept run passed its
+    timeout-minutes, which GitHub ends CANCELLED (run 40374422949's verify, 2026-10-26),
+    and the kept run's required failed."""
+    rows = _pr842(done="FAILURE")
+    for c in rows:
+        if _of(c, PR842_KEPT) and c["name"] == "docker":
+            c["conclusion"] = "CANCELLED"
+    return rows
+
+
+def _gate_rerun() -> list[dict]:
+    """PR #845 review 7010099051 建議 4: required failed and was re-run in the same run;
+    the queued re-run (no time yet) is listed before the failure."""
+    rows = _pr842(runs={PR842_KEPT}, done="FAILURE")
+    failed = rows.pop()
+    failed["startedAt"] = "2026-11-19T12:40:00Z"
+    queued = {**failed, "status": "QUEUED", "conclusion": ""}
+    queued["startedAt"] = "0001-01-01T00:00:00Z"
+    return rows + [queued, failed]
+
+
 def _patrol_ci(mon: Harness, at: int) -> str:
     out = mon.run(
         "patrol.sh",
@@ -351,6 +387,15 @@ def test_a_run_concurrency_cancelled_with_a_higher_id_is_no_ci_result(
             (str(PR842_CANCELLED), "cancelled"),
             "failure",
         ),
+        (_late_cancel, None, "pending"),
+        (
+            lambda: _late_cancel(done="SUCCESS"),
+            (str(PR842_KEPT), "success"),
+            "success",
+        ),
+        # Both runs look cancelled: the one whose required failed is named.
+        (_timed_out, (str(PR842_KEPT), "failure"), "failure"),
+        (_gate_rerun, None, "pending"),
     ],
     ids=[
         "kept-going",
@@ -362,6 +407,10 @@ def test_a_run_concurrency_cancelled_with_a_higher_id_is_no_ci_result(
         "one-run-failure",
         "one-run-going",
         "all-cancelled",
+        "late-cancel-kept-going",
+        "late-cancel-kept-success",
+        "kept-timed-out-failure",
+        "required-rerun-queued",
     ],
 )
 def test_the_ci_result_and_ci_skip_a_run_concurrency_cancelled(

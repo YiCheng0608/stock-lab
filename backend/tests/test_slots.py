@@ -436,6 +436,22 @@ def test_the_slots_read_the_run_concurrency_kept(runs, gate, red) -> None:
     assert slots.ci_red(pr) is red
 
 
+def test_only_the_cancelled_run_read_with_more_left_falls_back_to_the_rollup() -> None:
+    """PR #845 review 7010099051 必修 1: more check runs than CONTEXTS, and those read are
+    all of the run concurrency cancelled; the kept run may be among those not read, so
+    the rollup state decides (判定不了, as #829), not CI 紅. With all read it is red."""
+    nodes = _pr842_nodes({PR842_CANCELLED})
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=nodes)
+    rollup = pr["tip"]["nodes"][0]["commit"]["statusCheckRollup"]
+    rollup["contexts"]["totalCount"] = len(nodes)
+    assert slots.ci_red(pr)
+    rollup["contexts"]["totalCount"] = len(nodes) + 1
+    rollup["state"] = "PENDING"
+    assert not slots.ci_red(pr)
+    rollup["state"] = "FAILURE"
+    assert slots.ci_red(pr)
+
+
 def test_a_newer_runs_required_not_read_falls_back_to_the_rollup() -> None:
     """PR #829 review 6926278317 必修 1: more check runs than CONTEXTS. The newest run's
     `required` is not among those read, so the rollup state decides (判定不了 is

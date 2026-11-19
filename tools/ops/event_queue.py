@@ -89,13 +89,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from coordinator_json import (
-    GATE,
     cancelled_run,
     coordinator_comment,
     newest_ci_run,
     one_line,
     pr_line,
-    run_id,
+    run_gate,
     without_mark,
 )
 
@@ -299,15 +298,16 @@ def ci_result(rollup) -> tuple[str, str] | None:
     run has no finished required check there is no result yet. The run comes from
     newest_ci_run, which patrol's ci= reads as well (#740). It skips a run concurrency
     cancelled, whose required passes for the run kept (PR #842, #843); with every run
-    cancelled the newest one's passed required is "cancelled", not success."""
+    cancelled the newest one's passed required is "cancelled", not success. Of that
+    run's required checks the newest is run_gate's (latest_checks), as for ci=."""
     found = newest_ci_run(rollup)
     if found is None:
         return None
     _, newest = found
-    gate = [c for c in rollup if c.get("name") == GATE and run_id(c) == newest]
-    if not gate or (gate[-1].get("status") or "").upper() != "COMPLETED":
+    gate = run_gate(rollup, newest)
+    if not gate or (gate.get("status") or "").upper() != "COMPLETED":
         return None
-    state = (gate[-1].get("conclusion") or "unknown").lower()
+    state = (gate.get("conclusion") or "unknown").lower()
     if state == "success" and cancelled_run(rollup, newest):
         state = "cancelled"
     return str(newest), state
