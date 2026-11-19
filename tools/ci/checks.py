@@ -52,14 +52,16 @@ def changed_paths(base: str, cwd: Path = ROOT, worktree: bool = False) -> list[s
 # test_event_monitor reads 統籌 session and 無人值守運作 of docs/COORDINATOR.md (#316);
 # test_coordinator_scripts reads the dispatch notice in 任務流程第 2 步 of docs/WORKFLOW.md (#315);
 # test_turn_hook reads the hooks of .claude/settings.json (#595);
-# test_coordinator_doc reads 無人值守運作、記憶、接手文 of docs/COORDINATOR.md and 留言類型 of
-# docs/WORKFLOW.md (#828).
+# test_coordinator_doc reads 無人值守運作、記憶 of docs/COORDINATOR.md and 留言類型 of
+# docs/WORKFLOW.md (#828); it and test_take_over read the handover text (接手文) in 開啟命令 of
+# docs/ops/COORDINATOR_REFERENCE.md (#850).
 BACKEND_READ_DIRS: tuple[str, ...] = ()
 BACKEND_READ_FILES: frozenset[str] = frozenset(
     {
         ".claude/settings.json",
         "docs/COORDINATOR.md",
         "docs/WORKFLOW.md",
+        "docs/ops/COORDINATOR_REFERENCE.md",
         "docs/ops/SETUP.md",
         # backend/tests/test_verify_checks.py runs page_checks.display_title on these (#523).
         "frontend/src/news/newsLead.cases.json",

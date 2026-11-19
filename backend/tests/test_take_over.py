@@ -1152,10 +1152,15 @@ def test_take_over_goes_on_from_the_closed_step(to: Harness) -> None:
 
 def test_the_handover_text_runs_take_over() -> None:
     """AC-4: the handover text hands the mechanical steps to take_over.sh instead of
-    listing them, and 統籌承諾 writes the commitments file as well as the comment."""
-    text = (OPS.parents[1] / "docs" / "COORDINATOR.md").read_text(encoding="utf-8")
+    listing them, and 統籌承諾 writes the commitments file as well as the comment. The
+    handover text is in 開啟命令 of the reference since #850 (決定 7016472613)."""
+    docs = OPS.parents[1] / "docs"
+    text = (docs / "COORDINATOR.md").read_text(encoding="utf-8")
+    reference = (docs / "ops" / "COORDINATOR_REFERENCE.md").read_text(encoding="utf-8")
     handover = (
-        text.split("接手文固定如下", 1)[1].split("```text\n", 1)[1].split("\n```", 1)[0]
+        reference.split("接手文固定如下", 1)[1]
+        .split("```text\n", 1)[1]
+        .split("\n```", 1)[0]
     )
     assert "bash tools/ops/take_over.sh <舊 handle>" in handover
     assert "bash tools/ops/patrol.sh" in handover
