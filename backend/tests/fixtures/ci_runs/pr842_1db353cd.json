@@ -1,0 +1,152 @@
+{
+  "source": "gh pr view 842 --json statusCheckRollup (PR #842 head 1db353cd, read 2026-11-19, #843); run id from detailsUrl",
+  "check_runs": [
+    {
+      "name": "changes",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "changes",
+      "run": 44524774753,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    },
+    {
+      "name": "repository",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "repository",
+      "run": 44524774753,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    },
+    {
+      "name": "pr",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "pr",
+      "run": 44524774753,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    },
+    {
+      "name": "verify",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "verify",
+      "run": 44524774753,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    },
+    {
+      "name": "backend (${{ matrix.shard }})",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "backend (ops)",
+      "run": 44524774753,
+      "status": "IN_PROGRESS",
+      "conclusion": "",
+      "workflowName": "CI"
+    },
+    {
+      "name": "backend (rest)",
+      "run": 44524774753,
+      "status": "IN_PROGRESS",
+      "conclusion": "",
+      "workflowName": "CI"
+    },
+    {
+      "name": "docker",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "docker",
+      "run": 44524774753,
+      "status": "IN_PROGRESS",
+      "conclusion": "",
+      "workflowName": "CI"
+    },
+    {
+      "name": "frontend",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "frontend",
+      "run": 44524774753,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    },
+    {
+      "name": "frontend-image",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "frontend-image",
+      "run": 44524774753,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    },
+    {
+      "name": "compose",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "compose",
+      "run": 44524774753,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    },
+    {
+      "name": "suite",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "CANCELLED",
+      "workflowName": "CI"
+    },
+    {
+      "name": "required",
+      "run": 44524775078,
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "workflowName": "CI"
+    }
+  ]
+}
