@@ -155,6 +155,52 @@ def _is_excluded(ranges: list[tuple[str, str]] | None, day: str) -> bool:
     return ranges is not None and any(first <= day <= last for first, last in ranges)
 
 
+def _bar_days(
+    con: sqlite3.Connection, ids: Sequence[int], extra: str = "", args: tuple = ()
+) -> Iterable[tuple[int, str]]:
+    for chunk in range(0, len(ids), 500):
+        part = ids[chunk : chunk + 500]
+        yield from con.execute(
+            "select instrument_id, trading_date from market_bars "
+            f"where instrument_id in ({','.join('?' * len(part))}){extra}",
+            (*part, *args),
+        )
+
+
+def excluded_bar_counts(
+    con: sqlite3.Connection, ranges: dict[int, list[tuple[str, str]]], before: date
+) -> dict[int, int]:
+    """How many bars before ``before`` each instrument has in its excluded ranges:
+    what a direct count of ``market_bars`` has to take off (#839)."""
+
+    out: dict[int, int] = defaultdict(int)
+    for instrument_id, day in _bar_days(
+        con, sorted(ranges), " and trading_date < ?", (before.isoformat(),)
+    ):
+        if _is_excluded(ranges[instrument_id], day):
+            out[instrument_id] += 1
+    return dict(out)
+
+
+def last_kept_bars(
+    con: sqlite3.Connection,
+    ranges: dict[int, list[tuple[str, str]]],
+    ids: Iterable[int],
+) -> dict[int, date | None]:
+    """The last bar outside its excluded ranges of each of ``ids`` that has
+    ranges (None: every bar is excluded), for a direct ``max(trading_date)``."""
+
+    wanted = sorted(set(ids) & set(ranges))
+    out: dict[int, date | None] = dict.fromkeys(wanted)
+    for instrument_id, day in _bar_days(con, wanted):
+        if _is_excluded(ranges[instrument_id], day):
+            continue
+        current = out[instrument_id]
+        if current is None or day > current.isoformat():
+            out[instrument_id] = date.fromisoformat(day)
+    return out
+
+
 def _research_module():
     spec = importlib.util.spec_from_file_location(
         "backtest_research", ROOT / "tools" / "research" / "backtest_research.py"

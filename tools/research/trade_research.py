@@ -289,12 +289,17 @@ def load(db: Path, start: date, end: date, raw_dir: Path) -> Context:
 
     market = pr.load_market(db, start, raw_dir, fundamentals=True, end=end)
     ctx = Context(market, db, end)
-    types = lib.research_report().BENCHMARK_TYPES
+    report = lib.research_report()
+    types = report.BENCHMARK_TYPES
     marks = ",".join("?" * len(types))
     con = lib.connect_read_only(db)
     try:
+        # The bars of research_report's exclusion list are not in the panel, so
+        # they are not counted either (bar_count, the ENDED day; #839).
+        ranges = report.excluded_ranges(con)
+        excluded = report.excluded_bar_counts(con, ranges, start)
         ctx.bars_before = {
-            instrument_id: count
+            instrument_id: count - excluded.get(instrument_id, 0)
             for instrument_id, count in con.execute(
                 "select mb.instrument_id, count(*) from market_bars mb "
                 "join instruments i on i.id = mb.instrument_id "
@@ -314,6 +319,13 @@ def load(db: Path, start: date, end: date, raw_dir: Path) -> Context:
                 types,
             )
         }
+        for instrument_id, day in report.last_kept_bars(
+            con, ranges, ctx.last_bar
+        ).items():
+            if day is None:
+                del ctx.last_bar[instrument_id]
+            else:
+                ctx.last_bar[instrument_id] = day
         ctx.margin_lists = {
             (exchange, date.fromisoformat(day)): list_id
             for list_id, exchange, day in con.execute(

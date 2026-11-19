@@ -111,13 +111,16 @@ def weekdays(first: date, count: int) -> list[date]:
 
 # (id, exchange, symbol): 1 is the reused TWSE code with its old company, 2 a
 # TPEx stock across the 2007 range, 3 the reused TPEx code holding only the new
-# company (a production copy: nothing old to keep out), 4 a TWSE stock.
+# company (a production copy: nothing old to keep out), 4 a TWSE stock, 5 a
+# TPEx stock delisted inside the 2007 range.
 INSTRUMENTS = (
     (1, "TWSE", "2432"),
     (2, "TPEx", "1234"),
     (3, "TPEx", "6130"),
     (4, "TWSE", "1101"),
+    (5, "TPEx", "5678"),
 )
+DELISTED = {5}
 
 
 @pytest.fixture
@@ -129,7 +132,8 @@ def db(tmp_path) -> Path:
     new = weekdays(date(2024, 5, 24), 6)  # its 240th new bar is 2024-05-28
     tpex = weekdays(date(2007, 11, 28), 4)  # 11-28, 11-29, 11-30, 12-03
     late_6130 = weekdays(date(2013, 2, 25), 3)  # 02-25, 02-26, 02-27
-    days = {1: old + new, 2: tpex, 3: late_6130, 4: old + new}
+    ended = weekdays(date(2007, 4, 19), 4)  # 04-19, 04-20 | 04-23, 04-24
+    days = {1: old + new, 2: tpex, 3: late_6130, 4: old + new, 5: ended}
     with Session(engine) as session:
         for instrument_id, exchange, symbol in INSTRUMENTS:
             session.add(
@@ -139,7 +143,7 @@ def db(tmp_path) -> Path:
                     symbol=symbol,
                     name=symbol,
                     instrument_type="stock",
-                    status="active",
+                    status="delisted" if instrument_id in DELISTED else "active",
                 )
             )
         for instrument_id, bars in days.items():
@@ -169,6 +173,7 @@ EXPECTED = {
     # no old company in this database: the code_reuse range does not apply
     3: [date(2013, 2, 25), date(2013, 2, 26), date(2013, 2, 27)],
     4: [*weekdays(date(2008, 8, 18), 6), *weekdays(date(2024, 5, 24), 6)],
+    5: [date(2007, 4, 19), date(2007, 4, 20)],
 }
 
 
@@ -208,4 +213,35 @@ def test_the_ranges_of_a_database(db):
         1: [("", "2024-05-28")],
         2: [("2007-04-23", "2007-11-30")],
         3: [("2007-04-23", "2007-11-30")],
+        5: [("2007-04-23", "2007-11-30")],
     }
+
+
+def _tool(name: str):
+    path = ROOT / "tools" / "research" / f"{name}.py"
+    tool_spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(tool_spec)
+    sys.modules.setdefault(name, module)
+    tool_spec.loader.exec_module(module)
+    return module
+
+
+def test_trade_research_counts_and_ends_only_the_bars_it_reads(db, tmp_path):
+    """``bar_count`` (``bars_before`` + the panel position) and the ENDED day
+    (``last_bar``) count only the bars outside the list, as the panel does."""
+
+    ctx = _tool("trade_research").load(
+        db, date(2024, 5, 29), date(2024, 5, 31), tmp_path / "raw"
+    )
+    # 2432: 6 old bars and the new company's first 3 here, all excluded
+    assert ctx.bars_before.get(1, 0) == 0
+    assert ctx.bars_before[4] == 9
+    assert ctx.bars_before[5] == 2
+    # 5's bars 2007-04-23 and 04-24 are excluded: it ends on 04-20
+    assert ctx.last_bar == {5: date(2007, 4, 20)}
+
+
+def test_explore_counts_a_delisting_on_the_last_bar_it_reads(db):
+    explore = _tool("explore_research")
+    assert explore.delisted_count(db, date(2007, 4, 1), date(2007, 4, 20)) == 1
+    assert explore.delisted_count(db, date(2007, 4, 21), date(2007, 12, 31)) == 0

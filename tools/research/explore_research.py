@@ -553,19 +553,29 @@ def delisted_count(db: Path, first: date, last: date) -> int:
     """Stock／ipo instruments marked ``delisted`` whose last bar is in the window
     (dates only, no price is read)."""
 
-    types = lib.research_report().BENCHMARK_TYPES
+    report = lib.research_report()
+    types = report.BENCHMARK_TYPES
     con = lib.connect_read_only(db)
     try:
-        return con.execute(
-            "select count(*) from (select i.id, max(mb.trading_date) as last_day "
-            "from instruments i join market_bars mb on mb.instrument_id = i.id "
-            f"where i.instrument_type in ({','.join('?' * len(types))}) "
-            "and i.status = 'delisted' group by i.id) "
-            "where last_day >= ? and last_day <= ?",
-            (*types, first.isoformat(), last.isoformat()),
-        ).fetchone()[0]
+        last_days = {
+            instrument_id: date.fromisoformat(day)
+            for instrument_id, day in con.execute(
+                "select i.id, max(mb.trading_date) "
+                "from instruments i join market_bars mb on mb.instrument_id = i.id "
+                f"where i.instrument_type in ({','.join('?' * len(types))}) "
+                "and i.status = 'delisted' group by i.id",
+                types,
+            )
+        }
+        # the last bar the panel has: not one of the exclusion list's (#839)
+        last_days.update(
+            report.last_kept_bars(con, report.excluded_ranges(con), last_days)
+        )
     finally:
         con.close()
+    return sum(
+        1 for day in last_days.values() if day is not None and first <= day <= last
+    )
 
 
 # --- one hypothesis on one segment ------------------------------------------
