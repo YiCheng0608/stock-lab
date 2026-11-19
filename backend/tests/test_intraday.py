@@ -14,6 +14,7 @@ import argparse
 import contextlib
 import io
 import json
+import re
 import socket
 import sys
 import urllib.error
@@ -1290,6 +1291,224 @@ def test_a_dry_run_sends_nothing_and_writes_no_file(env, monkeypatch):
     # 3162 entry and stop.
     assert len(messages) == 5
     assert all('"status": "dry_run"' in line for line in messages)
+
+
+# --- #833: the terminal and the log show none of Fugle's values -----------------------
+
+# The Telegram texts of the fixture's day as the run before #833 sent them (AC-3): the
+# masking is of what is shown, never of what is sent.
+SENT_BEFORE_833 = [
+    "2618 長榮航 觸及規則進場價 47.75（09:01 前後；09:00:30 成交 47.80）\n來源：今日名單",
+    "8099 大世科 觸及規則進場價 182.00，但開盤 200.00 已在目標一 198.63 以上，"
+    "依規則不算進場，今天這檔不再通知（09:01 前後；09:00:30 成交 200.00）\n"
+    "漲停鎖住（委買 200.00，委賣取不到）\n來源：今日名單",
+    "3162 精確 觸及規則進場區 72.89～76.94（09:01 前後；09:00:30 成交 74.10）\n來源：今日名單",
+    "3374 精材 跌破停損 480.18，進場條件不再成立（10:03 前後；10:02:55 成交 467.50）\n"
+    "跌停鎖住（委買取不到，委賣 467.50）\n來源：今日名單",
+    "3162 精確 觸及停損 70.86（10:03 前後；10:02:54 成交 67.60）\n來源：今日名單",
+]
+
+
+def _fixture_values() -> tuple[set[str], set[str]]:
+    """The fixture's quote prices (as notify.price and as Python prints them) and trade
+    times (HH:MM:SS Taipei): what fugle.parse reads and a message or a levels line can
+    carry. A price that is also a rule level (2618's high at the open is its breakout
+    price) is left out: the level is ours and is shown; so is a time of a whole minute."""
+
+    prices: set[float] = set()
+    times: set[str] = set()
+    for poll in DAY["polls"]:
+        for body in poll["quotes"].values():
+            for name in ("openPrice", "highPrice", "lowPrice", "lastPrice"):
+                if body.get(name) is not None:
+                    prices.add(body[name])
+            for name in ("lastTrade", "lastTrial"):
+                trade = body.get(name) or {}
+                for part in ("price", "bid", "ask"):
+                    if trade.get(part) is not None:
+                        prices.add(trade[part])
+                if trade.get("time"):
+                    moment = datetime.fromtimestamp(trade["time"] / 1e6, TAIPEI)
+                    times.add(f"{moment:%H:%M:%S}")
+            for side in ("bids", "asks"):
+                prices.update(level["price"] for level in body.get(side) or [])
+    rules = {
+        value
+        for levels in DAY["levels"].values()
+        for value in levels.values()
+        if isinstance(value, float)
+    }
+    prices -= rules
+    # A trade at a whole minute reads as a round of ours (--- poll at=10:02:00).
+    times = {value for value in times if not value.endswith(":00")}
+    assert len(prices) >= 10 and len(times) >= 4
+    shown = {intraday.notify.price(value) for value in prices} | {
+        str(value) for value in prices
+    }
+    return shown, times
+
+
+def _shown_values(text: str) -> list[str]:
+    """The fixture's quote values in TEXT, each as a whole number (47.8 is not 47.80's
+    start, and a value is not a piece of another)."""
+
+    prices, times = _fixture_values()
+    found = []
+    for value in sorted(prices | times):
+        if re.search(rf"(?<![0-9.,:]){re.escape(value)}(?![0-9:]|\.[0-9])", text):
+            found.append(value)
+    return found
+
+
+@linux_only
+def test_a_dry_run_shows_no_quote_of_fugle(env):
+    """#833 AC-1: a dry run through the fixture's three rounds prints all five messages
+    with <價> and <時間> and none of the values; the poll and event lines and the rule
+    levels stay."""
+
+    _listed(env.db)
+    dry = _run(env, mode="--dry-run", extra=("--minutes", "70"))
+    assert not env.logs.exists()
+    assert _shown_values(dry.out) == []
+    lines = dry.out.splitlines()
+    messages = [
+        json.loads(line.removeprefix("--- message "))
+        for line in lines
+        if line.startswith("--- message ")
+    ]
+    assert [m["text"] for m in messages] == [
+        "2618 長榮航 觸及規則進場價 47.75（09:01 前後；<時間> 成交 <價>）\n來源：今日名單",
+        "8099 大世科 觸及規則進場價 182.00，但開盤 <價> 已在目標一 198.63 以上，"
+        "依規則不算進場，今天這檔不再通知（09:01 前後；<時間> 成交 <價>）\n"
+        "漲停鎖住（委買 <價>，委賣取不到）\n來源：今日名單",
+        "3162 精確 觸及規則進場區 72.89～76.94（09:01 前後；<時間> 成交 <價>）\n來源：今日名單",
+        "3374 精材 跌破停損 480.18，進場條件不再成立（10:03 前後；<時間> 成交 <價>）\n"
+        "跌停鎖住（委買取不到，委賣 <價>）\n來源：今日名單",
+        "3162 精確 觸及停損 70.86（10:03 前後；<時間> 成交 <價>）\n來源：今日名單",
+    ]
+    # Where a Fugle value goes, a placeholder is, whatever the value (_shown_values
+    # leaves out a quote equal to a rule level and a trade at a whole minute).
+    for message in messages:
+        text = message["text"]
+        assert re.search(r"（[0-9]{2}:[0-9]{2} 前後；<時間> 成交 <價>）", text), text
+        assert not re.search(r"(?:開盤|委買|委賣|成交) (?!<價>)[0-9]", text), text
+    assert sum(line.startswith("--- poll at=") for line in lines) == 70
+    assert sum(line.startswith("--- event key=") for line in lines) == 5
+    assert "--- target key=signal:" in dry.out and "stop=46.31" in dry.out
+
+
+@linux_only
+def test_the_log_shows_no_quote_of_fugle(env):
+    """#833 AC-1: the full day's log (sending, and a run restarted at 11:00 that reads
+    the levels lines back) and the terminal have none of the values; the poll, event
+    and levels_restored lines and the rule levels stay."""
+
+    _listed(env.db)
+    sent = _run(env)
+    again = _run(env, start="11:00:10")
+    log = _log(env)
+    assert _shown_values(log) == []
+    assert _shown_values(sent.out) == [] and _shown_values(again.out) == []
+    assert log.count("--- event key=") == 5
+    assert log.count("--- poll at=") == 271 + 150
+    assert "--- levels_restored restored=1 missing=-" in log
+    assert "stop=480.18" in log
+    # The values are in the day's jsonl (and the Telegram texts): the check sees them.
+    assert _shown_values(intraday.events_path(env.logs, MONDAY).read_text("utf-8"))
+
+
+@linux_only
+def test_the_telegram_texts_are_as_before_and_the_jsonl_keeps_them(env):
+    """#833 AC-2, AC-3: what is sent is word for word the text before #833; the jsonl
+    keeps it and the levels lines keep the high, low and last (a restart reads them)."""
+
+    _listed(env.db)
+    result = _run(env)
+    assert result.sent == SENT_BEFORE_833
+    assert [r["text"] for r in _jsonl(env)] == SENT_BEFORE_833
+    levels = [r[intraday.LEVELS] for r in _lines(env) if intraday.LEVELS in r]
+    assert levels and all(
+        isinstance(values["high"], float) for line in levels for values in line.values()
+    )
+
+
+@linux_only
+def test_a_raw_file_has_the_values_and_the_terminal_does_not(env, tmp_path):
+    """#833 AC-2: --raw-file gets the jsonl's lines (the messages as sent, the levels),
+    the terminal the masked ones; without it a dry run writes no file."""
+
+    _listed(env.db)
+    raw = tmp_path / "raw" / "dry-raw.jsonl"
+    dry = _run(env, mode="--dry-run", extra=("--minutes", "70", "--raw-file", str(raw)))
+    assert _shown_values(dry.out) == []
+    assert f"raw={raw}" in dry.out.splitlines()[-1]
+    assert not env.logs.exists()
+    records = [json.loads(line) for line in raw.read_text("utf-8").splitlines()]
+    texts = [r["text"] for r in records if intraday.LEVELS not in r]
+    assert texts == SENT_BEFORE_833
+    assert all(r["status"] == "dry_run" for r in records if "text" in r)
+    # 70 rounds, of which 09:00 is a trial (nothing judged): 69 levels lines.
+    assert sum(intraday.LEVELS in r for r in records) == 69
+    assert ENV[fugle.KEY_ENV] not in raw.read_text("utf-8")
+
+
+def test_a_raw_file_goes_with_a_dry_run_outside_a_checkout(tmp_path, monkeypatch):
+    monkeypatch.setenv("STOCK_DATA_DIR", str(tmp_path / "data"))
+    parser = argparse.ArgumentParser()
+    intraday.add_arguments(parser)
+    outside = str(tmp_path / "raw.jsonl")
+    args = parser.parse_args(["--send", "--raw-file", outside])
+    assert intraday.argument_problem(args).startswith("--raw-file goes with --dry-run")
+    assert intraday.argument_problem(parser.parse_args(["--dry-run"])) is None
+    args = parser.parse_args(["--dry-run", "--raw-file", outside])
+    assert intraday.argument_problem(args) is None
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    inside = str(tmp_path / "repo" / "logs" / "raw.jsonl")
+    args = parser.parse_args(["--dry-run", "--raw-file", inside])
+    assert (
+        intraday.argument_problem(args) == "--raw-file must be outside a git checkout"
+    )
+    # Empty (an unset shell variable): it would write nothing and say nothing.
+    for empty in ("", " "):
+        args = parser.parse_args(["--dry-run", "--raw-file", empty])
+        assert intraday.argument_problem(args) == "--raw-file must not be empty"
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "elsewhere/intraday-20261116.jsonl",  # named as the day's jsonl
+        "elsewhere/intraday-20261116.log",
+        "data/logs/raw.jsonl",  # under the scheduled run's logs
+        "data/logs/sub/raw.jsonl",
+        "mine/raw.jsonl",  # under this run's --log-dir
+    ],
+)
+def test_a_raw_file_is_never_a_file_the_scheduled_run_reads(
+    tmp_path, monkeypatch, where
+):
+    # #842 review: the scheduled run would read a dry run's lines as its own (its
+    # dry_run events as sent, its high and low as the last round).
+    monkeypatch.setenv("STOCK_DATA_DIR", str(tmp_path / "data"))
+    parser = argparse.ArgumentParser()
+    intraday.add_arguments(parser)
+    argv = ["--dry-run", "--log-dir", str(tmp_path / "mine")]
+    args = parser.parse_args([*argv, "--raw-file", str(tmp_path / where)])
+    assert intraday.argument_problem(args) == (
+        "--raw-file must not be a log or jsonl of intraday, nor in the logs"
+    )
+    args = parser.parse_args([*argv, "--raw-file", str(tmp_path / "other/raw.jsonl")])
+    assert intraday.argument_problem(args) is None
+
+
+@linux_only
+def test_a_raw_file_that_cannot_be_made_ends_with_a_result_line(env, tmp_path):
+    _listed(env.db)
+    (tmp_path / "a_file").write_text("", encoding="utf-8")
+    raw = tmp_path / "a_file" / "raw.jsonl"
+    dry = _run(env, mode="--dry-run", extra=("--minutes", "2", "--raw-file", str(raw)))
+    assert dry.code == 1
+    assert "--- result status=failed reason=error:" in dry.out
 
 
 def test_the_arguments():
