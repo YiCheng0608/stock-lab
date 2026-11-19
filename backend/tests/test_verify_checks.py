@@ -955,8 +955,9 @@ def test_t16_states_only_a_row_of_another_day(tmp_path):
         TX_ROW,
         TX_ROW.replace("合約 2026/11\t", "合約 2026/11\n資料 2026/10/21 非最新\n\t"),
     )
-    assert "台指期近月 合約 2026/11 ⏎ 資料 2026/10/21 非最新 ⏎ \t46,110" in page_checks.t16(
-        FakeRun(tmp_path, late_tx, {"market-1280": page})
+    assert (
+        "台指期近月 合約 2026/11 ⏎ 資料 2026/10/21 非最新 ⏎ \t46,110"
+        in page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": page}))
     )
     with pytest.raises(page_checks.Fail, match="tx：缺整行"):
         page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": INDEX_PAGE}))
@@ -966,7 +967,9 @@ def test_t16_states_only_a_row_of_another_day(tmp_path):
         TX_ROW,
         TX_ROW.replace("合約 2026/11\t", "合約 2026/11\n資料 2026/10/21 非最新\t"),
     )
-    with pytest.raises(page_checks.Fail, match="tx：`台指期近月 合約 2026/11` 下一行是"):
+    with pytest.raises(
+        page_checks.Fail, match="tx：`台指期近月 合約 2026/11` 下一行是"
+    ):
         page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": page}))
     page = INDEX_PAGE.replace(
         "加權指數\t46,041.43", "加權指數\n資料 2026/10/22\n\t46,041.43"
@@ -1000,9 +1003,13 @@ def test_t16_reads_a_missing_row_as_three_lines(tmp_path):
     assert f"`櫃買指數 ⏎ {reason} ⏎ \t—\t—" in page_checks.t16(
         FakeRun(tmp_path, _indexes(tpex=missing), {"market-1280": page})
     )
-    page = INDEX_PAGE.replace(old, f"櫃買指數\n{reason}\t—\t—\t—\t—\t證券櫃檯買賣中心\n")
+    page = INDEX_PAGE.replace(
+        old, f"櫃買指數\n{reason}\t—\t—\t—\t—\t證券櫃檯買賣中心\n"
+    )
     with pytest.raises(page_checks.Fail, match="tpex：`櫃買指數` 下一行是"):
-        page_checks.t16(FakeRun(tmp_path, _indexes(tpex=missing), {"market-1280": page}))
+        page_checks.t16(
+            FakeRun(tmp_path, _indexes(tpex=missing), {"market-1280": page})
+        )
 
 
 def test_t16_needs_the_source_in_the_table_explanation(tmp_path):
