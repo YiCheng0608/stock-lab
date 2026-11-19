@@ -145,6 +145,27 @@ daily 在今日名單之後，另算一份「主流族群前 20」（`mainstream
 - **限流**：`fetch_json` 對同一官方主機保持最小間隔（`sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS`：`www.twse.com.tw` 2.5 秒、MOPS 與期交所網站 3 秒，其餘官方主機 1 秒），另有 429／5xx／暫時性 307 的有界重試。手動的回補命令對每個 host 至少 3 秒（[CLI](CLI.md#現有-worker-cli)「回補命令的請求間隔」，#692）；daily 與 catchup 照上面的間隔。
 - **不要並行回補**：回補與 daily 都長時間寫 DB，analyze 也依 collect run 決定分析日；回補、回測期間停用 daily：scheduler 容器不必停：`backfill`、`backtest` 起跑時自己開[維護模式](#維護模式)（daily 與 news 不跑，看門狗與 monitor 照常），結束時自己關，作業死掉由 serve 在心跳逾時後解除（工作排程器的做法見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)）。
 
+### evaluate 的增量規則與全量重算
+
+daily 的 evaluate 步驟（`pipeline.evaluate`）照 [Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 7 點選出還在追蹤的 `analysis-*` 訊號。其中「已結算」的訊號保留原列，不重算，狀態也不動；其他訊號照舊重算（[#841](https://github.com/YiCheng0608/stock-lab/issues/841)）。
+
+- **已結算**：下面八條全部成立（`pipeline._settled_signal_ids`）。任何一條不成立，或比較不了（例如欄位格式不同），就重算。
+  - **R1 規則版本**：T+5、T+20 兩筆 settlement 都在，`tracking_rules` 是現行版本。
+  - **R2 視窗已滿**：剛好 20 筆 evaluation，日期等於訊號日之後的前 20 根日線（中間沒有補插或刪掉日線）。
+  - **R3 日線沒變**：每一列存的 OHLC、adj_close、volume、source、data_time（日線的 `data_as_of`），以及停牌旗標，都和現在的日線相同。
+  - **R4 沒有除權息**：訊號日到第 20 根之間沒有 `corporate_actions` 列。有就重算，不比較因子。
+  - **R5 沒有相關停牌公告**：沒有開始日在第 20 根以前、結束日在訊號日以後的 suspension 事件。結束日缺漏或無法解析的事件也算相關。
+  - **R6 籌碼沒變**：每一列的法人、融資確認，和現在該日 `chip_snapshots` 算出的相同。
+  - **R7 族群沒變**：每一列的族群確認，和現在 `_best_group_for_signal` 的結果相同。
+  - **R8 前 20 日量沒變**：每一列的 `volume_ratio_20d`，和現在前 20 根成交量算出的相同。
+- **跳過的是哪些訊號**：視窗還沒滿的訊號每天多一根日線，一定要重算。這些是絕大多數：2026-11-18 的副本有 75,918 個被選中的訊號，其中 133 個已結算。已結算的訊號是成交後停在 `target_1_hit`、`invalidated`、`incomparable` 或 `active`、永遠不離開清單的那一群，只有它們會隨累積的訊號數一直變多。
+- **每個訊號一次的讀取**：重算的訊號以前每一根日線各查一次族群分數、籌碼、停牌事件與既有的 evaluation，現在每個訊號各查一次。族群確認在同一次 evaluate 內按（標的、訊號日）共用：這個步驟不寫族群資料。結果與逐根查詢相同。
+- **全量重算**：`python -m worker.cli evaluate --force`（`evaluate(force=True)`）不看 R1～R8，所有被選中的訊號都重算。`backtest-*` 訊號與 v1 完整視窗的保留規則（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）不受影響。下面這些情況規則看不出來，要跑一次全量重算：
+  - 部署了改追蹤程式的版本（`app.tracking.track_path`／`settle`，或 evaluation、settlement 欄位的寫法），但沒有升規則版本。升了規則版本的話，R1 會自己重算。
+  - 重跑過去日期的 analyze（例如 `daily --date` 一個 20 個交易日以前的日期），改寫了已結算訊號的價位或狀態。
+  - 回補或手動更正歷史資料之後。日線、除權息、停牌公告、籌碼與族群的變動 R2～R8 看得到，其他來源的更正看不到。
+- **回傳**：`signals_checked` 是被選中的訊號數，`signals_skipped` 是其中已結算、沒重算的數量，`force` 是這次有沒有全量重算。`evaluations_written`／`settlements_written` 只算重算的訊號，是重算的列數；值沒變的列 SQLAlchemy 不會發 UPDATE，所以實際寫入的列比這少。
+
 ### 技術回測
 
 `python -m worker.cli backtest --start-date <起> --end-date <迄>` 在正式環境的跑法：`docker compose -p <P> exec scheduler python -m worker.cli backtest …`，起跑時自己持有[維護模式](#維護模式)，不必停 scheduler。

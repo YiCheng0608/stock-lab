@@ -6056,33 +6056,55 @@ def _corporate_action_factor(
 
 
 def _upsert_evaluation(
-    db: Session, signal: Signal, bar: MarketBar, data: dict[str, Any]
+    db: Session,
+    signal: Signal,
+    bar: MarketBar,
+    data: dict[str, Any],
+    existing: dict[date, SignalEvaluation] | None = None,
 ) -> SignalEvaluation:
-    evaluation = db.scalar(
-        select(SignalEvaluation).where(
-            SignalEvaluation.signal_id == signal.id,
-            SignalEvaluation.session_date == bar.trading_date,
+    """Write one session's evaluation; ``existing`` is the signal's rows by date.
+
+    With ``existing`` (loaded once per signal, #841) the row is looked up
+    there instead of with one query per session.
+    """
+
+    if existing is not None:
+        evaluation = existing.get(bar.trading_date)
+    else:
+        evaluation = db.scalar(
+            select(SignalEvaluation).where(
+                SignalEvaluation.signal_id == signal.id,
+                SignalEvaluation.session_date == bar.trading_date,
+            )
         )
-    )
     if not evaluation:
         evaluation = SignalEvaluation(
             signal_id=signal.id, session_date=bar.trading_date
         )
         db.add(evaluation)
+        if existing is not None:
+            existing[bar.trading_date] = evaluation
     for key, value in data.items():
         setattr(evaluation, key, value)
     return evaluation
 
 
 def _upsert_settlement(
-    db: Session, signal: Signal, horizon: int, data: dict[str, Any]
+    db: Session,
+    signal: Signal,
+    horizon: int,
+    data: dict[str, Any],
+    existing: dict[int, SignalSettlement] | None = None,
 ) -> SignalSettlement:
-    settlement = db.scalar(
-        select(SignalSettlement).where(
-            SignalSettlement.signal_id == signal.id,
-            SignalSettlement.horizon == horizon,
+    if existing is not None:
+        settlement = existing.get(horizon)
+    else:
+        settlement = db.scalar(
+            select(SignalSettlement).where(
+                SignalSettlement.signal_id == signal.id,
+                SignalSettlement.horizon == horizon,
+            )
         )
-    )
     if not settlement:
         settlement = SignalSettlement(signal_id=signal.id, horizon=horizon)
         db.add(settlement)
@@ -6101,21 +6123,54 @@ def _suspension_gap_between(
 
     if current_date <= previous_date:
         return False
-    events = db.scalars(
-        select(Event).where(
-            Event.instrument_id == instrument_id,
-            Event.event_type == "suspension",
-            Event.event_date <= current_date,
-        )
-    ).all()
+    return _suspension_gap_in(
+        _suspension_events(db, instrument_id, current_date),
+        previous_date,
+        current_date,
+    )
+
+
+def _suspension_events(db: Session, instrument_id: int, last_date: date) -> list[Event]:
+    """The instrument's suspension events that start on or before ``last_date``."""
+
+    return list(
+        db.scalars(
+            select(Event).where(
+                Event.instrument_id == instrument_id,
+                Event.event_type == "suspension",
+                Event.event_date <= last_date,
+            )
+        ).all()
+    )
+
+
+def _suspension_end(event: Event, current_date: date) -> date:
+    """The interval end of a suspension event; ``current_date`` when unknown."""
+
+    details = event.details_json or {}
+    end_text = details.get("resumed_date") or details.get("interval_end")
+    try:
+        return date.fromisoformat(str(end_text)[:10]) if end_text else current_date
+    except ValueError:
+        return current_date
+
+
+def _suspension_gap_in(
+    events: Iterable[Event], previous_date: date, current_date: date
+) -> bool:
+    """``_suspension_gap_between`` over already loaded suspension events.
+
+    Events that start after ``current_date`` are ignored, so one load up to
+    the last tracked session serves every session of a signal (#841).
+    """
+
+    if current_date <= previous_date:
+        return False
     for event in events:
-        details = event.details_json or {}
         start = event.event_date
-        end_text = details.get("resumed_date") or details.get("interval_end")
-        try:
-            end = date.fromisoformat(str(end_text)[:10]) if end_text else current_date
-        except ValueError:
-            end = current_date
+        if start > current_date:
+            continue
+        end = _suspension_end(event, current_date)
         if start > previous_date and start <= current_date and end >= start:
             return True
         if start <= previous_date < end and end >= current_date:
@@ -6189,6 +6244,9 @@ def _tracking_inputs(
                 fallback_reference_prices[action.action_date] = previous_close
     tracked: list[TrackBar] = []
     previous_observed_date = start_after
+    # One load for all sessions; each session reads only the events that
+    # start on or before it, as the per-session query did (#841).
+    suspension_events = _suspension_events(db, instrument_id, bars[-1].trading_date)
     for bar in bars:
         actions = [
             action for action in action_rows if action.action_date <= bar.trading_date
@@ -6197,9 +6255,8 @@ def _tracking_inputs(
             actions,
             fallback_reference_prices=fallback_reference_prices,
         )
-        suspension_gap = _suspension_gap_between(
-            db,
-            instrument_id,
+        suspension_gap = _suspension_gap_in(
+            suspension_events,
             previous_observed_date,
             bar.trading_date,
         )
@@ -6224,6 +6281,42 @@ def _tracking_inputs(
     return list(bars), tracked
 
 
+def _prior_volume_average(
+    db: Session, instrument_id: int, signal_date: date
+) -> float | None:
+    """The 20-session average volume ending on the signal day (all 20 > 0)."""
+
+    volumes = db.scalars(
+        select(MarketBar.volume)
+        .where(
+            MarketBar.instrument_id == instrument_id,
+            MarketBar.trading_date <= signal_date,
+        )
+        .order_by(desc(MarketBar.trading_date))
+        .limit(20)
+    ).all()
+    values = [volume for volume in volumes if volume and volume > 0]
+    return sum(values) / len(values) if len(values) == 20 else None
+
+
+def _chips_by_date(
+    db: Session, instrument_id: int, days: list[date]
+) -> dict[date, ChipSnapshot]:
+    """The instrument's chip rows on ``days`` (one per day, uq_chip_snapshot_day)."""
+
+    if not days:
+        return {}
+    return {
+        row.trading_date: row
+        for row in db.scalars(
+            select(ChipSnapshot).where(
+                ChipSnapshot.instrument_id == instrument_id,
+                ChipSnapshot.trading_date.in_(days),
+            )
+        )
+    }
+
+
 def track_levels(row: Any) -> TrackLevels:
     """The tracked levels of a signal or a tracking plan (same column names)."""
 
@@ -6237,11 +6330,51 @@ def track_levels(row: Any) -> TrackLevels:
     )
 
 
+def _group_confirmation(
+    db: Session,
+    instrument_id: int,
+    signal_date: date,
+    cache: dict[tuple[int, date], bool] | None = None,
+) -> str:
+    """``subgroup_confirmation`` of a signal: the same for all its sessions.
+
+    ``cache`` keeps the answer per (instrument, signal day) for one evaluate
+    run: the step writes no group rows, so every signal of that instrument-day
+    (one per strategy) reads the same groups (#841).
+    """
+
+    key = (instrument_id, signal_date)
+    if cache is not None and key in cache:
+        available = cache[key]
+    else:
+        available = bool(_best_group_for_signal(db, instrument_id, signal_date))
+        if cache is not None:
+            cache[key] = available
+    return "available" if available else "missing"
+
+
+def _chip_confirmations(chip: ChipSnapshot | None) -> tuple[str, str]:
+    """(institutional, leverage) confirmation of one session's chip row."""
+
+    flow_confirmation = "missing"
+    margin_confirmation = "missing"
+    if chip and all(
+        _safe_float(value) is not None
+        for value in (chip.foreign_buy, chip.trust_buy, chip.dealer_buy)
+    ):
+        flow_confirmation = "available"
+        margin_confirmation = (
+            "available" if _safe_float(chip.margin_balance) is not None else "missing"
+        )
+    return flow_confirmation, margin_confirmation
+
+
 def _evaluate_signal_tracking(
     db: Session,
     signal: Signal,
     *,
     evaluation_cutoff: date | None = None,
+    group_cache: dict[tuple[int, date], bool] | None = None,
 ) -> tuple[int, int]:
     bars, tracked = _tracking_inputs(
         db,
@@ -6277,22 +6410,8 @@ def _evaluate_signal_tracking(
     instrument = db.get(Instrument, signal.instrument_id)
     if not instrument:
         return 0, 0
-    prior_bars = db.scalars(
-        select(MarketBar)
-        .where(
-            MarketBar.instrument_id == signal.instrument_id,
-            MarketBar.trading_date <= signal.signal_date,
-        )
-        .order_by(desc(MarketBar.trading_date))
-        .limit(20)
-    ).all()
-    prior_volume_values = [
-        bar.volume for bar in prior_bars if bar.volume and bar.volume > 0
-    ]
-    prior_volume_average = (
-        sum(prior_volume_values) / len(prior_volume_values)
-        if len(prior_volume_values) == 20
-        else None
+    prior_volume_average = _prior_volume_average(
+        db, signal.instrument_id, signal.signal_date
     )
     signal.data_quality = signal.data_quality or "complete"
     path = track_path(track_levels(signal), tracked, rules=TRACKING_RULES)
@@ -6300,30 +6419,23 @@ def _evaluate_signal_tracking(
     # not enter on a gap beyond the target or the invalid price).
     signal.execution_date = path.execution_date if path.executed else None
     signal.execution_price = path.execution_price if path.executed else None
+    # Read once per signal what used to be read once per session (#841): the
+    # chip rows of the tracked sessions, the signal's stored rows, and its
+    # group confirmation (the same for every session).
+    chips = _chips_by_date(db, signal.instrument_id, [bar.trading_date for bar in bars])
+    existing_evaluations = {
+        row.session_date: row
+        for row in db.scalars(
+            select(SignalEvaluation).where(SignalEvaluation.signal_id == signal.id)
+        )
+    }
+    group_confirmation = _group_confirmation(
+        db, signal.instrument_id, signal.signal_date, group_cache
+    )
     evaluations: list[SignalEvaluation] = []
     for bar, session in zip(bars, path.sessions):
-        chip = db.scalar(
-            select(ChipSnapshot).where(
-                ChipSnapshot.instrument_id == signal.instrument_id,
-                ChipSnapshot.trading_date == bar.trading_date,
-            )
-        )
-        flow_confirmation = "missing"
-        margin_confirmation = "missing"
-        if chip and all(
-            _safe_float(value) is not None
-            for value in (chip.foreign_buy, chip.trust_buy, chip.dealer_buy)
-        ):
-            flow_confirmation = "available"
-            margin_confirmation = (
-                "available"
-                if _safe_float(chip.margin_balance) is not None
-                else "missing"
-            )
-        group_confirmation = (
-            "available"
-            if _best_group_for_signal(db, signal.instrument_id, signal.signal_date)
-            else "missing"
+        flow_confirmation, margin_confirmation = _chip_confirmations(
+            chips.get(bar.trading_date)
         )
         evaluation = _upsert_evaluation(
             db,
@@ -6367,6 +6479,7 @@ def _evaluate_signal_tracking(
                 "trigger_order": session.trigger_order,
                 "data_quality": "incomplete" if not session.comparable else "complete",
             },
+            existing_evaluations,
         )
         evaluations.append(evaluation)
     if path.skip_reason is not None:
@@ -6392,9 +6505,17 @@ def _evaluate_signal_tracking(
     if path.ambiguous or any(item.comparable is False for item in evaluations):
         signal.data_quality = "incomplete"
 
+    existing_settlements = {
+        row.horizon: row
+        for row in db.scalars(
+            select(SignalSettlement).where(SignalSettlement.signal_id == signal.id)
+        )
+    }
     settlement_count = 0
     for horizon in (5, 20):
-        _upsert_settlement(db, signal, horizon, settle(path, horizon))
+        _upsert_settlement(
+            db, signal, horizon, settle(path, horizon), existing_settlements
+        )
         settlement_count += 1
     return len(evaluations), settlement_count
 
@@ -6404,9 +6525,289 @@ def _evaluate_signal_tracking(
 # evaluation and settlement it wrote; one transaction over all open signals
 # outgrew the 2 GB scheduler container.
 EVALUATE_TRACKING_BATCH = 2000
+# The settled check (#841) reads this many signals' stored rows per query.
+EVALUATE_SETTLED_BATCH = 500
+# The statuses the daily evaluate still tracks (expired and the data/level
+# failures are final).
+EVALUATE_OPEN_STATUSES = frozenset(
+    {
+        "conditional",
+        "active",
+        "target_1_hit",
+        "invalidated",
+        "observation",
+        "incomparable",
+    }
+)
 
 
-def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
+def _session_suspended(
+    *, is_suspended: Any, volume: Any, open_: Any, high: Any, low: Any, close: Any
+) -> bool:
+    """``TrackSession.suspended`` of a session without a suspension-gap event.
+
+    Mirrors ``app.tracking.track_path`` (``is_suspended``, or a zero-volume
+    flat bar); test_evaluate_incremental pins the two together.
+    """
+
+    return bool(is_suspended or (volume == 0 and open_ == high == low == close))
+
+
+def _settled_signal_ids(
+    db: Session,
+    selection: list[Any],
+    *,
+    group_cache: dict[tuple[int, date], bool],
+) -> set[int]:
+    """The selected signals whose recomputation cannot change any row (#841).
+
+    A signal is settled only when all of these hold (docs/ops/SCHEDULING.md
+    增量規則); anything else, or anything that cannot be compared, is tracked:
+
+    - R1 rules: settlements for T+5 and T+20 exist under ``TRACKING_RULES``.
+    - R2 window: exactly 20 stored evaluations, on the first 20 bars after
+      the signal day.
+    - R3 bars: each stored session's OHLC, adj_close, volume, source,
+      data_time and suspended flag equal the bar's current values.
+    - R4 corporate actions: none from the signal day to the 20th session.
+    - R5 suspension events: none that starts by the 20th session and ends
+      (or may end) on or after the signal day.
+    - R6 chips: each session's institutional and leverage confirmation equal
+      what its current chip row gives.
+    - R7 group: each session's subgroup confirmation equals the current one.
+    - R8 volume: each session's volume_ratio_20d equals the one from the
+      current prior-20-session volumes.
+
+    Not detectable here, so documented as ``evaluate --force`` cases: a
+    change of the tracking code without a new rule version, and a re-analysis
+    of an old signal day that rewrote its levels or status.
+    """
+
+    complete = (
+        select(SignalEvaluation.signal_id)
+        .group_by(SignalEvaluation.signal_id)
+        .having(func.count(SignalEvaluation.id) == TRACKING_WINDOW_SESSIONS)
+    )
+    current_rules = (
+        select(SignalSettlement.signal_id)
+        .where(
+            SignalSettlement.tracking_rules == TRACKING_RULES,
+            SignalSettlement.horizon.in_((5, 20)),
+        )
+        .group_by(SignalSettlement.signal_id)
+        .having(func.count(func.distinct(SignalSettlement.horizon)) == 2)
+    )
+    candidates = db.scalars(
+        select(Signal.id)
+        .where(
+            *selection,
+            Signal.id.in_(complete),  # R2 (count)
+            Signal.id.in_(current_rules),  # R1
+        )
+        .order_by(Signal.id)
+    ).all()
+    settled: set[int] = set()
+    prior_averages: dict[tuple[int, date], float | None] = {}
+    for start in range(0, len(candidates), EVALUATE_SETTLED_BATCH):
+        chunk = list(candidates[start : start + EVALUATE_SETTLED_BATCH])
+        settled |= _settled_in_chunk(db, chunk, group_cache, prior_averages)
+    return settled
+
+
+def _settled_in_chunk(
+    db: Session,
+    chunk: list[int],
+    group_cache: dict[tuple[int, date], bool],
+    prior_averages: dict[tuple[int, date], float | None],
+) -> set[int]:
+    rows = db.execute(
+        select(
+            Signal.id.label("signal_id"),
+            Signal.instrument_id,
+            Signal.signal_date,
+            SignalEvaluation.session_date,
+            SignalEvaluation.ohlc_json,
+            SignalEvaluation.volume.label("stored_volume"),
+            SignalEvaluation.source.label("stored_source"),
+            SignalEvaluation.data_time,
+            SignalEvaluation.suspended,
+            SignalEvaluation.volume_ratio_20d,
+            SignalEvaluation.institutional_confirmation,
+            SignalEvaluation.leverage_confirmation,
+            SignalEvaluation.subgroup_confirmation,
+            MarketBar.open,
+            MarketBar.high,
+            MarketBar.low,
+            MarketBar.close,
+            MarketBar.adj_close,
+            MarketBar.volume,
+            MarketBar.source,
+            MarketBar.data_as_of,
+            MarketBar.is_suspended,
+            ChipSnapshot.foreign_buy,
+            ChipSnapshot.trust_buy,
+            ChipSnapshot.dealer_buy,
+            ChipSnapshot.margin_balance,
+        )
+        .join(SignalEvaluation, SignalEvaluation.signal_id == Signal.id)
+        .outerjoin(
+            MarketBar,
+            and_(
+                MarketBar.instrument_id == Signal.instrument_id,
+                MarketBar.trading_date == SignalEvaluation.session_date,
+            ),
+        )
+        .outerjoin(
+            ChipSnapshot,
+            and_(
+                ChipSnapshot.instrument_id == Signal.instrument_id,
+                ChipSnapshot.trading_date == SignalEvaluation.session_date,
+            ),
+        )
+        .where(Signal.id.in_(chunk))
+    ).all()
+    by_signal: dict[int, list[Any]] = defaultdict(list)
+    for row in rows:
+        by_signal[row.signal_id].append(row)
+    if not by_signal:
+        return set()
+    last = (
+        select(
+            SignalEvaluation.signal_id.label("signal_id"),
+            func.max(SignalEvaluation.session_date).label("last_date"),
+        )
+        .where(SignalEvaluation.signal_id.in_(chunk))
+        .group_by(SignalEvaluation.signal_id)
+        .subquery()
+    )
+    # R2: the bars from the signal day to the last stored session, so a bar
+    # added or removed inside the window is seen.
+    bar_counts = dict(
+        db.execute(
+            select(Signal.id, func.count(MarketBar.id))
+            .join(last, last.c.signal_id == Signal.id)
+            .join(
+                MarketBar,
+                and_(
+                    MarketBar.instrument_id == Signal.instrument_id,
+                    MarketBar.trading_date > Signal.signal_date,
+                    MarketBar.trading_date <= last.c.last_date,
+                ),
+            )
+            .group_by(Signal.id)
+        ).all()
+    )
+    # R4: any corporate action inside the window.
+    with_actions = set(
+        db.scalars(
+            select(Signal.id)
+            .join(last, last.c.signal_id == Signal.id)
+            .join(
+                CorporateAction,
+                and_(
+                    CorporateAction.instrument_id == Signal.instrument_id,
+                    CorporateAction.action_date > Signal.signal_date,
+                    CorporateAction.action_date <= last.c.last_date,
+                ),
+            )
+            .distinct()
+        ).all()
+    )
+    instrument_ids = {items[0].instrument_id for items in by_signal.values()}
+    suspensions: dict[int, list[Event]] = defaultdict(list)
+    for event in db.scalars(
+        select(Event).where(
+            Event.event_type == "suspension",
+            Event.instrument_id.in_(instrument_ids),
+        )
+    ):
+        suspensions[event.instrument_id].append(event)
+    settled: set[int] = set()
+    for signal_id, items in by_signal.items():
+        instrument_id = items[0].instrument_id
+        signal_date = items[0].signal_date
+        last_date = max(item.session_date for item in items)
+        # R2: 20 rows (the candidate query) on 20 bars, none added or removed.
+        if bar_counts.get(signal_id) != TRACKING_WINDOW_SESSIONS:
+            continue
+        if signal_id in with_actions:
+            continue  # R4
+        # R5: an event without a usable end counts as ending on the last
+        # session (``_suspension_end``), so it is relevant.
+        if any(
+            event.event_date <= last_date
+            and _suspension_end(event, last_date) >= signal_date
+            for event in suspensions.get(instrument_id, ())
+        ):
+            continue
+        key = (instrument_id, signal_date)
+        if key not in prior_averages:
+            prior_averages[key] = _prior_volume_average(db, instrument_id, signal_date)
+        group = _group_confirmation(db, instrument_id, signal_date, group_cache)
+        if all(
+            _stored_session_unchanged(item, prior_averages[key], group)
+            for item in items
+        ):
+            settled.add(signal_id)
+    return settled
+
+
+def _stored_session_unchanged(
+    item: Any, prior_average: float | None, group_confirmation: str
+) -> bool:
+    """R3, R6, R7 and R8 for one stored evaluation joined to its inputs.
+
+    A stored date without a bar any more compares its OHLC with nothing.
+    """
+
+    if item.ohlc_json != {
+        "open": item.open,
+        "high": item.high,
+        "low": item.low,
+        "close": item.close,
+        "adj_close": item.adj_close,
+    }:
+        return False  # R3
+    if item.stored_volume != item.volume:
+        return False  # R3
+    if item.stored_source != item.source:
+        return False  # R3
+    if item.data_time != (item.data_as_of.isoformat() if item.data_as_of else None):
+        return False  # R3
+    if item.suspended != _session_suspended(
+        is_suspended=item.is_suspended,
+        volume=item.volume,
+        open_=item.open,
+        high=item.high,
+        low=item.low,
+        close=item.close,
+    ):
+        return False  # R3
+    # Without a chip row the joined chip columns are all empty, which
+    # _chip_confirmations reads as no row.
+    if (
+        item.institutional_confirmation,
+        item.leverage_confirmation,
+    ) != _chip_confirmations(item):
+        return False  # R6
+    if item.subgroup_confirmation != group_confirmation:
+        return False  # R7
+    expected_ratio = (
+        item.volume / prior_average
+        if prior_average and item.volume is not None
+        else None
+    )
+    return item.volume_ratio_20d == expected_ratio  # R8
+
+
+def evaluate(*, init_schema: bool = True, force: bool = False) -> dict[str, Any]:
+    """Track the open ``analysis-*`` signals (the daily evaluate step).
+
+    Without ``force`` a settled signal (``_settled_signal_ids``, #841) keeps
+    its rows; ``force=True`` recomputes every selected signal, for after a
+    tracking-code fix or a backfill (docs/ops/SCHEDULING.md).
+    """
+
     if init_schema:
         init_db()
     with SessionLocal() as db:
@@ -6424,42 +6825,41 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
             SignalSettlement.tracking_rules == TRACKING_RULES_V1,
             SignalSettlement.signal_id.in_(complete_windows),
         )
+        selection = [
+            Signal.signal_key.not_like(f"{BACKTEST_SIGNAL_PREFIX}%"),
+            Signal.id.not_in(finished_v1),
+            Signal.status.in_(EVALUATE_OPEN_STATUSES),
+        ]
         # Only the ids are selected up front (the same selection as before);
         # the signals are loaded, tracked and committed one batch at a time.
         # Tracking a signal writes only its own rows and reads market data,
         # so a batch does not change what a later one tracks to: the result
         # equals one transaction over all of them.
         signal_ids = db.scalars(
-            select(Signal.id)
-            .where(
-                Signal.signal_key.not_like(f"{BACKTEST_SIGNAL_PREFIX}%"),
-                Signal.id.not_in(finished_v1),
-                Signal.status.in_(
-                    {
-                        "conditional",
-                        "active",
-                        "target_1_hit",
-                        "invalidated",
-                        "observation",
-                        "incomparable",
-                    }
-                ),
-            )
-            .order_by(Signal.id)
+            select(Signal.id).where(*selection).order_by(Signal.id)
         ).all()
+        group_cache: dict[tuple[int, date], bool] = {}
+        settled = (
+            set()
+            if force or not signal_ids
+            else _settled_signal_ids(db, selection, group_cache=group_cache)
+        )
+        tracked_ids = [
+            signal_id for signal_id in signal_ids if signal_id not in settled
+        ]
         evaluations = 0
         settlements = 0
-        for start in range(0, len(signal_ids), EVALUATE_TRACKING_BATCH):
+        for start in range(0, len(tracked_ids), EVALUATE_TRACKING_BATCH):
             batch = db.scalars(
                 select(Signal)
                 .where(
-                    Signal.id.in_(signal_ids[start : start + EVALUATE_TRACKING_BATCH])
+                    Signal.id.in_(tracked_ids[start : start + EVALUATE_TRACKING_BATCH])
                 )
                 .order_by(Signal.id)
             ).all()
             for signal in batch:
                 current_evaluations, current_settlements = _evaluate_signal_tracking(
-                    db, signal
+                    db, signal, group_cache=group_cache
                 )
                 evaluations += current_evaluations
                 settlements += current_settlements
@@ -6469,7 +6869,9 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
         if not signal_ids:
             return {
                 "status": "no_data",
+                "force": force,
                 "signals_checked": 0,
+                "signals_skipped": 0,
                 "evaluations_written": 0,
                 "settlements_written": 0,
             }
@@ -6477,7 +6879,9 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
         return {
             "status": "success",
             "date": latest_date.isoformat() if latest_date else None,
+            "force": force,
             "signals_checked": len(signal_ids),
+            "signals_skipped": len(settled),
             "evaluations_written": evaluations,
             "settlements_written": settlements,
         }
