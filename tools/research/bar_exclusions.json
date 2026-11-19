@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "doc": "docs/ops/RESEARCH_DB.md 研究工具的日線排除清單 (#839)",
+  "entries": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2432",
+      "first": null,
+      "last": "2024-05-28",
+      "reason": "code_reuse",
+      "old_company_last": "2008-08-25",
+      "new_company_first": "2023-05-31",
+      "warmup_bars": 240,
+      "raw_payload_ids": {"old_company_last": 62311, "new_company_first": 16121, "warmup_last": 13012},
+      "note": "舊公司 2004-02-11～2008-08-25；倚天酷碁-創 2023-05-31 上市，前 240 根到 2024-05-28",
+      "decision": "https://github.com/YiCheng0608/stock-lab/issues/702#issuecomment-6915138263"
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6130",
+      "first": null,
+      "last": "2013-02-26",
+      "reason": "code_reuse",
+      "old_company_last": "2008-11-28",
+      "new_company_first": "2011-12-15",
+      "warmup_bars": 240,
+      "raw_payload_ids": {"old_company_last": 61640, "new_company_first": 53531, "warmup_last": 48681},
+      "note": "亞全 2007-04-23～2008-11-28；基因 2011-12-15 起，前 240 根到 2013-02-26",
+      "decision": "https://github.com/YiCheng0608/stock-lab/issues/702#issuecomment-6915138263"
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "4415",
+      "first": null,
+      "last": "2016-05-19",
+      "reason": "code_reuse",
+      "old_company_last": "2011-11-07",
+      "new_company_first": "2015-04-14",
+      "warmup_bars": 240,
+      "raw_payload_ids": {"old_company_last": 53691, "new_company_first": 42392, "warmup_last": 39120},
+      "note": "美嘉電 2007-04-23～2011-11-07；台原藥 2015-04-14 起，前 240 根到 2016-05-19",
+      "decision": "https://github.com/YiCheng0608/stock-lab/issues/702#issuecomment-6915138263"
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": null,
+      "first": "2007-04-23",
+      "last": "2007-11-30",
+      "reason": "no_corporate_actions",
+      "note": "上櫃這段沒有可用的除權息來源，不補存活公司，整段排除",
+      "decision": "https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6917103976"
+    }
+  ]
+}

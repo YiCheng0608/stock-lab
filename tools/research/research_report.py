@@ -68,6 +68,91 @@ RAW_DIR_NAME = ".raw-unused"
 # Statuses scoring writes for a signal that is not actionable; every other
 # status is a conditional signal or where tracking moved it (RunSignals).
 NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
+# docs/ops/RESEARCH_DB.md 研究工具的日線排除清單 (#839): the stock／ipo bars no
+# research tool reads (``benchmark_universe``／``benchmark_bars``).
+EXCLUSIONS_PATH = ROOT / "tools" / "research" / "bar_exclusions.json"
+EXCLUSION_REASONS = ("code_reuse", "no_corporate_actions")
+
+
+@dataclass(frozen=True)
+class Exclusion:
+    """One range of ``bar_exclusions.json``: ``first``..``last`` (``first`` None:
+    from the instrument's first bar) of ``symbol`` (None: every stock／ipo of
+    ``exchange``).  A ``code_reuse`` range applies only to a database holding
+    the old company, a bar on or before ``old_company_last``."""
+
+    exchange: str
+    symbol: str | None
+    first: date | None
+    last: date
+    reason: str
+    old_company_last: date | None = None
+
+
+def load_exclusions(path: Path = EXCLUSIONS_PATH) -> tuple[Exclusion, ...]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("version") != 1:
+        raise ValueError(f"{path}: version {data.get('version')!r}, expected 1")
+    out = []
+    for entry in data["entries"]:
+        reason = entry["reason"]
+        if reason not in EXCLUSION_REASONS:
+            raise ValueError(f"{path}: unknown reason {reason!r}")
+        first = entry["first"] and date.fromisoformat(entry["first"])
+        last = date.fromisoformat(entry["last"])
+        old = entry.get("old_company_last")
+        old = old and date.fromisoformat(old)
+        if first is not None and first > last:
+            raise ValueError(
+                f"{path}: {entry['exchange']} {entry['symbol']} ends before it starts"
+            )
+        if (reason == "code_reuse") != (
+            entry["symbol"] is not None and old is not None
+        ):
+            raise ValueError(
+                f"{path}: a code_reuse range names one symbol and its old_company_last"
+            )
+        out.append(
+            Exclusion(entry["exchange"], entry["symbol"], first, last, reason, old)
+        )
+    return tuple(out)
+
+
+def excluded_ranges(
+    con: sqlite3.Connection, exclusions: Sequence[Exclusion] | None = None
+) -> dict[int, list[tuple[str, str]]]:
+    """The excluded (first, last) ISO days of each instrument id of ``con``."""
+
+    exclusions = load_exclusions() if exclusions is None else exclusions
+    out: dict[int, list[tuple[str, str]]] = defaultdict(list)
+    for item in exclusions:
+        first = "" if item.first is None else item.first.isoformat()
+        if item.symbol is None:
+            ids = [
+                row[0]
+                for row in con.execute(
+                    "select id from instruments where exchange = ? and instrument_type in "
+                    f"({','.join('?' * len(BENCHMARK_TYPES))})",
+                    (item.exchange, *BENCHMARK_TYPES),
+                )
+            ]
+        else:
+            ids = [
+                row[0]
+                for row in con.execute(
+                    "select i.id from instruments i where i.exchange = ? and i.symbol = ? "
+                    "and exists (select 1 from market_bars mb where mb.instrument_id = i.id "
+                    "and mb.trading_date <= ?)",
+                    (item.exchange, item.symbol, item.old_company_last.isoformat()),
+                )
+            ]
+        for instrument_id in ids:
+            out[instrument_id].append((first, item.last.isoformat()))
+    return dict(out)
+
+
+def _is_excluded(ranges: list[tuple[str, str]] | None, day: str) -> bool:
+    return ranges is not None and any(first <= day <= last for first, last in ranges)
 
 
 def _research_module():
@@ -411,12 +496,16 @@ def index_closes(
 def benchmark_universe(
     con: sqlite3.Connection, start: date, end: date | None = None
 ) -> tuple[dict[int, Instrument], dict[date, list[int]]]:
-    """Bars and actions of stock／ipo instruments from ``start`` (to ``end``), by id."""
+    """Bars and actions of stock／ipo instruments from ``start`` (to ``end``), by id;
+    the bars of ``bar_exclusions.json`` are not read."""
 
     instruments: dict[int, Instrument] = defaultdict(Instrument)
     listed: dict[date, list[int]] = defaultdict(list)
+    excluded = excluded_ranges(con)
     for row in con.execute(*_benchmark_bars(start, end)):
         instrument_id, day, *prices, volume, suspended = row
+        if _is_excluded(excluded.get(instrument_id), day):
+            continue
         day = date.fromisoformat(day)
         instruments[instrument_id].bars.append(
             Bar(day, *prices, volume or 0, bool(suspended))
@@ -451,13 +540,17 @@ def benchmark_bars(
     ``Bar`` objects are alive at a time.
 
     ``days`` maps an ISO date to the ``date`` object to use (the sessions'), so
-    every bar of a day shares one object; other days are parsed.
+    every bar of a day shares one object; other days are parsed.  The bars of
+    ``bar_exclusions.json`` are not read, as in ``benchmark_universe``.
     """
 
     days = {} if days is None else days
+    excluded = excluded_ranges(con)
     current, bars = None, []
     for row in con.execute(*_benchmark_bars(start, end)):
         instrument_id, day, *prices, volume, suspended = row
+        if _is_excluded(excluded.get(instrument_id), day):
+            continue
         if instrument_id != current:
             if bars:
                 yield current, bars

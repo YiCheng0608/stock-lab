@@ -28,11 +28,14 @@
 
 已知限制：
 
-- **代號重用**：一個代號下市多年後分配給別家公司時，兩家的日線會接在同一個標的上，這裡分不出來。回補完成後要依名稱變化稽核一次（回補執行單處理）。
+- **代號重用**：一個代號下市多年後分配給別家公司時，兩家的日線會接在同一個標的上，這裡分不出來。#702 批 5 後依中斷與名稱稽核，找到 3 段重用：TWSE 2432、TPEx 6130、TPEx 4415（[6915084041](https://github.com/YiCheng0608/stock-lab/issues/702#issuecomment-6915084041)）。DB 不改，研究工具用[日線排除清單](#研究工具的日線排除清單)排除。
+  - **上市舊頁的名稱是今天的名稱**：TWSE 舊的 `MI_INDEX`，「證券名稱」寫的是這個代號**現在**的名稱，和 MOPS 舊彙總頁一樣，是用今天的資料重產的。例如 2008-08-25 的頁上，2432 寫「倚天酷碁-創」，但倚天酷碁 2023-05-31 才上市。
+  - 所以上市段落不能用前後名稱判斷代號重用，要看中斷期間有沒有籌碼列、收盤價是否連續。上市 2013 年以前另有 4 段中斷，用這兩點判斷是同一家（[6915138263](https://github.com/YiCheng0608/stock-lab/issues/702#issuecomment-6915138263)）。
+  - 上櫃舊頁 `dailyQuotes` 印的是當時的名稱，例如 6130 從「亞全」變成「基因」。
 - **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。研究用的當時分類見[官方產業的逐月成員表](#官方產業的逐月成員表)。
 - **除權息**（[#821](https://github.com/YiCheng0608/stock-lab/issues/821)）：
   - **上市 2005-01-24 以前的除權**：`TWT49UDetail` 對這段的含權列都回「無相關資料」，2005-01-25 起才有明細。這些事件照樣寫入，但現金股利、配股率留空，`details_json.factor_source` 是 `twt49u_reference`。還原因子用 `TWT49U` 的 `除權息參考價／除權息前收盤價`，和欄位推得出的因子是同一種官方比值，所以還原價、報酬、指標都不受影響；只有個股頁的除權息清單看不到拆分。例外是參考價與前收盤價差在 0.02 元內的列，因子照用 1：370 列裡只有 2343 精業 2004-12-20（10.50／10.49，差不到 0.1%）。2004-02-11～2005-01-24 共 370 列（2004 年 367、2005 年 3，[AC-1](https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6916456620)）。
-  - **上櫃 2007-04-23～2007-11-30 沒有除權息事件**：TPEx `exDailyQ` 在 2007-12 以前都回空表，舊版網址也只回當期。研究 DB 的上櫃日線卻從 2007-04-23 開始，所以這段上櫃日線在除權息日會假跌（2007-07、08 是除權息旺季）。**研究工具用這段上櫃日線時，要排除，或接受假跌。** MOPS 舊站的「公司股利分派公告資料彙總表」（`t108sb27`）有這段的除權、除息交易日與配發內容，但它只收現在還在的公司：2007 年有日線的 547 檔上櫃普通股裡，之後下市的 100 檔一檔都不在表裡（[查證](https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6916792081)）。而且它是公告，沒有官方參考價可以核對因子，所以沒有用它補。
+  - **上櫃 2007-04-23～2007-11-30 沒有除權息事件**：TPEx `exDailyQ` 在 2007-12 以前都回空表，舊版網址也只回當期。研究 DB 的上櫃日線卻從 2007-04-23 開始，所以這段上櫃日線在除權息日會假跌（2007-07、08 是除權息旺季）。研究工具不讀這段上櫃日線（[日線排除清單](#研究工具的日線排除清單)，[#821 決定](https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6917103976)）。 MOPS 舊站的「公司股利分派公告資料彙總表」（`t108sb27`）有這段的除權、除息交易日與配發內容，但它只收現在還在的公司：2007 年有日線的 547 檔上櫃普通股裡，之後下市的 100 檔一檔都不在表裡（[查證](https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6916792081)）。而且它是公告，沒有官方參考價可以核對因子，所以沒有用它補。
 - **月營收**：MOPS 的 `t21sc03` 頁只列今天的公司，回補不到下市股的任何一個月。轉板公司上櫃那幾年的月份則接在上市標的上（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。[#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補其中補得到的部分，規則見 [DATA_SOURCES 的下市與轉板公司的月營收](../DATA_SOURCES.md#下市與轉板公司的月營收)：
   - **轉板**：`revenue transfers --apply` 把上櫃標的範圍內的月份從上市標的複製過來（0 個請求）。2026-11-15 在研究 DB 副本上實測（日線從 2017-03 起）：21 檔都通過同一家公司的核對，寫 1,360 列，重跑全部 `unchanged`，和上市標的逐列比對沒有不同。批 3～5 把日線往前補之後要再跑一次，補上新增的月份。
   - **下市股**：`revenue company-classify`，接著 `revenue company-backfill`，用 MOPS 單一公司查詢，只有仍公開發行的公司查得到。破產、合併消滅等「不繼續公開發行」的公司補不到，這部分的缺口會留下來，偏差方向仍對假設有利。等 #702 批 4 建完標的再發請求，請求數先貼在執行單，經統籌核准才補。
@@ -55,7 +58,9 @@
 - **季報**：
   - 只補 `delisted`／`transferred` 標的；它們要在季底到季底後 670 天內有日線（`quarterly_xbrl.EVIDENCE_WINDOW_DAYS`）。
   - 整包是 2025 年重新打包的，數字是現在的版本：事後更正過的季度，存的是更正後的值（和 `t163sb04` 相同）。
-  - #702 的代號重用清單出來以前，同一代號的舊公司分不出來，見上一節。清單出來後以 `--exclude-file`（instrument id 的 JSON 陣列）重跑：它只擋之後的寫入，輸出的 `excluded_already_written` 是之前已寫進這些標的的列數；不是 0 時，先停下批次，再刪 `fundamental_snapshots` 中 `source = 'mops_tifrs_zip'` 而且 `instrument_id` 在清單裡的列（刪之前先貼列數到 Issue），`raw_payloads` 不動。
+  - 代號重用（見上一節）：清單上 3 段舊公司的最後一根日線都在 2013 年以前（2008-08-25、2008-11-28、2011-11-07），整包從 2013Q1 起，所以寫進這 3 個標的的都是新公司的季報，不必用 `--exclude-file` 重跑。之後清單若加了 2013 年以後才結束的舊公司，以 `--exclude-file`（instrument id 的 JSON 陣列）重跑：
+    - 它只擋之後的寫入，輸出的 `excluded_already_written` 是之前已寫進這些標的的列數。
+    - 不是 0 時，先停下批次。把列數貼到 Issue，再刪 `fundamental_snapshots` 中 `source = 'mops_tifrs_zip'` 而且 `instrument_id` 在清單裡的列；`raw_payloads` 不動。
 - **月營收**：單一公司查詢只查得到下市後仍公開發行的公司。破產或合併消滅、不繼續公開發行的公司（例如 2475 華映、2888 新光金）查不到，這類公司會一直缺值。剩下多少由 #782 量。
 
 ## 回補怎麼跑
@@ -314,6 +319,41 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 這裡的 `--segment` 只是讓既有的兩個工具能在研究 DB 上指定日期（例如確認工具讀得到回補的資料）。新策略探索的分段已在 [策略證據「分段」](../spec/evidence.md#分段) 寫死（探索段到 2019-12-31、驗證段 2020-01-02～2024-09-27，[#697](https://github.com/YiCheng0608/stock-lab/issues/697)），探索工具另開單，參數寫死在程式裡；回補完成前不要在回補的歷史上跑整段的特徵證據（#692 決定）。`portfolio_research.py --hypothesis` 的凍結假設不接受 `--segment`。
 
+### 研究工具的日線排除清單
+
+[`tools/research/bar_exclusions.json`](../../tools/research/bar_exclusions.json) 列出研究工具不讀的股票日線（[#839](https://github.com/YiCheng0608/stock-lab/issues/839)）。DB 不改，日線照樣存著。
+
+**誰讀這份清單**：`research_report.benchmark_universe` 與 `benchmark_bars` 是 `stock`／`ipo` 日線的同一個查詢，兩個都跳過清單裡的列。用到它們的工具都不會讀到這些列：
+- `evidence_lib.load_panel`：`feature_evidence`、`candidate_scorecard`。
+- `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`。
+- `research_report` 的基準一。
+
+被排除的那幾天，這些標的就是沒有日線：前瞻報酬照「N 個交易日都要有日線」不可比；回看用的是剩下的日線根數。不讀這兩個函式的工具不受清單影響：
+- `exit_research`、`backtest_research` 讀產品訊號的日線。
+- `regime_report`、`index_condition_report` 只讀指數、台指期。
+- `synthetic_history` 從正式副本產生合成 DB，只算日線列數。
+
+**每一列**：
+- 欄位：交易所、代號（`null`＝這個交易所的全部 `stock`／`ipo`）、`first`～`last`（`first` 是 `null` 時，從第一根日線算起）、原因、依據的 raw id 與決定連結。
+- 原因只有兩種：
+  - `code_reuse`：代號重用。
+  - `no_corporate_actions`：這段沒有除權息來源。
+- `code_reuse` 的列只在 DB 有舊公司時才排除，也就是這個代號在 `old_company_last` 以前有日線。正式 DB 副本只有新公司，不會被排除。
+
+| 交易所 | 代號 | 排除 | 原因 |
+|---|---|---|---|
+| TWSE | 2432 | 第一根～2024-05-28 | 舊公司 2004-02-11～2008-08-25；倚天酷碁-創 2023-05-31 上市，前 240 根到 2024-05-28 |
+| TPEx | 6130 | 第一根～2013-02-26 | 亞全 2007-04-23～2008-11-28；基因 2011-12-15 起，前 240 根到 2013-02-26 |
+| TPEx | 4415 | 第一根～2016-05-19 | 美嘉電 2007-04-23～2011-11-07；台原藥 2015-04-14 起，前 240 根到 2016-05-19 |
+| TPEx | 全部 | 2007-04-23～2007-11-30 | 沒有除權息事件（見[下市與轉板的標的](#下市與轉板的標的)的除權息） |
+
+**代號重用為什麼多排除 240 根**（[6915138263](https://github.com/YiCheng0608/stock-lab/issues/702#issuecomment-6915138263)）：
+- `indicators --rebuild` 與研究工具的回看都照日線根數算，不看日期。新公司的前 N 根，回看會接到舊公司的日線。
+- 研究工具最長的回看是 240 根：`high_gap_240`、M1、M2 的 240 日報酬。
+- 240 根的最後一天，是用研究 DB 2026-11-20 的日線數出來的，寫死在清單裡。
+
+**改清單**：改 JSON，同一個 PR 改這一節與 `backend/tests/test_research_bar_exclusions.py` 的預期。
+
 ## 官方產業的逐月成員表
 
 研究用的「T 日屬於哪個官方產業」，給第三輪 M1、M2（[策略證據「官方產業的成員」](../spec/evidence.md#第三輪m1m2)）。由 [`tools/research/industry_members.py`](../../tools/research/industry_members.py) 從官方的分產業收盤行情產生，不寫進研究 DB（[#779](https://github.com/YiCheng0608/stock-lab/issues/779)）。
@@ -367,7 +407,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
   - 上市當時分類的來源不在 #779 找，由 M1、M2 的研究工具單決定只用上櫃、接受回溯，還是先補對照。
 - 一個月一份：月中改分類、新上市的股票，要到月底那一份才反映。新上市的股票在第一份快照前沒有族群，不能被選，但照樣在母體裡。
 - 2023-07 以後上櫃 18、34 不抓，看不出它們之後還有沒有列，只在 2024-09-30 全掃確認過是 0 列。19、08 同理，只有檢查過的日子確定是 0 列。
-- 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的；#702 AC-5 的清單拆出的舊公司，依日期分開。
+- 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的。[日線排除清單](#研究工具的日線排除清單)裡的舊公司那段沒有日線，所以對不到。
 - 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。manifest 的 `completeness` 逐日記原因並分開計數：`checked`（核對過，`missing` 是不在任何產業的普通股）、`no_stored_answer`（研究 DB 沒有那一天的全市場行情）、`raw_missing`（有列但檔案找不到或 sha256 不符）。這也是唯一能看出「代號期間外其實有列」的檢查。
 
 **檔案**：在研究 volume 的 `/data/research/industry_members/`。M1、M2 的研究工具讀 `/data/research/industry_members/industry_members_v1.json`。
