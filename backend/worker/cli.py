@@ -178,7 +178,12 @@ def main() -> None:
 
     subparsers.add_parser("init-db", help="建立 SQLite 資料表")
     subparsers.add_parser("analyze", help="計算技術特徵與族群排名")
-    subparsers.add_parser("evaluate", help="更新訊號追蹤狀態")
+    evaluate_parser = subparsers.add_parser("evaluate", help="更新訊號追蹤狀態")
+    evaluate_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="全量重算：不跳過已結算的訊號（修正追蹤程式或回補後用，#841）",
+    )
     daily_parser = subparsers.add_parser("daily", help="執行 collect/analyze/evaluate")
     daily_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD；未指定使用最近工作日"
@@ -845,7 +850,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
     elif args.command == "analyze":
         result = analyze()
     elif args.command == "evaluate":
-        result = evaluate()
+        result = evaluate(force=args.force)
     elif args.command == "collect":
         result = collect(parse_date(args.run_date), months_back=args.months_back)
     elif args.command == "backfill":

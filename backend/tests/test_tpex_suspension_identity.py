@@ -216,7 +216,9 @@ def evaluate(db, instrument, key):
     )
     db.add(signal)
     db.flush()
-    gap = pipeline._suspension_gap_between(db, instrument.id, signal.signal_date, DAY)
+    gap = pipeline._suspension_gap_in(
+        pipeline._suspension_events(db, instrument.id, DAY), signal.signal_date, DAY
+    )
     assert pipeline._evaluate_signal_tracking(db, signal) == (1, 2)
     db.flush()
     evaluation = db.scalar(

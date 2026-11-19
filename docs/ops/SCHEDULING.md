@@ -159,6 +159,33 @@ daily 在今日名單之後，另算一份「主流族群前 20」（`mainstream
 - **限流**：`fetch_json` 對同一官方主機保持最小間隔（`sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS`：`www.twse.com.tw` 2.5 秒、MOPS 與期交所網站 3 秒，其餘官方主機 1 秒），另有 429／5xx／暫時性 307 的有界重試。手動的回補命令對每個 host 至少 3 秒（[CLI](CLI.md#現有-worker-cli)「回補命令的請求間隔」，#692）；daily 與 catchup 照上面的間隔。
 - **不要並行回補**：回補與 daily 都長時間寫 DB，analyze 也依 collect run 決定分析日；回補、回測期間停用 daily：scheduler 容器不必停：`backfill`、`backtest` 起跑時自己開[維護模式](#維護模式)（daily 與 news 不跑，看門狗與 monitor 照常），結束時自己關，作業死掉由 serve 在心跳逾時後解除（工作排程器的做法見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)）。
 
+### evaluate 的增量規則與全量重算
+
+daily 的 evaluate 步驟（`pipeline.evaluate`）照 [Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 7 點選出還在追蹤的 `analysis-*` 訊號。其中「已結算」的訊號保留原列，不重算，狀態也不動；其他訊號照舊重算（[#841](https://github.com/YiCheng0608/stock-lab/issues/841)）。
+
+- **已結算**：下面四條全部成立（`pipeline._settled_signal_ids`），任何一條不成立就重算。
+  - **R1 視窗已滿**：已有 20 筆 evaluation。
+  - **R2 沒有除權息**：訊號日到最後一筆 evaluation 之間沒有 `corporate_actions` 列。有就重算，不比較因子。
+  - **R3 沒有相關停牌公告**：沒有開始日在最後一筆 evaluation 以前、結束日在訊號日以後的 suspension 事件。結束日缺漏或無法解析的事件也算相關。
+  - **R4 重算結果相同**：用現在的輸入在記憶體裡重算，結果要和存的逐欄相同，什麼都不寫。
+    - 輸入：訊號日之後的前 20 根日線、這些日子的籌碼、族群、前 20 日成交量，以及訊號現在的價位與狀態。
+    - 比對對象：20 列 evaluation、T+5／T+20 settlement（含 `tracking_rules`），以及訊號的狀態、資料品質、成交日與成交價。
+    - 重算和真正追蹤用同一段程式（`_tracking_outcome`、`_apply_signal_outcome`）。R2、R3 成立時價格因子是 1、沒有停牌缺口，所以不用再讀除權息與事件。
+    - 看得到的變動：日線被更正、補插或刪掉，籌碼晚到，族群改變，前 20 日量被更正，規則版本改變。重跑舊日期的 analyze 改寫了訊號的價位、狀態或資料品質，也看得到。追蹤程式改了但沒升規則版本，同樣看得到。
+- **跳過的是哪些訊號**：視窗還沒滿的訊號每天多一根日線，一定要重算。這些是絕大多數：2026-11-18 的副本有 75,918 個被選中的訊號，其中 133 個已結算。已結算的訊號是成交後停在 `target_1_hit`、`invalidated`、`incomparable` 或 `active`、永遠不離開清單的那一群，只有它們會隨累積的訊號數一直變多。
+- **驗證也要時間**：已結算的訊號每晚都重新驗證一次，這段時間也會跟著它們的數量成長。回傳的 `settled_check_seconds` 記這段時間，部署後看它長不長。
+- **孤兒 evaluation**：日線被刪掉或改日期後，舊日期的 evaluation 不會刪（重算只寫現在的 20 根）。這種訊號的 evaluation 超過 20 筆，R1 永遠不成立，所以每晚照樣重算。結果仍然正確，只是省不到時間。
+- **每個訊號一次的讀取**：重算的訊號以前每一根日線各查一次族群分數、籌碼、停牌事件與既有的 evaluation，現在每個訊號各查一次。族群確認在同一次 evaluate 內按（標的、訊號日）共用：這個步驟不寫族群資料。結果與逐根查詢相同。
+- **全量重算**：`python -m worker.cli evaluate --force`（`evaluate(force=True)`）不看 R1～R4，所有被選中的訊號都重算。`backtest-*` 訊號與 v1 完整視窗的保留規則（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）不受影響。R4 讀不到的情況要跑一次全量重算：
+  - 回補或手動更正了上面列的輸入以外的資料。
+  - 改了 R4 不經過的讀取程式，例如 `_tracking_inputs` 的除權息因子、停牌缺口或日線選取。
+- **回傳**：
+  - `signals_checked`：被選中的訊號數。
+  - `signals_skipped`：其中已結算、沒重算的數量。
+  - `settled_check_seconds`：已結算判斷花的秒數（`--force` 時是 0）。
+  - `force`：這次有沒有全量重算。
+  - `evaluations_written`／`settlements_written`：只算重算的訊號，是重算的列數。值沒變的列 SQLAlchemy 不會發 UPDATE，所以實際寫入的列比這少。
+
 ### 技術回測
 
 `python -m worker.cli backtest --start-date <起> --end-date <迄>` 在正式環境的跑法：`docker compose -p <P> exec scheduler python -m worker.cli backtest …`，起跑時自己持有[維護模式](#維護模式)，不必停 scheduler。
@@ -218,6 +245,13 @@ daily 在今日名單之後，另算一份「主流族群前 20」（`mainstream
 - 休市判定依官方 no-data 回應；來源暫時失敗的日期記為缺日，不推定休市。
 - 全市場 analyze＋evaluate 單次約 4～6 分鐘、峰值約 0.2 GB，連同 candidates／indicators 約 6 分鐘、0.3 GB（2026-10-18，正式 DB 副本：2,409 檔、2024-09-30～2026-10-16 共 496 個交易日；[#184](https://github.com/YiCheng0608/stock-lab/issues/184)）。analyze 每 200 檔 commit 一次 features、group scores 寫完再 commit，每次持有寫入鎖約 2 秒內，與 news 同時執行不會等到 30 秒 busy timeout；analyze 中途失敗時已 commit 的 features／group scores 都是由日線重算的值，重跑會寫出相同結果。group scores 先於 signals commit，所以 analyze 進行中（約 1～2 分鐘）或中途失敗時，API 可能看到新日期族群分數與舊日期訊號並存，重跑 analyze 即一致。
 - daily 的 evaluate 每 2,000 個訊號 commit 一次（[Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 7 點，[#640](https://github.com/YiCheng0608/stock-lab/issues/640)），每批持有的物件數固定；隨追蹤中的訊號數成長的只有開頭取的 id 清單（6 萬多個整數）與耗時。2026-11-11 正式 DB 副本要重算 63,395 個訊號（大多是 `observation`，每個交易日約 3,900 個，視窗滿 20 根才結束，所以約是最近 20 個交易日的量）：2g 上限下 994 秒、cgroup anon 峰值 289 MB；1g 上限下 953 秒、anon 峰值 280 MB、`memory.peak` 350 MB（evaluation 與 settlement 全部重寫的情況）。#640 以前整個 evaluate 是一個 transaction，訊號與寫出的 evaluation／settlement 都留在 session 直到結束：同一副本在 4g 上限下 18 分鐘被 OOM 結束，正式 scheduler 11/10、11/11 在 2g 上限被結束。
+- [#841](https://github.com/YiCheng0608/stock-lab/issues/841) 改成每個訊號只讀一次輸入、已結算的訊號跳過（[evaluate 的增量規則與全量重算](#evaluate-的增量規則與全量重算)）。2026-11-18 正式 DB 副本，75,918 個被選中的訊號，2g 上限，每次各用一份獨立副本跑同一天：
+  - #841 以前（master 8e5d593a）：1,650 秒，行程 RSS 峰值 324 MiB，`memory.peak` 964 MiB。
+  - 增量（a3741761，舊版規則）：308 秒，跳過 133 個，RSS 峰值 324 MiB，`memory.peak` 1,395 MiB。
+  - `--force`（a3741761）：297 秒，RSS 峰值 323 MiB，`memory.peak` 1,493 MiB。
+  - 增量（28343815，R1～R4）：369 秒，跳過 133 個，其中已結算判斷 1.8 秒（0.5%），RSS 峰值 321 MiB，`memory.peak` 1,475 MiB。比 a3741761 多約 60 秒，不在已結算判斷；兩者在不同時段量，原因沒有再拆。
+  - 每一份的 `signal_evaluations`、`signal_settlements`、`signals` 逐列相同。`memory.peak` 含 page cache，行程本身的峰值都約 321～324 MiB。
+  - 增量與 `--force` 的耗時差不多：同一天跳過的只有 0.2%，變快主要來自讀取合併。增量規則讓成交後停在清單裡的訊號不再每晚重算，這一群會一直累積。
 
 ## scheduler 容器的排程（serve）
 
