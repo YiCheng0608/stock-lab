@@ -243,6 +243,10 @@ def get_or_create_instrument(
     Their ``ipo`` classification is relative to that session, and a code they
     list is listed today, not on it; so an existing instrument keeps its
     ``instrument_type`` and ``status``, and only a new instrument takes them.
+    It keeps a stored ``listing_date`` too (Issue #848): the daily catchup runs
+    before the day's collect, and the new listing membership sync tells a
+    revised official date by the stored one, so only a current collect adopts
+    a new date; a historical one fills an empty one.
     """
 
     item = db.scalar(
@@ -263,7 +267,8 @@ def get_or_create_instrument(
                 item.instrument_type = instrument_type
             item.etf_category = etf_category
             item.industry = industry or item.industry
-            item.listing_date = listing_date or item.listing_date
+            if current or item.listing_date is None:
+                item.listing_date = listing_date or item.listing_date
             # Being listed again ends delisted/transferred; dormant (listed but
             # without quote rows) ends only when a quote row returns.
             if current and item.status != "dormant":
@@ -3651,12 +3656,13 @@ def _nonindustry_observations(
     score_date: date,
     observed_now: datetime,
     run_id: int | None,
-    previous_listing_dates: dict[tuple[str, str], date | None] | None = None,
+    previous_listing_dates: dict[int, date | None] | None = None,
 ) -> dict[str, Any]:
     """Project ETF heuristics and bounded listing observations in separate domains.
 
-    ``previous_listing_dates`` are the instruments' listing dates before this
-    collect wrote them (Issue #848); without it, the stored instrument's.
+    ``previous_listing_dates`` are the instruments' listing dates (by id)
+    before this collect wrote them (Issue #848); without it, the stored
+    instrument's.
     """
     official = "TWSE/TPEx official OpenAPI"
     hot_id = canonical_group_id("new-listings", "new-listings")
@@ -3924,6 +3930,11 @@ def _nonindustry_observations(
                 row for row in history if row.valid_to is None or row.valid_to >= day
             ]
             current = active[0] if active else None
+            previous = (
+                previous_listing_dates.get(instrument.id)
+                if previous_listing_dates is not None
+                else instrument.listing_date
+            )
             if current and current.valid_to is not None:
                 # Issue #846: the official listing date of a stock changed
                 # while its bounded window covers the day (TPEx 6874 read
@@ -3935,11 +3946,6 @@ def _nonindustry_observations(
                 # the date differs from the one adopted before this collect; a
                 # period that does not match an unchanged date, or that opened
                 # today, is still rejected.
-                previous = (
-                    previous_listing_dates.get(key)
-                    if previous_listing_dates is not None
-                    else instrument.listing_date
-                )
                 if (
                     domain == "newlisting"
                     and record.instrument_type in {"stock", "ipo"}
@@ -3993,12 +3999,15 @@ def _nonindustry_observations(
                 receipt["closed_history"] = {
                     "valid_from": history[-1].valid_from.isoformat(),
                     "valid_to": history[-1].valid_to.isoformat(),
+                    "previous_listing_date": previous.isoformat() if previous else None,
                 }
                 results[domain]["warnings"].append(
-                    "newlisting expiry conflicts with closed history"
+                    "newlisting membership not reopened"
                     f"{who}: listing date {record.listing_date.isoformat()} "
+                    f"(before this collect "
+                    f"{previous.isoformat() if previous else 'none'}) "
                     f"ends {expiry.isoformat()}, period closed on "
-                    f"{history[-1].valid_to.isoformat()}; not reopened"
+                    f"{history[-1].valid_to.isoformat()}"
                 )
                 _upsert_quality(
                     db,
@@ -4134,7 +4143,7 @@ def _ensure_official_groups(
     payloads: Iterable[FetchedPayload],
     observed_now: datetime,
     run_id: int | None = None,
-    previous_listing_dates: dict[tuple[str, str], date | None] | None = None,
+    previous_listing_dates: dict[int, date | None] | None = None,
 ) -> dict[str, Any]:
     """Atomically project independently scoped industry, ETF and listing evidence.
 
@@ -4901,6 +4910,7 @@ NONCORE_WARNING_PATTERN = re.compile(
     r"|futures bars "
     r"|us index bars "
     r"|instrument status sync skipped"
+    r"|newlisting membership not reopened"
     r"|TPEx OpenAPI )"
 )
 
@@ -5261,11 +5271,11 @@ def collect(
             # listing membership sync tells a revised official date from a
             # bad period by them (Issue #848).
             previous_listing_dates = {
-                (exchange, symbol): listing_date
-                for exchange, symbol, listing_date in db.execute(
-                    select(
-                        Instrument.exchange, Instrument.symbol, Instrument.listing_date
-                    ).where(Instrument.market == "TW")
+                instrument_id: listing_date
+                for instrument_id, listing_date in db.execute(
+                    select(Instrument.id, Instrument.listing_date).where(
+                        Instrument.market == "TW"
+                    )
                 )
             }
             newlisting_digests = {

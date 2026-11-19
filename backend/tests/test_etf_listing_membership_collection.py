@@ -94,7 +94,7 @@ def apply(db, cap, rec, *, score=date(2026, 12, 31), captures=None, records=None
             score,
             payloads=captures if captures is not None else [cap],
             observed_now=datetime(2027, 1, 1),
-            previous_listing_dates={(rec.exchange, rec.symbol): previous},
+            previous_listing_dates={instrument.id: previous},
         )
     except sources.OfficialDataError:
         # A failed collect rolls the instrument write back too.
@@ -920,6 +920,7 @@ def test_date_flipping_back_after_close_stops_at_the_instrument(env):
         assert receipts[2]["closed_history"] == {
             "valid_from": D.isoformat(),
             "valid_to": D.isoformat(),
+            "previous_listing_date": right.isoformat(),
         }
         assert [r["status"] for r in results] == [
             "observed",
@@ -929,10 +930,15 @@ def test_date_flipping_back_after_close_stops_at_the_instrument(env):
             "observed",
         ]
         assert results[2]["warnings"] == [
-            "newlisting expiry conflicts with closed history: TPEx AAA: listing "
-            f"date {wrong.isoformat()} ends {(D + timedelta(days=16)).isoformat()}, "
-            f"period closed on {D.isoformat()}; not reopened"
+            "newlisting membership not reopened: TPEx AAA: listing date "
+            f"{wrong.isoformat()} (before this collect {right.isoformat()}) ends "
+            f"{(D + timedelta(days=16)).isoformat()}, period closed on {D.isoformat()}"
         ]
+        # Non-core: it does not make the collect partial.
+        assert pipeline.split_collect_warnings(results[2]["warnings"]) == (
+            [],
+            results[2]["warnings"],
+        )
         assert results[4]["warnings"] == []
         assert quality_rows(db) == [
             (
@@ -1113,3 +1119,75 @@ def test_revised_listing_date_still_rejects_real_conflicts(env, conflict, match)
                 *observation(kind=kind, day=day, listing_date=date(2022, 12, 14)),
             )
         assert snapshot(db) == before
+
+
+def one_stock_batch(day, listing, *, snapshot=True):
+    cap = sources.capture_payload(
+        "tpex",
+        sources.TPEX_LISTED_ENDPOINT,
+        {"symbol": "AAA", "day": day.isoformat(), "listing": listing.isoformat()},
+        day.isoformat(),
+        collected_at=datetime.combine(day, datetime.min.time()) + timedelta(hours=1),
+    )
+    rec = sources.InstrumentRecord(
+        "AAA",
+        "Alpha",
+        exchange="TPEx",
+        instrument_type="stock",
+        industry="24",
+        listing_date=listing,
+        payload_sha256=cap.sha256,
+    )
+    index = sources.InstrumentRecord(
+        "TAIEX", "Index", instrument_type="index", payload_sha256=cap.sha256
+    )
+    bars = [
+        sources.BarRecord(
+            r.symbol,
+            day,
+            100,
+            101,
+            99,
+            100,
+            1000,
+            100000,
+            exchange=r.exchange,
+            payload_sha256=cap.sha256,
+            turnover_status="available",
+        )
+        for r in (rec, index)
+    ]
+    return sources.OfficialBatch(
+        instruments=[rec, index], bars=bars, payloads=[cap], snapshot_feeds=snapshot
+    )
+
+
+# Issue #848 review 7015184779: the daily catchup (a historical batch with
+# today's lists) runs before the day's collect; it must not adopt the revised
+# listing date, or the day's collect no longer sees the revision and fails.
+def test_catchup_before_the_daily_keeps_the_revision_visible(env, monkeypatch):
+    first, catchup, today = D - timedelta(days=2), D - timedelta(days=1), D
+    old, new = first - timedelta(days=10), first - timedelta(days=5)
+
+    def collect(day, batch, taipei_today):
+        monkeypatch.setattr(pipeline, "taipei_today", lambda: taipei_today)
+        return pipeline.collect(day, adapter=SimpleNamespace(fetch=lambda *_: batch))
+
+    opened = collect(first, one_stock_batch(first, old), first)
+    assert opened["status"] == "success", opened
+    caught = collect(catchup, one_stock_batch(catchup, new, snapshot=False), today)
+    assert caught["status"] == "success", caught
+    daily = collect(today, one_stock_batch(today, new), today)
+    assert daily["status"] == "success", daily
+    receipt = next(
+        r
+        for r in daily["industry_membership_observations"]["newlisting"]["observations"]
+        if r.get("symbol") == "AAA"
+    )
+    assert receipt["action"] == "expiry_listing_date_revised"
+    assert receipt["listing_date_revision"]["previous_listing_date"] == old.isoformat()
+    with env() as db:
+        assert db.scalar(select(Instrument.listing_date)) == new
+        assert [p[1:3] for p in periods(db, "newlisting")] == [
+            (first, new + timedelta(days=60))
+        ]
