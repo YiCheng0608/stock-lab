@@ -149,22 +149,28 @@ daily 在今日名單之後，另算一份「主流族群前 20」（`mainstream
 
 daily 的 evaluate 步驟（`pipeline.evaluate`）照 [Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 7 點選出還在追蹤的 `analysis-*` 訊號。其中「已結算」的訊號保留原列，不重算，狀態也不動；其他訊號照舊重算（[#841](https://github.com/YiCheng0608/stock-lab/issues/841)）。
 
-- **已結算**：下面八條全部成立（`pipeline._settled_signal_ids`）。任何一條不成立，或比較不了（例如欄位格式不同），就重算。
-  - **R1 規則版本**：T+5、T+20 兩筆 settlement 都在，`tracking_rules` 是現行版本。
-  - **R2 視窗已滿**：剛好 20 筆 evaluation，日期等於訊號日之後的前 20 根日線（中間沒有補插或刪掉日線）。
-  - **R3 日線沒變**：每一列存的 OHLC、adj_close、volume、source、data_time（日線的 `data_as_of`），以及停牌旗標，都和現在的日線相同。
-  - **R4 沒有除權息**：訊號日到第 20 根之間沒有 `corporate_actions` 列。有就重算，不比較因子。
-  - **R5 沒有相關停牌公告**：沒有開始日在第 20 根以前、結束日在訊號日以後的 suspension 事件。結束日缺漏或無法解析的事件也算相關。
-  - **R6 籌碼沒變**：每一列的法人、融資確認，和現在該日 `chip_snapshots` 算出的相同。
-  - **R7 族群沒變**：每一列的族群確認，和現在 `_best_group_for_signal` 的結果相同。
-  - **R8 前 20 日量沒變**：每一列的 `volume_ratio_20d`，和現在前 20 根成交量算出的相同。
+- **已結算**：下面四條全部成立（`pipeline._settled_signal_ids`），任何一條不成立就重算。
+  - **R1 視窗已滿**：已有 20 筆 evaluation。
+  - **R2 沒有除權息**：訊號日到最後一筆 evaluation 之間沒有 `corporate_actions` 列。有就重算，不比較因子。
+  - **R3 沒有相關停牌公告**：沒有開始日在最後一筆 evaluation 以前、結束日在訊號日以後的 suspension 事件。結束日缺漏或無法解析的事件也算相關。
+  - **R4 重算結果相同**：用現在的輸入在記憶體裡重算，結果要和存的逐欄相同，什麼都不寫。
+    - 輸入：訊號日之後的前 20 根日線、這些日子的籌碼、族群、前 20 日成交量，以及訊號現在的價位與狀態。
+    - 比對對象：20 列 evaluation、T+5／T+20 settlement（含 `tracking_rules`），以及訊號的狀態、資料品質、成交日與成交價。
+    - 重算和真正追蹤用同一段程式（`_tracking_outcome`、`_apply_signal_outcome`）。R2、R3 成立時價格因子是 1、沒有停牌缺口，所以不用再讀除權息與事件。
+    - 看得到的變動：日線被更正、補插或刪掉，籌碼晚到，族群改變，前 20 日量被更正，規則版本改變。重跑舊日期的 analyze 改寫了訊號的價位、狀態或資料品質，也看得到。追蹤程式改了但沒升規則版本，同樣看得到。
 - **跳過的是哪些訊號**：視窗還沒滿的訊號每天多一根日線，一定要重算。這些是絕大多數：2026-11-18 的副本有 75,918 個被選中的訊號，其中 133 個已結算。已結算的訊號是成交後停在 `target_1_hit`、`invalidated`、`incomparable` 或 `active`、永遠不離開清單的那一群，只有它們會隨累積的訊號數一直變多。
+- **驗證也要時間**：已結算的訊號每晚都重新驗證一次，這段時間也會跟著它們的數量成長。回傳的 `settled_check_seconds` 記這段時間，部署後看它長不長。
+- **孤兒 evaluation**：日線被刪掉或改日期後，舊日期的 evaluation 不會刪（重算只寫現在的 20 根）。這種訊號的 evaluation 超過 20 筆，R1 永遠不成立，所以每晚照樣重算。結果仍然正確，只是省不到時間。
 - **每個訊號一次的讀取**：重算的訊號以前每一根日線各查一次族群分數、籌碼、停牌事件與既有的 evaluation，現在每個訊號各查一次。族群確認在同一次 evaluate 內按（標的、訊號日）共用：這個步驟不寫族群資料。結果與逐根查詢相同。
-- **全量重算**：`python -m worker.cli evaluate --force`（`evaluate(force=True)`）不看 R1～R8，所有被選中的訊號都重算。`backtest-*` 訊號與 v1 完整視窗的保留規則（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）不受影響。下面這些情況規則看不出來，要跑一次全量重算：
-  - 部署了改追蹤程式的版本（`app.tracking.track_path`／`settle`，或 evaluation、settlement 欄位的寫法），但沒有升規則版本。升了規則版本的話，R1 會自己重算。
-  - 重跑過去日期的 analyze（例如 `daily --date` 一個 20 個交易日以前的日期），改寫了已結算訊號的價位或狀態。
-  - 回補或手動更正歷史資料之後。日線、除權息、停牌公告、籌碼與族群的變動 R2～R8 看得到，其他來源的更正看不到。
-- **回傳**：`signals_checked` 是被選中的訊號數，`signals_skipped` 是其中已結算、沒重算的數量，`force` 是這次有沒有全量重算。`evaluations_written`／`settlements_written` 只算重算的訊號，是重算的列數；值沒變的列 SQLAlchemy 不會發 UPDATE，所以實際寫入的列比這少。
+- **全量重算**：`python -m worker.cli evaluate --force`（`evaluate(force=True)`）不看 R1～R4，所有被選中的訊號都重算。`backtest-*` 訊號與 v1 完整視窗的保留規則（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）不受影響。R4 讀不到的情況要跑一次全量重算：
+  - 回補或手動更正了上面列的輸入以外的資料。
+  - 改了 R4 不經過的讀取程式，例如 `_tracking_inputs` 的除權息因子、停牌缺口或日線選取。
+- **回傳**：
+  - `signals_checked`：被選中的訊號數。
+  - `signals_skipped`：其中已結算、沒重算的數量。
+  - `settled_check_seconds`：已結算判斷花的秒數（`--force` 時是 0）。
+  - `force`：這次有沒有全量重算。
+  - `evaluations_written`／`settlements_written`：只算重算的訊號，是重算的列數。值沒變的列 SQLAlchemy 不會發 UPDATE，所以實際寫入的列比這少。
 
 ### 技術回測
 
