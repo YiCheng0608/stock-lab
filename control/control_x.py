@@ -33,16 +33,26 @@ def log(text: str) -> None:
         fh.write(f"{time.monotonic() - started:7.0f}s {text}\n")
 
 
-segment = er.EXPLORATION
+segment = sys.argv[4] if len(sys.argv) > 4 else er.EXPLORATION
 spec = er.HYPOTHESES[name]
 fields = [f for f, _op, _v in spec["filters"]]
 log(f"{name} {segment} fields={fields} load")
-ctx = er.load_context(DB, er.LOAD_FROM, er.SEGMENTS[segment][1], out / "raw")
+if segment == er.EXPLORATION:  # as run_exploration
+    ctx = er.load_context(DB, er.LOAD_FROM, er.SEGMENTS[segment][1], out / "raw")
+    min_t = er.MIN_T
+else:  # as run_validation
+    from datetime import timedelta
+
+    first_day, end = er.SEGMENTS[segment]
+    ctx = er.load_context(
+        DB, first_day - timedelta(days=er.WARMUP_CALENDAR_DAYS), end, out / "raw"
+    )
+    min_t = er.validation_min_t(er.CUMULATIVE)
 panel = ctx.market.panel
 sessions = panel.sessions
 
 # 1. the tool's own numbers, recomputed: must equal the published report
-tool = er.run_one(ctx, DB, name, segment)
+tool = er.run_one(ctx, DB, name, segment, min_t=min_t)
 report = json.loads(published.read_text(encoding="utf-8"))["hypotheses"][name]
 same = (
     tool["verdict"] == report["verdict"]

@@ -1,0 +1,4 @@
+      0s X4 validation fields=['revenue_yoy', 'eps_growth_yield'] load
+    134s recomputed equals published: True
+    183s simulate
+    216s done

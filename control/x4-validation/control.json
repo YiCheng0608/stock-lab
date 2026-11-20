@@ -1,0 +1,54 @@
+{
+ "hypothesis": "X4",
+ "segment": "validation",
+ "decision": "https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032683717",
+ "list_only": true,
+ "published_explore_json": "/out/validate-x.json",
+ "recomputed_equals_published": true,
+ "fields": [
+  "revenue_yoy",
+  "eps_growth_yield"
+ ],
+ "removed": {
+  "rule": "status = 'delisted' and any filter field missing on the day",
+  "member_days": 10435,
+  "signal_days_with_removal": 1153,
+  "signal_days": 1153
+ },
+ "tool": {
+  "verdict": "前瞻觀察",
+  "excess_population": {
+   "days": 1153,
+   "mean": 0.0001520177529706767,
+   "annual": 0.03830847374861053,
+   "t": 0.8011722259752428
+  },
+  "absolute_mean": 0.0009306290202608508,
+  "population_curve": {
+   "days": 1153,
+   "total": 1.2159748219034459,
+   "annual": 0.18994460221351472,
+   "volatility": 0.21014410963041916,
+   "max_drawdown": -0.3077773329451119,
+   "invested": 0.9562517222239515,
+   "turnover": 4.1415203658988675
+  }
+ },
+ "control": {
+  "excess": {
+   "days": 1153,
+   "mean": 0.00013609656742039156,
+   "annual": 0.03429633498993867,
+   "t": 0.7152605147038571
+  },
+  "benchmark_curve": {
+   "days": 1153,
+   "total": 1.2509713599346588,
+   "annual": 0.1940268099621496,
+   "volatility": 0.2128797767768576,
+   "max_drawdown": -0.31180421285933835,
+   "invested": 0.9561028101033667,
+   "turnover": 4.186216234806471
+  }
+ }
+}
