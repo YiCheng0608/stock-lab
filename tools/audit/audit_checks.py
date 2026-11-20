@@ -28,6 +28,7 @@ from audit_lib import (
     action_rows,
     close_enough,
     columns,
+    employee_bonus_explained,
     field_factor,
     finite,
     institutional_rows,
@@ -645,7 +646,7 @@ def actions_fields(ctx: Context) -> Check:
         "actions_fields",
         "除權息欄位對官方價格與配股數",
         issues="A1、#386",
-        scope="corporate_actions 全部列：欄位推出的參考價對減除股利參考價（差 ≤ 0.02 元）、上櫃配股率對每仟股配股",
+        scope="corporate_actions 全部列：欄位推出的參考價對減除股利參考價（差 ≤ 0.02 元；2009 年以前可由員工紅利轉增資解釋的差距算通過，#891）、上櫃配股率對每仟股配股",
     )
     rows = ctx.con.execute(
         "select i.exchange, i.symbol, c.action_date, c.action_type, c.cash_dividend, c.stock_dividend_ratio, c.split_ratio, c.reference_price, c.details_json"
@@ -681,7 +682,11 @@ def actions_fields(ctx: Context) -> Check:
                 check.undetermined("fields_left_empty", key)
                 continue
             implied = field_factor(action, before) * before
-            if round(abs(implied - deducted), 6) > REFERENCE_TOLERANCE:
+            # Before 2009 employee bonus shares the reference counted can
+            # explain the gap (#891, docs/DATA_SOURCES.md 寫入防呆).
+            if round(
+                abs(implied - deducted), 6
+            ) > REFERENCE_TOLERANCE and not employee_bonus_explained(action):
                 problems.append(
                     ("implied_reference", [round(implied, 4), deducted, before])
                 )
