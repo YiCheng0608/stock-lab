@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "design": "868",
+  "watch": "H2",
+  "kind": "通過驗證",
+  "note": "通過驗證、待使用者決定進不進產品的策略：只當紀錄，不判下架；判到「輸給基準」時由統籌在 #1 的進產品提案補一則（是事實，不是下架提案），其餘判定只記錄",
+  "entry": {
+    "kind": "通過驗證",
+    "source": "explore_research",
+    "source_version": 2,
+    "code": "X2",
+    "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+    "since": "2026-11-20",
+    "min_days": 60,
+    "registered": "https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043710015"
+  },
+  "definition": {
+    "direction": "持有較久、低換手",
+    "label": "`high_gap_240`（收盤 ÷ 240 日最高價 − 1）大者先",
+    "rule": "daily",
+    "subset": null,
+    "filters": [],
+    "keys": [
+      "high_gap_240"
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-04-23",
+      240
+    ]
+  },
+  "command": "python tools/research/forward_watch.py --db /db/stock.db --watch H2 --out /out/H2 --min-free-gb 0",
+  "tool_commit": "68d1fcfdf5f8a946febdbbb347c9975575cf52cf",
+  "copy": {
+    "latest": "2026-11-20",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T16:13:39.180997+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "since": "2026-11-20",
+  "cutoff": "2026-11-20",
+  "first_signal": null,
+  "first_session": null,
+  "last_session": null,
+  "signal_days": 0,
+  "days": 0,
+  "min_days": 60,
+  "verdict": "樣本不足",
+  "excess": {
+    "taiex": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    },
+    "population": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    }
+  },
+  "absolute": {
+    "days": 0,
+    "mean": null
+  },
+  "curves": {
+    "taiex": {
+      "days": 0
+    },
+    "H2": {
+      "days": 0
+    },
+    "population": {
+      "days": 0
+    }
+  },
+  "win": null,
+  "counts": {},
+  "coverage": {},
+  "elapsed_seconds": 18.29834240299533,
+  "peak_memory_gb": 0.2977256774902344
+}
