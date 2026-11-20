@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "design": "726",
+  "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+  "label": "大盤站上 MA60；revenue_yoy > 0、ATR14 > 0；投信 5 日買超天數、三大法人 20 日淨買超大者先，前 10 名；[收盤 − 1×ATR14, 收盤] 掛限價 3 日；停損 −2×ATR14、目標 +4×ATR14、持有 20 日",
+  "parameters": {
+    "kind": "zone",
+    "market_filter": true,
+    "top": 10,
+    "entry_days": 3,
+    "zone_atr": 1.0,
+    "stop_atr": 2.0,
+    "target_atr": 4.0,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ]
+  },
+  "hypothesis": "S1",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 805,
+    "mean": -0.0032782034622009775,
+    "t": -0.7013634219626864
+  },
+  "excess": {
+    "days": 805,
+    "mean": 0.007424161172308277,
+    "t": 1.7264764733430606
+  },
+  "absolute": {
+    "days": 805,
+    "mean": -0.002505369273426664
+  },
+  "signals": 8050,
+  "signal_days": 805,
+  "trade_days": 805,
+  "trades": 7107,
+  "net_mean": -0.00343216669278605,
+  "net_median": -0.0275714912115703,
+  "win_rate": 0.3959476572393415,
+  "zero": 0,
+  "won_mean": 0.07670423452469612,
+  "lost_mean": -0.05596042968509791,
+  "won": 2814,
+  "lost": 4293,
+  "exit_share": {
+    "stop": 0.4874067820458703,
+    "target": 0.24862811312790206,
+    "time": 0.2467989306317715,
+    "segment_end": 0.01702546784859997,
+    "delisted": 0.0,
+    "transferred": 0.0001407063458561981
+  },
+  "exits": {
+    "stop": 3464,
+    "target": 1767,
+    "time": 1754,
+    "segment_end": 121,
+    "delisted": 0,
+    "transferred": 1
+  },
+  "both_touched": 0,
+  "gapped": 560,
+  "limit_delayed": 2,
+  "suspension_delayed": 4,
+  "holding_mean": 11.528915154073449,
+  "abandoned": 943,
+  "abandon_rate": 0.11714285714285715,
+  "abandon_reasons": {
+    "not_triggered": 943
+  },
+  "entry_limit_blocked": 0,
+  "below_lower": 81,
+  "filter_blocked_days": 422,
+  "filter_missing_days": 0,
+  "population_unbought": 820,
+  "min_t": 2.0
+}

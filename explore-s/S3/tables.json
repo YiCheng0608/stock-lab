@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "design": "726",
+  "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+  "label": "S1 的停損改成 −1×ATR14（R 仍是 2×ATR14，目標仍是 +4×ATR14）",
+  "parameters": {
+    "kind": "zone",
+    "market_filter": true,
+    "top": 10,
+    "entry_days": 3,
+    "zone_atr": 1.0,
+    "stop_atr": 1.0,
+    "target_atr": 4.0,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ]
+  },
+  "hypothesis": "S3",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 805,
+    "mean": -0.004895585753581394,
+    "t": -1.3476807135366744
+  },
+  "excess": {
+    "days": 805,
+    "mean": 0.0051175528724332914,
+    "t": 1.4571317575161309
+  },
+  "absolute": {
+    "days": 805,
+    "mean": -0.004630558874182808
+  },
+  "signals": 8050,
+  "signal_days": 805,
+  "trade_days": 805,
+  "trades": 7125,
+  "net_mean": -0.005083645273256307,
+  "net_median": -0.028396569852328725,
+  "win_rate": 0.24982456140350878,
+  "zero": 0,
+  "won_mean": 0.08590507751407864,
+  "lost_mean": -0.03538484762338843,
+  "won": 1780,
+  "lost": 5345,
+  "exit_share": {
+    "stop": 0.7225263157894737,
+    "target": 0.176,
+    "time": 0.08982456140350877,
+    "segment_end": 0.011649122807017544,
+    "delisted": 0.0,
+    "transferred": 0.0
+  },
+  "exits": {
+    "stop": 5148,
+    "target": 1254,
+    "time": 640,
+    "segment_end": 83,
+    "delisted": 0,
+    "transferred": 0
+  },
+  "both_touched": 1,
+  "gapped": 610,
+  "limit_delayed": 2,
+  "suspension_delayed": 1,
+  "holding_mean": 7.126456140350877,
+  "abandoned": 925,
+  "abandon_rate": 0.11490683229813664,
+  "abandon_reasons": {
+    "not_triggered": 925
+  },
+  "entry_limit_blocked": 0,
+  "below_lower": 74,
+  "filter_blocked_days": 422,
+  "filter_missing_days": 0,
+  "population_unbought": 833,
+  "min_t": 2.0
+}

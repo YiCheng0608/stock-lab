@@ -1,0 +1,104 @@
+{
+  "tool": "trade_research",
+  "version": 1,
+  "design": "726",
+  "registration_commit": "64a5efe1",
+  "segment": "exploration",
+  "round": 2,
+  "round_size": 5,
+  "cumulative": 13,
+  "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/trade_research.py --db /research/stock.db --segment exploration --hypotheses S1,S2,S3 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "S1",
+    "S2",
+    "S3"
+  ],
+  "hypotheses": {
+    "S1": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1227,
+      "trade_days": 805,
+      "taiex_excess": {
+        "days": 805,
+        "mean": -0.0032782034622009775,
+        "t": -0.7013634219626864
+      },
+      "excess": {
+        "days": 805,
+        "mean": 0.007424161172308277,
+        "t": 1.7264764733430606
+      },
+      "absolute_mean": -0.002505369273426664,
+      "trades": 7107,
+      "abandon_rate": 0.11714285714285715,
+      "prerequisites": {
+        "days": 1227,
+        "min_days": 500,
+        "delisted": 71,
+        "ok": true
+      }
+    },
+    "S2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1227,
+      "trade_days": 1227,
+      "taiex_excess": {
+        "days": 1227,
+        "mean": -0.001924776659388429,
+        "t": -0.47648482743304527
+      },
+      "excess": {
+        "days": 1227,
+        "mean": 0.006485461219100403,
+        "t": 1.8288266382076381
+      },
+      "absolute_mean": 0.0004888854630061516,
+      "trades": 10832,
+      "abandon_rate": 0.1171964140179299,
+      "prerequisites": {
+        "days": 1227,
+        "min_days": 500,
+        "delisted": 71,
+        "ok": true
+      }
+    },
+    "S3": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1227,
+      "trade_days": 805,
+      "taiex_excess": {
+        "days": 805,
+        "mean": -0.004895585753581394,
+        "t": -1.3476807135366744
+      },
+      "excess": {
+        "days": 805,
+        "mean": 0.0051175528724332914,
+        "t": 1.4571317575161309
+      },
+      "absolute_mean": -0.004630558874182808,
+      "trades": 7125,
+      "abandon_rate": 0.11490683229813664,
+      "prerequisites": {
+        "days": 1227,
+        "min_days": 500,
+        "delisted": 71,
+        "ok": true
+      }
+    }
+  },
+  "elapsed_seconds": 86.16377062600804,
+  "peak_memory_gb": 0.7371482849121094
+}

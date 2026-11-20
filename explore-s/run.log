@@ -1,0 +1,10 @@
+exploration 2014-12-26
+exploration 2016-01-05
+exploration 2017-01-12
+exploration 2018-01-17
+exploration 2019-01-22
+S1: 沒有通過（探索段）
+S2: 沒有通過（探索段）
+S3: 沒有通過（探索段）
+{"out": "/out/exploration", "segment": "exploration", "sha256": "eae22284845cbb3bf3f2ef5e60ecf444a50d2474034d45f32109a6966d4e984f", "verdicts": {"S1": "沒有通過（探索段）", "S2": "沒有通過（探索段）", "S3": "沒有通過（探索段）"}}
+exit 0
