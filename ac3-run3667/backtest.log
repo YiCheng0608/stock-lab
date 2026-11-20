@@ -1,0 +1,7 @@
+start=2026-11-19T18:49:01Z
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+exit=0
+end=2026-11-20T00:45:06Z
