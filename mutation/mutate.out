@@ -1,0 +1,29 @@
+== 樣本日數門檻 5→3 (backend/app/strategies/index_conditions.py: s/^OVERNIGHT_MIN_REMOVED_DAYS = 5/OVERNIGHT_MIN_REMOVED_DAYS = 3/)
+FAILED tests/test_strategy_index_conditions.py::test_the_two_overnight_judgements
+1 failed, 166 passed in 37.35s
+== o5 門檻 −1%→−2% (backend/app/strategies/index_conditions.py: s/("o5", "SPX", -0.01, True)/("o5", "SPX", -0.02, True)/)
+FAILED tests/test_strategy_index_conditions.py::test_the_overnight_conditions_are_the_decided_twelve
+FAILED tests/test_strategy_index_conditions.py::test_an_overnight_condition_rejects_at_its_threshold[o5-100.0-99.0-rejected]
+2 failed, 165 passed in 37.11s
+== o6 門檻 +1%→+0.5% (backend/app/strategies/index_conditions.py: s/("o6", "SPX", 0.01, False)/("o6", "SPX", 0.005, False)/)
+FAILED tests/test_strategy_index_conditions.py::test_the_overnight_conditions_are_the_decided_twelve
+FAILED tests/test_strategy_index_conditions.py::test_an_overnight_condition_rejects_at_its_threshold[o6-100.0-100.99-passed]
+2 failed, 165 passed in 37.20s
+== o2 門檻 −1%→−0.5% (backend/app/strategies/index_conditions.py: s/("o2", "SOX", -0.01, True)/("o2", "SOX", -0.005, True)/)
+FAILED tests/test_strategy_index_conditions.py::test_the_overnight_conditions_are_the_decided_twelve
+FAILED tests/test_strategy_index_conditions.py::test_an_overnight_condition_rejects_at_its_threshold[o2-100.0-99.01-passed]
+2 failed, 165 passed in 38.00s
+== 讀到 E 當天的列（bisect_left→bisect_right） (backend/app/strategies/index_conditions.py: s/bisect.bisect_left(dates, entry)/bisect.bisect_right(dates, entry)/)
+FAILED tests/test_strategy_index_conditions.py::test_an_overnight_condition_never_reads_the_us_row_dated_the_entry_session
+FAILED tests/test_strategy_index_conditions.py::test_an_overnight_condition_does_not_read_the_row_before_the_score_date
+FAILED tests/test_strategy_index_conditions.py::test_a_report_of_an_overnight_run_on_the_fixture
+3 failed, 164 passed in 36.94s
+== 母體不扣成本 (tools/research/index_condition_report.py: s/ - ic.TRACKING_COST$//)
+FAILED tests/test_strategy_index_conditions.py::test_the_population_mean_is_the_t20_return_less_tracking_cost
+1 failed, 166 passed in 36.88s
+== 成交日拿 T 比 (tools/research/index_condition_report.py: s/elif entry is not None and filled == entry:/elif filled == key[1]:/)
+FAILED tests/test_strategy_index_conditions.py::test_the_overnight_numbers_of_a_hand_written_run
+1 failed, 166 passed in 37.03s
+== T+5 取代 T+20 (tools/research/index_condition_report.py: s/\.get(20))$/.get(5))/)
+FAILED tests/test_strategy_index_conditions.py::test_the_overnight_numbers_of_a_hand_written_run
+1 failed, 166 passed in 37.01s
