@@ -1,0 +1,80 @@
+{
+  "copy_latest": "2026-11-19",
+  "rows": [
+    {
+      "day": "2026-11-13",
+      "population": 582,
+      "have": {
+        "revenue_yoy": 578,
+        "eps_growth_yield": 578,
+        "eps_yield_raw": 579,
+        "quarter_eps_and_year_ago": 578
+      },
+      "both_filters_positive": 340,
+      "latest_known_quarter_end": {
+        "2026-09-30": 526,
+        "2026-06-30": 54
+      }
+    },
+    {
+      "day": "2026-11-16",
+      "population": 580,
+      "have": {
+        "revenue_yoy": 576,
+        "eps_growth_yield": 576,
+        "eps_yield_raw": 577,
+        "quarter_eps_and_year_ago": 576
+      },
+      "both_filters_positive": 336,
+      "latest_known_quarter_end": {
+        "2026-09-30": 565,
+        "2026-06-30": 13
+      }
+    },
+    {
+      "day": "2026-11-17",
+      "population": 578,
+      "have": {
+        "revenue_yoy": 574,
+        "eps_growth_yield": 574,
+        "eps_yield_raw": 575,
+        "quarter_eps_and_year_ago": 574
+      },
+      "both_filters_positive": 336,
+      "latest_known_quarter_end": {
+        "2026-09-30": 563,
+        "2026-06-30": 13
+      }
+    },
+    {
+      "day": "2026-11-18",
+      "population": 576,
+      "have": {
+        "revenue_yoy": 572,
+        "eps_growth_yield": 572,
+        "eps_yield_raw": 573,
+        "quarter_eps_and_year_ago": 572
+      },
+      "both_filters_positive": 336,
+      "latest_known_quarter_end": {
+        "2026-09-30": 562,
+        "2026-06-30": 12
+      }
+    },
+    {
+      "day": "2026-11-19",
+      "population": 582,
+      "have": {
+        "revenue_yoy": 578,
+        "eps_growth_yield": 578,
+        "eps_yield_raw": 579,
+        "quarter_eps_and_year_ago": 578
+      },
+      "both_filters_positive": 337,
+      "latest_known_quarter_end": {
+        "2026-09-30": 568,
+        "2026-06-30": 12
+      }
+    }
+  ]
+}
