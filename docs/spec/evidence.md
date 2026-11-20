@@ -465,7 +465,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 `tools/research/explore_research.py`（#703，設計在統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)）。X1～X8 寫在 `explore_research.HYPOTHESES`，判定是 `explore_research.explore_judge`；沒有改參數、起日或 cutoff 的旗標。只讀（`mode=ro`＋`query_only`），拒絕的情況同[出場規則研究](#出場規則研究)（正式 DB、台北 21:30～23:30、可用記憶體不足）。
 
-**跑法只有一種**：研究 volume（[研究 DB](../ops/RESEARCH_DB.md#建研究-db)，`stock.db` 旁有研究標記 `research-db.json`）直接掛在 `/research`，**不掛在 `/data`、不設研究用的 `STOCK_DATA_DIR`**。image 預設 `STOCK_DATA_DIR=/data`，DB 在它底下會被當成正式 DB 拒絕；`/research/stock.db` 不在底下，所以不被拒絕。DB 以唯讀開，驗證段的紀錄檔固定寫在研究 volume 的 `/research/explore-ledger.json`。不要把 DB 複製到別處再跑：紀錄檔會跟著副本走，副本一刪就擋不住第二次；驗證段沒有研究標記就拒絕（探索段與 `--coverage-only` 不要求）。
+**跑法只有一種**：研究 volume（[研究 DB](../ops/RESEARCH_DB.md#建研究-db)，`stock.db` 旁有研究標記 `research-db.json`）直接掛在 `/research`，**不掛在 `/data`、不設研究用的 `STOCK_DATA_DIR`**。image 預設 `STOCK_DATA_DIR=/data`，DB 在它底下會被當成正式 DB 拒絕；`/research/stock.db` 不在底下，所以不被拒絕。DB 以唯讀開，驗證段的紀錄檔固定寫在研究 volume 的 `/research/explore-ledger.json`。volume 不可加 `:ro`：探索段與驗證段都在讀資料之前確認紀錄檔寫得進去，寫不進就拒絕（exit 2，[`explore_research.ledger_write_problem`](../../tools/research/explore_research.py)，五支工具共用，#899）；`--coverage-only` 不寫紀錄檔，不檢查。不要把 DB 複製到別處再跑：紀錄檔會跟著副本走，副本一刪就擋不住第二次；驗證段沒有研究標記就拒絕（探索段與 `--coverage-only` 不要求）。
 
 ```bash
 # 換值：IMG＝含 #703 的 backend image；O＝主機上的輸出目錄；T、GIT_RO 同 docs/WORKFLOW.md（工具 commit 要讀 .git，沒掛記 unknown）
