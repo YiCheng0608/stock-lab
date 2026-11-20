@@ -17,6 +17,7 @@ import json
 import os
 import random
 import shutil
+import sqlite3
 import statistics
 import sys
 from datetime import date, datetime, timedelta
@@ -1763,3 +1764,54 @@ def test_s1_through_the_round4_hooks_is_version_1_trade_by_trade(
     )
     assert digest(zone) == V1_ZONE_TRADES  # plain is version 1's S1
     assert digest(zone["S1"]) == digest(plain)
+
+
+# --- the ledger must be writable (#899) -------------------------------------------
+
+# A directory a non-root POSIX user cannot write, as the research volume
+# mounted :ro is in the container; Windows and root ignore the mode (#899).
+READ_ONLY = pytest.mark.skipif(
+    os.name == "nt" or os.geteuid() == 0,
+    reason="a read-only directory needs a non-root POSIX user (CI's runner)",
+)
+
+
+def no_reads(monkeypatch) -> list:
+    """Every sqlite3.connect from here on is recorded and fails."""
+
+    opened: list = []
+
+    def connect(*args, **kwargs):
+        opened.append(args)
+        raise AssertionError(f"the DB was opened: {args}")
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    return opened
+
+
+def unwritable(problems: list[str], db: Path) -> bool:
+    # the only refusal: a run refused for another reason proves nothing here
+    return len(problems) == 1 and all(
+        str(db.parent / ex.LEDGER_NAME) in text
+        and "not writable" in text
+        and ":ro" in text
+        and "第 2 步的工具" in text
+        for text in problems
+    )
+
+
+@READ_ONLY
+def test_a_read_only_ledger_folder_refuses_the_exploration_before_anything_is_read(
+    golden_db, tmp_path, monkeypatch, capsys
+):
+    db = copy_of(golden_db, tmp_path)
+    compressed(monkeypatch, tmp_path)
+    opened = no_reads(monkeypatch)
+    out = tmp_path / "out"
+    db.parent.chmod(0o555)
+    try:
+        assert explore(db, out) == 2
+    finally:
+        db.parent.chmod(0o755)
+    assert unwritable(refused(capsys), db)
+    assert opened == [] and not out.exists()

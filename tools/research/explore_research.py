@@ -18,7 +18,9 @@ whole population (``evidence_lib.universe``); TAIEX is only listed.
 as its data is accepted, #721), writes the report to be published, and only
 then records each one in ``<DB directory>/explore-ledger.json`` (a crash before
 that leaves no entry); a hypothesis recorded there or in the repository's
-ledger for this ``VERSION`` is refused before anything is read.
+ledger for this ``VERSION`` is refused before anything is read, and so is a
+run whose ledger cannot be written (the volume mounted ``:ro``, #899; both
+segments, not ``--coverage-only``).
 ``--segment validation`` runs once, only after the exploration report was
 published, and only on the research DB (#701's marker ``research-db.json``
 beside it; the volume mounted at ``/research``, not under ``STOCK_DATA_DIR``,
@@ -40,10 +42,12 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from array import array
 from bisect import bisect_left
@@ -979,6 +983,30 @@ def ledger_path(db: Path) -> Path:
     return db.resolve().parent / LEDGER_NAME
 
 
+def ledger_write_problem(db: Path) -> str | None:
+    """Why the ledger beside ``db`` cannot be written, or None: checked before
+    anything is read, so a read-only research volume (``:ro``) refuses the
+    run instead of failing after the report (#899).  A missing DB or the
+    production DB is left to ``exit_research.refusals``."""
+
+    if not db.is_file() or lib.production_problem(db, dict(os.environ)):
+        return None
+    ledger = ledger_path(db)
+    try:
+        with tempfile.TemporaryFile(dir=ledger.parent):
+            pass
+        if ledger.exists():
+            with ledger.open("r+b"):
+                pass
+    except OSError as error:
+        return (
+            f"{ledger} is not writable ({error.strerror or error}): the ledger "
+            "is written there, so mount the research volume without :ro "
+            "(docs/spec/evidence.md 第 2 步的工具, 跑法只有一種)"
+        )
+    return None
+
+
 def validation_problems(
     db: Path,
     report: str | None,
@@ -1024,6 +1052,9 @@ def validation_problems(
             [],
             None,
         )
+    unwritable = ledger_write_problem(db)
+    if unwritable:
+        return [unwritable], [], None
     path = Path(report)
     if not path.is_file():
         return [f"{path} does not exist"], [], None
@@ -1086,6 +1117,9 @@ def exploration_problems(
     if not names:
         return [f"--segment exploration needs --hypotheses (e.g. {example})"], []
     problems: list[str] = []
+    unwritable = ledger_write_problem(db)
+    if unwritable:
+        problems.append(unwritable)
     unknown = [name for name in names if name not in hypotheses]
     if unknown:
         problems.append(f"{', '.join(unknown)} not registered in HYPOTHESES")
