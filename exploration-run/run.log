@@ -1,0 +1,10 @@
+MemAvailable:    7021940 kB
+exploration 2014-12-26
+exploration 2016-01-05
+exploration 2017-01-12
+exploration 2018-01-17
+exploration 2019-01-22
+R1: 沒有通過（探索段）
+R2: 沒有通過（探索段）
+{"out": "/out/exploration", "segment": "exploration", "sha256": "978a1199c8a2efe9c226d9f7b8df8fc64cb352fbfc20223c4f32fec91b5daf4d", "verdicts": {"R1": "沒有通過（探索段）", "R2": "沒有通過（探索段）"}}
+exit=0
