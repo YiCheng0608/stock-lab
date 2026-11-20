@@ -79,7 +79,11 @@ def test_the_round_and_the_thresholds():
     assert tool.SEGMENTS == ex.SEGMENTS
     assert tool.MIN_SEGMENT_DAYS == ex.MIN_SEGMENT_DAYS
     assert tool.REGISTRATION_COMMIT == "6f6142d4"
-    assert (tool.EX_YEAR_DAYS, tool.EX_AHEAD_DAYS, tool.SEASON_STALE_DAYS) == (365, 28, 7)
+    assert (tool.EX_YEAR_DAYS, tool.EX_AHEAD_DAYS, tool.SEASON_STALE_DAYS) == (
+        365,
+        28,
+        7,
+    )
 
 
 def test_the_definitions_hash_holds_the_validation_threshold(monkeypatch):
@@ -91,9 +95,7 @@ def test_the_definitions_hash_holds_the_validation_threshold(monkeypatch):
 
 def test_the_command_has_no_parameter_flags():
     flags = {
-        option
-        for action in tool._parser()._actions
-        for option in action.option_strings
+        option for action in tool._parser()._actions for option in action.option_strings
     }
     assert flags == {
         "-h",
@@ -238,9 +240,7 @@ def test_amihud_60_is_missing_with_a_suspended_bar_in_the_61():
 
 @pytest.mark.parametrize("bad", [NAN, 0.0, -5.0])
 @pytest.mark.parametrize("where", [1, 30, 60])  # the 60 bars i = at − 59 .. at
-def test_amihud_60_is_missing_with_a_turnover_not_available_or_not_positive(
-    bad, where
-):
+def test_amihud_60_is_missing_with_a_turnover_not_available_or_not_positive(bad, where):
     turnover = [1000.0] * 61
     turnover[where] = bad  # NaN is a turnover_status other than available
     assert w1(zigzag(61), turnover) is None
@@ -370,12 +370,18 @@ def test_w3_lists_the_picks_with_1_as_a_mean_by_year():
 
     spec = tool.HYPOTHESES["W3"]
     coverage: dict = {}
-    for day, count in ((date(2015, 6, 1), 3), (date(2015, 6, 2), 1), (date(2016, 6, 1), 25)):
+    for day, count in (
+        (date(2015, 6, 1), 3),
+        (date(2015, 6, 2), 1),
+        (date(2016, 6, 1), 25),
+    ):
         items, acts, members = [], {}, []
         for i in range(1, 31):
             item = make_item([50.0], dates=[day], instrument_id=i)
             items.append(item)
-            acts[i] = [action(day - timedelta(days=350), cash=1.0)] if i <= count else []
+            acts[i] = (
+                [action(day - timedelta(days=350), cash=1.0)] if i <= count else []
+            )
             members.append((item, 0))
         ranked = tool.rank(context_for(items, actions=acts), spec, day, members)
         tool._coverage_add(coverage, spec, day, len(members), ranked)
@@ -390,7 +396,9 @@ def test_w3_lists_the_picks_with_1_as_a_mean_by_year():
 # --- W4 -------------------------------------------------------------------------
 
 
-def season_item(shift: dict[int, int] | None = None, close: dict[str, float] | None = None):
+def season_item(
+    shift: dict[int, int] | None = None, close: dict[str, float] | None = None
+):
     """Bars only on a_k and b_k (k = 1..5) and on T: P(a_k) = 100, P(b_k) =
     100 × (1 + k %), so r = 1..5 % and the mean is 3 %.  ``shift`` moves the
     bar of a_k by that many calendar days."""
@@ -690,7 +698,9 @@ def test_w1_a_turnover_status_not_available_is_missing_for_its_60_bars(loaded):
 def test_w3_reads_the_cash_dividend_as_stored(loaded):
     day = date(2013, 4, 15)
     values = {
-        i: tool.expected_parts(loaded, loaded.panel.series[i], loaded.panel.series[i].position[day])
+        i: tool.expected_parts(
+            loaded, loaded.panel.series[i], loaded.panel.series[i].position[day]
+        )
         for i in (3, 5, 7, 9, 11, 13)
     }
     assert values == {
@@ -745,8 +755,18 @@ def explore(
     chosen = [] if hypotheses is None else ["--hypotheses", hypotheses]
     return one_process(
         lambda: tool.main(
-            ["--db", str(db), "--out", str(out), "--segment", "exploration",
-             "--min-free-gb", "0", *chosen, *extra]
+            [
+                "--db",
+                str(db),
+                "--out",
+                str(out),
+                "--segment",
+                "exploration",
+                "--min-free-gb",
+                "0",
+                *chosen,
+                *extra,
+            ]
         )  # fmt: skip
     )
 
@@ -800,7 +820,13 @@ def test_the_exploration_reports_the_round_and_records_the_ledger(explored):
         for e in entries
     ] == [(name, "round6_research", 6, "exploration", 1) for name in NAMES]
     for name in NAMES:
-        for file in ("summary.md", "tables.json", "equity.csv", "picks.csv", "trades.csv"):
+        for file in (
+            "summary.md",
+            "tables.json",
+            "equity.csv",
+            "picks.csv",
+            "trades.csv",
+        ):
             assert (out / name / file).is_file(), (name, file)
 
 
@@ -812,16 +838,21 @@ def test_w3_picks_the_expected_ex_dividends_first_then_the_hash(explored):
     rows = [line.split(",") for line in lines[1:] if line.startswith(day.isoformat())]
     assert len(rows) == 20
     symbols = [row[3] for row in rows]
-    assert symbols[:2] == [f"S{i}" for i in sorted((3, 11), key=lambda i: pr.tie_break(day, i))]
+    assert symbols[:2] == [
+        f"S{i}" for i in sorted((3, 11), key=lambda i: pr.tie_break(day, i))
+    ]
     assert [row[4] for row in rows] == ["1.0", "1.0"] + ["0.0"] * 18
     rest = sorted(set(range(1, 28)) - {3, 11}, key=lambda i: pr.tie_break(day, i))
     assert symbols[2:] == [f"S{i}" for i in rest[:18]]
     summary = (out / "W3" / "summary.md").read_text(encoding="utf-8")
     assert "另列：每年選入的股票中鍵值是 1 的平均檔數" in summary
     # stock 3 is 1 on 20 sessions, stock 11 on 20 (the hand windows in ACTIONS)
-    assert read_json(out / "explore.json")["hypotheses"]["W3"]["coverage"]["2013"][
-        "picked_ones"
-    ] == 40
+    assert (
+        read_json(out / "explore.json")["hypotheses"]["W3"]["coverage"]["2013"][
+            "picked_ones"
+        ]
+        == 40
+    )
 
 
 def test_the_exploration_runs_once(explored, capsys):
@@ -839,7 +870,14 @@ def test_the_repository_ledger_refuses_the_exploration_too(
     compressed(monkeypatch, tmp_path)
     ex.write_ledger(
         ex.REPO_LEDGER,
-        [{"hypothesis": "W4", "tool": "round6_research", "segment": "exploration", "version": 1}],
+        [
+            {
+                "hypothesis": "W4",
+                "tool": "round6_research",
+                "segment": "exploration",
+                "version": 1,
+            }
+        ],
     )
     capsys.readouterr()
     assert explore(db, tmp_path / "x", hypotheses="W4") == 2
@@ -998,7 +1036,10 @@ def no_reads(monkeypatch) -> list:
 def unwritable(problems: list[str], db: Path) -> bool:
     # the only refusal: a run refused for another reason proves nothing here
     return len(problems) == 1 and all(
-        str(db.parent / ex.LEDGER_NAME) in text and "not writable" in text
+        str(db.parent / ex.LEDGER_NAME) in text
+        and "not writable" in text
+        and ":ro" in text
+        and "第 2 步的工具" in text
         for text in problems
     )
 

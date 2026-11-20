@@ -359,7 +359,10 @@ def season_5y(_ctx: Context, item: lib.Series, at: int) -> float | None:
     returns = []
     for k in range(1, SEASON_YEARS + 1):
         a = day - timedelta(days=SEASON_YEAR_DAYS * k)
-        start, end = price_on(item, a), price_on(item, a + timedelta(days=SEASON_SPAN_DAYS))
+        start, end = (
+            price_on(item, a),
+            price_on(item, a + timedelta(days=SEASON_SPAN_DAYS)),
+        )
         if start is None or end is None:
             return None
         returns.append(end / start - 1.0)
