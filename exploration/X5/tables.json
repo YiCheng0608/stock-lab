@@ -1,0 +1,205 @@
+{
+  "version": 2,
+  "design": "703",
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "label": "母體中 60 日平均成交金額前 50 名，全部等權買進、不排序",
+  "direction": "大型股傾向",
+  "parameters": {
+    "rule": "daily",
+    "subset": [
+      "turnover_60",
+      50
+    ],
+    "filters": [],
+    "keys": [],
+    "top": 50,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-04-23",
+      60
+    ]
+  },
+  "hypothesis": "X5",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-07-17",
+    "first_session": "2007-07-18",
+    "last_session": "2019-12-31",
+    "days": 3081,
+    "signal_days": 3081
+  },
+  "prerequisites": {
+    "days": 3081,
+    "min_days": 500,
+    "delisted": 155,
+    "ok": true
+  },
+  "coverage": {
+    "2007": {
+      "days": 117,
+      "members": 52212,
+      "missing": {
+        "turnover_60": 345
+      }
+    },
+    "2008": {
+      "days": 249,
+      "members": 109905,
+      "missing": {
+        "turnover_60": 3036
+      }
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "turnover_60": 715
+      }
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "turnover_60": 954
+      }
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "turnover_60": 706
+      }
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "turnover_60": 627
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "turnover_60": 627
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "turnover_60": 527
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "turnover_60": 481
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "turnover_60": 270
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "turnover_60": 234
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "turnover_60": 338
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "turnover_60": 193
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 3081,
+      "mean": -0.00015359719071315252,
+      "annual": -0.03870649205971444,
+      "t": -1.53316910213195
+    },
+    "taiex": {
+      "days": 3081,
+      "mean": -0.000194855747135767,
+      "annual": -0.049103648278213285,
+      "t": -1.831067943752918
+    }
+  },
+  "absolute": {
+    "days": 3081,
+    "mean": -5.241494357513448e-05
+  },
+  "curves": {
+    "X5": {
+      "days": 3081,
+      "total": -0.37309985416446634,
+      "annual": -0.03747387729406715,
+      "volatility": 0.223186798376324,
+      "max_drawdown": -0.6848664159040653,
+      "invested": 0.9730991015944769,
+      "turnover": 4.057613025676714
+    },
+    "population": {
+      "days": 3081,
+      "total": 0.05874101310988289,
+      "annual": 0.004679620558762032,
+      "volatility": 0.20341388346196038,
+      "max_drawdown": -0.6420464887542308,
+      "invested": 0.9731146517874848,
+      "turnover": 3.9263642068832336
+    },
+    "taiex": {
+      "days": 3081,
+      "total": 0.2615647342248366,
+      "annual": 0.019186248796137173,
+      "volatility": 0.1835517881715603,
+      "max_drawdown": -0.5830805269789234,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 154001,
+    "won": 73891,
+    "rate": 0.47980857267160604,
+    "unsold": 3179
+  },
+  "counts": {
+    "X5": {
+      "bought": 154001,
+      "not_tradable": 33,
+      "sale_held": 377,
+      "limit_down": 34,
+      "limit_up": 16,
+      "unsold": 3179
+    },
+    "population": {
+      "bought": 1452813,
+      "not_tradable": 390,
+      "sale_held": 6130,
+      "limit_down": 256,
+      "limit_up": 245,
+      "unsold": 29372
+    }
+  },
+  "min_t": 2.0
+}

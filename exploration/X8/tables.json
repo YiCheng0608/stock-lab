@@ -1,0 +1,186 @@
+{
+  "version": 2,
+  "design": "703",
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "label": "董事會決議買回庫藏股（主旨規則），T+1 開盤買、持有 20 日",
+  "direction": "事件：重大訊息",
+  "parameters": {
+    "rule": "buyback",
+    "subset": null,
+    "filters": [],
+    "keys": [],
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2007-04-23",
+      20
+    ]
+  },
+  "hypothesis": "X8",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-05-21",
+    "first_session": "2007-05-22",
+    "last_session": "2019-12-31",
+    "days": 3121,
+    "signal_days": 3121
+  },
+  "prerequisites": {
+    "days": 3121,
+    "min_days": 500,
+    "delisted": 157,
+    "ok": true
+  },
+  "coverage": {
+    "2007": {
+      "announcements": 140,
+      "rolled": 4,
+      "in_population": 45,
+      "picked": 42
+    },
+    "2008": {
+      "announcements": 576,
+      "rolled": 11,
+      "in_population": 183,
+      "picked": 174
+    },
+    "2009": {
+      "announcements": 92,
+      "rolled": 4,
+      "in_population": 34,
+      "picked": 34
+    },
+    "2010": {
+      "announcements": 65,
+      "rolled": 2,
+      "in_population": 32,
+      "picked": 31
+    },
+    "2011": {
+      "announcements": 301,
+      "rolled": 2,
+      "in_population": 109,
+      "picked": 103
+    },
+    "2012": {
+      "announcements": 175,
+      "rolled": 2,
+      "in_population": 41,
+      "picked": 39
+    },
+    "2013": {
+      "announcements": 87,
+      "rolled": 0,
+      "in_population": 20,
+      "picked": 19
+    },
+    "2014": {
+      "announcements": 124,
+      "rolled": 0,
+      "in_population": 48,
+      "picked": 48
+    },
+    "2015": {
+      "announcements": 362,
+      "rolled": 3,
+      "in_population": 99,
+      "picked": 98
+    },
+    "2016": {
+      "announcements": 205,
+      "rolled": 3,
+      "in_population": 54,
+      "picked": 52
+    },
+    "2017": {
+      "announcements": 101,
+      "rolled": 0,
+      "in_population": 31,
+      "picked": 27
+    },
+    "2018": {
+      "announcements": 220,
+      "rolled": 1,
+      "in_population": 48,
+      "picked": 42
+    },
+    "2019": {
+      "announcements": 89,
+      "rolled": 3,
+      "in_population": 12,
+      "picked": 12
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 3121,
+      "mean": 0.00015648123625618636,
+      "annual": 0.03943327153655896,
+      "t": 0.7137415713098347
+    },
+    "taiex": {
+      "days": 3121,
+      "mean": -0.00018663462046022275,
+      "annual": -0.04703192435597613,
+      "t": -0.9258340349057623
+    }
+  },
+  "absolute": {
+    "days": 3121,
+    "mean": 4.189284995120552e-06
+  },
+  "curves": {
+    "X8": {
+      "days": 3121,
+      "total": 0.012810693190552058,
+      "annual": 0.0010283371751558246,
+      "volatility": 0.007467722541334318,
+      "max_drawdown": -0.029799981444533663,
+      "invested": 0.011042079810027448,
+      "turnover": 0.145102510994351
+    },
+    "population": {
+      "days": 3121,
+      "total": -0.5143847028694053,
+      "annual": -0.056655778154229175,
+      "volatility": 0.1990367685863368,
+      "max_drawdown": -0.6780436248153408,
+      "invested": 0.950772812450604,
+      "turnover": 11.31097925068604
+    },
+    "taiex": {
+      "days": 3121,
+      "total": 0.47356228942994827,
+      "annual": 0.03179789346716566,
+      "volatility": 0.18297107716300473,
+      "max_drawdown": -0.5830805269789231,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 719,
+    "won": 370,
+    "rate": 0.5146036161335188,
+    "unsold": 0
+  },
+  "counts": {
+    "X8": {
+      "bought": 719,
+      "limit_down": 1,
+      "limit_up": 2
+    },
+    "population": {
+      "bought": 1471652,
+      "not_tradable": 393,
+      "sale_held": 3458,
+      "limit_down": 251,
+      "limit_up": 245,
+      "unsold": 9508
+    }
+  },
+  "min_t": 2.0
+}

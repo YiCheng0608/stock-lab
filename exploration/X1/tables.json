@@ -1,0 +1,204 @@
+{
+  "version": 2,
+  "design": "703",
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "label": "`momentum_120`（120 日報酬）大者先",
+  "direction": "持有較久、低換手",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "filters": [],
+    "keys": [
+      "momentum_120"
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-04-23",
+      120
+    ]
+  },
+  "hypothesis": "X1",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-10-12",
+    "first_session": "2007-10-15",
+    "last_session": "2019-12-31",
+    "days": 3021,
+    "signal_days": 3021
+  },
+  "prerequisites": {
+    "days": 3021,
+    "min_days": 500,
+    "delisted": 154,
+    "ok": true
+  },
+  "coverage": {
+    "2007": {
+      "days": 57,
+      "members": 21985,
+      "missing": {
+        "momentum_120": 310
+      }
+    },
+    "2008": {
+      "days": 249,
+      "members": 109905,
+      "missing": {
+        "momentum_120": 10276
+      }
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "momentum_120": 1741
+      }
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "momentum_120": 2075
+      }
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "momentum_120": 1544
+      }
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "momentum_120": 1777
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "momentum_120": 1141
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "momentum_120": 1099
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "momentum_120": 806
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "momentum_120": 552
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "momentum_120": 477
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "momentum_120": 561
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "momentum_120": 579
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 3021,
+      "mean": 0.00012309450833197807,
+      "annual": 0.031019816099658475,
+      "t": 0.7550248384853038
+    },
+    "taiex": {
+      "days": 3021,
+      "mean": 0.00012159863291705367,
+      "annual": 0.030642855495097526,
+      "t": 0.5373593120219353
+    }
+  },
+  "absolute": {
+    "days": 3021,
+    "mean": 0.0002644222958725759
+  },
+  "curves": {
+    "X1": {
+      "days": 3021,
+      "total": 0.4297311164603217,
+      "annual": 0.030269188815853054,
+      "volatility": 0.270455622275386,
+      "max_drawdown": -0.6702646738514528,
+      "invested": 0.9711482936698237,
+      "turnover": 4.086207839657524
+    },
+    "population": {
+      "days": 3021,
+      "total": 0.19662903024774248,
+      "annual": 0.015086563990991841,
+      "volatility": 0.2025055655232205,
+      "max_drawdown": -0.6260972873798447,
+      "invested": 0.9729070864971952,
+      "turnover": 3.926432705505289
+    },
+    "taiex": {
+      "days": 3021,
+      "total": 0.26332626754993704,
+      "annual": 0.019689689530641985,
+      "volatility": 0.18138606134588203,
+      "max_drawdown": -0.5830805269789237,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 60359,
+    "won": 26646,
+    "rate": 0.4414586060073891,
+    "unsold": 1257
+  },
+  "counts": {
+    "X1": {
+      "bought": 60359,
+      "not_tradable": 16,
+      "sale_held": 207,
+      "limit_up": 45,
+      "limit_down": 21,
+      "unsold": 1257
+    },
+    "population": {
+      "bought": 1422594,
+      "not_tradable": 382,
+      "sale_held": 5974,
+      "limit_down": 256,
+      "limit_up": 245,
+      "unsold": 29352
+    }
+  },
+  "min_t": 2.0
+}

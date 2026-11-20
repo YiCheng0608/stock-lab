@@ -1,0 +1,197 @@
+{
+  "version": 2,
+  "design": "703",
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "label": "`high_gap_240`（收盤 ÷ 240 日最高價 − 1）大者先",
+  "direction": "持有較久、低換手",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "filters": [],
+    "keys": [
+      "high_gap_240"
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-04-23",
+      240
+    ]
+  },
+  "hypothesis": "X2",
+  "segment": "exploration",
+  "verdict": "探索通過",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-04-10",
+    "first_session": "2008-04-11",
+    "last_session": "2019-12-31",
+    "days": 2901,
+    "signal_days": 2901
+  },
+  "prerequisites": {
+    "days": 2901,
+    "min_days": 500,
+    "delisted": 146,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 186,
+      "members": 81358,
+      "missing": {
+        "high_gap_240": 13746
+      }
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "high_gap_240": 3712
+      }
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "high_gap_240": 4155
+      }
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "high_gap_240": 3491
+      }
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "high_gap_240": 4002
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "high_gap_240": 2454
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "high_gap_240": 2430
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "high_gap_240": 1706
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "high_gap_240": 1565
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "high_gap_240": 1268
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "high_gap_240": 1204
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "high_gap_240": 1540
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2901,
+      "mean": 0.0002624810046131056,
+      "annual": 0.0661452131625026,
+      "t": 2.6978252648961543
+    },
+    "taiex": {
+      "days": 2901,
+      "mean": 0.00023946384344115465,
+      "annual": 0.060344888547170975,
+      "t": 2.0681773370953427
+    }
+  },
+  "absolute": {
+    "days": 2901,
+    "mean": 0.00040638455755659256
+  },
+  "curves": {
+    "X2": {
+      "days": 2901,
+      "total": 1.799827625807069,
+      "annual": 0.0935553617228273,
+      "volatility": 0.1606349220063126,
+      "max_drawdown": -0.4965062111416597,
+      "invested": 0.9722254785754024,
+      "turnover": 3.814492825117213
+    },
+    "population": {
+      "days": 2901,
+      "total": 0.20242322595816775,
+      "annual": 0.016141784356664246,
+      "volatility": 0.20060930008244168,
+      "max_drawdown": -0.5930391802461383,
+      "invested": 0.9725163314087835,
+      "turnover": 3.9519402107979107
+    },
+    "taiex": {
+      "days": 2901,
+      "total": 0.35877183047545813,
+      "annual": 0.02698946002995206,
+      "volatility": 0.17549199607050922,
+      "max_drawdown": -0.559995481538859,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 57924,
+    "won": 30648,
+    "rate": 0.5291071058628548,
+    "unsold": 1555
+  },
+  "counts": {
+    "X2": {
+      "bought": 57924,
+      "not_tradable": 23,
+      "sale_held": 466,
+      "limit_down": 5,
+      "limit_up": 73,
+      "unsold": 1555
+    },
+    "population": {
+      "bought": 1372086,
+      "not_tradable": 358,
+      "sale_held": 5658,
+      "limit_down": 256,
+      "limit_up": 245,
+      "unsold": 29114
+    }
+  },
+  "min_t": 2.0
+}
