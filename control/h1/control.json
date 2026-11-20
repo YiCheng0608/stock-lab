@@ -1,0 +1,64 @@
+{
+ "hypothesis": "H1",
+ "window": "historical",
+ "decision": "https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7033054556",
+ "list_only": true,
+ "recomputed_equals_published": true,
+ "removed": {
+  "rule": "status = 'delisted' and revenue_high_12 missing, on days with at least one member known",
+  "signal_days": 3037,
+  "signal_days_applied": 2617,
+  "signal_days_with_removal": 2617,
+  "member_days": 59319
+ },
+ "judged_window": {
+  "first_session": "2012-05-09",
+  "last_session": "2024-09-27",
+  "tool_population": {
+   "days": 3037,
+   "mean": 0.0002569421939491889,
+   "annual": 0.0647494328751956,
+   "t": 2.1717894985118296
+  },
+  "control": {
+   "days": 3037,
+   "mean": 0.00022659421679925598,
+   "annual": 0.05710174263341251,
+   "t": 1.9207336821153895
+  }
+ },
+ "from_2014_02_list_only": {
+  "first_session": "2014-02-05",
+  "last_session": "2024-09-27",
+  "tool_population": {
+   "days": 2606,
+   "mean": 0.00022723478964357604,
+   "annual": 0.057263166990181164,
+   "t": 1.7119402216108048
+  },
+  "control": {
+   "days": 2606,
+   "mean": 0.0001918050398836884,
+   "annual": 0.048334870050689475,
+   "t": 1.449498594557368
+  }
+ },
+ "control_curve": {
+  "days": 3037,
+  "total": 0.12215948239572971,
+  "annual": 0.009609341463172827,
+  "volatility": 0.18099559327683876,
+  "max_drawdown": -0.502932683450268,
+  "invested": 0.9466354622492974,
+  "turnover": 12.322210899880513
+ },
+ "tool_population_curve": {
+  "days": 3037,
+  "total": 0.040375671787460155,
+  "annual": 0.003289769370783846,
+  "volatility": 0.17337993645742156,
+  "max_drawdown": -0.5130602337967086,
+  "invested": 0.9482394621584617,
+  "turnover": 11.90684646626386
+ }
+}
