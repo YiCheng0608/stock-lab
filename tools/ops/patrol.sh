@@ -35,7 +35,9 @@
 # with this session's handoff marker it is printed only (in the daily window the exit is
 # then 0, or 12 when a #1 comment is missing, below), and when the handoff condition holds
 # it goes before the handoff line (exit 10). GitHub not read (gh failed,
-# --max-gh 0): every task is counted as 判定不了 and no vacancy is claimed.
+# --max-gh 0): every task is counted as 判定不了 and no vacancy is claimed. A task whose
+# engineer terminal the monitor last saw at a permission or trust menu (monitor-state.json
+# engineer_menus, #873) is tagged 工程師停在確認框 on both lines.
 #
 # #1's body (#807, docs/ops/COORDINATOR_REFERENCE.md 決策落地的比對), from the same answer (its body is the
 # one extra field, its latest 100 comments are already there): above
@@ -341,7 +343,7 @@ else
       esac
     done < <(tr -d '\r' <"$wt")
   fi
-  slot_lines="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/slots.py" report "$now" "$wt" "$slot_dir/status")"
+  slot_lines="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/slots.py" report "$now" "$wt" "$slot_dir/status" "$logs/monitor-state.json")"
   slot_rc=$?
   if [ -n "$overview_dir" ]; then
     # The overview reads the same listing (#804); the EXIT trap removes it.
