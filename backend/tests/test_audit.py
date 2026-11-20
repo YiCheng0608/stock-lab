@@ -781,6 +781,23 @@ def test_the_audit_factor_pins_employee_bonus_rows_to_the_official_ratio(day, ex
         assert abs(factor - fields) > 1e-5
 
 
+def test_a_row_whose_fields_pass_is_not_an_employee_bonus_row():
+    # TPEx 2007, both references cut to 44.54: e = 49 / 44.54 - 1.1 is a small
+    # positive number, but the fields' 44.5455 is within 0.02, so the product
+    # never looks at employee bonus shares and keeps the field factor.
+    details = {
+        "ClosePriceBeforeExRightsDiviend": "50.00",
+        "ExRightsDiviendQuote": "44.54",
+        "DividendDeductedQuote": "44.54",
+    }
+    row = audit_lib.Action("2007-12-20", 1.0, 0.1, None, 50.0, details)
+    assert 0 < 49 / 44.54 - 1.1 <= audit_lib.EMPLOYEE_BONUS_MAX_RATIO
+    assert audit_lib.employee_bonus_explained(row) is False
+    assert audit_lib.action_factor(row, None) == pytest.approx(
+        audit_lib.field_factor(row, 50.0), abs=1e-12
+    )
+
+
 def twt48u(*rows):
     return [
         {

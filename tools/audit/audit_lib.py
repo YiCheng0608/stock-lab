@@ -543,7 +543,8 @@ TWSE_EMPLOYEE_BONUS_KEY = "B. 員工紅利轉增資"
 def employee_bonus_explained(action: Action) -> bool:
     """Whether employee bonus shares explain the row's gap to 減除股利參考價 (#891).
 
-    Dated before 2009-01-01, no split, a positive shareholders' ratio,
+    The fields' implied 減除股利參考價 is more than REFERENCE_TOLERANCE off,
+    dated before 2009-01-01, no split, a positive shareholders' ratio,
     ``0 < (before - cash) / deducted - 1 - ratio <= 0.06``, and on TWSE a
     positive 員工紅利轉增資 in the stored TWT49UDetail (TPEx has no such column).
     """
@@ -560,6 +561,11 @@ def employee_bonus_explained(action: Action) -> bool:
         if positive(before) and positive(deducted):
             break
     else:
+        return False
+    # Only a row whose fields miss 減除股利參考價 is looked at (the product
+    # calls its employee bonus rule only after the field comparison failed).
+    implied = field_factor(action, before) * before
+    if round(abs(implied - deducted), 6) <= REFERENCE_TOLERANCE:
         return False
     if index == 1:  # TWSE TWT49U
         detail = action.details.get("detail")
