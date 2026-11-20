@@ -2038,7 +2038,9 @@ def _mainstream_item_rows() -> list[dict[str, Any]]:
 # fixture has: the universe is app.h2_list's (stock/ipo with a bar on T and 20 bars averaging
 # MIN_AVERAGE_LOTS), each value is T's close over the highest high of all its fixture bars
 # (in place of the last WINDOW), and H2_MISSING keeps a null value, ranked last as the
-# definition ranks a missing one, so the page has one to show. /api/h2 reads the stored rows.
+# definition ranks a missing one, so the page has one to show. No fixture bar is suspended or off
+# the sessions, so the suspended rule and the session filter change nothing here and are not
+# repeated. /api/h2 reads the stored rows.
 H2_MISSING = {"9204"}
 
 

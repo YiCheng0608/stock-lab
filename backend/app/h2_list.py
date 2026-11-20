@@ -18,8 +18,10 @@ changes nothing of the today list or ``mainstream_v1``.
   bar is suspended when ``is_suspended`` is set **or** its volume is 0 with
   open = high = low = close (``research_report.Bar.suspended``).  This is not
   ``mainstream_v1``'s universe, which reads ``is_suspended`` alone and needs
-  241 bars.  ``bar_exclusions.json`` is not used (its ranges end by
-  2024-05-28, before any window read now).
+  241 bars.  ``bar_exclusions.json`` is not used: its code_reuse ranges apply
+  only to a database holding the old companies' bars, which the production
+  one (stock bars from 2024-09-30) does not, and its 2007 TPEx range is older
+  than it; only a recompute of an old date on a longer history can differ.
 - **Prices** (``evidence_lib._series``): each bar times the product of the
   factors of the corporate actions after its day (on or before T), each
   action's own ``worker.pipeline._corporate_action_factor``; an action
