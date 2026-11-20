@@ -24,7 +24,7 @@
 
 - 不設常駐 QA、文件、索引／Git 角色。需要獨立驗證時由統籌在 PR 上跑 `/code-review` 或另開一個 review session，見[工作手冊](docs/WORKFLOW.md#review-與合併)。
 - 統籌可以自己當工程師做小任務；大任務或可並行的任務派給工程師 session。
-- 使用者只決定產品取捨：範圍、來源與付費、刪除資料、部署、對外操作。其餘由統籌自行推進，不逐步請示。
+- 使用者只決定：來源與付費、刪除正式資料、外部帳戶、部署、對外操作。範圍取捨照統籌建議先做，每項先在 #1 留 `決定：`（#1 [6609823375](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6609823375)、[6746691032](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6746691032)、[6925425095](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6925425095)）。其餘由統籌自行推進，不逐步請示。
 
 ## 任務生命週期
 
@@ -35,7 +35,7 @@
 5. **Review 與合併**：統籌 review（必要時獨立 review），以 merge commit 合併；不 squash／rebase、不直接 push master。
 6. **結案**：合併後 master CI 綠即關 Issue、移除 worktree；遠端 branch 由 GitHub 自動刪。master CI 紅就先修，不開新功能。
 
-並行以不互改同一組檔案為原則，同時進行的任務以 3 個為上限（並行名額，統籌有空額就派下一張）；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）；只剩等外部時點的實測或抽樣、工程師不再改程式的任務也不算（使用者 2026-11-09 決定，#1 [6728938283](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6728938283)）。名額由 [`patrol.sh`](tools/ops/patrol.sh) 計算（名額行與判定規則見 [COORDINATOR 處理佇列](docs/COORDINATOR.md#無人值守運作)，#727），不靠統籌記得或沿用前任的數。衝突由後合併者在自己的 branch 解決，不全選一方。
+並行以不互改同一組檔案為原則，同時進行的任務以 3 個為上限（並行名額，統籌有空額就派下一張）；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）；只剩等外部時點的實測或抽樣、工程師不再改程式的任務也不算（使用者 2026-11-09 決定，#1 [6728938283](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6728938283)）。名額由 [`patrol.sh`](tools/ops/patrol.sh) 計算（名額行與判定規則見 [統籌手冊參考「並行名額的判定」](docs/ops/COORDINATOR_REFERENCE.md#並行名額的判定)，#727），不靠統籌記得或沿用前任的數。衝突由後合併者在自己的 branch 解決，不全選一方。
 
 ## 工程原則
 
@@ -43,7 +43,7 @@
 - **顯示**：有資料就顯示並標來源與日期；LLM 產出與來源事實分欄並標「推論」。詳見 [ROADMAP 顯示原則](docs/ROADMAP.md#v1-範圍基線2026-10-17-核定)。
 - **LLM**：只做新聞摘要、關聯、方向判讀與進出點說明；以本機 Claude Code 無介面模式（`claude -p`）用使用者的訂閱帳號呼叫，不接 API 金鑰、不計費；每次呼叫記模型與提示版本。
 - **測試**：單元與計算用小 fixture 或記憶體 DB；需要磁碟時用隔離暫存檔並在測試後清理；真實資料驗收記日期與範圍。
-- **不做**：自動下單、盤中即時、付費來源、未驗證勝率。部署、正式 DB、外部帳戶需使用者同意。
+- **不做**：自動下單、盤中即時交易、付費來源、未驗證勝率。盤中只做今日名單與我的追蹤的規則價位即時通知（不下單、不給下單指示，[#756](https://github.com/YiCheng0608/stock-lab/issues/756)）。部署、正式 DB、外部帳戶需使用者同意。
 - **AC 不自行降低**：做不到就在 Issue 說明並請統籌決定拆分或延後。
 
 ## 前端
@@ -66,4 +66,4 @@
 
 ## 流程變更
 
-改本文、[WORKFLOW](docs/WORKFLOW.md) 或 [COORDINATOR](docs/COORDINATOR.md) 由統籌開 PR，使用者同意後合併；不占任務名額。
+改本文、[WORKFLOW](docs/WORKFLOW.md)、[COORDINATOR](docs/COORDINATOR.md) 或[模板](docs/templates/README.md)由統籌開 PR，CI 綠、統籌 review 可合併就由統籌合併，不等使用者同意（使用者 2026-11-16 決定，#1 [6911025182](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6911025182)）；不占任務名額。

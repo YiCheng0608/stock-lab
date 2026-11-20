@@ -1,4 +1,4 @@
-"""Research backtest on a copy of stock.db: canonical strategies, ablations (#318), regime filters (#546), index conditions (#567).
+"""Research backtest on a copy of stock.db: canonical strategies, ablations (#318), regime filters (#546), index conditions (#567, overnight #855).
 
 Runs ``worker.pipeline.backtest(registry=...)`` once over ``--start``..``--end``
 on the database given by ``--db`` (a ``tools/ops/copy_db.py`` copy or another
@@ -13,8 +13,11 @@ built once.  Regime strategies read TAIEX's ``market_bars`` closes, and
 index-condition strategies the rows of their indexes, loaded once before the
 replay and pointed at each score date while its signals are written
 (``score_dates``); index conditions are also pointed at each instrument's
-exchange while its signals are written (``instruments``).  A run refuses an
-index condition whose series has no rows in the database.
+exchange while its signals are written (``instruments``), and given the Taiwan
+sessions (``pipeline.taiwan_bar_dates``: E, the session after a score date, of
+the overnight conditions, #855).  A run of index conditions alone replays
+their bases (``index_conditions.baselines_of``).  A run refuses an index
+condition whose series has no rows in the database.
 
 Refuses before importing the app when ``--db`` is the production database
 (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as its
@@ -77,7 +80,10 @@ def _parser() -> argparse.ArgumentParser:
         nargs="*",
         default=[],
         metavar="STRATEGY:CONDITION",
-        help="index-condition strategies to add, e.g. pullback_v3:c1; 'all' for every one",
+        help=(
+            "index-condition strategies to add, e.g. pullback_v3:c1; 'all' for "
+            "every #567 one, 'overnight' for the 12 of #855"
+        ),
     )
     parser.add_argument(
         "--slim",
@@ -265,27 +271,35 @@ def regime_items(names: list[str]) -> list[tuple[str, str]]:
 
 
 def condition_items(names: list[str]) -> list[tuple[str, str]]:
-    from app.strategies.index_conditions import BASES, CONDITIONS, all_conditions
+    from app.strategies.index_conditions import (
+        ALL_CONDITIONS,
+        all_conditions,
+        bases_of,
+        overnight_conditions,
+    )
 
     if names == ["all"]:
         return all_conditions()
+    if names == ["overnight"]:
+        return overnight_conditions()
     items = []
     for name in names:
         key, _, code = name.partition(":")
-        if key not in BASES or code not in CONDITIONS:
+        if code not in ALL_CONDITIONS or key not in bases_of(code):
             raise Refused(f"unknown index-condition strategy {name!r}")
         items.append((key, code))
     return items
 
 
 def index_history():
-    """Every ``market_bars`` row of the ``SERIES`` indexes, as an ``IndexHistory``."""
+    """Every ``market_bars`` row of the ``SERIES`` indexes and the Taiwan sessions, as an ``IndexHistory``."""
 
     from sqlalchemy import select
 
     from app.db import SessionLocal
     from app.models import Instrument, MarketBar
     from app.strategies.index_conditions import SERIES, IndexHistory
+    from worker.pipeline import taiwan_bar_dates
 
     rows = {}
     with SessionLocal() as db:
@@ -309,15 +323,16 @@ def index_history():
                     ).where(MarketBar.instrument_id == instrument.id)
                 )
             }
-    return IndexHistory(rows)
+        sessions = taiwan_bar_dates(db)
+    return IndexHistory(rows, sessions)
 
 
 def missing_series(history, items: list[tuple[str, str]]) -> list[str]:
     """The series the conditions of ``items`` read that have no rows at all."""
 
-    from app.strategies.index_conditions import CONDITIONS
+    from app.strategies.index_conditions import ALL_CONDITIONS
 
-    needed = sorted({key for _, code in items for key in CONDITIONS[code].series})
+    needed = sorted({key for _, code in items for key in ALL_CONDITIONS[code].series})
     return [key for key in needed if not history.series(key)[0]]
 
 
@@ -558,7 +573,7 @@ def main(argv: list[str] | None = None) -> int:
     from app.db import init_db
     from app.strategies import REGISTRY
     from app.strategies.ablation import research_registry
-    from app.strategies.index_conditions import BASES, with_conditions
+    from app.strategies.index_conditions import baselines_of, with_conditions
     from app.strategies.regime import with_regimes
     from worker import pipeline
 
@@ -571,9 +586,10 @@ def main(argv: list[str] | None = None) -> int:
         elif regimes:
             registry = {} if args.no_canonical else dict(REGISTRY)
         else:
-            # Index conditions alone: their fixed v3 bases are the baselines,
-            # whatever REGISTRY holds (app.strategies.index_conditions.BASES).
-            registry = {} if args.no_canonical else dict(BASES)
+            # Index conditions alone: their fixed bases are the baselines,
+            # whatever REGISTRY holds (app.strategies.index_conditions:
+            # BASES for #567, OVERNIGHT_BASES for #855).
+            registry = {} if args.no_canonical else baselines_of(conditions)
     except (Refused, ValueError) as exc:
         print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
         return 2

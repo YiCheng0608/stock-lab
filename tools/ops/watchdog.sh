@@ -72,6 +72,10 @@ NOTIFY_AFTER_HM=910
 # preopen (#760): Monday to Friday 08:20, at most 15 minutes plus serve's 5-minute
 # backstop; judged from 09:00, so the 09:15 run reports it.
 PREOPEN_AFTER_HM=900
+# intraday (#801): Monday to Friday 08:59 to 13:31, a round a minute from 09:00 to 13:30;
+# judged from 13:45 (the 13:45 run), after its last round.
+INTRADAY_AFTER_HM=1345
+INTRADAY_POLLS=271
 # The day's daily is judged from 23:10 Taipei (#466): its log, its result and the
 # data check. By then the 23:00 trigger (the retry of a 21:30 that failed or did
 # not run, or the institutional refetch after a 21:30 success) has written its
@@ -584,6 +588,36 @@ if compgen -G "$logs/preopen-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
         fi
         ;;
     esac
+  fi
+fi
+
+# intraday (#801 decision 6906133359): Monday to Friday from 13:45 (the 13:45 run, after
+# the 13:30 round), the day's intraday log is missing, or its successful rounds (`--- poll`
+# lines with ok>0) are fewer than 80% of a full day's INTRADAY_POLLS. Not judged: a day
+# the stored calendar marks closed, or a log whose results say non_trading_day,
+# not_configured (no FUGLE_API_KEY yet) or no_targets. One #1 comment a Taipei day (key
+# intraday_result_<date>). Only once intraday logs exist.
+intraday_log="$logs/intraday-$taipei_date.log"
+if compgen -G "$logs/intraday-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
+  && [ $((10#$taipei_hm)) -ge "$INTRADAY_AFTER_HM" ]; then
+  intraday_closed=""
+  if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
+    intraday_closed="$(helper closed-day "$data_dir/stock.db" "$taipei_iso" 2>>"$work/helper.err")" \
+      || intraday_closed=""
+  fi
+  intraday_key="intraday_result_$taipei_date"
+  intraday_where="請查 \`logs/intraday-$taipei_date.log\` 與 \`docker logs\` 的 \`serve start job=intraday\`／\`serve end job=intraday\`"
+  if [ "$intraday_closed" = closed ]; then
+    :
+  elif [ ! -f "$intraday_log" ]; then
+    anomaly "$intraday_key" "盤中即時通知：今天（$taipei_iso）沒有盤中通知的日誌（\`logs/intraday-$taipei_date.log\` 不存在），08:59 的 intraday 沒有跑，今天盤中沒有通知；scheduler 可能沒在跑，$intraday_where。"
+  elif ! grep -qE '^--- result status=(not_configured|skipped reason=(non_trading_day|no_targets))( |$)' \
+    "$intraday_log"; then
+    intraday_ok="$(grep -cE '^--- poll .* ok=[1-9][0-9]* ' "$intraday_log")"
+    if [ $((intraday_ok * 100)) -lt $((INTRADAY_POLLS * 80)) ]; then
+      intraday_last="$(sed -nE 's/^--- result (status=[a-z_]+.*)$/\1/p' "$intraday_log" | tail -n 1)"
+      anomaly "$intraday_key" "盤中即時通知：今天（$taipei_iso）成功的輪詢 $intraday_ok 次，少於整天 $INTRADAY_POLLS 次的 80%（09:00～13:30 每分鐘一輪），最後的結果是 \`${intraday_last:-（沒有 result 列：仍在跑或被中斷）}\`；可能是富果回應失敗（每 5 分鐘一輪）、key 無效或限流（當天停止）、或 scheduler 中途停過，$intraday_where。"
+    fi
   fi
 fi
 

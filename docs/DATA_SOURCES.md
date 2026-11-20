@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、標的狀態同步、官方來源限制、新聞來源清單、盤中報價來源、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [CAPABILITIES](CAPABILITIES.md) 為準。
@@ -96,13 +96,13 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 上市日行情、TAIEX 收盤 | `MI_INDEX` | 2004-02-11 | `stat`「查詢日期小於93年2月11日」 | `backfill --start-date` 早於這天就拒絕、不發請求（`sources.TWSE_QUOTES_FIRST_DATE`）。2008-12-31 以前的 `MI_INDEX` 只有「大盤統計資訊」與「每日收盤行情」，沒有「價格指數」表（2009-01-05 起才有，`TWSE_MI_INDEX_TAIEX_FIRST_DATE`）：那些日子的 TAIEX 收盤改取 `MI_5MINS_HIST` 月報（每月 1 個請求），寫成同樣的收盤列（`twse_index`），raw 指向月報，交易日基準照[TAIEX 交易日基準](#taiex-交易日基準)核實。價格指數表的加權指數列名以「發行量加權股價指數」為主，2019-04-29 是「加權股價指數」；兩個名稱都接受，完全比對（`sources.TWSE_INDEX_NAMES`，#764） |
 | 上市三大法人 | `T86` | 2012-05-02 | `stat`「查詢日期小於101年05月02日」 | 不請求，籌碼列只有融資組；run metadata 的 `feed_sources.TWSE.not_published.institutional` 記日期，不記 warning。較舊的版面沒有外資自營商欄（2012-05-02 實測如此，2014-11-28 已是現行版面，改版日沒有實測），外資取「外資買賣超股數」（當時的外資口徑，含後來分出的外資自營商）；parser 依欄名判斷版面，現行版面不改讀這欄 |
 | 上市融資融券 | `MI_MARGN` | 不晚於 2004-02-11 | — | 照常請求 |
-| 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05 | `stat`「查詢開始日期小於92年5月5日」 | `corporate-actions sync` 的起日夾到這天 |
+| 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05；`TWT49UDetail` 2005-01-25 起 | `stat`「查詢開始日期小於92年5月5日」；明細 `stat`「無相關資料」 | `corporate-actions sync` 的起日夾到這天。早於 2005-01-25 的含權列沒有明細，照樣寫入，欄位留空、以參考價還原（`sources.TWSE_ACTION_DETAIL_FIRST_DATE`，見[除權息回補](#除權息回補)，#821） |
 | 上市減資停止買賣 | `TWTAUU` | 2011-01-01 | `stat`「查詢開始日期小於100年1月1日」 | `trading-halts` 的起日夾到這天，輸出 `not_published_before` |
 | 加權指數日 K | `MI_5MINS_HIST`＋`FMTQIK` | 不晚於 2004-02 | — | `index-bars backfill`，研究 DB 以 `STOCK_INDEX_HISTORY_START` 放寬下限 |
-| 上櫃日行情 | `dailyQuotes` | 2007-04-23 | `stat ok` 但「上櫃家數: 0家」的空表（2006-12-29、2007-01-02） | 不請求，也不記成休市（空表在這天以前不是 no-data 證據）；`feed_sources.TPEx.not_published.quotes` |
+| 上櫃日行情 | `dailyQuotes` | 2007-04-23 | `stat ok` 但「上櫃家數: 0家」的空表（2006-12-29、2007-01-02） | 不請求，也不記成休市（空表在這天以前不是 no-data 證據）；`feed_sources.TPEx.not_published.quotes`。2007-04-23～2011-11-11 的舊版面在沒有一般交易時，開、收、高、低四個價格欄填 `0.00`，不是 `---`；這種列算[官方無成交日](#官方無成交日)，不是收盤價 0 的日線（#819） |
 | 上櫃三大法人 | `insti/dailyTrade` | 2014-12-01 | 空表（2014-11-28、07-01，2010～2014 各年 1 月） | 不請求，籌碼列只有融資組；`feed_sources.TPEx.not_published.institutional`。起始時的版面是 16 欄（外資及陸資淨買、投信淨買、自營淨買、三大法人買賣超，沒有外資自營商欄），而且 2014～2015 的回應第一張表是空的、明細在第二張「三大法人買賣明細資訊」；parser 依欄名認這個版面（`TPEX_INSTITUTIONAL_LEGACY_FIELDS`），欄名不同就不讀 |
 | 上櫃融資融券 | `margin/balance` | 不晚於 2007-01-02 | — | 照常請求 |
-| 上櫃除權息 | `exDailyQ` | 2007-07 是空表，2008-07 起有 | 空表 | 照常逐月請求；空月份不寫 |
+| 上櫃除權息 | `exDailyQ` | 2007-12（2004-02～04、2006-04、2007-04、07、10、11 實測都是空表，#821） | 空表 | 照常逐月請求；空月份不寫。上櫃日線 2007-04-23～2007-11-30 因此沒有除權息事件（研究 DB 的限制） |
 | 上櫃減資停止買賣 | `revivt` | 2013 年 | 2012 年整年空表 | `trading-halts` 的起日夾到 2013-01-01 |
 | 櫃買指數日 K | `inx`＋`tradingIndex` | 不晚於 2007-01 | — | 同加權指數 |
 | TPEx 停復牌 | OpenAPI `tpex_spendi_history` | 只有今年（2026-11-14 查到 365 列，暫停日 1150109～1151113） | — | 不能回補 |
@@ -136,6 +136,79 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - **時間**：`pubDate` 依其時區轉 UTC，寫 `published_at`（精度 datetime）；沒有時間部分的值（`2026-10-17`、`20261017`）寫 `event_date`（精度 date），不補時分。工商時報的無時區 ISO 時間依 +08:00 解讀；其他來源的無時區時間、RFC 2822 的 `-0000`、不存在的日期都當作未知。來源時間晚於收錄時間 15 分鐘以上時，該則標 `time_consistency=conflict` 並隔離。
 - **非股市內容**：中央社產經證券 feed 會混入生活（含彩券開獎）、社會等分類的稿件，CNBC Top News 會混入 CNBC Make It 專欄；這些稿件與標題含彩券、社會案件關鍵字者存為 `status=excluded`，不顯示、不送 LLM，raw 照存。各來源的排除分類與關鍵字見 [NEWS_SPEC §3](NEWS_SPEC.md#3-去重新資訊與事件影響)。
 - **限制**：feed 只保留最近 10～65 則，抓取間隔內若超過這個數量會漏稿，漏掉的舊稿不回補。feed 的 `pubDate` 是來源宣稱的發布時間，不是本系統可證明的第一次可得時間。
+
+## 盤中報價
+
+這一節記盤中即時通知用的報價來源。通知是今日名單與我的追蹤的股票觸及規則價位時傳 Telegram。查證與實測在 2026-11-15～16 做（[#756](https://github.com/YiCheng0608/stock-lab/issues/756)）。使用者 2026-11-16 選富果行情 API 的免費方案（[#1 6909629060](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6909629060)、[#756 決定 6909643332](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6909643332)）。實作是 [#801](https://github.com/YiCheng0608/stock-lab/issues/801)：scheduler 的 `intraday` 工作（[`backend/worker/intraday.py`](../backend/worker/intraday.py)、adapter [`backend/worker/fugle.py`](../backend/worker/fugle.py)，排程與規則見 [SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）；只有它讀盤中報價，collector 與 daily 都不讀，也不寫 DB。
+
+### 採用：富果行情 API 基本用戶
+
+- **端點**：`GET https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/{symbol}`，標頭 `X-API-KEY`。上市、上櫃都有。
+- **帳戶**：要註冊富果會員取得 API key。使用者自己註冊、自己把 key 放進本機設定檔，agent 不註冊也不讀 key。這是[來源選用原則](#來源選用原則)的例外：免費但要帳戶，由使用者決定採用。
+- **上限**（[行情方案及價格](https://developer.fugle.tw/docs/pricing)，2026-11-15 查）：
+  - 基本用戶的額度：「台股日內行情 API (呼叫次數/分鐘) 60/min」「台股即時行情 WebSocket 5 訂閱數 1 連線數」「台股日內行情快照 ✘ 不支援」。
+  - 每檔每分鐘 1 個請求，一分鐘最多約 50 檔，留 10 次餘裕。
+  - WebSocket 只有 5 個訂閱，不用。
+- **條款**（[使用規範與聲明](https://developer.fugle.tw/docs/data/intro)）：
+  - 每人只能有一個帳號，不得用多帳號規避免費行情的限制。
+  - 要遵守[臺灣證券交易所交易資訊使用管理辦法](https://www.twse.com.tw/downloads/zh/products/regulation_use.pdf)，不得轉接、出售或轉讓交易資訊，也不得傳送給第三人。
+  - 該辦法第三條第六款：「市場交易時間中所傳送之交易資訊為即時資訊，較即時資訊延遲二十分鐘以上之交易資訊為延遲資訊」。
+  - 第二十七條：「資訊用戶不得將本公司交易資訊出租、出售或轉讓他人，或以任何方式再轉接他處」。
+  - 所以通知只傳給使用者本人，只寫規則價位與觸及時的成交價與時間，不轉傳、不公開。
+- **讀的欄位**：
+  - `highPrice`／`lowPrice`：開盤以來的最高最低，用來判斷觸及。
+  - `lastTrade.price`／`lastTrade.time`：訊息附的成交價與時間。
+  - `isTrial`：試撮階段不判斷。
+  - `isLimitUpPrice` 等漲跌停旗標。
+  - `lastUpdated`：記延遲。
+- **錯誤碼與處理**（#801）：401（key 無效）、403（方案不支援）、429（限流）當天停止讀取並通知；逾時（10 秒）、連線失敗與 5xx 這一分鐘這檔跳過、不重試；404（代號）與缺 `highPrice`／`lowPrice`／`lastTrade` 的回應只停那一檔；整輪連續 5 次沒有回應改成每 5 分鐘一輪（[SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）。
+- **延遲**（2026-11-17 實測，[#808 AC-1 6935599005](https://github.com/YiCheng0608/stock-lab/issues/808#issuecomment-6935599005)）：
+  - 做法：交易日 09:00～09:59 在任務容器跑 `worker.cli intraday --dry-run --minutes 60`，每分鐘一輪，每輪 7 檔（今日名單），共 60 輪、420 個請求。數字來自每輪的 `--- poll` 列。
+  - 失敗：2／420（0.48%），都是 10 秒逾時（09:00、09:08 各 1 檔），其餘都是 200。60 輪都至少有一檔成功；沒有 401／403／429、404、缺欄位與別天的報價（`--- stale_quote`）。
+  - 回應時間（每檔一個請求）：各輪中位數的中位數 158 ms、p90 508 ms；各輪最大值的中位數 595 ms，最大 10,178 ms（逾時）。第一輪 09:00 較慢（中位數 3,466 ms）。MIS 是中位數 1,474 ms、p90 4,009 ms。
+  - `lastUpdated` 的落後：`lag` 是這一輪開始的時間減 `lastUpdated`。主機與容器的時鐘當天比標準時間慢約 9～10 秒（`w32tm` 對 time.windows.com 量到 +9.99 秒，富果與 Google 回應的 `Date` 標頭也差 9～10 秒），所以記下的各輪 `lag_median` 是 −10～−4 秒（中位數 −8）。記下的值加約 9.5 秒才是實際落後：`lag_median` 的中位數 −8 秒，校正後約 1.5 秒；各輪 `lag_max` 的中位數 1.5 秒、p90 23 秒、最大 67 秒，校正後約 11 秒、33 秒、77 秒，大的是那一分鐘沒更新的檔。MIS 的報價時間落後中位數 66 秒。
+  - 換算成通知：每分鐘輪詢一次時，通知比觸及晚約 1 分鐘以內（輪詢間隔），報價本身的落後是秒級。
+- **不公開報價的守門員**（#834，使用者 2026-11-17 決定由 script 把關，[#1 6933304440](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6933304440)）：
+  - 貼盤中輸出（`--dry-run` 的輸出、`intraday-*.log`、`intraday-*.jsonl`）到 Issue、PR 或 `pr-assets` 前，先跑 `python tools/ops/quote_guard.py mask <檔> > <遮好的檔>`，貼遮好的檔。成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`，富果回應欄位與 `Quote(...)` 的值換成 `<值>`，每輪 `levels` 紀錄的 `high`、`low`、`last` 換成 `<價>`；`--- poll`、`--- event` 列與規則價位（進場價、停損、目標）照原樣留著。
+  - 守門員是 [`tools/ops/quote_guard.py`](../tools/ops/quote_guard.py)，樣式只寫在 [`quote_patterns.json`](../tools/ops/quote_patterns.json) 一份。它擋 `comment.sh`、`gh issue`／`gh pr` 的留言、開單、改本文、標題與 review、`gh api` 到 issues、pulls、comments、graphql 的欄位、推 `pr-assets`，以及 CI 的 PR 本文（規則 g）。命中時只印行號與哪一種樣式，不印報價。範圍與擋不到的情況見 [GUARDRAILS](GUARDRAILS.md) 的「沒遮的富果報價不上 GitHub」那一列。
+  - 樣式抓的是 `TEMPLATES` 帶富果值的片段（`<時間> 成交 <價>`、`開盤`、`委買`、`委賣` 後面接數字）、上面「讀的欄位」與 `openPrice`、`closePrice`、`lastPrice`、`bids`、`asks` 帶數值（值是 `[…]`／`{…}` 時裡面有任何數字就算），`fugle.Quote(...)` 印出來的 `key=數字`，`--- message` 列，以及每輪 `levels` 紀錄（[#808](https://github.com/YiCheng0608/stock-lab/issues/808) 的 jsonl）各檔帶數字的 `high`、`low`、`last`；各檔自己的規則價位清單放行。日線的開盤價寫成「開盤價 X」、無成交與成交量寫成「無成交 N」「成交 N 股」不會被擋。
+  - 源頭遮罩（下一點）是 [#833](https://github.com/YiCheng0608/stock-lab/issues/833)，兩層各自獨立、不共用程式。
+- **源頭遮罩**（#833）：`intraday` 印到終端與寫進 `intraday-YYYYMMDD.log` 的內容預設沒有富果的值。
+  - 遮哪些：訊息裡從富果來的成交價、開盤、委買、委賣換成 `<價>`，成交時間換成 `<時間>`（`message(masked=True)` 依欄位產生，不是事後比對字串）。`--dry-run` 印的 `--- message` 列就是遮過的全文，例如 `2618 長榮航 觸及規則進場價 47.75（09:01 前後；<時間> 成交 <價>）`。`.log` 本來就不寫訊息全文，也不寫每輪的 `levels`（最高、最低、成交價）。
+  - 不遮的：`--- poll` 列（`ok`、`codes`、`ms_*`、`lag_*`）、`--- event`、`--- target`、`--- levels_restored` 列，規則價位（進場、停損、目標）與我們自己的輪詢時間。
+  - 原始值在哪：只在本機資料目錄（repo 外）的 `intraday-YYYYMMDD.jsonl`，訊息照送出的全文、每輪 `levels` 照原值，重啟還原照舊讀它。`--dry-run` 不寫 jsonl；要看原始值時加 `--raw-file <路徑>`，同樣的 jsonl 列追加到那個檔、不印到終端。`--raw-file` 只配 `--dry-run`；空值、路徑在任何 git checkout 裡、檔名是 `intraday-*.jsonl`／`intraday-*.log` 或落在 logs 目錄底下都拒絕（後兩種會被排程那次當成自己的紀錄讀回，把 dry-run 的事件當成已送）。
+  - Telegram 送到私人對話的訊息照舊帶真實報價，逐字不變（只送私人對話由 `chat_not_private` 擋）。
+  - 要貼 jsonl 或 raw 檔的內容時，仍先過上一點的 `quote_guard.py mask`。
+
+### 沒採用的來源
+
+查證日是 2026-11-15，條款原文在 [#756 AC-1](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6888637963) 的留言。
+
+| 來源 | 為什麼不用 |
+| --- | --- |
+| TWSE 基本市況報導網站（MIS）`getStockInfo.jsp` | 條款禁止自動下載（見下）；非公開端點，沒有文件、上限與 SLA |
+| TWSE OpenAPI（`STOCK_DAY_ALL` 等）、TPEx OpenAPI（`tpex_mainboard_quotes`，以及名稱有「盤中」的排行 `tpex_active_*`） | 沒有逐檔盤中價。2026-11-16 10:00～11:00 每 5 或 15 分鐘讀一次，32 次全部回 11/13 的資料，盤中不更新 |
+| 永豐 Shioaji | 要永豐金證券帳戶；官方要求盤中用訂閱，反覆輪詢 `snapshots` 會被停權 |
+| 富邦 Neo API | 要富邦證券開戶、電子交易憑證，並簽署 API 使用聲明 |
+| FinMind `taiwan_stock_tick_snapshot` | 只限 sponsor 會員（付費） |
+| Yahoo 股市等第三方網站 | [Yahoo 條款](https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html)禁止以自動化方式收集資料 |
+
+**MIS 的條款與實測**（留作沒採用的紀錄）：
+
+- **條款**：MIS 內嵌「基本市況報導網站使用條款」，第六條與 [TWSE 主站使用條款](https://www.twse.com.tw/zh/terms/use.html)同文：
+  - 「非依臺灣證券交易所同意之方式或經臺灣證券交易所同意者，禁止透過包括但不限於自動化裝置、指令碼、自動程式、蜘蛛程式、爬蟲程式或擷取程式等方式下載本網站之軟體或資料。」
+  - 頁尾另寫「本網站資料不得作為商業使用」。
+  - MIS 的即時報價沒有登錄在政府資料開放平臺。
+- **實測**：使用者同意只做一次評估（[#756 6892582754](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6892582754)），結果見 [6906081956](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6906081956)。
+  - 2026-11-16 10:02～10:23 每分鐘 1 個請求，一次帶 14 檔，共 22 個請求。
+  - 失敗 1／22，是 10 秒逾時，照決定停止、不重試。
+  - 回應時間中位數 1,474 ms、p90 4,009 ms。
+  - 伺服器快照（`queryTime.sysTime`）約每 1～2 分鐘才換一次。
+  - 各檔報價時間（`tlong`）比收到時間落後：中位數 66 秒、p90 125 秒、最大 256 秒。
+  - 最近一筆成交距快照時間中位數 109 秒，冷門股更久。
+  - 頂層成交價 `z` 有 89% 是 `-`：快照常常只更新五檔、沒有新成交，最近成交要讀 `trade` 子物件。
+  - 漲停鎖住時，委買最佳一檔是 `0`、委賣是 `-`。
+  - 換算成通知：每分鐘輪詢一次時，通知比成交晚約 1～5 分鐘。
 
 ## 欄位規則
 
@@ -193,10 +266,10 @@ TPEx 的日行情、法人、融資三份核心資料，當日 collect 先讀開
 
 ### 官方無成交日
 
-冷門股與債券 ETF 當天沒有一般交易時段成交時，官方每日行情表仍列出這一檔，但開、高、低、收全部空白：上市 `MI_INDEX`（`type=ALLBUT0999`）的「每日收盤行情」表是 `--`，上櫃 `dailyQuotes` 的「上櫃股票行情」表與當日 OpenAPI `tpex_mainboard_daily_close_quotes` 都是 `---`（11/09 兩邊同為 8,549 列）。成交股數可能是 0，也可能只有零股或盤後的股數（[#454](https://github.com/YiCheng0608/stock-lab/issues/454) AC-1：2026-10 的 201 檔未滿 20 日中，556 個缺日是這種列）。日行情 parser 不收這種列，所以它不是 bar；它是「這天官方確認沒有價格」的證據，不是缺資料，也不補價、不補零。
+冷門股與債券 ETF 當天沒有一般交易時段成交時，官方每日行情表仍列出這一檔，但開、高、低、收全部空白：上市 `MI_INDEX`（`type=ALLBUT0999`）的「每日收盤行情」表是 `--`，上櫃 `dailyQuotes` 的「上櫃股票行情」表與當日 OpenAPI `tpex_mainboard_daily_close_quotes` 都是 `---`（11/09 兩邊同為 8,549 列）。`dailyQuotes` 2007-04-23～2011-11-11 的舊版面在同樣的列上四個價格都填 `0.00`（同一份回應的附註仍寫「--- : 個股當日無交易時，以此符號表示開市價、最高價、最低價、收盤價、漲跌價」）。例如 2011-11-01 的 5011 久陽：收盤、開盤、最高、最低都是 `0.00`，只有 36 股零股成交、均價 31.89（[#819](https://github.com/YiCheng0608/stock-lab/issues/819)）。成交股數可能是 0，也可能只有零股或盤後的股數（[#454](https://github.com/YiCheng0608/stock-lab/issues/454) AC-1：2026-10 的 201 檔未滿 20 日中，556 個缺日是這種列）。日行情 parser 不收這種列，所以它不是 bar；它是「這天官方確認沒有價格」的證據，不是缺資料，也不補價、不補零。
 
 - **保存**：`no_trade_days` 每個標的每日一列，記 `source`（`twse`／`tpex`）、`endpoint`、`data_as_of`、`raw_payload_id`、`collected_at`。collect 寫入它剛存的行情表（`worker.no_trade_days`，失敗只記在 run 的 `no_trade_days`、不影響 collect）；歷史由 [`no-trade-days`](ops/CLI.md#現有-worker-cli) 從已存 raw 回補。
-- **判定**：四個價格欄都存在且都空白（空字串或只有 `-`）才算；只缺部分價格的列是格式異常，仍算缺資料。上市取 `parse_twse_all_daily_payload` 用來產生 bar 的同一張表。
+- **判定**：四個價格欄都存在且都空白（空字串或只有 `-`）才算。上櫃另外也認四個價格欄都存在、而且都正好是 0（`0.00`）的列：舊版面就是這樣表示的（#819）。只缺部分價格的列是格式異常，仍算缺資料；空白和 `0.00` 混在一列的也一樣。只有部分價格是 `0.00` 的列照舊讀成 bar，研究 DB 已存的 2007-04～2011-11 raw 裡，這種列只出現在權證代號。上市 `MI_INDEX` 沒有 `0.00` 的寫法：研究 DB 與正式 DB 的上市四價皆 0 日線都是 0 根，所以上市不認 0。上市取 `parse_twse_all_daily_payload` 用來產生 bar 的同一張表。
 - **選哪份 capture**：該交易所該日最新一份「回報日期相符、而且有證券行情表」的 capture（有列但沒有行情表的 capture 跳過，不拿來清掉該日的列），並以它重建該日該交易所的所有列：之後的 capture 改成有價格，舊列就刪掉。休市日官方回「沒有符合條件的資料」或空表時記 `no_data`（不算缺）；沒有任何可用 capture 時記 `missing`。兩者都保留原有的列，coverage 照樣只看已存的列。raw 檔讀不到、不是 JSON 或 SHA-256 不符時，停在該日，回 `failed` 與 `failed_date`。
 - **與 bar 的關係**：同一標的同一天已有 bar（例如當日快照有價格）時不寫，coverage 也以 bar 為準。代號在 `instruments` 找不到的股票或 ETF 列只計入 `unmatched`，不寫；同表的權證、債券等代號不計。
 - **表上沒有這一列**：不算無成交，仍是缺資料。AC-1 的 88 個這種缺日集中在少數標的、連續數天，多是減資換股期間的停止買賣：落在[減資停止買賣](#減資停止買賣)區間內的，coverage 算涵蓋、原因是 `capital_reduction_halt`（#582）；其餘沒有可對應的來源，不推定。個股頁把其餘的寫成「官方行情表未列此股」（`quote_not_listed`）：那天同交易所已有其他股票的 bar，所以不是收集缺口；整個交易所都沒有 bar 的日子才寫「行情尚未收錄」（`missing_bar_dates`，可回補）。2026-11-04 的副本上 32 檔有前者、0 檔有後者，前者多是減資換股期間連續 5～7 天（[#511](https://github.com/YiCheng0608/stock-lab/issues/511)）。
@@ -273,6 +346,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
   - backfill 的候選日與延伸補抓日：`calendar_weekday_dates`、`_extension_candidate_dates`。
   - sources 的逐日請求：上市 `MI_INDEX`、上櫃 `dailyQuotes`、`fetch_index_history`。
   - `pipeline.collect`：收到清單裡的週末時，用原日；其他週末照舊推回星期五。
+  - 資料稽核 `tools/audit/audit_checks.py`（[#798](https://github.com/YiCheng0608/stock-lab/issues/798)）：從 `worker.sources` 匯入同一份清單，不另抄。
+    - `bars_integrity` 的 `weekend_date`：清單上的日子有日線不算違規，其他週末照舊算。
+    - `bars_coverage` 的缺口：用 `is_request_date`，清單上的日子沒有日線也列進缺口（2020 年以前休市表是空的，所以記成 `not_in_holiday_table`）；星期日與清單外的星期六照舊不檢查。
 - **平日不受影響**：範圍裡、以及迄日前 93 日內都沒有清單日期時，送出的日子、延伸補抓的候選日和 request key，都和 #790 之前一樣。
   - 延伸補抓看的是迄日前 93 日。所以清單日期在範圍外、但在這個窗口內時，會多一個延伸補抓候選日。例如 2016-06-06～08-31 會多出 2016-06-04。
   - 這一天只有要延伸補抓時才會送；範圍內送出的日子不變。
@@ -522,6 +598,7 @@ TWSE：`GET /instruments/{symbol}` 的 `corporate_actions[]` 帶唯讀分類 `so
 - **不比除權息參考價**：用減除股利參考價，不用含現金增資認購的除權息參考價。欄位沒有現增，所以 3691 2026-10-27（現增認股）是 109.00／109.00 ＝ 1，不會被擋；現增由價格還原改用除權息參考價處理（[還原因子](spec/indicators.md)，#394）。
 - **不符時**：該列照存 raw 與 `details_json`（加 `factor_check`），但 `cash_dividend`、`stock_dividend_ratio`、`split_ratio` 留空，錯的欄位不進價格還原；有官方除權息價格的列改以官方比還原（[還原因子](spec/indicators.md)）。另寫一列 `data_quality`（`entity_type=corporate_action`、`entity_key=<交易所>:<代號>:<action_type>`、`as_of_date` 為除權息日、`status=factor_mismatch`，`checks_json` 記兩邊的值）。之後同一事件寫入正確值時，這列改為 `complete`。
 - **沒有官方價格的列**（daily 的 `TWT48U_ALL`）：不比，照舊寫入；之後的回補會以 `TWT49U` 覆寫並核對。
+- **沒有明細的參考價列**（早於 2005-01-25 的上市含權列，`details_json.factor_source` 是 `twt49u_reference`，見[除權息回補](#除權息回補)，#821）：欄位刻意留空，不比、不寫 `factor_mismatch`。因為不比，下一點的「已核對的列不被覆寫」也套用在它身上：同一事件已有通過核對的列時，參考價列整列不寫。
 - **已核對的列不被覆寫**：同一事件（標的、日期、`action_type`）已有帶官方價格且通過核對的列時（回補寫入的，或 TPEx daily 寫入的），沒有官方價格的列（daily 的 `TWT48U_ALL` 重抓）整列不寫，因子、`details_json` 與 raw 連結都不變；daily 只新增還沒有的事件。沒有官方價格的既有列照舊由 daily 覆寫。
 
 #### 除權息回補
@@ -534,7 +611,7 @@ TWSE：`GET /instruments/{symbol}` 的 `corporate_actions[]` 帶唯讀分類 `so
 | TWSE 計算結果明細 | `https://www.twse.com.tw/rwd/zh/exRight/TWT49UDetail?STK_NO=<代號>&T1=YYYYMMDD&response=json` | `(每股配發現金股利)除息`（`3 元／股`）、`A. 按普通股股東持股比例每千股無償配股`（`100 股`）；其餘現增欄位只保存。只對 `權/息` 含「權」的列請求。 |
 | TPEx 除權除息計算結果表 | `https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ?startDate=YYYY/MM/DD&endDate=YYYY/MM/DD&response=json` | 21 欄（`除權息日期`、`代號`…`按持股比例仟股認購`）逐一對應 `tpex_exright_daily` 的英文欄名後，以 daily 同一個 parser 解析；回應的 `date` 須等於請求區間。 |
 
-- **TWSE 對應**：`息` 列的現金股利是 `權值+息值`；含「權」的列取明細的每股現金股利，配股率見下一點。明細讀不到時該事件不寫入、記 warning，run 為 `partial`。`details_json` 保留 `TWT49U` 全部欄位、`detail` 與 `detail_sha256`，並補 `Code`／`Date`／`Name`／`Exdividend`，讓上面的分類照常運作。
+- **TWSE 對應**：`息` 列的現金股利是 `權值+息值`；含「權」的列取明細的每股現金股利，配股率見下一點。明細讀不到時該事件不寫入、記 warning，run 為 `partial`；例外是早於 2005-01-25、明細回 `{"stat": "無相關資料"}`（沒有 `data`），而且這列 `除權息前收盤價`、`除權息參考價` 都是正數（`sources._twse_detail_unpublished`；TWSE 沒有公布這段的明細，2005-01-24 2888 沒有、2005-01-25 2825 有，#821）：事件照寫，`cash_dividend`、`stock_dividend_ratio` 留空，`details_json` 記 `factor_source: "twt49u_reference"`、`detail: null` 與那份空回應的 `detail_sha256`。還原因子由 `除權息參考價／除權息前收盤價` 決定（[還原因子](spec/indicators.md)，欄位空白時就用官方比）。例外：`除權息參考價` 與 `除權息前收盤價` 差在 0.02 元內時，空白欄位的因子 1 已重現參考價，照用因子 1，不是官方比（2004-02-11～2005-01-24 的 370 列裡只有 2343 精業 2004-12-20：10.50／10.49，官方比 0.999048，差不到 0.1%）。寫入防呆與 `corporate-actions check` 都不比這種列，也不寫 `factor_mismatch`；sync 與 check 的輸出另外計 `reference_factor_rows`。transport 失敗、明細回其他 stat 或空表、只有別檔的列、官方價格缺一，或 2005-01-25 起明細讀不到，仍照上面跳過、記 warning。`details_json` 保留 `TWT49U` 全部欄位、`detail` 與 `detail_sha256`，並補 `Code`／`Date`／`Name`／`Exdividend`，讓上面的分類照常運作。
 - **TWSE 配股率**（`sources._twse_stock_ratio`）：明細的每千股無償配股只印到小數一位（2442 2026-09-08 印 `71.1 股`，實際 0.07111516），印出值 ÷ 1,000 最多差 0.00005。TWSE 用精確比率算參考價，所以從同一列的價格反推：沒有現增時 `(除權息前收盤價 − 現金股利) ／ (除權息前收盤價 − 權值+息值) − 1`（`權值+息值` 六位小數、未捨去）；明細有現增（`C. (有償) 現金增資` 或 `按股東持股比例每千股認購` 大於 0）時，分母改用不含認購的 `減除股利參考價`。存哪個值：
   - 反推值與印出值相差不到 0.000001：存印出值（`used=printed`）。
   - 相差不超過半個印出單位（0.00005）：存反推值（`used=derived`，精度為 TWSE 計算時用的比率）。
@@ -632,13 +709,16 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **下市股分類**（`revenue company-classify`）：對象是 `delisted` 的 `stock`／`ipo`，要有日線，分類月在 2013-01 以後。每檔問 1 次單一公司頁，用最後一個有日線的月份，晚於「可以問的最後一個月」時改用它：
   - 頁上是「該 <代號> 公開發行公司不繼續公開發行！」：`not_public`。破產（2475 華映）、合併消滅（2888 新光金）是這樣，這些公司的月營收補不到。
   - 有營收表、通過檢查：`found`。這個月同時寫入。
-  - 頁上是「查無資料」：`no_data`，列出來，等統籌決定。
+  - 頁上是「該 <代號> 上市公司已下市！」：`delisted_notice`。這一頁對已下市的上市公司不給月份（[#854](https://github.com/YiCheng0608/stock-lab/issues/854)：run 8795 的 TWSE 3598 奕力、3682 亞太電）。
+  - 頁上是「外國發行人免申報本項資訊」：`foreign_exempt`。外國發行人（KY、F- 公司）免申報這一頁，頁上不印代號（run 8795 有 11 檔，例如 TPEx 1258 其祥-KY、TWSE 3697 F-晨星）。
+  - 頁上是「查無資料」或「資料庫中查無需求資料。」：`no_data`，列出來，等統籌決定。後者是 run 8795 對 TPEx 5371 中光電 2026-08 的回答：月份已過期限，頁面和其他固定頁一樣只有一句、沒有表，意思同樣是那個月查不到申報，所以歸同一類。
+  - 上面四種沒有表的頁面都是已回答：不算失敗、連續失敗的計數歸零，回應存下來，重跑時重讀、不再問。
   - 頁首的公司名稱和標的名稱（正規化後）互不包含：`name_mismatch`，不寫入、列出來。代號被後來的公司重用時，`co_id` 可能查到現在那家。
-- **補「查得到」的**（`revenue company-backfill`）：分類為 `found` 的標的，範圍內還沒有列的月份每月 1 個請求。每一頁都重新核對公司名稱。
-- **頁面檢查**：隱藏欄位 `Q1V`、`Q2V` 要是請求的代號與民國年月，頁面印的「民國YYY年MM月」也要相同，單位要是「新台幣仟元」；表頭是「項目／營業收入淨額」，接著 8 列依序是本月、去年同期、增減金額、增減百分比、本年累計、去年累計、增減金額、增減百分比，再來是備註。不合就記失敗、不寫入。本月 → `revenue`、去年同期 → `prior_year_revenue`、第一個增減百分比 → `yoy`、本年累計 → `cumulative_revenue`（千元）；8 列的文字、備註、`co_id`、頁首名稱與公司類別（例如「公開發行公司」）存 `data_json`。
+- **補「查得到」的**（`revenue company-backfill`）：分類為 `found` 的標的，範圍內還沒有列的月份每月 1 個請求。每一頁都重新核對公司名稱。`not_public`、`delisted_notice`、`foreign_exempt`、`no_data`、`name_mismatch` 都不補，`--plan` 的 `classes` 列出各類的檔數；backfill 中途某個月回了固定頁面，那個月記成該類（`write`），不寫入、不算失敗。
+- **頁面檢查**：隱藏欄位 `Q1V`、`Q2V` 要是請求的代號與民國年月，頁面印的「民國YYY年MM月」也要相同，單位要是「新台幣仟元」；表頭是「項目／營業收入淨額」，接著 8 列依序是本月、去年同期、增減金額、增減百分比、本年累計、去年累計、增減金額、增減百分比，再來是備註。不合就記失敗、不寫入。KY 公司另有一種雙幣別版面（TWSE 1592 英瑞-KY 2021-06，#854）：表頭是「項目／合併營業收入淨額」，下一列分「新台幣」與「功能性貨幣(美元)」兩欄，8 列之後多兩列換算匯率，最後是「備註」；頁上沒有 `Q1V`、`Q2V`，所以只核對印出的年月，公司由名稱比對（`name_mismatch`）把關。只讀「新台幣」那一欄，寫進和一般版面相同的欄位，`data_json` 另記 `幣別`、`功能性貨幣`與兩個匯率；找不到「新台幣」欄就記失敗，不拿另一欄。本月 → `revenue`、去年同期 → `prior_year_revenue`、第一個增減百分比 → `yoy`、本年累計 → `cumulative_revenue`（千元）；8 列的文字、備註、`co_id`、頁首名稱與公司類別（例如「公開發行公司」）存 `data_json`。
 - **可得日**：同 `t21sc03`，法定期限次月 10 日，遇休市順延（`announcement_basis=statutory_deadline`）。
 - **raw 與續跑**：每個回應存一列 `raw_payloads`（`source=mops`），`endpoint` 是 `…/ajax_t05st10_ifrs?co_id=<代號>&year=<民國年>&month=<月>`，內容是表單與 HTML。發請求前先找同一個鍵的已存回應：檔案的 sha256 要和 `raw_payloads` 那列相同、內容要通過檢查，有就重讀、不重抓；分類結果也是從已存的回應重讀，所以沒有另外的表。中斷後重跑就接著做，失敗的那一個下次再問。
-- **請求規則**：同一 host 每個請求間隔至少 5 秒；台北 20:30～23:30 與 08:00～09:00 不發，下一個請求（等完間隔之後）會落在這兩段時就停，run 標 `partial`，之後重跑接續；不重試；封鎖頁（`查詢過於頻繁` 等）、非 200、空回應或傳輸錯誤連續 3 次就停。`--max-requests N` 限制這次最多發幾個（已存的不算）；`--plan` 只印對象與請求數，不發請求、不寫入。
+- **請求規則**：同一 host 每個請求間隔至少 5 秒；台北 20:30～23:30 與 08:00～09:00 不發，下一個請求（等完間隔之後）會落在這兩段時就停，run 標 `partial`，之後重跑接續；不重試；封鎖頁（`查詢過於頻繁` 等）、非 200、空回應、傳輸錯誤或認不得的頁面連續 3 次就停。`--max-requests N` 限制這次最多發幾個（已存的不算）；`--plan` 只印對象與請求數，不發請求、不寫入；`company-classify --plan` 另印已有存檔回應、不再問的檔數與各自的類別（`answered`）。
 - **run**：`run_type` 是 `revenue_transfer_copy`／`revenue_company_classify`／`revenue_company_backfill`，metadata 有每家（每月）的結果、raw id 與中止原因；每個請求之後 commit，跑到一半也讀得到。例外時 run 記 `failed` 與已完成的部分，再把例外拋出。
 
 ## FinMind 補缺口規則

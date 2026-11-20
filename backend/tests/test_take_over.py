@@ -83,6 +83,26 @@ exit 0
 # Closing the old terminal ends the listener it started (docs/ops/MONITOR.md): the hook of
 # orca terminal close, for the tests where one ran before the take-over.
 CLOSE_ENDS_LISTENER = 'rm -f "$FAKE_DIR/listener_up"\n'
+# The old coordinator terminal sat at its prompt before the take-over (#806): tui-idle is
+# satisfied only by the turn of a text sent while the wait runs: a text sent before the
+# wait started ended its turn unseen (PR #831 review 1), so the wait forgets it and
+# watches up to 10 seconds for one. With <fake>/wait_never it is never satisfied.
+IDLE_AFTER_SEND = r"""d="$FAKE_DIR"
+rm -f "$d/sent_text.txt"
+for _ in $(seq 50); do [ -f "$d/sent_text.txt" ] && break; sleep 0.2; done
+if [ -f "$d/sent_text.txt" ] && [ ! -f "$d/wait_never" ]; then
+  echo '{"ok": true, "result": {"wait": {"condition": "tui-idle", "satisfied": true}}}'
+else
+  echo '{"ok": true, "result": {"wait": {"condition": "tui-idle", "satisfied": false}}}'
+fi >"$d/orca_terminal_wait.json"
+"""
+SCREEN = ["● 已回報 #1。", "", "❯ "]
+CLOSE_TEXT = "新統籌 term_new 已接手，要關閉這個 terminal。只回覆收到，不要呼叫工具。"
+READ = "terminal read --terminal term_old --screen --limit 20 --json"
+SEND = f"terminal send --terminal term_old --text {CLOSE_TEXT} --enter --json"
+# TAKE_OVER_CLOSE_WAIT is 5 in these runs (default 600, review 2).
+WAIT = "terminal wait --terminal term_old --for tui-idle --timeout-ms 5000 --json"
+CLOSE = "terminal close --terminal term_old --json"
 
 
 @pytest.fixture
@@ -97,7 +117,14 @@ def to(tmp_path) -> Harness:
     (h.fake / "issue1.json").write_bytes(
         json.dumps({"number": 1, "title": "治理", "body": BODY}).encode()
     )
-    h.answer("orca_terminal_wait", _ok({"satisfied": True}))
+    # The old terminal (#806): its screen and an empty draft, a send it accepts; the wait
+    # sees an idle only after the send (it sat at its prompt before the take-over).
+    h.answer(
+        "orca_terminal_read",
+        _ok({"terminal": {"handle": "term_old", "tail": SCREEN, "draft": ""}}),
+    )
+    h.answer("orca_terminal_send", _ok({"send": {"accepted": True}}))
+    h.write("orca_terminal_wait.hook", IDLE_AFTER_SEND)
     h.answer("orca_terminal_close", _ok({"closed": True}))
     # The old coordinator's heartbeat, 5 minutes old and without a handoff marker.
     (h.data / "logs" / "coordinator-heartbeat.json").write_text(
@@ -133,6 +160,8 @@ def _take_over(h: Harness, *args: str) -> subprocess.CompletedProcess:
         ORCA_TERMINAL_HANDLE="term_new",
         TMPDIR=h.temp.as_posix(),
         TAKE_OVER_LISTENER_WAIT="0",
+        TAKE_OVER_CLOSE_WAIT="5",
+        TAKE_OVER_CLOSE_SETTLE="1",
     )
 
 
@@ -146,6 +175,10 @@ def _body(h: Harness) -> str:
 
 def _orca(h: Harness) -> list[str]:
     return [c for c in h.calls("orca") if c.startswith("terminal ")]
+
+
+def _out(result: subprocess.CompletedProcess) -> list[str]:
+    return result.stdout.replace("\r", "").splitlines()
 
 
 def _listener(h: Harness) -> list[str]:
@@ -215,12 +248,13 @@ def test_take_over_runs_every_step_in_order_and_reads_each_back(to: Harness) -> 
         f"`），session `sess-new`；2026-10-25T12:00Z 接手（[900]({COMMENT_URL})）。"
     )
     assert new.encode("utf-8").replace(row.encode(), OLD_ROW.encode()) == BODY.encode()
-    # The old terminal: idle first, then closed; the listener started before the comment
-    # and again after the close.
-    assert _orca(to) == [
-        "terminal wait --terminal term_old --for tui-idle --timeout-ms 60000 --json",
-        "terminal close --terminal term_old --json",
-    ]
+    # The old terminal: read, one short text sent, idle after it, then closed (#806); the
+    # listener started before the comment and again after the close.
+    assert _orca(to) == [READ, WAIT, SEND, CLOSE]
+    assert (to.fake / "sent_text.txt").read_text(encoding="utf-8") == CLOSE_TEXT
+    assert "  | ● 已回報 #1。" in _out(result)
+    assert "舊 terminal term_old 的 draft：（空）" in _out(result)
+    assert not [ln for ln in _out(result) if ln.startswith("提示：")]
     # No listener ran before: this run starts one in its own terminal and keeps it.
     assert _listener(to) == ["--status", "start", "--status", "start", "--status"]
     # The commitments, the closed check (#713), then the memory check (#705), are
@@ -300,17 +334,12 @@ def test_take_over_checks_the_listener_it_started(to: Harness) -> None:
         ("row", lambda h: h.write("fail_patch", ""), 3, 0),
         # The fake drops the edit: the read-back differs.
         ("row", lambda h: h.write("patch_ignored", ""), 4, 0),
-        (
-            "close",
-            lambda h: h.answer("orca_terminal_wait", _ok({"satisfied": False})),
-            4,
-            1,
-        ),
+        ("close", lambda h: h.write("wait_never", ""), 4, 3),
         (
             "close",
             lambda h: h.answer("orca_terminal_close", {"ok": False, "error": "x"}),
             4,
-            2,
+            4,
         ),
     ],
     ids=["listener", "comment", "get", "patch", "readback", "busy", "close"],
@@ -483,13 +512,13 @@ def test_take_over_refuses_a_handle_without_a_heartbeat_naming_it(
 def test_take_over_going_on_checks_the_handle_against_its_record(to: Harness) -> None:
     """Review 2: after the heartbeat step the heartbeat names this session; a run going on
     with --from checks the handle against what the first run recorded."""
-    to.answer("orca_terminal_wait", _ok({"satisfied": False}))
+    to.write("wait_never", "")
     assert _take_over(to, "term_old").returncode == 1
     record = json.loads(
         (to.data / "logs" / "take-over-sess-new.json").read_text(encoding="utf-8")
     )
     assert record["old_handle"] == "term_old"
-    to.answer("orca_terminal_wait", _ok({"satisfied": True}))
+    (to.fake / "wait_never").unlink()
     resume = ("--from", "close", "--comment-url", COMMENT_URL)
     wrong = _take_over(to, "term_engineer", *resume)
     assert wrong.returncode == 64, wrong.stdout + wrong.stderr
@@ -497,6 +526,128 @@ def test_take_over_going_on_checks_the_handle_against_its_record(to: Harness) ->
     result = _take_over(to, "term_old", *resume)
     assert result.returncode == 0, result.stdout + result.stderr
     assert _orca(to)[-1] == "terminal close --terminal term_old --json"
+
+
+# --- the close step on an old terminal already at its prompt (#806) --------------------
+
+
+def test_close_sends_one_text_so_an_idle_terminal_closes(to: Harness) -> None:
+    """AC-1: the old terminal sat at its prompt before the take-over, so no idle comes
+    until something ends a turn (2026-11-14, 2026-11-16). The close step sends one short
+    text while a wait already runs (PR #831 review 1: the fake's wait does not see a
+    turn that ended before it started); the wait sees the idle and the terminal is
+    closed, with no step by hand. Red on the script before #806 (it waited without
+    sending) and on one that sends first and waits after it."""
+    result = _take_over(to, "term_old")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "close" in _last(result)["done"]
+    assert _orca(to) == [READ, WAIT, SEND, CLOSE]
+    assert "已關舊 terminal：term_old" in _out(result)
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        ("TAKE_OVER_CLOSE_WAIT", "0"),
+        ("TAKE_OVER_CLOSE_WAIT", "1m"),
+        ("TAKE_OVER_CLOSE_SETTLE", "x"),
+    ],
+)
+def test_take_over_refuses_a_close_wait_that_is_no_seconds(
+    to: Harness, env: tuple
+) -> None:
+    result = to.run(
+        "take_over.sh",
+        "term_old",
+        CLAUDE_CODE_SESSION_ID="sess-new",
+        ORCA_TERMINAL_HANDLE="term_new",
+        TMPDIR=to.temp.as_posix(),
+        **{env[0]: env[1]},
+    )
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert to.calls("gh") == [] and _orca(to) == [] and _listener(to) == []
+
+
+@pytest.mark.parametrize(
+    ("setup", "calls", "words"),
+    [
+        # Gone (stale handle after a reboot, or closed by hand): read fails, so does all.
+        (
+            lambda h: [
+                h.answer(f"orca_terminal_{sub}", {"ok": False, "error": "stale"})
+                for sub in ("read", "send", "wait")
+            ],
+            [READ],
+            # The command for a terminal that is gone (review suggestion 1).
+            "--no-old-terminal --from close --comment-url " + COMMENT_URL,
+        ),
+        (
+            lambda h: h.answer("orca_terminal_send", {"ok": False, "error": "x"}),
+            [READ, WAIT, SEND],
+            "送短訊失敗",
+        ),
+        (
+            lambda h: h.answer(
+                "orca_terminal_send", _ok({"send": {"accepted": False}})
+            ),
+            [READ, WAIT, SEND],
+            "送短訊失敗",
+        ),
+    ],
+    ids=["gone", "send-fails", "send-not-accepted"],
+)
+def test_close_fails_and_closes_nothing_when_the_old_terminal_cannot_take_the_text(
+    to: Harness, setup, calls: list[str], words: str
+) -> None:
+    """AC-1: a terminal that is not there, or a text it does not take, fails close as
+    before: nothing waited for after it, nothing closed, and --from close goes on."""
+    setup(to)
+    result = _take_over(to, "term_old")
+    assert result.returncode == 1, result.stdout + result.stderr
+    line = _last(result)
+    assert line["failed"] == "close"
+    assert line["done"] == ["heartbeat", "listener", "comment", "row"]
+    assert words in line["reason"] and "未關" in line["reason"]
+    assert _orca(to) == calls
+    assert (
+        f"bash tools/ops/take_over.sh term_old --from close --comment-url {COMMENT_URL}"
+        in result.stderr
+    )
+
+
+def test_close_prints_the_old_screen_and_a_draft_with_a_hint(to: Harness) -> None:
+    """AC-2: before the send takes it away, the old terminal's last screen and its draft
+    (text in Orca's input box nobody sent) are printed, and a draft with text gets one
+    line more pointing at 自動換手機制 4."""
+    to.answer(
+        "orca_terminal_read",
+        _ok(
+            {
+                "terminal": {
+                    "handle": "term_old",
+                    "tail": SCREEN,
+                    "draft": "明天記得停 daily\n第二行",
+                }
+            }
+        ),
+    )
+    result = _take_over(to, "term_old")
+    assert result.returncode == 0, result.stdout + result.stderr
+    out = _out(result)
+    start = out.index("舊 terminal term_old 的最後畫面：")
+    assert out[start : start + 8] == [
+        "舊 terminal term_old 的最後畫面：",
+        "  | ● 已回報 #1。",
+        "  | ",
+        "  | ❯ ",
+        "舊 terminal term_old 的 draft：",
+        "  | 明天記得停 daily",
+        "  | 第二行",
+        "提示：舊 terminal 的輸入框有還沒送出的字（上面的 draft），可能是使用者留給舊統籌的話；"
+        "關掉後讀不到，照 docs/COORDINATOR.md「自動換手機制」第 4 點處理",
+    ]
+    # Printed before the text is sent and the terminal closed.
+    assert out.index("已關舊 terminal：term_old") > start + 7
 
 
 # --- the closed step (#713) ------------------------------------------------------------
@@ -1001,10 +1152,15 @@ def test_take_over_goes_on_from_the_closed_step(to: Harness) -> None:
 
 def test_the_handover_text_runs_take_over() -> None:
     """AC-4: the handover text hands the mechanical steps to take_over.sh instead of
-    listing them, and 統籌承諾 writes the commitments file as well as the comment."""
-    text = (OPS.parents[1] / "docs" / "COORDINATOR.md").read_text(encoding="utf-8")
+    listing them, and 統籌承諾 writes the commitments file as well as the comment. The
+    handover text is in 開啟命令 of the reference since #850 (決定 7016472613)."""
+    docs = OPS.parents[1] / "docs"
+    text = (docs / "COORDINATOR.md").read_text(encoding="utf-8")
+    reference = (docs / "ops" / "COORDINATOR_REFERENCE.md").read_text(encoding="utf-8")
     handover = (
-        text.split("接手文固定如下", 1)[1].split("```text\n", 1)[1].split("\n```", 1)[0]
+        reference.split("接手文固定如下", 1)[1]
+        .split("```text\n", 1)[1]
+        .split("\n```", 1)[0]
     )
     assert "bash tools/ops/take_over.sh <舊 handle>" in handover
     assert "bash tools/ops/patrol.sh" in handover

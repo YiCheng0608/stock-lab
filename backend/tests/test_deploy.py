@@ -37,6 +37,9 @@ SCRIPTS = (
     "coordinator_json.py",
     "db_revision.py",
     "comment.sh",
+    # #834: comment.sh checks the body for Fugle quotes first
+    "quote_guard.py",
+    "quote_patterns.json",
 )
 PROJECT = "stock-lab"
 # docker-compose.yml before and after #340: only the second tags the images.

@@ -276,6 +276,49 @@ def test_every_failure_is_listed_with_its_memory_and_check(
     assert result.stdout.splitlines()[-1].startswith("memory_check: 失敗 3 項（")
 
 
+GOOD_INDEX = "- [A](a-memory.md) — the first\n- [B](b-memory.md) — the second\n"
+
+
+def _padded_index(size: int) -> str:
+    """GOOD_INDEX followed by 200-byte non-list lines, `size` UTF-8 bytes in all."""
+    text = GOOD_INDEX
+    room = size - len(text.encode())
+    while room > 201:
+        text += "#" + "x" * 198 + "\n"
+        room -= 200
+    text += "#" + "x" * (room - 2) + "\n"
+    assert len(text.encode()) == size
+    return text
+
+
+def test_size_fails_on_an_index_over_7000_bytes(memory: Path, repo: Path) -> None:
+    _write(memory, "MEMORY.md", _padded_index(7000))
+    assert _check(memory, repo).returncode == 0
+    _write(memory, "MEMORY.md", _padded_index(7001))
+    result = _check(memory, repo)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert [f.split("（")[0] for f in _failures(result)] == [
+        "MEMORY.md: size: 7,001 位元組，上限 7,000"
+    ]
+
+
+def test_size_fails_on_a_line_over_240_bytes(memory: Path, repo: Path) -> None:
+    # Counted in UTF-8 bytes: 72 CJK characters are 216 bytes, not 72.
+    def line(size: int) -> str:
+        head = "- [A](a-memory.md) — "  # 23 bytes
+        hint = "說" * 72
+        return head + hint + "x" * (size - len((head + hint).encode()))
+
+    _write(memory, "MEMORY.md", line(240) + "\n- [B](b-memory.md) — x\n")
+    assert _check(memory, repo).returncode == 0
+    _write(memory, "MEMORY.md", "- [B](b-memory.md) — x\n" + line(241) + "\n")
+    result = _check(memory, repo)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert [f.split("（")[0] for f in _failures(result)] == [
+        "MEMORY.md:2: size: 這列 241 位元組，上限 240"
+    ]
+
+
 # --- where the directory is --------------------------------------------------------------
 
 

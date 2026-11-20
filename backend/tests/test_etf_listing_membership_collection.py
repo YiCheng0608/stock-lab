@@ -7,7 +7,14 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base, enable_sqlite_foreign_keys
-from app.models import GroupMembership, ThemeGroup, Instrument, IngestionRun, RawPayload
+from app.models import (
+    DataQuality,
+    GroupMembership,
+    IngestionRun,
+    Instrument,
+    RawPayload,
+    ThemeGroup,
+)
 from app.taxonomy import canonical_group_id
 from worker import pipeline, sources
 
@@ -58,7 +65,7 @@ def observation(kind="etf", day=D, exchange="TWSE", **changes):
     return cap, replace(rec, **changes)
 
 
-def apply(db, cap, rec, *, score=date(2026, 12, 31), captures=None):
+def apply(db, cap, rec, *, score=date(2026, 12, 31), captures=None, records=None):
     instrument = db.scalar(
         select(Instrument).where(
             Instrument.symbol == rec.symbol, Instrument.exchange == rec.exchange
@@ -74,15 +81,26 @@ def apply(db, cap, rec, *, score=date(2026, 12, 31), captures=None):
         )
         db.add(instrument)
         db.flush()
-    return pipeline._ensure_official_groups(
-        db,
-        [rec],
-        {(rec.exchange, rec.symbol): instrument},
-        date(1990, 1, 1),
-        score,
-        payloads=captures if captures is not None else [cap],
-        observed_now=datetime(2027, 1, 1),
-    )
+    # Like the collect: the listing date stored before this one overwrites it.
+    previous = instrument.listing_date
+    instrument.listing_date = rec.listing_date or instrument.listing_date
+    db.flush()
+    try:
+        return pipeline._ensure_official_groups(
+            db,
+            records or [rec],
+            {(rec.exchange, rec.symbol): instrument},
+            date(1990, 1, 1),
+            score,
+            payloads=captures if captures is not None else [cap],
+            observed_now=datetime(2027, 1, 1),
+            previous_listing_dates={instrument.id: previous},
+        )
+    except sources.OfficialDataError:
+        # A failed collect rolls the instrument write back too.
+        instrument.listing_date = previous
+        db.flush()
+        raise
 
 
 def periods(db, domain="etf"):
@@ -269,13 +287,19 @@ def test_bounded_listing_expires_without_future_collection_and_never_extends(env
             *observation(kind="stock", day=expiry + timedelta(days=1), listing_date=D),
         )
         assert periods(db, "newlisting") == before
-        with pytest.raises(sources.OfficialDataError, match="expiry"):
-            apply(
-                db,
-                *observation(
-                    kind="stock", day=expiry + timedelta(days=2), listing_date=expiry
-                ),
-            )
+        # A later date putting the day back in a window does not reopen the
+        # closed period (Issue #848: recorded, not raised).
+        result = apply(
+            db,
+            *observation(
+                kind="stock", day=expiry + timedelta(days=2), listing_date=expiry
+            ),
+        )
+        assert periods(db, "newlisting") == before
+        assert (
+            result["newlisting"]["observations"][0]["status"]
+            == "unresolved_closed_history_conflict"
+        )
 
 
 @pytest.mark.parametrize(
@@ -815,3 +839,355 @@ def test_collect_failure_after_helper_rolls_back_normalized_writes(env, monkeypa
         assert len(db.scalars(select(RawPayload)).all()) == 5
         run = db.get(IngestionRun, result["run_id"])
         assert run.status == "failed" and "after memberships" in run.error
+
+
+# Issue #846: TPEx 6874 read DateOfListing 2026-10-05 on 11/18 and
+# 2022-12-14 on 11/19; the 11/19 daily raised on the window opened on 11/18.
+def test_revised_listing_date_out_of_window_closes_the_day_before(env):
+    with env() as db:
+        apply(
+            db,
+            *observation(
+                kind="ipo", exchange="TPEx", listing_date=D - timedelta(days=44)
+            ),
+        )
+        result = apply(
+            db,
+            *observation(
+                kind="stock",
+                exchange="TPEx",
+                day=D + timedelta(days=1),
+                listing_date=date(2022, 12, 14),
+            ),
+        )
+        assert [p[1:3] for p in periods(db, "newlisting")] == [(D, D)]
+        receipt = result["newlisting"]["observations"][0]
+        assert receipt["action"] == "closed_listing_date_revised"
+        assert receipt["listing_date_revision"] == {
+            "previous_listing_date": (D - timedelta(days=44)).isoformat(),
+            "previous_valid_from": D.isoformat(),
+            "previous_valid_to": (D + timedelta(days=16)).isoformat(),
+            "closed_valid_to": D.isoformat(),
+        }
+        before = snapshot(db)
+        apply(
+            db,
+            *observation(
+                kind="stock",
+                exchange="TPEx",
+                day=D + timedelta(days=2),
+                listing_date=date(2022, 12, 14),
+            ),
+        )
+        assert snapshot(db) == before
+
+
+def quality_rows(db):
+    return [
+        (r.entity_type, r.entity_key, r.as_of_date, r.status, r.missing_fields_json)
+        for r in db.scalars(select(DataQuality).order_by(DataQuality.as_of_date))
+    ]
+
+
+# Issue #848 scope 1: after the period closed, the official date flips back to
+# the wrong value (6874 back to 10-05).  The closed period is not reopened, and
+# the collect does not fail: a warning and a data_quality row per day.
+def test_date_flipping_back_after_close_stops_at_the_instrument(env):
+    with env() as db:
+        wrong, right = D - timedelta(days=44), date(2022, 12, 14)
+        seq = [wrong, right, wrong, wrong, right]
+        results = [
+            apply(
+                db,
+                *observation(
+                    kind="ipo" if listing == wrong else "stock",
+                    exchange="TPEx",
+                    day=D + timedelta(days=offset),
+                    listing_date=listing,
+                ),
+            )["newlisting"]
+            for offset, listing in enumerate(seq)
+        ]
+        assert [p[1:3] for p in periods(db, "newlisting")] == [(D, D)]
+        receipts = [r["observations"][0] for r in results]
+        assert [r["status"] for r in receipts] == [
+            "applied",
+            "applied",
+            "unresolved_closed_history_conflict",
+            "unresolved_closed_history_conflict",
+            "applied",
+        ]
+        assert receipts[2]["closed_history"] == {
+            "valid_from": D.isoformat(),
+            "valid_to": D.isoformat(),
+            "previous_listing_date": right.isoformat(),
+        }
+        assert [r["status"] for r in results] == [
+            "observed",
+            "observed",
+            "partial",
+            "partial",
+            "observed",
+        ]
+        assert results[2]["warnings"] == [
+            "newlisting membership not reopened: TPEx AAA: listing date "
+            f"{wrong.isoformat()} (before this collect {right.isoformat()}) ends "
+            f"{(D + timedelta(days=16)).isoformat()}, period closed on {D.isoformat()}"
+        ]
+        # Non-core: it does not make the collect partial.
+        assert pipeline.split_collect_warnings(results[2]["warnings"]) == (
+            [],
+            results[2]["warnings"],
+        )
+        assert results[4]["warnings"] == []
+        assert quality_rows(db) == [
+            (
+                "newlisting_membership",
+                "TPEx:AAA",
+                D + timedelta(days=offset),
+                "conflict",
+                ["group_membership"],
+            )
+            for offset in (2, 3)
+        ]
+
+
+# Issue #848 scope 2: two dates both in the window, alternating daily, keep one
+# period; only its end follows the latest official date.
+def test_date_flipping_inside_the_window_keeps_one_period(env):
+    with env() as db:
+        early, late = D - timedelta(days=10), D - timedelta(days=5)
+        results = [
+            apply(
+                db,
+                *observation(
+                    kind="ipo", day=D + timedelta(days=offset), listing_date=listing
+                ),
+            )["newlisting"]["observations"][0]
+            for offset, listing in enumerate([early, late, early, late])
+        ]
+        assert [p[1:3] for p in periods(db, "newlisting")] == [
+            (D, late + timedelta(days=60))
+        ]
+        assert [r["action"] for r in results] == [
+            "opened",
+            "expiry_listing_date_revised",
+            "expiry_listing_date_revised",
+            "expiry_listing_date_revised",
+        ]
+        assert results[1]["listing_date_revision"] == {
+            "previous_listing_date": early.isoformat(),
+            "previous_valid_from": D.isoformat(),
+            "previous_valid_to": (early + timedelta(days=60)).isoformat(),
+            "revised_valid_to": (late + timedelta(days=60)).isoformat(),
+        }
+        # The same date the next day is not a revision.
+        same = apply(
+            db,
+            *observation(kind="ipo", day=D + timedelta(days=4), listing_date=late),
+        )["newlisting"]["observations"][0]
+        assert same["action"] == "unchanged" and "listing_date_revision" not in same
+
+
+# Issue #848 scope 3: a period whose end does not match an unchanged listing
+# date (an old bug or a hand edit) is not a revision and still fails.
+@pytest.mark.parametrize("in_window", [True, False])
+def test_bad_period_with_unchanged_listing_date_still_fails(env, in_window):
+    with env() as db:
+        listing = D - timedelta(days=10)
+        apply(db, *observation(kind="ipo", listing_date=listing))
+        row = _two_rows(db)[0]
+        row.valid_to = D + timedelta(days=70)
+        db.flush()
+        before = snapshot(db)
+        day = D + timedelta(days=1 if in_window else 55)
+        with pytest.raises(
+            sources.OfficialDataError, match="conflicts with expiry: TWSE AAA"
+        ):
+            apply(db, *observation(kind="ipo", day=day, listing_date=listing))
+        assert snapshot(db) == before
+
+
+# Issue #848 scope 4: two records of one instrument in one apply (a transfer
+# day: the TWSE and the TPEx list both map to the one stored instrument) write
+# one period; two records whose windows disagree are a real conflict.  Two
+# records of one exchange and code are rejected earlier, by the industry step.
+@pytest.mark.parametrize("agree", [True, False])
+def test_two_records_of_one_instrument_in_one_apply(env, agree):
+    with env() as db:
+        cap, rec = observation(kind="ipo", listing_date=D - timedelta(days=10))
+        cap2, rec2 = observation(
+            kind="stock",
+            exchange="TPEx",
+            listing_date=rec.listing_date if agree else D - timedelta(days=5),
+        )
+        instrument = Instrument(
+            symbol="AAA", name="Alpha", exchange="TWSE", market="TW"
+        )
+        instrument.instrument_type = "ipo"
+        db.add(instrument)
+        db.flush()
+
+        def run():
+            return pipeline._ensure_official_groups(
+                db,
+                [rec, rec2],
+                {("TWSE", "AAA"): instrument, ("TPEx", "AAA"): instrument},
+                date(1990, 1, 1),
+                date(2026, 12, 31),
+                payloads=[cap, cap2],
+                observed_now=datetime(2027, 1, 1),
+                previous_listing_dates={},
+            )
+
+        if agree:
+            result = run()
+            assert [p[1:] for p in periods(db, "newlisting")] == [
+                (D, D + timedelta(days=50), f"{OFFICIAL}; exchange=TWSE")
+            ]
+            assert [r["action"] for r in result["newlisting"]["observations"]] == [
+                "opened",
+                "duplicate_record",
+            ]
+        else:
+            with pytest.raises(
+                sources.OfficialDataError,
+                match="conflicting newlisting records for one instrument: TPEx AAA",
+            ):
+                run()
+            assert periods(db, "newlisting") == []
+
+
+def _two_rows(db):
+    return list(
+        db.scalars(
+            select(GroupMembership)
+            .where(GroupMembership.group_id == HOT)
+            .order_by(GroupMembership.valid_from)
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "conflict,match",
+    [
+        ("same_day", "closed newlisting period"),
+        # Issue #848 scope 5: every period error names the instrument.
+        ("overlap", "overlapping official newlisting membership periods: TWSE AAA"),
+        ("inverted", "future or inverted newlisting membership period: TWSE AAA"),
+        ("group", "canonical newlisting history identity conflict: TWSE AAA"),
+        ("exchange", "official newlisting membership exchange conflict: TWSE AAA"),
+        ("etf", "closed newlisting period"),
+    ],
+)
+def test_revised_listing_date_still_rejects_real_conflicts(env, conflict, match):
+    with env() as db:
+        apply(db, *observation(kind="ipo", listing_date=D - timedelta(days=10)))
+        day = D + timedelta(days=1)
+        kind = "stock"
+        if conflict == "same_day":
+            day = D
+        elif conflict == "overlap":
+            row = _two_rows(db)[0]
+            db.add(
+                GroupMembership(
+                    group_id=HOT,
+                    instrument_id=row.instrument_id,
+                    valid_from=D - timedelta(days=1),
+                    valid_to=D,
+                    role="member",
+                    confidence=1.0,
+                    source=row.source,
+                )
+            )
+            db.flush()
+        elif conflict == "inverted":
+            _two_rows(db)[0].valid_to = D - timedelta(days=1)
+            db.flush()
+        elif conflict == "group":
+            db.get(ThemeGroup, HOT).name = "Other"
+            db.flush()
+        elif conflict == "exchange":
+            _two_rows(db)[0].source = f"{OFFICIAL}; exchange=TPEx"
+            db.flush()
+        else:
+            kind = "etf"
+        before = snapshot(db)
+        with pytest.raises(sources.OfficialDataError, match=match):
+            apply(
+                db,
+                *observation(kind=kind, day=day, listing_date=date(2022, 12, 14)),
+            )
+        assert snapshot(db) == before
+
+
+def one_stock_batch(day, listing, *, snapshot=True):
+    cap = sources.capture_payload(
+        "tpex",
+        sources.TPEX_LISTED_ENDPOINT,
+        {"symbol": "AAA", "day": day.isoformat(), "listing": listing.isoformat()},
+        day.isoformat(),
+        collected_at=datetime.combine(day, datetime.min.time()) + timedelta(hours=1),
+    )
+    rec = sources.InstrumentRecord(
+        "AAA",
+        "Alpha",
+        exchange="TPEx",
+        instrument_type="stock",
+        industry="24",
+        listing_date=listing,
+        payload_sha256=cap.sha256,
+    )
+    index = sources.InstrumentRecord(
+        "TAIEX", "Index", instrument_type="index", payload_sha256=cap.sha256
+    )
+    bars = [
+        sources.BarRecord(
+            r.symbol,
+            day,
+            100,
+            101,
+            99,
+            100,
+            1000,
+            100000,
+            exchange=r.exchange,
+            payload_sha256=cap.sha256,
+            turnover_status="available",
+        )
+        for r in (rec, index)
+    ]
+    return sources.OfficialBatch(
+        instruments=[rec, index], bars=bars, payloads=[cap], snapshot_feeds=snapshot
+    )
+
+
+# Issue #848 review 7015184779: the daily catchup (a historical batch with
+# today's lists) runs before the day's collect; it must not adopt the revised
+# listing date, or the day's collect no longer sees the revision and fails.
+def test_catchup_before_the_daily_keeps_the_revision_visible(env, monkeypatch):
+    first, catchup, today = D - timedelta(days=2), D - timedelta(days=1), D
+    old, new = first - timedelta(days=10), first - timedelta(days=5)
+
+    def collect(day, batch, taipei_today):
+        monkeypatch.setattr(pipeline, "taipei_today", lambda: taipei_today)
+        return pipeline.collect(day, adapter=SimpleNamespace(fetch=lambda *_: batch))
+
+    opened = collect(first, one_stock_batch(first, old), first)
+    assert opened["status"] == "success", opened
+    caught = collect(catchup, one_stock_batch(catchup, new, snapshot=False), today)
+    assert caught["status"] == "success", caught
+    daily = collect(today, one_stock_batch(today, new), today)
+    assert daily["status"] == "success", daily
+    receipt = next(
+        r
+        for r in daily["industry_membership_observations"]["newlisting"]["observations"]
+        if r.get("symbol") == "AAA"
+    )
+    assert receipt["action"] == "expiry_listing_date_revised"
+    assert receipt["listing_date_revision"]["previous_listing_date"] == old.isoformat()
+    with env() as db:
+        assert db.scalar(select(Instrument.listing_date)) == new
+        assert [p[1:3] for p in periods(db, "newlisting")] == [
+            (first, new + timedelta(days=60))
+        ]

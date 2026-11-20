@@ -242,6 +242,188 @@ def test_a_run_cancelled_by_a_newer_one_is_no_ci_result(mon: Harness) -> None:
     ]
 
 
+# PR #842's head 1db353cd as gh pr view --json statusCheckRollup read it on 2026-11-19
+# (#843): run 44524775078 (the higher id) was cancelled by concurrency, its required
+# passed for the other run; run 44524774753 went on, with no required listed yet.
+PR842 = json.loads(
+    (
+        ROOT / "backend" / "tests" / "fixtures" / "ci_runs" / "pr842_1db353cd.json"
+    ).read_text(encoding="utf-8")
+)["check_runs"]
+PR842_CANCELLED, PR842_KEPT = 44524775078, 44524774753
+
+
+def _pr842(runs=None, done: str | None = None, swap: bool = False) -> list[dict]:
+    """PR #842's rollup in gh's shape. runs keeps only those run ids; done finishes the
+    kept run (its jobs SUCCESS) with a required of that conclusion; swap exchanges the
+    two run ids (the lower id cancelled)."""
+    ids = {PR842_CANCELLED: PR842_KEPT, PR842_KEPT: PR842_CANCELLED} if swap else {}
+    rows = [dict(c) for c in PR842 if not runs or c["run"] in runs]
+    if done:
+        for c in rows:
+            if c["run"] == PR842_KEPT and c["status"] != "COMPLETED":
+                c.update(status="COMPLETED", conclusion="SUCCESS")
+        rows.append(
+            {
+                "name": "required",
+                "run": PR842_KEPT,
+                "status": "COMPLETED",
+                "conclusion": done,
+                "workflowName": "CI",
+            }
+        )
+    return [
+        {
+            "name": c["name"],
+            "workflowName": c["workflowName"],
+            "status": c["status"],
+            "conclusion": c["conclusion"],
+            "detailsUrl": CI_RUN.format(ids.get(c["run"], c["run"]), i),
+        }
+        for i, c in enumerate(rows)
+    ]
+
+
+def _of(row: dict, run: int) -> bool:
+    return f"/runs/{run}/" in row["detailsUrl"]
+
+
+def _late_cancel(done: str | None = None) -> list[dict]:
+    """PR #845 review 7010099051 建議 2: the run cancelled once only required was left;
+    its other jobs passed and its required is CANCELLED."""
+    rows = _pr842(done=done)
+    for c in rows:
+        if _of(c, PR842_CANCELLED):
+            c["conclusion"] = "CANCELLED" if c["name"] == "required" else "SUCCESS"
+    return rows
+
+
+def _timed_out() -> list[dict]:
+    """PR #845 review 7010099051 建議 1 and 3: a job of the kept run passed its
+    timeout-minutes, which GitHub ends CANCELLED (run 40374422949's verify, 2026-10-26),
+    and the kept run's required failed."""
+    rows = _pr842(done="FAILURE")
+    for c in rows:
+        if _of(c, PR842_KEPT) and c["name"] == "docker":
+            c["conclusion"] = "CANCELLED"
+    return rows
+
+
+def _gate_rerun() -> list[dict]:
+    """PR #845 review 7010099051 建議 4: required failed and was re-run in the same run;
+    the queued re-run (no time yet) is listed before the failure."""
+    rows = _pr842(runs={PR842_KEPT}, done="FAILURE")
+    failed = rows.pop()
+    failed["startedAt"] = "2026-11-19T12:40:00Z"
+    queued = {**failed, "status": "QUEUED", "conclusion": ""}
+    queued["startedAt"] = "0001-01-01T00:00:00Z"
+    return rows + [queued, failed]
+
+
+def _patrol_ci(mon: Harness, at: int) -> str:
+    out = mon.run(
+        "patrol.sh",
+        "--session-id",
+        "coord",
+        "--terminal",
+        "term_coord",
+        PATROL_NOW=str(at),
+    ).stdout
+    found = re.search(r"PR #324 ci=(\S+)", out)
+    assert found, out
+    return found.group(1)
+
+
+def test_a_run_concurrency_cancelled_with_a_higher_id_is_no_ci_result(
+    mon: Harness,
+) -> None:
+    """#843 AC-1, PR #842 on 2026-11-19: the cancelled run had the higher id and its
+    required passed (#421), so monitor event 3830 said "CI success" while the kept run
+    was still going. No CI event and ci=pending until the kept run's required is done;
+    then the kept run's result."""
+    pr = _pr()
+    pr["statusCheckRollup"] = _pr842()
+    mon.answer("gh_pr_list", [pr])
+    _monitor(mon)
+    assert not [i for i in _ids(mon) if i.startswith("ci:")]
+    assert _patrol_ci(mon, NOW + 30) == "pending"
+    pr["statusCheckRollup"] = _pr842(done="FAILURE")
+    mon.answer("gh_pr_list", [pr])
+    _monitor(mon, at=NOW + 60)
+    assert [i for i in _ids(mon) if i.startswith("ci:")] == [
+        f"ci:324:{'c' * 12}:{PR842_KEPT}:failure"
+    ]
+    assert _patrol_ci(mon, NOW + 90) == "failure"
+
+
+@pytest.mark.parametrize(
+    ("rollup", "result", "ci"),
+    [
+        (lambda: _pr842(), None, "pending"),
+        (lambda: _pr842(done="SUCCESS"), (str(PR842_KEPT), "success"), "success"),
+        (lambda: _pr842(done="FAILURE"), (str(PR842_KEPT), "failure"), "failure"),
+        # #843 AC-2: the lower id cancelled, the higher one kept, as before the fix.
+        (
+            lambda: _pr842(done="SUCCESS", swap=True),
+            (str(PR842_CANCELLED), "success"),
+            "success",
+        ),
+        (lambda: _pr842(swap=True), None, "pending"),
+        # #843 AC-2: one run only.
+        (
+            lambda: _pr842(runs={PR842_KEPT}, done="SUCCESS"),
+            (str(PR842_KEPT), "success"),
+            "success",
+        ),
+        (
+            lambda: _pr842(runs={PR842_KEPT}, done="FAILURE"),
+            (str(PR842_KEPT), "failure"),
+            "failure",
+        ),
+        (lambda: _pr842(runs={PR842_KEPT}), None, "pending"),
+        # Every run cancelled: the newest one's passed required is no success.
+        (
+            lambda: _pr842(runs={PR842_CANCELLED}),
+            (str(PR842_CANCELLED), "cancelled"),
+            "failure",
+        ),
+        (_late_cancel, None, "pending"),
+        (
+            lambda: _late_cancel(done="SUCCESS"),
+            (str(PR842_KEPT), "success"),
+            "success",
+        ),
+        # Both runs look cancelled: the one whose required failed is named.
+        (_timed_out, (str(PR842_KEPT), "failure"), "failure"),
+        (_gate_rerun, None, "pending"),
+    ],
+    ids=[
+        "kept-going",
+        "kept-success",
+        "kept-failure",
+        "lower-id-cancelled-success",
+        "lower-id-cancelled-going",
+        "one-run-success",
+        "one-run-failure",
+        "one-run-going",
+        "all-cancelled",
+        "late-cancel-kept-going",
+        "late-cancel-kept-success",
+        "kept-timed-out-failure",
+        "required-rerun-queued",
+    ],
+)
+def test_the_ci_result_and_ci_skip_a_run_concurrency_cancelled(
+    rollup, result, ci
+) -> None:
+    """#843: event_queue.ci_result (the CI event) and check_state (patrol's ci=) read the
+    run concurrency kept, whichever id is higher."""
+    eq = _eq()
+    rows = rollup()
+    assert eq.ci_result(rows) == result
+    assert sys.modules["coordinator_json"].check_state(rows) == ci
+
+
 def test_the_comment_cursor_moves_only_with_what_was_read(mon: Harness) -> None:
     _monitor(mon)
     first = [c for c in mon.calls("gh") if c.startswith("api ")][0]
@@ -804,20 +986,39 @@ def test_one_monitor_at_a_time(mon: Harness) -> None:
 
 
 def test_compaction_hook_logs_each_compaction_time(tmp_path) -> None:
-    """AC-4: <session>.log keeps one time per compaction next to the count."""
+    """AC-4: <session>.log keeps one time per compaction next to the count, and which
+    conversation compacted (#811): a subagent's input has the parent's session_id
+    with agent_id and agent_type (the inputs as measured on Claude Code 2.1.325)."""
     h = Harness(tmp_path)
     hook = (h.ops / "compact_hook.sh").as_posix()
-    for at, trigger in ((NOW, "auto"), (NOW + 90, "manual")):
+    base = {
+        "session_id": "sess-9",
+        "transcript_path": "C:\\x\\projects\\C--proj\\sess-9.jsonl",
+        "cwd": "C:\\proj",
+        "prompt_id": "p-1",
+        "hook_event_name": "PreCompact",
+        "custom_instructions": None,
+    }
+    sub = {"agent_id": "a345b3b2b5e3588b8", "agent_type": "general-purpose"}
+    for at, extra in (
+        (NOW, {**sub, "trigger": "auto"}),
+        (NOW + 90, {"trigger": "manual"}),
+        (NOW + 120, {"agent_id": "a/b", "agent_type": "x y", "trigger": "auto"}),
+    ):
         result = h.run_bash(
-            f'printf \'%s\' \'{{"session_id":"sess-9","trigger":"{trigger}"}}\' | bash "$1"',
+            'printf \'%s\' "$2" | bash "$1"',
             hook,
+            json.dumps({**base, **extra}),
             COMPACT_HOOK_NOW=str(at),
         )
         assert result.returncode == 0, result.stdout + result.stderr
     folder = h.data / "logs" / "compactions"
-    assert (folder / "sess-9.count").read_text(encoding="utf-8") == "2\n"
+    assert (folder / "sess-9.count").read_text(encoding="utf-8") == "3\n"
     assert (folder / "sess-9.log").read_text(encoding="utf-8") == (
-        "2026-10-25T12:00:00Z trigger=auto\n2026-10-25T12:01:30Z trigger=manual\n"
+        "2026-10-25T12:00:00Z trigger=auto agent_id=a345b3b2b5e3588b8"
+        " agent_type=general-purpose\n"
+        "2026-10-25T12:01:30Z trigger=manual agent_id=none\n"
+        "2026-10-25T12:02:00Z trigger=auto agent_id=unknown agent_type=unknown\n"
     )
 
 
@@ -1121,10 +1322,18 @@ def _section(text: str, heading: str) -> str:
 
 def test_the_coordinator_keeps_no_polling_of_its_own() -> None:
     """AC-2: the handbook's 統籌 session (with the handoff text) and 無人值守運作 no
-    longer tell the coordinator to keep a GitHub watch or a patrol cron."""
+    longer tell the coordinator to keep a GitHub watch or a patrol cron. The handoff text
+    is in 開啟命令 of the reference since #850, so that section is read too."""
     text = (ROOT / "docs" / "COORDINATOR.md").read_text(encoding="utf-8")
-    for heading in ("統籌 session", "無人值守運作"):
-        section = _section(text, heading)
+    reference = (ROOT / "docs" / "ops" / "COORDINATOR_REFERENCE.md").read_text(
+        encoding="utf-8"
+    )
+    sections = {
+        heading: _section(text, heading) for heading in ("統籌 session", "無人值守運作")
+    }
+    sections["開啟命令"] = _section(reference, "開啟命令")
+    assert "接手文固定如下" in sections["開啟命令"]
+    for heading, section in sections.items():
         for word in ("監看", "巡檢 cron", "定時巡檢", "cron"):
             assert word not in section, (heading, word)
         assert "patrol.sh" in section
@@ -1457,6 +1666,31 @@ def test_the_comment_tool_refuses_bad_arguments_before_gh(
     result = _comment_tool(mon, *args, body=body)
     assert result.returncode == 64, result.stdout + result.stderr
     assert result.stdout == "" and mon.calls("gh") == []
+
+
+def test_the_comment_tool_refuses_an_unmasked_fugle_quote_before_gh(
+    mon: Harness,
+) -> None:
+    """#834 AC-2: a body with a Fugle quote exits 65 without gh and without the quote in
+    what it prints; the masked body is posted."""
+    mon.answer("gh_comments", {"id": 77, "html_url": COMMENT_URL})
+    mon.write("gh_comments.hook", 'cat >"$FAKE_DIR/posted.json"\n')
+    raw = "回報：dry-run\n\n2618 觸及規則進場價 47.75（10:03 前後；10:02:41 成交 47.80）\n"
+    result = _comment_tool(mon, "440", body=raw)
+    assert result.returncode == 65, result.stdout + result.stderr
+    assert result.stdout == "" and mon.calls("gh") == []
+    assert ":3: template:trade" in result.stderr and "47.80" not in result.stderr
+    masked = raw.replace("10:02:41 成交 47.80", "<時間> 成交 <價>")
+    result = _comment_tool(mon, "440", body=masked)
+    assert result.returncode == 0, result.stdout + result.stderr
+    posted = json.loads((mon.fake / "posted.json").read_text(encoding="utf-8"))
+    assert posted["body"].startswith(masked.rstrip())
+    # The check cannot run (no quote_guard.py): refused as well, exit 2.
+    (mon.ops / "quote_guard.py").unlink()
+    result = _comment_tool(mon, "440", body=masked)
+    assert result.returncode == 2 and mon.calls("gh") == [
+        "api repos/YiCheng0608/stock-lab/issues/440/comments --method POST --input -"
+    ]
 
 
 def test_a_message_that_points_to_the_setup_heading_names_it_word_for_word() -> None:

@@ -1,0 +1,32 @@
+{
+  "note": "Unmasked Fugle quotes (#834; docs/DATA_SOURCES.md 盤中報價): the one copy of the patterns tools/ops/quote_guard.py and tools/ops/agent_guard.cjs both read. Each regex is written so Python re and JavaScript RegExp read it the same: [0-9] rather than \\d, no named groups, fixed-width lookbehind only. templates: the pieces of backend/worker/intraday.py TEMPLATES that carry a Fugle value once filled in, keyed by the TEMPLATES key or the field ({open}); a masked value (<價>, <時間>) holds no digit and passes, and so do the rule levels (觸及規則進場價 X, 停損 X, 目標一 X), which are ours, a count (無成交 N, 成交 N 股／張／筆) and a daily price written 開盤價 X. fields: the fields of Fugle's answer backend/worker/fugle.py reads, as JSON keys, Python keywords or key=value (field_head after the name); the value counts when it is a number (scalar) or a [..], {..} or (..) with any digit inside (balanced across lines, quotes skipped; one that never closes ends at its line's end). repr: a fugle.Quote as Python prints it, from open to its closing parenthesis on the line: any key=number or a datetime with a number. record: a JSON line, bare or after --- <word>; message: its text (a --- message record, or a line of the day's jsonl) is checked with the templates, \\u escapes decoded, and a --- message line that is no record hits too; levels: the per-stock entries of its levels object whose high, low or last is a number (PR #812 _record_levels); the rule levels inside each entry's own levels list pass. backend/tests/test_quote_guard.py binds templates to TEMPLATES.",
+  "templates": {
+    "trade": "[0-9]{1,2}:[0-9]{2}:[0-9]{2}\\s*成交(?:\\s*[0-9][0-9,]*(?:\\.[0-9]+)?)?|(?<![無未])成交\\s*[0-9][0-9,]*(?:\\.[0-9]+)?(?![0-9,.]|\\s*[股張筆])",
+    "open": "開盤\\s*[0-9][0-9,]*(?:\\.[0-9]+)?",
+    "bid": "委買\\s*[0-9][0-9,]*(?:\\.[0-9]+)?",
+    "ask": "委賣\\s*[0-9][0-9,]*(?:\\.[0-9]+)?"
+  },
+  "fields": [
+    "lastTrade",
+    "lastPrice",
+    "highPrice",
+    "lowPrice",
+    "openPrice",
+    "closePrice",
+    "bids",
+    "asks",
+    "lastUpdated",
+    "last_price"
+  ],
+  "field_head": "[\"']?\\s*[:=]\\s*",
+  "scalar": "-?[0-9]",
+  "repr": {
+    "open": "Quote\\(",
+    "value": "[A-Za-z_][A-Za-z0-9_]*=-?[0-9]|datetime\\.datetime\\([^)]*[0-9]"
+  },
+  "record": "^(?:--- [a-z_]+ )?(\\{.*\\})\\s*$",
+  "levels": {
+    "key": "levels",
+    "quotes": ["high", "low", "last"]
+  }
+}

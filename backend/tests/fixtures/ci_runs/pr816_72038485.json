@@ -1,0 +1,167 @@
+{
+  "source": "GET repos/YiCheng0608/stock-lab/commits/72038485/check-runs (PR #816 head, read 2026-11-17, #817)",
+  "workflow": "CI",
+  "check_runs": [
+    {
+      "completedAt": "2026-11-16T10:30:23Z",
+      "conclusion": "CANCELLED",
+      "name": "changes",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:23Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:23Z",
+      "conclusion": "CANCELLED",
+      "name": "pr",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:23Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:23Z",
+      "conclusion": "CANCELLED",
+      "name": "repository",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:23Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:23Z",
+      "conclusion": "CANCELLED",
+      "name": "verify",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:23Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:24Z",
+      "conclusion": "CANCELLED",
+      "name": "backend (${{ matrix.shard }})",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:24Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:24Z",
+      "conclusion": "CANCELLED",
+      "name": "compose",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:24Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:24Z",
+      "conclusion": "CANCELLED",
+      "name": "docker",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:24Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:24Z",
+      "conclusion": "CANCELLED",
+      "name": "frontend",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:24Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:24Z",
+      "conclusion": "CANCELLED",
+      "name": "frontend-image",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:24Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:24Z",
+      "conclusion": "CANCELLED",
+      "name": "suite",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:24Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:29Z",
+      "conclusion": "FAILURE",
+      "name": "required",
+      "run": 43849447761,
+      "startedAt": "2026-11-16T10:30:26Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:31:03Z",
+      "conclusion": "SUCCESS",
+      "name": "changes",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:30:32Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:31:03Z",
+      "conclusion": "SUCCESS",
+      "name": "pr",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:30:32Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:31:31Z",
+      "conclusion": "SUCCESS",
+      "name": "repository",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:30:32Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:30:58Z",
+      "conclusion": "SUCCESS",
+      "name": "verify",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:30:32Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:33:28Z",
+      "conclusion": "SUCCESS",
+      "name": "compose",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:31:05Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:38:34Z",
+      "conclusion": "SUCCESS",
+      "name": "docker",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:31:05Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:32:09Z",
+      "conclusion": "SUCCESS",
+      "name": "frontend-image",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:31:05Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:38:58Z",
+      "conclusion": "SUCCESS",
+      "name": "backend (ops)",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:31:06Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:38:50Z",
+      "conclusion": "SUCCESS",
+      "name": "backend (rest)",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:31:06Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:31:35Z",
+      "conclusion": "SUCCESS",
+      "name": "frontend",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:31:06Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:39:14Z",
+      "conclusion": "SUCCESS",
+      "name": "suite",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:39:00Z"
+    },
+    {
+      "completedAt": "2026-11-16T10:39:18Z",
+      "conclusion": "SUCCESS",
+      "name": "required",
+      "run": 43849450051,
+      "startedAt": "2026-11-16T10:39:16Z"
+    }
+  ]
+}

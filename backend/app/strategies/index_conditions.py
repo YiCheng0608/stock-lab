@@ -3,7 +3,8 @@
 An index-condition strategy is named ``<strategy>_index_<code>`` (kind
 ``<kind>_index_<code>``).  Its rule is the registered strategy's rule, called
 exactly as a canonical run calls it, followed by one condition of
-``CONDITIONS`` on the ``market_bars`` rows of the indexes in ``SERIES``:
+``ALL_CONDITIONS`` (#567's ``CONDITIONS`` and #855's ``OVERNIGHT_CONDITIONS``)
+on the ``market_bars`` rows of the indexes in ``SERIES``:
 
 - the condition holds: the strategy's result, unchanged;
 - it fails: a passed result becomes ``rejected`` with
@@ -49,6 +50,17 @@ The base strategies are fixed (``BASES``: ``breakout_v3`` and ``pullback_v3``),
 not whatever ``REGISTRY`` holds, so a newer registered version does not change
 what run 2759 measured; a run of index conditions alone replays both bases
 as its baselines (``tools/research/backtest_research.py``).
+
+The overnight conditions (#855, ``OVERNIGHT_CONDITIONS`` o1～o6) ask whether
+the list of score date T should be acted on at E, the next Taiwan session:
+they read the US row that closed between the list and E's open
+(``IndexView.overnight_row``: the newest row dated in [T, E), never one dated
+E or later; none in [T, E) is a US holiday and the condition holds).  E comes
+from the Taiwan sessions given to ``IndexHistory`` (``worker.pipeline.
+taiwan_bar_dates``).  Their bases are ``OVERNIGHT_BASES`` (``breakout_v3`` and
+``pullback_v4``, the 08:45 list's), and their judgement is
+``judge_improved``／``judge_edge`` (both fixed before any result), not
+#567's.
 """
 
 from __future__ import annotations
@@ -66,10 +78,16 @@ from . import registry_problems
 from .base import Strategy, StrategyInputs
 from .breakout_v3 import BREAKOUT_V3
 from .pullback_v3 import PULLBACK_V3
+from .pullback_v4 import PULLBACK_V4
 
 # The versions #567 measured (run 2759); see the module docstring.
 BASES: dict[str, Strategy] = {
     strategy.key: strategy for strategy in (BREAKOUT_V3, PULLBACK_V3)
+}
+# The overnight conditions' bases (#855 decision 7018301183): the strategies
+# of the list 08:45 shows (candidate_score_v7), not #567's fixed v3 pair.
+OVERNIGHT_BASES: dict[str, Strategy] = {
+    strategy.key: strategy for strategy in (BREAKOUT_V3, PULLBACK_V4)
 }
 
 # Series key -> (instruments.exchange, instruments.symbol, instrument_type).
@@ -88,6 +106,10 @@ MARKET_INDEX_UNKNOWN = "market_index_unknown"
 # closure next to a weekend is four days (a Friday holiday and a Monday
 # signal date: Thursday), so a week only fires on missing collection.
 US_STALE_DAYS = 7
+# The overnight conditions (#855): read the US row of [T, E), not before T.
+OVERNIGHT_ISSUE = 855
+OVERNIGHT_WINDOW = "newest_us_row_dated_from_signal_date_to_before_next_taiwan_session"
+NEXT_SESSION_UNKNOWN = "next_session_unknown"
 
 
 @dataclass(frozen=True)
@@ -134,12 +156,29 @@ class IndexCondition:
     # True: reads the stock's own market index (MARKET_INDEX), so its state
     # depends on the instrument as well as the date.
     per_market: bool = False
+    issue: int = 567
 
     @property
     def reason(self) -> str:
         return f"index_condition_{self.code}_not_met"
 
     def snapshot(self) -> dict[str, Any]:
+        if self.issue == OVERNIGHT_ISSUE:
+            return {
+                "condition": self.code,
+                "definition": self.definition,
+                "reads": self.reads,
+                "series": list(self.series),
+                "per_market": False,
+                "price_field": "market_bars.close",
+                "us_window": OVERNIGHT_WINDOW,
+                "overnight_return": "close_of_newest_row_over_previous_stored_close_minus_1",
+                "us_market_closed": "condition_holds",
+                "us_stale_days": US_STALE_DAYS,
+                "next_session": "worker.pipeline.taiwan_bar_dates",
+                "missing_policy": "data_incomplete",
+                "failed_reason": self.reason,
+            }
         return {
             "condition": self.code,
             "definition": self.definition,
@@ -186,6 +225,47 @@ class IndexView:
             raise _Incomplete(f"us_{key.lower()}_bar_stale")
         return _window(f"us_{key}", closes, at, count)
 
+    def overnight_row(self, key: str) -> dict[str, Any]:
+        """The US row of ``key`` that closed between the list and the next session's open.
+
+        E is the first Taiwan session after the score date T
+        (``IndexHistory.next_session``).  The row is the newest one dated in
+        [T, E): a US close of date D is in Taipei D + 1 before 09:00, so every
+        row dated before E is known at E's open, and a row dated T − 1 or
+        earlier had closed before T's list (21:30).  A row dated E or later is
+        never read.  ``return`` is its close over the stored row before it,
+        minus 1; ``rows`` counts the rows in [T, E) (more than one across a
+        Taiwan holiday, the newest decides).  No row in [T, E) while a later
+        row is stored: the US market was closed, ``date`` and ``return`` are
+        None.  No row in [T, E) and none later: not collected yet
+        (``us_<key>_overnight_pending``).
+        """
+
+        entry = self.history.next_session(self.session)
+        dates, closes, _ = self.history.series(key)
+        name = key.lower()
+        low = bisect.bisect_left(dates, self.session)
+        high = bisect.bisect_left(dates, entry)
+        if high == low:
+            if high < len(dates):
+                return {"entry": entry, "date": None, "return": None, "rows": 0}
+            raise _Incomplete(f"us_{name}_overnight_pending")
+        at = high - 1
+        if at == 0:
+            raise _Incomplete(f"us_{name}_closes_insufficient")
+        if (dates[at] - dates[at - 1]).days > US_STALE_DAYS:
+            raise _Incomplete(f"us_{name}_bar_stale")
+        previous, close = closes[at - 1], closes[at]
+        if not all(_finite(value) and float(value) > 0 for value in (previous, close)):
+            raise _Incomplete(f"us_{name}_close_missing_or_non_finite")
+        return {
+            "entry": entry,
+            "date": dates[at],
+            "previous_date": dates[at - 1],
+            "return": float(close) / float(previous) - 1.0,
+            "rows": high - low,
+        }
+
     def market_index(self) -> str:
         key = MARKET_INDEX.get(self.exchange or "")
         if key is None:
@@ -193,10 +273,10 @@ class IndexView:
         return key
 
     def result(self, code: str) -> RuleEvaluation:
-        """``CONDITIONS[code]`` on this view (memoized: every stock of a market shares it)."""
+        """``ALL_CONDITIONS[code]`` on this view (memoized: every stock of a market shares it)."""
 
         if code not in self._results:
-            item = CONDITIONS[code]
+            item = ALL_CONDITIONS[code]
             try:
                 held = item.holds(self)
             except _Incomplete as missing:
@@ -363,16 +443,89 @@ CONDITIONS: dict[str, IndexCondition] = {
 }
 
 
+# ---- the overnight conditions (#855) ----
+#
+# Fixed before any result was read (#855 提問 7018248685, decision
+# 7018301183): the score date T's list is not acted on at E (the next Taiwan
+# session) when the US close of the night before E moved past a threshold.
+# r is ``IndexView.overnight_row``'s return; a US market closed through
+# [T, E) has no overnight close and the condition holds.  The bounds are
+# inclusive on the side that rejects (r ≤ −2 % rejects, r ≥ +1 % rejects).
+
+
+def _overnight(key: str, threshold: float, rejects_at_or_below: bool):
+    def holds(view: IndexView) -> bool:
+        value = view.overnight_row(key)["return"]
+        if value is None:
+            return True
+        return value > threshold if rejects_at_or_below else value < threshold
+
+    return holds
+
+
+def _overnight_condition(
+    code: str, key: str, threshold: float, below: bool
+) -> IndexCondition:
+    side = "gt" if below else "lt"
+    bound = f"{'m' if threshold < 0 else 'p'}{abs(threshold) * 100:g}pct"
+    label = "−" if threshold < 0 else "+"
+    held = (
+        f"> {label}{abs(threshold) * 100:g}%"
+        if below
+        else f"< {label}{abs(threshold) * 100:g}%"
+    )
+    return IndexCondition(
+        code,
+        f"{key.lower()}_overnight_return_{side}_{bound}",
+        f"隔夜 {key} 漲跌 {held}（不成立：T+1 不進場）",
+        f"{key} newest row in [T, E) and the row before it",
+        (key,),
+        _overnight(key, threshold, below),
+        note_zh="美股依 #547 只顯示；採用要使用者另外決定。",
+        issue=OVERNIGHT_ISSUE,
+    )
+
+
+OVERNIGHT_THRESHOLDS: tuple[tuple[str, str, float, bool], ...] = (
+    ("o1", "SOX", -0.02, True),
+    ("o2", "SOX", -0.01, True),
+    ("o3", "SOX", 0.01, False),
+    ("o4", "SPX", -0.02, True),
+    ("o5", "SPX", -0.01, True),
+    ("o6", "SPX", 0.01, False),
+)
+OVERNIGHT_CONDITIONS: dict[str, IndexCondition] = {
+    code: _overnight_condition(code, key, threshold, below)
+    for code, key, threshold, below in OVERNIGHT_THRESHOLDS
+}
+ALL_CONDITIONS: dict[str, IndexCondition] = {**CONDITIONS, **OVERNIGHT_CONDITIONS}
+
+
+def bases_of(code: str) -> dict[str, Strategy]:
+    """The base strategies a condition is measured on (#567's or #855's)."""
+
+    return OVERNIGHT_BASES if code in OVERNIGHT_CONDITIONS else BASES
+
+
 class IndexHistory:
     """Stored rows of the ``SERIES`` indexes, plus the score date and instrument being written.
 
     ``rows[key]`` maps a date to ``(close, contract_month)``; a series missing
     from ``rows`` has no rows (every condition on it is data_incomplete).
+    ``sessions`` are the Taiwan sessions (``worker.pipeline.taiwan_bar_dates``)
+    that give an overnight condition its E (``next_session``); #567's
+    conditions do not read them, and without them an overnight condition
+    raises instead of guessing E.
     """
 
     def __init__(
-        self, rows: Mapping[str, Mapping[date, tuple[float | None, str | None]]]
+        self,
+        rows: Mapping[str, Mapping[date, tuple[float | None, str | None]]],
+        sessions: Iterable[date] | None = None,
     ):
+        # The Taiwan sessions (``worker.pipeline.taiwan_bar_dates``): E of the
+        # overnight conditions.  None: an overnight condition raises.
+        self.sessions = None if sessions is None else sorted(set(sessions))
         self._series: dict[
             str, tuple[list[date], list[float | None], list[str | None]]
         ] = {}
@@ -393,6 +546,32 @@ class IndexHistory:
         self, key: str
     ) -> tuple[list[date], list[float | None], list[str | None]]:
         return self._series[key]
+
+    def next_session(self, day: date) -> date:
+        """E: the first Taiwan session after ``day`` (``next_session_unknown`` after the last)."""
+
+        if self.sessions is None:
+            raise RuntimeError(
+                "an overnight condition needs the Taiwan sessions "
+                "(IndexHistory(rows, sessions=worker.pipeline.taiwan_bar_dates))"
+            )
+        at = bisect.bisect_right(self.sessions, day)
+        if at == len(self.sessions):
+            raise _Incomplete(NEXT_SESSION_UNKNOWN)
+        return self.sessions[at]
+
+    def overnight_rows(
+        self, key: str, days: Iterable[date]
+    ) -> dict[date, dict[str, Any]]:
+        """``IndexView.overnight_row`` of each of ``days`` (the report); missing: its reason."""
+
+        result = {}
+        for day in days:
+            try:
+                result[day] = IndexView(self, day, None).overnight_row(key)
+            except _Incomplete as missing:
+                result[day] = {"missing": missing.reason}
+        return result
 
     def set_session(self, day: date | None) -> None:
         self.session = day
@@ -485,17 +664,17 @@ def evaluate_with_condition(
 
 
 def condition_strategy(strategy_key: str, code: str, history: IndexHistory) -> Strategy:
-    """``BASES[strategy_key]`` plus the condition ``code``, under its own name and kind."""
+    """``bases_of(code)[strategy_key]`` plus the condition ``code``, under its own name and kind."""
 
-    base = BASES[strategy_key]
-    item = CONDITIONS[code]
+    base = bases_of(code)[strategy_key]
+    item = ALL_CONDITIONS[code]
     config: dict[str, Any] = copy.deepcopy(dict(base.config))
     config["name"] = f"{strategy_key}_index_{code}"
     config["kind"] = f"{base.kind}_index_{code}"
     config["index_condition"] = {
         "base_strategy": strategy_key,
         "base_version": base.version,
-        "issue": 567,
+        "issue": item.issue,
         **item.snapshot(),
     }
     base_rule = base.rule
@@ -535,6 +714,35 @@ def with_conditions(
 
 def all_conditions() -> list[tuple[str, str]]:
     return [(strategy_key, code) for strategy_key in BASES for code in CONDITIONS]
+
+
+def overnight_conditions() -> list[tuple[str, str]]:
+    """The 12 groups of #855: each overnight condition on each of its bases."""
+
+    return [
+        (strategy_key, code)
+        for strategy_key in OVERNIGHT_BASES
+        for code in OVERNIGHT_CONDITIONS
+    ]
+
+
+def baselines_of(items: Iterable[tuple[str, str]]) -> dict[str, Strategy]:
+    """The bases a run of the condition strategies ``items`` replays.
+
+    #567's conditions: ``BASES`` (both, as run 2759); #855's overnight ones:
+    ``OVERNIGHT_BASES``.  A run takes one or the other: mixing them puts
+    ``pullback_v3`` and ``pullback_v4`` (one kind) in one registry, which
+    ``registry_problems`` refuses (exit 2), so this does not pick between
+    them.
+    """
+
+    chosen = list(items)
+    result: dict[str, Strategy] = {}
+    if any(code in CONDITIONS for _, code in chosen):
+        result |= BASES
+    if any(code in OVERNIGHT_CONDITIONS for _, code in chosen):
+        result |= OVERNIGHT_BASES
+    return result
 
 
 # ---- the rule a condition passes to be proposed (fixed before any result) ----
@@ -608,3 +816,101 @@ def proposable(exploration: Comparison, validation: Comparison) -> bool:
         judge_exploration(exploration) == "selected"
         and judge_validation(validation) == "not_reversed"
     )
+
+
+# ---- #855: the overnight conditions' two judgements (fixed before any result) ----
+#
+# 提問 7018248685 §4 and decision 7018301183 §3.  Per strategy × condition ×
+# segment, the condition version against its baseline:
+#
+# (a) the mean T+20 simulated return of the run's tracking (net of its 30 bps
+#     round trip, ``app.tracking``); (b) the mean of each signal's (a) less
+#     the same signal date's population mean (evidence.md 共同口徑: T+1 open
+#     with 5 bps to T+20 close, less the same 30 bps).
+# - improved: judgeable, and the version's (a) and (b) both strictly above the
+#   baseline's;
+# - edge: improved, and the version's (a) at the 共同口徑 58.5 bps round trip
+#   and its (b) both above 0.
+# Both segments must pass.  Short of the sample floor a segment cannot judge
+# (``insufficient``), which is not a pass.
+
+OVERNIGHT_MIN_REMOVED = 30
+OVERNIGHT_MIN_REMOVED_DAYS = 5
+OVERNIGHT_MIN_T20 = 100
+TRACKING_COST = 0.003
+COMMON_COST = 0.00585
+OVERNIGHT_RULE_ZH = (
+    "改善：條件濾掉的 baseline 可行動訊號 ≥ 30 筆、分布在 ≥ 5 個訊號日，研究版本 T+20 可用報酬 ≥ 100 筆，"
+    "且研究版本的 (a) 扣成本 T+20 模擬報酬平均與 (b) 對母體超額平均都嚴格高於 baseline。"
+    "有優勢：先符合改善，且研究版本的 (a)（改扣共同口徑來回 58.5 bps）與 (b) 都 > 0。"
+    "探索段與驗證段都要過；門檻不足記「無法判定」，不算通過。"
+)
+
+
+@dataclass(frozen=True)
+class OvernightComparison:
+    """One segment of #855: a condition version against its baseline."""
+
+    removed: int  # baseline actionable signals the condition rejected
+    removed_days: int  # their distinct signal dates
+    t20_n: int  # usable T+20 returns of the condition version
+    net_mean: float | None  # (a) of the version, tracking's 30 bps
+    baseline_net_mean: float | None
+    excess_mean: float | None  # (b) of the version
+    baseline_excess_mean: float | None
+
+    @property
+    def common_net_mean(self) -> float | None:
+        """(a) at the 共同口徑 round trip (58.5 bps) instead of tracking's 30 bps."""
+
+        if self.net_mean is None:
+            return None
+        return self.net_mean + TRACKING_COST - COMMON_COST
+
+    @property
+    def judgeable(self) -> bool:
+        return (
+            self.removed >= OVERNIGHT_MIN_REMOVED
+            and self.removed_days >= OVERNIGHT_MIN_REMOVED_DAYS
+            and self.t20_n >= OVERNIGHT_MIN_T20
+            and None
+            not in (
+                self.net_mean,
+                self.baseline_net_mean,
+                self.excess_mean,
+                self.baseline_excess_mean,
+            )
+        )
+
+
+def judge_improved(item: OvernightComparison) -> str:
+    """``improved``, ``not_improved`` or ``insufficient``."""
+
+    if not item.judgeable:
+        return "insufficient"
+    better = (
+        item.net_mean > item.baseline_net_mean
+        and item.excess_mean > item.baseline_excess_mean
+    )
+    return "improved" if better else "not_improved"
+
+
+def judge_edge(item: OvernightComparison) -> str:
+    """``edge``, ``no_edge`` or ``insufficient`` (improved, and (a) at 58.5 bps and (b) > 0)."""
+
+    verdict = judge_improved(item)
+    if verdict != "improved":
+        return "insufficient" if verdict == "insufficient" else "no_edge"
+    return "edge" if item.common_net_mean > 0 and item.excess_mean > 0 else "no_edge"
+
+
+def overnight_verdict(
+    exploration: OvernightComparison, validation: OvernightComparison
+) -> dict[str, bool]:
+    """Both segments: ``improved`` and ``edge``."""
+
+    return {
+        "improved": judge_improved(exploration) == "improved"
+        and judge_improved(validation) == "improved",
+        "edge": judge_edge(exploration) == "edge" and judge_edge(validation) == "edge",
+    }

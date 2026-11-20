@@ -67,6 +67,11 @@ SCRIPTS = (
     "memory_check.py",
     # #727: the slots patrol.sh prints
     "slots.py",
+    # #804: the overview page of patrol.sh --overview
+    "overview.py",
+    # #834: comment.sh checks the body for Fugle quotes first
+    "quote_guard.py",
+    "quote_patterns.json",
 )
 # The sandbox memory directory every run gets (STOCK_MEMORY_DIR, #705): one memory, indexed,
 # no backticked path, so memory_check.py passes without asking git.
@@ -190,6 +195,9 @@ case "$1 $2" in
       # patrol.sh's open Issues and PRs with their comments (#401); with
       # gh_questions_partial the answer is printed and the exit is 1, as gh does for a
       # partial answer (data and errors, #727)
+      # patrol.sh --overview's backfill of the threads over a page (#804)
+      *OverviewBackfill*) [ -f "$d/gh_backfill_fails" ] && exit 1
+        cat "$d/gh_backfill.json" 2>/dev/null || echo '{}' ;;
       *OpenQuestions*) [ -f "$d/gh_questions_fails" ] && exit 1
         cat "$d/gh_questions.json" 2>/dev/null || echo '{}'
         if [ -f "$d/gh_questions_partial" ]; then exit 1; fi ;;
@@ -662,7 +670,10 @@ def dispatch(h: Harness) -> Harness:
             }
         ),
     )
-    h.answer("orca_terminal_read", _ok({"terminal": {"tail": ["❯ 你好"]}}))
+    h.answer(
+        "orca_terminal_read",
+        _ok({"terminal": {"tail": ["❯ 你好"], "source": "screen"}}),
+    )
     task = h.root / "task.md"
     # Over the old 30,000-byte limit, with quotes, $, backticks and CRLF line ends: none of
     # it reaches the terminal, only the path does (#315).
@@ -681,6 +692,13 @@ def dispatch(h: Harness) -> Harness:
 def _dispatch(h: Harness, task: str | None = None) -> subprocess.CompletedProcess:
     return h.run(
         "dispatch.sh", "282", "dryrun", "--task-file", task or h.task.as_posix()
+    )
+
+
+def _settings(folder: str) -> str:
+    """claude's --settings for the task directory (#835), as dispatch.sh writes it."""
+    return json.dumps(
+        {"permissions": {"additionalDirectories": [folder]}}, separators=(",", ":")
     )
 
 
@@ -715,8 +733,15 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
         "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282"
         " CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude"
         " --model claude-opus-5-5 --effort medium"
-        f' --add-dir "{dispatch.root.as_posix()}" --json'
+        f" --settings '{_settings(dispatch.root.as_posix())}' --json"
     )
+    assert "--add-dir" not in terminal
+    # The same string in the JSON, for a resume to copy (review 6934849677 suggestion 3).
+    assert line["settings"] == _settings(dispatch.root.as_posix())
+    # The screen is read for a menu after the wait and before the send (#835).
+    screen = next(i for i, c in enumerate(orca) if "--screen" in c)
+    assert orca[screen].startswith("terminal read --terminal term_new")
+    assert wait < screen < send
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
         dispatch.calls("git")
     )
@@ -752,7 +777,7 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
     ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
     assert ran == (
         "task-282|1|--model claude-opus-5-5 --effort medium"
-        f" --add-dir {dispatch.task.parent.as_posix()}"
+        f" --settings {_settings(dispatch.task.parent.as_posix())}"
     )
     # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
     (create,) = [c for c in dispatch.calls("orca") if c.startswith("terminal create")]
@@ -788,17 +813,32 @@ def test_dispatch_sends_the_absolute_path_of_a_relative_task_file(
 def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
     dispatch: Harness,
 ) -> None:
-    """#327 review A: the directory goes to --add-dir in double quotes."""
+    """#327 review A: a space or CJK in the directory reaches claude whole; since #835
+    it is in the single-quoted --settings JSON, the CJK as \\u escapes (only ASCII is
+    typed for it), and claude gets back the directory as it is."""
     folder = dispatch.root / "t282" / "任務 檔"
     folder.mkdir(parents=True)
     task = folder / "task.md"
     shutil.copyfile(dispatch.task, task)
+    claude = dispatch.bin / "claude"
+    claude.write_text(
+        "#!/usr/bin/env bash\n"
+        'while [ $# -gt 0 ]; do [ "$1" = --settings ] && printf %s "$2"'
+        ' >"$FAKE_DIR/settings.json"; shift; done\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    claude.chmod(0o755)
+    dispatch.write("run_terminal_command", "")
     result = _dispatch(dispatch, task.as_posix())
     assert result.returncode == 0, result.stdout + result.stderr
     terminal = next(
         c for c in dispatch.calls("orca") if c.startswith("terminal create")
     )
-    assert f'--add-dir "{folder.as_posix()}" --json' in terminal
+    assert f"--settings '{_settings(folder.as_posix())}' --json" in terminal
+    assert "任務" not in terminal and "\\u4efb\\u52d9 \\u6a94" in terminal
+    settings = json.loads((dispatch.fake / "settings.json").read_text(encoding="utf-8"))
+    assert settings == {"permissions": {"additionalDirectories": [folder.as_posix()]}}
     sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
     assert sent == _notice(task.as_posix())
 
@@ -812,8 +852,9 @@ def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
         ("a%b/task.md", "任務檔目錄不能含"),
         ("a!b/task.md", "任務檔目錄不能含"),
         ("a`b/task.md", "任務檔目錄不能含"),
+        ("a'b/task.md", "任務檔目錄不能含"),
     ],
-    ids=["lf", "cr", "dollar", "percent", "bang", "backtick"],
+    ids=["lf", "cr", "dollar", "percent", "bang", "backtick", "single-quote"],
 )
 def test_dispatch_refuses_a_task_path_it_cannot_pass_on(
     dispatch: Harness, where: str, error: str
@@ -841,11 +882,175 @@ def test_dispatch_help_shows_the_line_it_sends(dispatch: Harness) -> None:
     help_text = dispatch.run("dispatch.sh", "--help")
     assert help_text.returncode == 0, help_text.stderr
     assert _notice("<path>") in help_text.stdout
-    assert "--add-dir" in help_text.stdout
+    assert "additionalDirectories" in help_text.stdout
     assert "30000" not in help_text.stdout
     workflow = (ROOT / "docs" / "WORKFLOW.md").read_text(encoding="utf-8")
     assert _notice("<path>") in workflow
-    assert '--effort <effort> --add-dir "<任務檔目錄>"' in workflow
+    assert (
+        '--effort <effort> --settings \'{\\"permissions\\":{\\"additionalDirectories\\":'
+        '[\\"<任務檔目錄>\\"]}}\'" --json' in workflow
+    )
+    assert "orca terminal read --terminal <handle> --screen --json" in workflow
+    # The allowance lives only in that claude process (#835 decision 6934230800): the
+    # resume command carries the same --settings.
+    assert (
+        "claude --resume <ID> --effort <原 level> --settings"
+        ' \'{"permissions":{"additionalDirectories":["<任務檔目錄>"]}}\'' in workflow
+    )
+
+
+# The screens a fresh session stopped at (#835): the trust menu as the coordinator read it
+# when #834 was dispatched (#835 comment 6933488869, AC-1 E1), and the read-permission
+# menu of a session in default mode (AC-1 E4b).
+TRUST_MENU = [
+    "$ claude --model claude-opus-5-5 --effort medium --add-dir"
+    ' "C:/Users/YiCheng/t834/task"',
+    " Adding a new directory:",
+    " C:\\Users\\YiCheng\\t834\\task",
+    " This session hasn't worked here before. Is this a directory you created or one"
+    " you trust?",
+    " Claude Code'll be able to read, edit, and execute files here. Your answer holds"
+    " for this session.",
+    " Security guide",
+    " ❯ No, exit",
+    "   Yes, add it",
+    " Enter to confirm · Esc to cancel",
+]
+PERMISSION_MENU = [
+    " Read(C:\\Users\\YiCheng\\t835\\exp\\new1\\f.md)",
+    " Do you want to proceed?",
+    " ❯ 1. Yes",
+    "   2. Yes, allow reading from /c/Users/YiCheng/t835/exp/new1 during this session",
+    "   3. No",
+    " Esc to cancel · Tab to amend",
+]
+
+
+def _screen(tail: list[str], wrapped: list[bool] | None = None, **terminal) -> dict:
+    """An `orca terminal read --screen` answer; tailRows as Orca gives them."""
+    rows = [
+        {"wrapped": w, "trailingSpaces": 0} for w in (wrapped or [False] * len(tail))
+    ]
+    return _ok(
+        {"terminal": {"tail": tail, "tailRows": rows, "source": "screen"} | terminal}
+    )
+
+
+def _assert_not_sent(dispatch: Harness, result: subprocess.CompletedProcess) -> dict:
+    line = _json_line(result)
+    assert line["sent"] is False and line["turn_started"] is False
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal send")]
+    assert not (dispatch.fake / "sent_text.txt").exists()
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+    return line
+
+
+@pytest.mark.parametrize(
+    "screen, kind",
+    [(TRUST_MENU, "信任框"), (PERMISSION_MENU, "確認框")],
+    ids=["trust", "permission"],
+)
+def test_dispatch_stops_at_a_menu_without_sending(
+    dispatch: Harness, screen: list[str], kind: str
+) -> None:
+    """#835 AC-3: tui-idle is satisfied with the start-up trust menu open (AC-1 E1), and
+    an Enter there lands on "No, exit". A menu on the screen sends nothing, not even
+    Enter, and is exit 5 with the terminal and what the user is to choose, for the
+    kind of menu it is (review 6934849677 suggestion 2)."""
+    dispatch.answer("orca_terminal_read", _screen(screen))
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    line = _assert_not_sent(dispatch, result)
+    assert line["terminal"] == "term_new"
+    assert "term_new" in line["error"] and "#282 dryrun" in line["error"]
+    assert f"停在{kind}" in line["error"]
+    if screen is TRUST_MENU:
+        assert "Yes, add it" in line["error"] and "No, exit" in line["error"]
+    else:
+        assert "Yes, add it" not in line["error"]
+        assert (
+            "Do you want to proceed?" in line["error"] and "3 不允許" in line["error"]
+        )
+
+
+@pytest.mark.parametrize(
+    "tail, wrapped",
+    [
+        # The terminal wrapped the row: tailRows[1].wrapped says row 1 goes on row 0.
+        (
+            [
+                " This session hasn't worked here before. Is this a directory you created or one you tr",
+                "ust?",
+            ],
+            [False, True],
+        ),
+        # Claude Code broke the line itself: two rows, the words apart by the break.
+        ([" Is this a directory you created or one you", "   trust?"], [False, False]),
+    ],
+    ids=["terminal-wrap", "tui-line-break"],
+)
+def test_dispatch_finds_a_mark_split_over_rows(
+    dispatch: Harness, tail: list[str], wrapped: list[bool]
+) -> None:
+    """#835 review 6934849677 suggestion 1: a narrow pane splits "one you trust" over
+    rows; the rows are joined back (wrapped) and blanks made one space before matching."""
+    dispatch.answer("orca_terminal_read", _screen(tail, wrapped))
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    assert "one you trust" in _assert_not_sent(dispatch, result)["error"]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # Orca could not render the screen and gave the accumulated output instead, where
+        # a TUI's cursor-drawn spaces are gone (orca terminal read --help).
+        _screen(["Entertoconfirm·Esctocancel"], source="screen-unavailable"),
+        # An older host: no source at all.
+        _ok({"terminal": {"tail": ["❯ No, exit"]}}),
+        _screen([]),
+        _screen(["", "   ", ""]),
+    ],
+    ids=["screen-unavailable", "no-source", "empty", "blank-rows"],
+)
+def test_dispatch_does_not_send_without_a_rendered_screen(
+    dispatch: Harness, answer: dict
+) -> None:
+    """#835 review 6934849677 must-fix 1: only a rendered screen with text on it can show
+    that no menu is open; anything else is "the screen could not be read", exit 1."""
+    dispatch.answer("orca_terminal_read", answer)
+    result = _dispatch(dispatch)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "讀不到 terminal 畫面" in _assert_not_sent(dispatch, result)["error"]
+
+
+def test_dispatch_stops_when_orca_refuses_the_send_at_a_menu(
+    dispatch: Harness,
+) -> None:
+    """#835: a menu that opens between the read and the send: Orca refuses the text and
+    Enter with agent_prompt_blocked (#720), so nothing went in; exit 5, not 3."""
+    dispatch.answer(
+        "orca_terminal_send",
+        {"ok": False, "error": {"code": "agent_prompt_blocked", "message": "x"}},
+    )
+    result = _dispatch(dispatch)
+    assert result.returncode == 5, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["sent"] is False and "agent_prompt_blocked" in line["error"]
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+
+
+def test_dispatch_does_not_send_when_the_screen_cannot_be_read(
+    dispatch: Harness,
+) -> None:
+    """#835: with no screen there is no knowing a menu is not open: nothing is sent."""
+    dispatch.answer(
+        "orca_terminal_read", {"ok": False, "error": {"code": "terminal_not_found"}}
+    )
+    result = _dispatch(dispatch)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _json_line(result)["sent"] is False
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal send")]
 
 
 @pytest.mark.parametrize(
@@ -1717,6 +1922,38 @@ def test_close_task_refuses_an_extra_dir_it_must_not_delete(
     assert (close.other / "keep.txt").is_file()
     assert result.returncode == 1, result.stdout + result.stderr
     _assert_nothing_deleted(close)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "printf '{\"a\": 1}' | cj get a",
+        "json_str x",
+        "board_set 806 開發中",
+        "memory_check",
+    ],
+    ids=["cj", "json_str", "board_set", "memory_check"],
+)
+def test_lib_functions_without_find_python_say_what_is_missing(
+    h: Harness, call: str
+) -> None:
+    """#806 AC-3: a shell that sourced coordinator_lib.sh and went on without find_python
+    has an empty $python; cj ran a command named "" (": command not found", no reason:
+    #350 and twice more). Now it names find_python and STOCK_PYTHON and fails; after
+    find_python the same call works. Red on the lib before #806."""
+    code = 'script_dir="$1"; shift; . "$script_dir/coordinator_lib.sh"; '
+    result = h.run_bash(code + call, h.ops.as_posix(), STOCK_PYTHON="")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "command not found" not in result.stderr
+    assert "find_python" in result.stderr and "STOCK_PYTHON" in result.stderr
+    # board_set stops before its first gh call (PR #831 review 3: the shared quota).
+    assert h.calls("gh") == []
+    if call.startswith(("printf", "json_str")):
+        found = h.run_bash(
+            code + f"find_python; {call}", h.ops.as_posix(), STOCK_PYTHON=""
+        )
+        assert found.returncode == 0, found.stderr
+        assert found.stdout.strip() in ("1", '"x"')
 
 
 def _guard(h: Harness, path: str, *mode: str) -> str:
@@ -3012,6 +3249,32 @@ def _transcript(
     return path
 
 
+def _boundary(**extra) -> dict:
+    """A compact_boundary row as Claude Code writes it (#811)."""
+    return {
+        "type": "system",
+        "subtype": "compact_boundary",
+        "isSidechain": False,
+        "sessionId": "sess-1",
+        "timestamp": "2026-10-25T11:00:00Z",
+        "compactMetadata": {"trigger": "auto", "preTokens": 368_373},
+        **extra,
+    }
+
+
+def _compacted(h: Harness, main: int, hook: int | None = None) -> None:
+    """sess-1 compacted MAIN times in its main conversation (compact_boundary rows
+    appended to its transcript, when there is one) and HOOK times as the PreCompact
+    hook counted (MAIN by default; more when its subagents compacted too)."""
+    (h.data / "logs" / "compactions" / "sess-1.count").write_text(
+        f"{main if hook is None else hook}\n", encoding="utf-8"
+    )
+    path = h.home / ".claude" / "projects" / "C--proj" / "sess-1.jsonl"
+    if path.exists():
+        with open(path, "a", encoding="utf-8", newline="\n") as f:
+            f.write("".join(json.dumps(_boundary()) + "\n" for _ in range(main)))
+
+
 def _files(root: Path) -> dict[str, bytes]:
     return {
         p.relative_to(root).as_posix(): p.read_bytes()
@@ -3143,11 +3406,18 @@ def _thread(number: int, *comments: dict, state: str = "OPEN") -> dict:
 
 
 def _threads(
-    issues: list[dict], prs: list[dict] = (), total: int | None = None
+    issues: list[dict],
+    prs: list[dict] = (),
+    total: int | None = None,
+    governance: str | None = None,
 ) -> dict:
+    """The answer of patrol's one GraphQL call; GOVERNANCE is #1's body (#807), not in
+    the answer when None (then the #1 check says 未查完)."""
+    extra = {} if governance is None else {"governance": {"body": governance}}
     return {
         "data": {
             "repository": {
+                **extra,
                 "issues": {
                     "totalCount": len(issues) if total is None else total,
                     "nodes": issues,
@@ -3344,11 +3614,20 @@ def test_patrol_says_which_questions_it_could_not_read(
 def test_patrol_leaves_the_governance_issue_out(patrol: Harness) -> None:
     governance = _thread(1, _comment(31, "提問：#1 的留言不套類型", number=1))
     governance["comments"]["totalCount"] = 175
-    patrol.answer("gh_questions", _threads([governance, _thread(401, QUESTION)]))
+    # The body names the comment, so the #1 check (#807) lists nothing either.
+    patrol.answer(
+        "gh_questions",
+        _threads(
+            [governance, _thread(401, QUESTION)],
+            governance="- 某決策（[31](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-31)）",
+        ),
+    )
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "未回覆的提問：1 則\n" in result.stdout
-    assert "#1 " not in result.stdout.split("未回覆的提問")[1]
+    questions = result.stdout.split("未回覆的提問")[1].split("gh 呼叫：")[0]
+    assert "#1 " not in questions
+    assert "#1 漏同步：0 則" in result.stdout
     assert "未查完" not in result.stdout
 
 
@@ -3387,7 +3666,7 @@ def test_patrol_says_when_the_monitor_has_stopped(patrol: Harness) -> None:
 
 def test_patrol_reads_compactions_and_handoff(patrol: Harness) -> None:
     logs = patrol.data / "logs"
-    (logs / "compactions" / "sess-1.count").write_text("2\n", encoding="utf-8")
+    _compacted(patrol, 2)
     (logs / "handoff-sess-1.json").write_text("{}", encoding="utf-8")
     (logs / "coordinator-heartbeat.json").write_text(
         '{"session_id":"sess-1","terminal_handle":"term_coord",'
@@ -3402,6 +3681,95 @@ def test_patrol_reads_compactions_and_handoff(patrol: Harness) -> None:
     assert "換手中" in result.stdout.strip().splitlines()[-1]
 
 
+def _subagent_compacted(h: Harness, n: int = 1) -> Path:
+    """A subagent's transcript under <session id>/subagents/ with N compactions: its
+    rows are sidechains with the parent's sessionId (#811 已查證)."""
+    folder = h.home / ".claude" / "projects" / "C--proj" / "sess-1" / "subagents"
+    path = folder / "agent-a861ccda67049a526.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [_call_row(300_000, isSidechain=True, sessionId="sess-1")]
+    rows += [_boundary(isSidechain=True) for _ in range(n)]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    ("main", "hook", "header", "due"),
+    [
+        (1, 2, "壓縮 1 次（hook 記 2 次，含子代理）", False),
+        (2, 2, "壓縮 2 次：已達換手條件", True),
+        (2, 3, "壓縮 2 次（hook 記 3 次，含子代理）：已達換手條件", True),
+        (0, 1, "壓縮 0 次（hook 記 1 次，含子代理）", False),
+        (1, 0, "壓縮 1 次（hook 記 0 次）", False),
+    ],
+)
+def test_patrol_counts_only_the_main_conversations_compactions(
+    patrol: Harness, main: int, hook: int, header: str, due: bool
+) -> None:
+    """#811 AC-1: the count is the compact_boundary rows of the main transcript that
+    are not a sidechain; a subagent's (in <session id>/subagents/, and the hook counted
+    it under the parent's id) is not one. The hook's number is shown when it differs."""
+    _subagent_compacted(patrol, hook - main if hook > main else 1)
+    # A sidechain row in the main transcript is not the main conversation's either.
+    path = patrol.home / ".claude" / "projects" / "C--proj" / "sess-1.jsonl"
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(_boundary(isSidechain=True)) + "\n")
+    _compacted(patrol, main, hook)
+    result = _patrol(patrol)
+    out = result.stdout
+    assert result.returncode == (10 if due else 0), out + result.stderr
+    line = next(ln for ln in out.splitlines() if ln.startswith("壓縮 "))
+    suffix = "（手冊「統籌 session」自動換手機制）" if due else ""
+    assert line == header + suffix, line
+    last = out.strip().splitlines()[-1]
+    assert ("已達換手條件" in last) is due
+    assert (f"已壓縮 {main} 次（門檻 2 次）" in last) is due
+
+
+@pytest.mark.parametrize("why", ["missing", "not_json"])
+@pytest.mark.parametrize("hook", [1, 2])
+def test_patrol_falls_back_to_the_hook_count_without_a_transcript(
+    patrol: Harness, why: str, hook: int
+) -> None:
+    """#811 AC-2: a transcript not found or not understood is not 0 compactions: the
+    hook's count is used and the line says so; at 2 the handoff holds (exit 10)."""
+    path = patrol.home / ".claude" / "projects" / "C--proj" / "sess-1.jsonl"
+    if why == "missing":
+        path.unlink()
+    else:
+        path.write_text("not json\n", encoding="utf-8")
+    _subagent_compacted(patrol)
+    _compacted(patrol, 0, hook)
+    result = _patrol(patrol)
+    out = result.stdout
+    due = hook >= 2
+    assert result.returncode == (10 if due else 0), out + result.stderr
+    line = next(ln for ln in out.splitlines() if ln.startswith("壓縮 "))
+    reason = "找不到紀錄檔" if why == "missing" else "沒有 JSON 列"
+    assert line.startswith(
+        f"壓縮 {hook} 次（hook 計數，可能含子代理；紀錄檔未讀到：{reason}"
+    ), line
+    assert line.endswith("：已達換手條件（手冊「統籌 session」自動換手機制）") is due
+    last = out.strip().splitlines()[-1]
+    assert (f"已壓縮 {hook} 次（門檻 2 次）" in last) is due
+
+
+def test_patrol_counts_compactions_in_the_named_transcript(patrol: Harness) -> None:
+    """--transcript names the file for the count as for the context (#811)."""
+    named = _transcript(patrol, [100_000], session="other-session")
+    with open(named, "a", encoding="utf-8", newline="\n") as f:
+        f.write("".join(json.dumps(_boundary()) + "\n" for _ in range(2)))
+    _compacted(patrol, 0, 2)
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "壓縮 0 次（hook 記 2 次，含子代理）" in result.stdout.splitlines()
+    result = _patrol(patrol, "--transcript", named.as_posix())
+    assert result.returncode == 10, result.stdout + result.stderr
+    assert "壓縮 2 次：已達換手條件（手冊「統籌 session」自動換手機制）" in (
+        result.stdout.splitlines()
+    )
+
+
 # --- #534: handoff condition as the last line, commitments ----------------------------
 
 
@@ -3412,9 +3780,7 @@ def test_patrol_ends_with_the_handoff_condition_and_exit_10(
     """AC-2: at 2 compactions or more the last line says so and the exit code is 10;
     below that neither. The rest of the listing is printed as before."""
     if count != "0":
-        (patrol.data / "logs" / "compactions" / "sess-1.count").write_text(
-            count + "\n", encoding="utf-8"
-        )
+        _compacted(patrol, int(count))
     result = _patrol(patrol)
     last = result.stdout.strip().splitlines()[-1]
     due = int(count) >= 2
@@ -3480,9 +3846,8 @@ def test_patrol_hands_off_above_the_context_limit(
 
 
 def test_patrol_names_both_handoff_conditions(patrol: Harness) -> None:
-    logs = patrol.data / "logs"
-    (logs / "compactions" / "sess-1.count").write_text("2\n", encoding="utf-8")
     _transcript(patrol, [500_000])
+    _compacted(patrol, 2)
     result = _patrol(patrol)
     assert result.returncode == 10, result.stdout + result.stderr
     last = result.stdout.strip().splitlines()[-1]
@@ -3567,7 +3932,7 @@ def test_patrol_warns_when_the_transcript_cannot_be_read(
         lines = out.strip().splitlines()
         assert (f"context 已連續 {n} 次讀不到" in lines[-1]) is (n >= 3)
     # With 2 compactions the handoff line stays the last and the warning is before it.
-    (patrol.data / "logs" / "compactions" / "sess-1.count").write_text("2\n")
+    _compacted(patrol, 2)
     lines = _patrol(patrol).stdout.strip().splitlines()
     assert "context 已連續 5 次讀不到" in lines[-2]
     assert "已達換手條件" in lines[-1]
@@ -3743,6 +4108,277 @@ def test_session_cost_report_prints_per_call_per_action_and_after_compaction(
     out = report()
     assert "對外動作：0 個、每個動作成本 —" in out
     assert "壓縮後第 1 次呼叫" not in out
+
+
+TAKE_OVER_FAILED = 'take_over：失敗：close\n{"ok":false,"done":["heartbeat"]}\n'
+TAKE_OVER_OK = 'take_over：全部完成\n{"ok":true,"done":["close","memory"]}\n'
+SAVED_PREVIEW = (
+    "<persisted-output>\nOutput too large (20KB). Full output saved to: "
+    "C:\\cfg\\projects\\p\\s\\tool-results\\b1.txt\n\nPreview\n</persisted-output>"
+)
+
+
+def _takeover_rows(case: str = "ok") -> list[dict]:
+    """A coordinator's take over: AGENTS.md read, #1's body saved by Claude Code and
+    read back, take_over.sh named by sed (not a run), run, failed and continued with
+    --from, then the open Issues and patrol.sh in one call. Every call outputs 100."""
+
+    def call(mid: str, ctx: int, *uses: tuple[str, str, dict]) -> dict:
+        return {
+            "type": "assistant",
+            "cwd": "C:\\repo",
+            "message": {
+                "id": mid,
+                "model": "claude-x",
+                "content": [
+                    {"type": "tool_use", "id": t, "name": name, "input": i}
+                    for t, name, i in uses
+                ],
+                "usage": {
+                    "input_tokens": 1,
+                    "cache_read_input_tokens": ctx - 1_001,
+                    "cache_creation_input_tokens": 1_000,
+                    "output_tokens": 100,
+                },
+            },
+        }
+
+    def bash(t: str, command: str) -> tuple[str, str, dict]:
+        return (t, "Bash", {"command": command})
+
+    def result(t: str, text: str) -> dict:
+        return {
+            "type": "user",
+            "message": {
+                "content": [{"type": "tool_result", "tool_use_id": t, "content": text}]
+            },
+        }
+
+    run1, run2 = "bash tools/ops/take_over.sh term_old", "echo x"
+    second = TAKE_OVER_OK
+    patrol = "bash tools/ops/wake_listener_start.sh; bash tools/ops/patrol.sh 2>&1"
+    if case == "no_take_over":
+        run1 = "echo x"
+    elif case == "never_ok":
+        run2, second = (
+            "cd C:/repo && tools/ops/take_over.sh term_old --from close",
+            (TAKE_OVER_FAILED),
+        )
+    elif case == "no_patrol":
+        patrol = "bash tools/ops/wake_listener_start.sh"
+    if case != "no_take_over" and run2 == "echo x":
+        run2 = "bash tools/ops/take_over.sh term_old --from close"
+    return [
+        {"type": "user", "message": {"content": "你是 stock-lab 的統籌"}},
+        call("m1", 30_000, ("t1", "Read", {"file_path": "C:\\repo\\AGENTS.md"})),
+        result("t1", "a" * 7_000),
+        call("m2", 33_100, bash("t2", "gh issue view 1 --json body -q .body")),
+        result("t2", SAVED_PREVIEW),
+        # One message written as two rows; a sidechain's call is not the session's.
+        call("m3", 35_100),
+        call(
+            "m3",
+            35_100,
+            ("t3", "Read", {"file_path": "C:/cfg/projects/p/s/tool-results/b1.txt"}),
+        ),
+        call("side", 900_000, bash("ts", "bash tools/ops/patrol.sh"))
+        | {"isSidechain": True},
+        result("t3", "b" * 20_000),
+        call("m4", 45_100, bash("t4", "sed -n 1,80p tools/ops/take_over.sh")),
+        result("t4", "c" * 1_000),
+        call("m5", 45_600, bash("t5", run1)),
+        result("t5", TAKE_OVER_FAILED),
+        call("m6", 46_100, bash("t6", run2)),
+        result("t6", second),
+        call(
+            "m7",
+            46_600,
+            bash("t7", "gh issue list --state open"),
+            bash("t8", patrol),
+        ),
+        result("t7", "d" * 2_000),
+        result("t8", "e" * 4_000),
+        call("m8", 49_100),
+    ]
+
+
+def _takeover(h: Harness, rows: list[dict]) -> subprocess.CompletedProcess:
+    path = h.root / "t.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    return h.run_bash(
+        '"$STOCK_PYTHON" -X utf8 "$1" takeover "$2"',
+        (h.ops / "session_cost.py").as_posix(),
+        path.as_posix(),
+    )
+
+
+def test_session_cost_takeover_prints_the_three_points_and_groups(h: Harness) -> None:
+    """#803 AC-1: the 2nd point is the take_over.sh run that printed "ok":true (here the
+    2nd, continued with --from; sed naming the file is not a run), the 3rd the first
+    patrol.sh after it; what each call adds past its own output is shared by the tool
+    results before the next call by bytes; a saved long output read back counts as the
+    command's."""
+    result = _takeover(h, _takeover_rows())
+    out = result.stdout
+    assert result.returncode == 0, out + result.stderr
+    assert (
+        "context：第 1 次呼叫 30,000、take_over.sh 之後 46,600"
+        '（第 2 次執行、印出 "ok":true；共執行 2 次）、patrol.sh 之後 49,100' in out
+    )
+    assert (
+        "增量：第 1 次呼叫 → take_over.sh 16,600、take_over.sh → patrol.sh 2,500、"
+        "合計 19,100" in out
+    )
+    preview = len(SAVED_PREVIEW.encode())
+    groups = {
+        "讀檔：AGENTS.md": (7_000, 3_000),
+        "讀 #1": (preview + 20_000, 1_900 + 9_900),
+        "讀檔：tools/ops/take_over.sh": (1_000, 400),
+        "take_over.sh 輸出": (
+            len(TAKE_OVER_FAILED.encode()) + len(TAKE_OVER_OK.encode()),
+            800,
+        ),
+        "讀其他 Issue／PR": (2_000, 800),
+        "patrol.sh 輸出": (4_000, 1_600),
+    }
+    for group, (size, tokens) in groups.items():
+        assert f"  {group}：{size:,} B、{tokens:,}、{size / tokens:.2f}" in out, group
+    assert "  統籌自己的輸出：" in out and "B、700、" in out
+    assert "其他（提示、附件）" not in out
+    size = sum(s for s, _ in groups.values())
+    tokens = sum(t for _, t in groups.values())
+    assert (
+        f"位元組／token：工具結果 {size:,} B ÷ {tokens:,} = {size / tokens:.2f}" in out
+    )
+    assert "其中讀 repo 檔案 2.35" in out  # 8,000 B ÷ 3,400
+
+
+@pytest.mark.parametrize(
+    "case,missing",
+    [
+        ("no_take_over", "找不到 take_over.sh 的工具結果"),
+        ("never_ok", 'take_over.sh 執行 2 次，沒有一次印出 "ok":true'),
+        ("no_patrol", "找不到 take_over.sh 之後的 patrol.sh 工具結果"),
+    ],
+)
+def test_session_cost_takeover_names_a_missing_point(
+    h: Harness, case: str, missing: str
+) -> None:
+    """#803 AC-1: a point not found is one line saying which, no numbers, exit 5."""
+    result = _takeover(h, _takeover_rows(case))
+    out = result.stdout
+    assert result.returncode == 5, out + result.stderr
+    assert out.splitlines()[1:] == [missing]
+    assert "context：" not in out and "30,000" not in out
+
+
+def _tool(t: str, command: str) -> dict:
+    return {"type": "tool_use", "id": t, "name": "Bash", "input": {"command": command}}
+
+
+def _result(t: str, text: str) -> dict:
+    return {
+        "type": "user",
+        "message": {
+            "content": [{"type": "tool_result", "tool_use_id": t, "content": text}]
+        },
+    }
+
+
+def _patrol_later(rows: list[dict]) -> None:
+    """m8 runs patrol.sh too, and m9 (50,000) is the call after it."""
+    m8 = rows[-1]
+    m8["message"]["content"].append(_tool("t9", "bash tools/ops/patrol.sh"))
+    m9 = json.loads(json.dumps(m8))
+    m9["message"]["id"] = "m9"
+    m9["message"]["content"] = []
+    m9["message"]["usage"]["cache_read_input_tokens"] = 50_000 - 1_001
+    rows += [_result("t9", "f" * 10), m9]
+
+
+def _row(rows: list[dict], mid: str) -> dict:
+    return next(
+        r
+        for r in rows
+        if r.get("type") == "assistant"
+        and r["message"]["id"] == mid
+        and r["message"]["content"]
+    )
+
+
+@pytest.mark.parametrize(
+    "case,points",
+    [
+        # One sed or grep reading both scripts is not a run of either (review
+        # 6912162312 must-fix 1: "patrol.sh tools/ops/take_over.sh" is not "sh ...").
+        ("multi_file_reads", (46_600, 2, 50_000)),
+        # A --closed-only run printing "ok":true is not the 2nd point.
+        ("closed_only", (46_600, 2, 49_100)),
+        # patrol.sh --heartbeat-only is not the 3rd point.
+        ("heartbeat_only", (46_600, 2, 50_000)),
+        # patrol.sh in the same command as the ok run: the 3rd point is the 2nd.
+        ("same_command", (46_600, 2, 46_600)),
+    ],
+)
+def test_session_cost_takeover_counts_only_runs_of_the_scripts(
+    h: Harness, case: str, points: tuple[int, int, int]
+) -> None:
+    """#803 AC-1 and the definitions in docs/ops/COORDINATOR_REFERENCE.md 換手偵測: which
+    tool results are the 2nd and 3rd points."""
+    rows = _takeover_rows()
+    m4, m6, m7 = (_row(rows, m) for m in ("m4", "m6", "m7"))
+    at = rows.index(m4) + 1
+    if case == "multi_file_reads":
+        m4["message"]["content"].append(
+            _tool("t4b", "sed -n 1,40p tools/ops/patrol.sh tools/ops/take_over.sh")
+        )
+        rows.insert(at, _result("t4b", "g" * 10))
+        m7["message"]["content"][1] = _tool(
+            "t8", "grep -n x tools/ops/take_over.sh tools/ops/patrol.sh"
+        )
+        _patrol_later(rows)
+    elif case == "closed_only":
+        m4["message"]["content"].append(
+            _tool("t4b", "bash tools/ops/take_over.sh --closed-only")
+        )
+        rows.insert(at, _result("t4b", TAKE_OVER_OK))
+    elif case == "heartbeat_only":
+        m7["message"]["content"][1] = _tool(
+            "t8", "bash tools/ops/patrol.sh --heartbeat-only --take-over"
+        )
+        _patrol_later(rows)
+    else:
+        m6["message"]["content"][0]["input"]["command"] += (
+            " && bash tools/ops/patrol.sh"
+        )
+        m7["message"]["content"][1] = _tool("t8", "echo x")
+    second, nth, third = points
+    result = _takeover(h, rows)
+    out = result.stdout
+    assert result.returncode == 0, out + result.stderr
+    assert (
+        f"context：第 1 次呼叫 30,000、take_over.sh 之後 {second:,}"
+        f'（第 {nth} 次執行、印出 "ok":true；共執行 2 次）、patrol.sh 之後 {third:,}'
+        in out
+    ), out
+
+
+def test_session_cost_reads_a_transcript_cut_inside_a_character(h: Harness) -> None:
+    """Review 6912162312 must-fix 4: a transcript still being written may end inside a
+    multi-byte character; takeover and report skip that line, and the next session
+    is still printed."""
+    path = h.root / "t.jsonl"
+    rows = "".join(json.dumps(r) + "\n" for r in _takeover_rows())
+    path.write_bytes(rows.encode() + '{"type":"user","message":"統'.encode()[:-1])
+    for command in ("takeover", "report"):
+        result = h.run_bash(
+            f'"$STOCK_PYTHON" -X utf8 "$1" {command} "$2" "$2"',
+            (h.ops / "session_cost.py").as_posix(),
+            path.as_posix(),
+        )
+        out = result.stdout
+        assert result.returncode == 0, out + result.stderr
+        assert out.count("== t") == 2, out
 
 
 def _commit(h: Harness, *args: str, session: str = "sess-old"):
@@ -4486,9 +5122,7 @@ def test_patrol_ends_with_the_vacancy_and_exit_11(slotted: Harness) -> None:
 
 
 def test_patrol_puts_the_handoff_after_the_vacancy(slotted: Harness) -> None:
-    (slotted.data / "logs" / "compactions" / "sess-1.count").write_text(
-        "2\n", encoding="utf-8"
-    )
+    _compacted(slotted, 2)
     result = _patrol(slotted)
     assert result.returncode == 10, result.stdout + result.stderr
     lines = result.stdout.strip().splitlines()
@@ -4570,3 +5204,525 @@ def test_patrol_reads_the_questions_of_a_partial_answer(slotted: Harness) -> Non
         ln.startswith("名額空缺") and "請派工" in ln
         for ln in result.stdout.splitlines()
     )
+
+
+# --- #807: #1's body against its comments, and its size --------------------------------
+# One answer, the same GraphQL call: #1's body is the `governance` alias, its latest
+# comments the #1 thread of the issues list.
+
+MARK = "\n\n<!-- stock-lab:coordinator -->"
+ISSUE1 = "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-"
+
+
+def _c1(cid: int, body: str, at: str = "09:00:00") -> dict:
+    return _comment(cid, body, number=1, at=at)
+
+
+def _governance(*comments: dict, body: str = "## 決策索引\n") -> dict:
+    return _threads([_thread(1, *comments)], governance=body)
+
+
+def _sync_lines(out: str) -> list[str]:
+    """The rows under the 本文沒有的留言 line."""
+    lines = out.splitlines()
+    start = next(
+        (i for i, ln in enumerate(lines) if ln.startswith("#1 本文沒有的留言")), None
+    )
+    if start is None:
+        return []
+    rows = []
+    for ln in lines[start + 1 :]:
+        if not ln.startswith("  "):
+            break
+        rows.append(ln.strip())
+    return rows
+
+
+DECISION_1 = _c1(6900000001, "決定：使用者 2026-10-25 在統籌 session 交代兩件事" + MARK)
+
+
+@pytest.mark.parametrize(
+    ("comments", "body", "listed"),
+    [
+        # A 決定 whose id the body does not hold: listed.
+        ([DECISION_1], "## 決策索引\n- 別的（[6800000000](…)）\n", [6900000001]),
+        # The id in the body as a comment link, or bare in brackets: not listed.
+        ([DECISION_1], f"- 兩件事（[看留言]({ISSUE1}6900000001)）\n", []),
+        ([DECISION_1], "- 兩件事（[6900000001]）\n", []),
+        # A longer id holding it is another id.
+        ([DECISION_1], "- 兩件事（[69000000012]）\n", [6900000001]),
+        # Up to the archive line's comment (#794 AC-1, the line starts with 歸檔：): not
+        # listed, the archive's own id too; after it, listed.
+        (
+            [
+                DECISION_1,
+                _c1(6900000005, "回報：整理前的本文全文" + MARK),
+                _c1(6900000009, "決定：歸檔之後" + MARK, at="10:00:00"),
+            ],
+            f"## 決策索引\n  歸檔：[6900000005]({ISSUE1}6900000005)（整理前的本文全文）\n",
+            [6900000009],
+        ),
+        # A decision line that says 歸檔 with a link is no archive line (PR #810 review).
+        (
+            [DECISION_1],
+            f"- 舊的歸檔到留言（[6900000005]({ISSUE1}6900000005)）\n",
+            [6900000001],
+        ),
+        # 本文：不同步 in a coordinator's one-off 決定 (any line but the first): not
+        # listed; the user's 同意 it answers is covered, one level down.
+        (
+            [
+                _c1(6900000030, "同意"),
+                _c1(
+                    6900000031,
+                    "決定：PR #900 合併（回覆 [6900000030]）\n\n本文：不同步（一次性同意）"
+                    + MARK,
+                ),
+            ],
+            "## 決策索引\n",
+            [],
+        ),
+        # A 同意 answered by a 決定 in the body: covered. Answered by one neither in the
+        # body nor marked: both listed.
+        (
+            [
+                _c1(6900000032, "同意"),
+                _c1(6900000033, "決定：照建議做（回覆 [6900000032]）" + MARK),
+            ],
+            f"- 照建議做（[6900000033]({ISSUE1}6900000033)）\n",
+            [],
+        ),
+        (
+            [
+                _c1(6900000032, "同意"),
+                _c1(6900000033, "決定：照建議做（回覆 [6900000032]）" + MARK),
+            ],
+            "## 決策索引\n",
+            [6900000032, 6900000033],
+        ),
+        # A BOM before the type keeps it: a 部署 left out, a 決定 listed.
+        (
+            [
+                _c1(6900000040, chr(0xFEFF) + "部署：tag `v1.2.5` 的 image 已啟動"),
+                _c1(6900000041, chr(0xFEFF) + "決定：BOM 開頭" + MARK),
+                _c1(6900000042, "決定:半形冒號" + MARK),
+            ],
+            "## 決策索引\n",
+            [6900000041, 6900000042],
+        ),
+        # The coordinator's 回報 and 部署, 待使用者 and 決定 lower down: not listed.
+        (
+            [
+                _c1(6900000002, "回報：派 #10" + MARK),
+                _c1(6900000003, "部署：tag `v1.2.3` 的 image 已啟動" + MARK),
+                _c1(6900000004, "待使用者：請選 A 或 B" + MARK),
+                _c1(6900000006, "回報：收到\n\n決定：引用" + MARK),
+            ],
+            "## 決策索引\n",
+            [],
+        ),
+        # 統籌承諾 and 決定（補充…） are listed.
+        (
+            [
+                _c1(6900000007, "統籌承諾：明天 09:00 核對" + MARK),
+                _c1(6900000008, "決定（補充 6900000001）：還有一件" + MARK),
+            ],
+            f"- 兩件事 [6900000001]({ISSUE1}6900000001)\n",
+            [6900000007, 6900000008],
+        ),
+        # Without the coordinator mark: the user (or a cloud session for the user) is
+        # listed; the scripts' own comments and 部署／統籌 session 更換 are not.
+        (
+            [
+                _c1(6900000010, "使用者決定（由雲端 session 轉述）：拿掉說明文字"),
+                _c1(
+                    6900000011,
+                    "待使用者：請開統籌。事件佇列有 4 個未處理事件\n\n"
+                    "（事件 monitor `tools/ops/monitor.sh` 自動留言，同一心跳只留一則。）",
+                ),
+                _c1(
+                    6900000012,
+                    "待使用者：daily 失敗\n\n（看門狗 `tools/ops/watchdog.sh` 自動留言，"
+                    "同一異常每日最多一則。）",
+                ),
+                _c1(
+                    6900000013,
+                    "部署：tag `v1.2.4` 的 image 已以 `docker compose up -d` 啟動",
+                ),
+                _c1(6900000014, "回報：統籌 session 更換：term_x／sess"),
+                _c1(6900000015, "回報：開工\n\n- session：x"),
+                _c1(6900000016, "回報：收到（回覆 [6900000010]）"),
+            ],
+            "## 決策索引\n",
+            [6900000010],
+        ),
+    ],
+    ids=[
+        "missing-decision",
+        "id-as-link",
+        "id-bare",
+        "longer-id",
+        "archive",
+        "decision-line-saying-archive",
+        "not-synced-mark",
+        "reply-covered",
+        "reply-not-covered",
+        "bom-and-half-width",
+        "coordinator-reports",
+        "commitment-and-addendum",
+        "unmarked",
+    ],
+)
+def test_patrol_lists_the_comments_missing_from_the_governance_body(
+    patrol: Harness, comments: list[dict], body: str, listed: list[int]
+) -> None:
+    """#807 AC-1: each comment that should be in #1's body and is not, one row with its
+    time, id and first line; then the last line says so and the exit is 12."""
+    patrol.answer("gh_questions", _governance(*comments, body=body))
+    result = _patrol(patrol)
+    out = result.stdout
+    assert f"#1 漏同步：{len(listed)} 則（最近 {len(comments)} 則留言裡" in out
+    rows = _sync_lines(out)
+    assert [int(r.split()[1]) for r in rows] == listed
+    last = out.strip().splitlines()[-1]
+    if listed:
+        assert result.returncode == 12, out + result.stderr
+        assert last == (
+            f"#1 漏同步 {len(listed)} 則：照 docs/COORDINATOR.md「決策落地」"
+            "補進 #1 本文的決策索引（patrol exit 12）"
+        )
+    else:
+        assert result.returncode == 0, out + result.stderr
+        assert "漏同步" not in last and "本文沒有的留言" not in out
+
+
+def test_patrol_names_the_time_id_and_first_line_of_a_missing_comment(
+    patrol: Harness,
+) -> None:
+    long = "決定：" + "很長的第一行" * 20 + "\n\n第二行不印"
+    patrol.answer(
+        "gh_questions",
+        _governance(
+            _c1(6900000021, long + MARK, at="10:00:00"),
+            _c1(6900000020, "\n\n使用者：先派 #742", at="09:00:00"),
+        ),
+    )
+    result = _patrol(patrol)
+    assert result.returncode == 12, result.stdout + result.stderr
+    rows = _sync_lines(result.stdout)
+    assert rows[0] == "2026-10-25T09:00:00Z 6900000020 使用者：先派 #742"
+    at, cid, first = rows[1].split(" ", 2)
+    assert (at, cid) == ("2026-10-25T10:00:00Z", "6900000021")
+    assert len(first) == 60 and first.endswith("…") and first.startswith("決定：很長")
+    assert "第二行" not in result.stdout
+
+
+def test_patrol_puts_the_handoff_after_a_missing_decision(patrol: Harness) -> None:
+    """#807 AC-1: the handoff condition as well: exit 10, both printed."""
+    _compacted(patrol, 2)
+    patrol.answer("gh_questions", _governance(DECISION_1))
+    result = _patrol(patrol)
+    assert result.returncode == 10, result.stdout + result.stderr
+    lines = result.stdout.strip().splitlines()
+    assert lines[-1].startswith("已達換手條件")
+    assert "#1 漏同步：1 則（最近 1 則留言裡，id 不在本文）" in lines
+    assert _sync_lines(result.stdout) == [
+        "2026-10-25T09:00:00Z 6900000001 決定：使用者 2026-10-25 在統籌 session 交代兩件事"
+    ]
+    assert not any("patrol exit 12" in ln for ln in lines)
+
+
+def test_patrol_puts_the_vacancy_after_a_missing_decision(slotted: Harness) -> None:
+    """#807: a free slot as well: exit 11, the missing comment printed before it."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_thread(1, DECISION_1))
+    answer["data"]["repository"]["governance"] = {"body": "## 決策索引\n"}
+    slotted.answer("gh_questions", answer)
+    result = _patrol(slotted)
+    assert result.returncode == 11, result.stdout + result.stderr
+    lines = result.stdout.strip().splitlines()
+    assert lines[-1] == "名額空缺 2 個，請派工：#33（patrol exit 11）"
+    assert [r.split()[1] for r in _sync_lines(result.stdout)] == ["6900000001"]
+
+
+def test_patrol_in_the_daily_window_ends_with_a_missing_decision(
+    slotted: Harness,
+) -> None:
+    """The daily window prints the vacancy only; a missing decision still exits 12."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_thread(1, DECISION_1))
+    answer["data"]["repository"]["governance"] = {"body": "## 決策索引\n"}
+    slotted.answer("gh_questions", answer)
+    at = int(datetime(2026, 10, 25, 14, 0, tzinfo=timezone.utc).timestamp())
+    result = slotted.run(
+        "patrol.sh",
+        "--session-id",
+        "sess-1",
+        "--terminal",
+        "term_coord",
+        PATROL_NOW=str(at),
+    )
+    assert result.returncode == 12, result.stdout + result.stderr
+    lines = result.stdout.strip().splitlines()
+    assert "daily 時段不派新工，只印出" in lines[-2]
+    assert lines[-1].endswith("（patrol exit 12）")
+
+
+def test_patrol_with_a_handoff_marker_prints_a_missing_decision_only(
+    patrol: Harness,
+) -> None:
+    (patrol.data / "logs" / "handoff-sess-1.json").write_text("{}", encoding="utf-8")
+    patrol.answer("gh_questions", _governance(DECISION_1))
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip().splitlines()[-1] == "#1 漏同步 1 則（換手中，只印出）"
+
+
+@pytest.mark.parametrize(
+    ("size", "limit", "line"),
+    [
+        (14_336, None, None),
+        (14_337, None, "#1 本文 14,337 位元組（14.0 KB），超過上限 14,336"),
+        (41_752, None, "#1 本文 41,752 位元組（40.8 KB），超過上限 14,336"),
+        (41_752, "51200", None),
+        (12_000, "10240", "#1 本文 12,000 位元組（11.7 KB），超過上限 10,240"),
+    ],
+)
+def test_patrol_says_when_the_governance_body_is_above_its_limit(
+    patrol: Harness, size: int, limit: str | None, line: str | None
+) -> None:
+    """#807 AC-2: in UTF-8 bytes (a CJK character is 3), 14 KB or
+    STOCK_GOVERNANCE_BODY_LIMIT; a hint in the header only, the exit code as before."""
+    head = f"- 兩件事 [6900000001]({ISSUE1}6900000001)\n"
+    pad = size - len(head.encode("utf-8"))
+    body = head + "決" * (pad // 3) + "x" * (pad % 3)
+    assert len(body.encode("utf-8")) == size
+    patrol.answer("gh_questions", _governance(DECISION_1, body=body))
+    env = {"STOCK_GOVERNANCE_BODY_LIMIT": limit} if limit else {}
+    result = patrol.run(
+        "patrol.sh", "--session-id", "sess-1", "--terminal", "term_coord", **env
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = result.stdout.splitlines()
+    sized = [ln for ln in lines if ln.startswith("#1 本文 ")]
+    assert sized == ([line] if line else [])
+    if line:
+        # In the header: before the slots and the events.
+        assert lines.index(line) < next(
+            i for i, ln in enumerate(lines) if ln.startswith("未處理事件")
+        )
+    assert "#1 漏同步：0 則" in result.stdout
+
+
+@pytest.mark.parametrize("limit", ["0", "14k", "-1"])
+def test_patrol_refuses_a_bad_governance_body_limit(
+    patrol: Harness, limit: str
+) -> None:
+    result = patrol.run(
+        "patrol.sh",
+        "--session-id",
+        "sess-1",
+        "--terminal",
+        "term_coord",
+        STOCK_GOVERNANCE_BODY_LIMIT=limit,
+    )
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "STOCK_GOVERNANCE_BODY_LIMIT" in result.stderr
+
+
+def test_patrol_names_the_archive_comment_it_took(patrol: Harness) -> None:
+    body = f"歸檔：[6900000005]({ISSUE1}6900000005)（整理前的本文全文）\n"
+    patrol.answer("gh_questions", _governance(DECISION_1, body=body))
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "#1 漏同步：0 則（最近 1 則留言裡，id 不在本文、也不早於歸檔留言 6900000005）"
+        in result.stdout.splitlines()
+    )
+
+
+@pytest.mark.parametrize(
+    ("how", "why"),
+    [
+        ("max-gh-0", "GitHub 沒讀到"),
+        ("gh-fails", "GitHub 沒讀到"),
+        ("graphql-error", "GitHub 沒讀到"),
+        ("no-body", "沒讀到 #1 本文"),
+        ("no-thread", "沒讀到 #1 的留言"),
+        ("comments-null", "沒讀到 #1 的留言"),
+        ("nodes-null", "沒讀到 #1 的留言"),
+        ("two-archive-lines", "歸檔：開頭的行有 2 行"),
+        ("archive-line-without-link", "歸檔行沒有 #1 留言連結"),
+        ("archive-line-with-two-links", "歸檔行有 2 個 #1 留言連結"),
+    ],
+)
+def test_patrol_does_not_take_an_unread_governance_issue_for_none_missing(
+    patrol: Harness, how: str, why: str
+) -> None:
+    """#807 AC-3: GitHub not read, the answer without #1's body or comments, or an archive
+    line that cannot be told (PR #810 review 6912088904): 未查完 with why, no row, the
+    exit as before."""
+    args = []
+    answer = _governance(DECISION_1)
+    thread = answer["data"]["repository"]["issues"]["nodes"][0]
+    archive = f"歸檔：[6900000005]({ISSUE1}6900000005)\n"
+    if how == "max-gh-0":
+        args = ["--max-gh", "0"]
+    elif how == "gh-fails":
+        patrol.write("gh_questions_fails", "")
+    elif how == "graphql-error":
+        answer = {"errors": [{"message": "rate limited"}]}
+    elif how == "no-body":
+        answer = _threads([_thread(1, DECISION_1)])
+    elif how == "no-thread":
+        answer = _threads([_thread(401)], governance="x")
+    elif how == "comments-null":
+        thread["comments"] = None
+    elif how == "nodes-null":
+        thread["comments"]["nodes"] = None
+    elif how == "two-archive-lines":
+        answer = _governance(DECISION_1, body=archive + archive)
+    elif how == "archive-line-without-link":
+        answer = _governance(DECISION_1, body="歸檔：之後補\n")
+    else:
+        answer = _governance(
+            DECISION_1, body=archive.rstrip() + f" [6900000006]({ISSUE1}6900000006)\n"
+        )
+    patrol.answer("gh_questions", answer)
+    result = _patrol(patrol, *args)
+    assert result.returncode == 0, result.stdout + result.stderr
+    (line,) = [ln for ln in result.stdout.splitlines() if ln.startswith("#1 漏同步")]
+    assert line == f"#1 漏同步：未查完（{why}）"
+    assert _sync_lines(result.stdout) == []
+
+
+def test_patrol_checks_the_governance_issue_when_slots_cannot_give_its_query(
+    slotted: Harness,
+) -> None:
+    """The questions' own query carries #1's body as well (slots.py query failed)."""
+    (slotted.ops / "slots.py").write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+    slotted.answer("gh_questions", _governance(DECISION_1))
+    result = _patrol(slotted)
+    assert result.returncode == 12, result.stdout + result.stderr
+    assert "名額：判定不了（slots.py query 失敗" in result.stdout
+    assert [r.split()[1] for r in _sync_lines(result.stdout)] == ["6900000001"]
+    (call,) = slotted.calls("gh")
+    assert "governance:issue(number:1){body}" in call and "blockedBy" not in call
+
+
+def test_patrol_checks_the_governance_issue_within_one_gh_call(
+    patrol: Harness,
+) -> None:
+    """#807 AC-3: --max-gh 1 reads #1's body in the one call, and the body of no other
+    thread is asked for."""
+    patrol.answer("gh_questions", _governance(DECISION_1))
+    result = _patrol(patrol, "--max-gh", "1")
+    assert result.returncode == 12, result.stdout + result.stderr
+    assert "gh 呼叫：1／上限 1" in result.stdout
+    (call,) = patrol.calls("gh")
+    assert call.count("governance:issue(number:1){body}") == 1
+    assert (
+        "issues(states:OPEN,first:100){totalCount nodes{number state comments" in call
+    )
+
+
+# --- #804: patrol.sh --overview ----------------------------------------------------------
+# overview.py's page has its own tests (test_overview.py); these run patrol.sh: the page
+# comes from the same GraphQL answer, the backfill is one more call only when a thread has
+# more comments than it read (decision 6913246451), and the last lines stay last.
+
+
+def _long_thread(number: int = 702, read: int = 100, total: int = 150) -> dict:
+    comments = [
+        _comment(
+            n, f"回報：第 {n} 則", number, f"2026-10-25T09:{n // 60:02d}:{n % 60:02d}Z"
+        )
+        for n in range(total - read + 1, total + 1)
+    ]
+    thread = _thread(number, *comments)
+    thread["comments"]["totalCount"] = total
+    return thread
+
+
+def test_patrol_without_overview_prints_no_page(slotted: Harness) -> None:
+    result = _patrol(slotted)
+    assert "=== 現況頁" not in result.stdout
+    assert "gh 呼叫：1／上限 1" in result.stdout
+
+
+def test_patrol_overview_reads_the_page_from_the_one_call(slotted: Harness) -> None:
+    """#804 AC-1: no thread over a page: the page from the one call (gh calls 1 of 2),
+    before the last lines, and the exit as without it."""
+    result = _patrol(slotted, "--overview")
+    assert result.returncode == 11, result.stdout + result.stderr
+    out = result.stdout
+    assert "gh 呼叫：1／上限 2" in out
+    assert len(slotted.calls("gh")) == 1
+    assert "=== 現況頁：索引（" in out and "=== 現況頁結束：" in out
+    assert "## #10 " in out and "  名額：算：開發中（沒有 PR）" in out
+    lines = out.strip().splitlines()
+    assert lines[-1] == "名額空缺 2 個，請派工：#33（patrol exit 11）"
+    assert out.index("=== 現況頁結束：") < out.index("其餘依手冊")
+
+
+def test_patrol_overview_backfills_a_thread_over_a_page(slotted: Harness) -> None:
+    """Decision 6913246451: one more call for the oldest totalCount-100, merged by url
+    (the comment both answers hold is listed once)."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_long_thread())
+    slotted.answer("gh_questions", answer)
+    old = [
+        _comment(
+            n, f"回報：第 {n} 則", 702, f"2026-10-25T08:{n // 60:02d}:{n % 60:02d}Z"
+        )
+        for n in range(1, 52)
+    ]
+    slotted.answer(
+        "gh_backfill", {"data": {"repository": {"t702": {"comments": {"nodes": old}}}}}
+    )
+    # The full section of #702 (decision 6914347432): every comment on a line; the
+    # numbers after --overview are not taken for another option.
+    result = _patrol(slotted, "--overview", "#702", "10", "--max-gh", "2")
+    assert result.returncode == 11, result.stdout + result.stderr
+    out = result.stdout
+    assert "=== 現況頁：#702 #10 的完整段落" in out
+    assert "gh 呼叫：2／上限 2" in out
+    calls = slotted.calls("gh")
+    assert len(calls) == 2 and "OverviewBackfill" in calls[1]
+    assert "t702:issueOrPullRequest(number:702)" in calls[1] and "first:50" in calls[1]
+    assert sum(" 51 回報：第 51 則" in ln for ln in out.splitlines()) == 1
+    assert sum("回報：第 " in ln for ln in out.splitlines()) == 150
+    assert "未查完：共 150 則" not in out
+
+
+@pytest.mark.parametrize("how", ["max-gh-1", "fails"])
+def test_patrol_overview_without_the_backfill_says_not_read(
+    slotted: Harness, how: str
+) -> None:
+    """Decision 6913246451: at the --max-gh limit (or the call failing) the page says
+    未查完 with the range missing, never taken as complete."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_long_thread())
+    slotted.answer("gh_questions", answer)
+    if how == "fails":
+        slotted.write("gh_backfill_fails", "")
+        result = _patrol(slotted, "--overview")
+        assert (
+            "  未查完：共 150 則，缺第 1～50 則（補查的 gh api graphql 失敗）"
+            in result.stdout
+        )
+    else:
+        result = _patrol(slotted, "--overview", "--max-gh", "1")
+        assert len(slotted.calls("gh")) == 1
+        assert (
+            "  未查完：共 150 則，缺第 1～50 則（gh 呼叫已達上限 1，沒有補查）"
+            in result.stdout
+        )
+    assert result.returncode == 11, result.stdout + result.stderr
+
+
+def test_patrol_overview_without_github_prints_the_local_part(slotted: Harness) -> None:
+    result = _patrol(slotted, "--overview", "--max-gh", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "現況頁：未查完（GitHub 沒讀到），只印本機的部分" in result.stdout
+    assert slotted.calls("gh") == []

@@ -2,8 +2,17 @@
 
 The memory directory (MEMORY.md, the index every coordinator and engineer session loads,
 and one file per memory) lives outside the repo, under the Claude Code profile, so CI
-cannot see it; take_over.sh and close_task.sh run this instead. Four checks:
+cannot see it; take_over.sh and close_task.sh run this instead. Five checks:
 
+  size    MEMORY.md is at most INDEX_MAX_BYTES bytes and each of its lines at most
+          LINE_MAX_BYTES bytes (UTF-8; Issue #851). Every session loads the whole index
+          at start, so its size is paid on every coordinator and engineer session. The
+          limits: on 2026-11-20 the index was 66 lines, 14,812 bytes; the disposition of
+          #851 (issuecomment-7016524671) brings it to 39 lines, 6,101 bytes, the longest
+          213 bytes. 7,000 is the Issue's target (under half of 14,812) and leaves about
+          five lines of room; 240 is that longest line plus a few words. A longer hint
+          belongs in the memory file, not the index. No override: raising a limit is a
+          change to this file, reviewed like any other.
   index   every list line of MEMORY.md links one existing file of the directory, once;
   orphan  every other entry of the directory is linked from MEMORY.md;
   link    every [[name]] names an existing memory (its frontmatter name, or its file
@@ -40,6 +49,8 @@ import sys
 from pathlib import Path
 
 INDEX = "MEMORY.md"
+INDEX_MAX_BYTES = 7000
+LINE_MAX_BYTES = 240
 INDEX_LINK = re.compile(r"\]\(([^)\s]+)\)")
 WIKI_LINK = re.compile(r"\[\[([^\]\n]+)\]\]")
 FENCE = re.compile(r"^ {0,3}(```|~~~).*?^ {0,3}\1[^\n]*$", re.M | re.S)
@@ -153,6 +164,24 @@ def path_candidate(text: str) -> str | None:
     return path or None
 
 
+def size_failures(data: bytes) -> list[str]:
+    """The size check of MEMORY.md, measured in UTF-8 bytes as the file is stored."""
+    failures = []
+    if len(data) > INDEX_MAX_BYTES:
+        failures.append(
+            f"{INDEX}: size: {len(data):,} 位元組，上限 {INDEX_MAX_BYTES:,}"
+            "（刪掉或合併已編成檢查、已寫進文件或過期的記憶，或縮短提示）"
+        )
+    for number, line in enumerate(data.split(b"\n"), 1):
+        length = len(line.rstrip(b"\r"))
+        if length > LINE_MAX_BYTES:
+            failures.append(
+                f"{INDEX}:{number}: size: 這列 {length:,} 位元組，上限 "
+                f"{LINE_MAX_BYTES:,}（細節寫進記憶檔，索引只留提示）"
+            )
+    return failures
+
+
 def check(memory: Path, repo: Path, ref: str) -> tuple[list[str], int]:
     """Failures as "<file>: <check>: <what>", and the number of memories."""
     if not memory.is_dir():
@@ -164,6 +193,7 @@ def check(memory: Path, repo: Path, ref: str) -> tuple[list[str], int]:
     if not index_path.is_file():
         return [f"{INDEX}: index: 記憶目錄 {memory.as_posix()} 沒有 {INDEX}"], 0
     index_text = index_path.read_text(encoding="utf-8")
+    failures.extend(size_failures(index_path.read_bytes()))
 
     indexed: dict[str, int] = {}
     for number, line in enumerate(index_text.splitlines(), 1):
