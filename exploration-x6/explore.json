@@ -1,0 +1,92 @@
+{
+  "version": 2,
+  "design": "703",
+  "registration_commit": "0ba48e9",
+  "segment": "exploration",
+  "round": 1,
+  "round_size": 8,
+  "cumulative": 8,
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/explore_research.py --db /research/stock.db --segment exploration --hypotheses X6 --out /out/exploration-x6",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "hypotheses": {
+    "X6": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1187,
+      "taiex_excess": {
+        "days": 1187,
+        "mean": -0.0003683553999651029,
+        "annual": -0.09282556079120592,
+        "t": -2.2632159550925746
+      },
+      "excess": {
+        "days": 1187,
+        "mean": 1.0566383473788316e-05,
+        "annual": 0.0026627286353946554,
+        "t": 0.05259920621440526
+      },
+      "absolute_mean": -0.00014820467892938136,
+      "prerequisites": {
+        "days": 1187,
+        "min_days": 500,
+        "delisted": 70,
+        "ok": true
+      },
+      "coverage": {
+        "2015": {
+          "days": 209,
+          "members": 90120,
+          "missing": {
+            "turnover_60": 439,
+            "institutional_flow_20": 3708
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "turnover_60": 270,
+            "institutional_flow_20": 6944
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "turnover_60": 234,
+            "institutional_flow_20": 12219
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "turnover_60": 338,
+            "institutional_flow_20": 6007
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "turnover_60": 193,
+            "institutional_flow_20": 2945
+          }
+        }
+      }
+    }
+  },
+  "selected": [
+    "X6"
+  ],
+  "elapsed_seconds": 256.7471420210204,
+  "peak_memory_gb": 1.5473442077636719
+}

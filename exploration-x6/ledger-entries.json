@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "hypothesis": "X6",
+      "round": 1,
+      "segment": "exploration",
+      "version": 2,
+      "status": "finished",
+      "finished_at": "2026-11-20T15:44:52+00:00",
+      "report_sha256": "02e533a77a4af4fc4a70b5daa60c05813b4b25e076c10cde7cddd03cf107fac5",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "verdict": "沒有通過（探索段）"
+    }
+  ]
+}
