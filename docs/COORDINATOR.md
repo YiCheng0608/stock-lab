@@ -1,63 +1,49 @@
-<!-- owns: 統籌 session、接手文、統籌換手、無人值守運作、記憶維護 -->
+<!-- owns: 統籌 session、統籌換手、無人值守運作、記憶維護 -->
 # 統籌手冊
 
-統籌接手時固定讀 [AGENTS](../AGENTS.md) 與本文（[接手文](#統籌-session)）；其他文件依手上的事再讀：
+統籌接手時固定讀 [AGENTS](../AGENTS.md) 與本文；其他文件依手上的事再讀：
 
 - 建單、派工、本機檢查、review、合併、結案、留言類型、長期整合分支：[WORKFLOW](WORKFLOW.md)。
-- 大 PR（計數 1,500 行以上或估計 3 萬 token 以上）的 review 交子代理，統籌不讀整份 diff；門檻的算法、照抄的派法與收到結果後的核對見 [WORKFLOW「Review 與合併」](WORKFLOW.md#review-與合併)，任務文用 [review 任務文模板](templates/review-task.md)。
+- 大 PR（計數 1,500 行以上或估計 3 萬 token 以上）的 review 交子代理，統籌不讀整份 diff：[WORKFLOW「Review 與合併」](WORKFLOW.md#review-與合併)。
 - 排下一張任務、判斷範圍與 gate、更新產品方向：[ROADMAP](ROADMAP.md)；已完成能力：[CAPABILITIES](CAPABILITIES.md)。
 - review 改到檢查、hook 或 CI 的 PR，規則表要補列，或查某條規則由什麼擋：[GUARDRAILS](GUARDRAILS.md)。
 - 發佈與部署：[RELEASE](RELEASE.md)。
-- 開統籌的命令、`take_over.sh` 各步驟與續跑、resume 統籌、換手偵測的細節、工程師 session 的狀態檔與 resume：[統籌手冊參考](ops/COORDINATOR_REFERENCE.md)（本文原處各有一行指過去）。
+- 接手與每次巡邏用不到的段落：[統籌手冊參考](ops/COORDINATOR_REFERENCE.md)（本文原處各有一行指過去）。
 
 ## 統籌 session
 
-同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時使用者對任一 Claude session 說「開統籌」。開啟者先讀心跳檔 `<資料目錄>/logs/coordinator-heartbeat.json`（`<資料目錄>` 換成 [LOCAL](ops/LOCAL.md#正式位置使用者決定)「正式位置」表的「正式資料目錄」，`<資料目錄>/logs` 就是該表的「統籌的資料目錄的 `logs/`」；本文其他處的 `<資料目錄>` 同）：心跳在 60 分鐘內就不開，改對心跳記的 handle 送一句「請跑 bash tools/ops/patrol.sh 處理事件佇列」；否則在 `master` 管理 checkout 開可見 terminal：
+同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時使用者對任一 Claude session 說「開統籌」。要開統籌時（讀心跳檔、四行命令、原文送出的接手文）讀[參考「開啟命令」](ops/COORDINATOR_REFERENCE.md#開啟命令)。本文的 `<資料目錄>` 換成 [LOCAL](ops/LOCAL.md#正式位置使用者決定)「正式位置」表的「正式資料目錄」，`<資料目錄>/logs` 就是該表的「統籌的資料目錄的 `logs/`」；心跳檔是 `<資料目錄>/logs/coordinator-heartbeat.json`。
 
-開可見 terminal 的四行命令、`--autocompact 400k` 與新統籌第一次呼叫的 context 門檻（55K）見[參考「開啟命令」](ops/COORDINATOR_REFERENCE.md#開啟命令)。
+`take_over.sh` 中途停下要續跑，或要知道它某一步做什麼（含 `--from`、`--closed-only`）時讀[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)。
 
-接手文固定如下，開啟者原文送出，`<舊 handle>` 換成心跳記的舊統籌 terminal，它已不存在時換成 `--no-old-terminal`；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
-
-```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/COORDINATOR.md、治理 Issue #1 本文的決策索引。接著跑 bash tools/ops/take_over.sh <舊 handle>：它寫心跳、啟動 wake listener、在 #1 留「統籌 session 更換」並改 #1 本文的現任統籌、等舊統籌 terminal 閒置後關掉它、列出未兌現的承諾、核對最近 48 小時內關閉的 Issue 與合併的 PR、檢查記憶目錄；中途失敗會停下並印出已做的步驟與續跑命令，修好原因後照它續跑，不手動補做。關閉單只讀「關閉單核對」列為異常或未查完的那幾張的最後一則留言並處理，其餘不讀。再跑 bash tools/ops/patrol.sh --overview：它除了事件佇列、未回覆的提問、名額與承諾，還印出現況頁的索引（每張 open Issue 與 PR 的標題、未勾 AC 數、名額、最後一則留言；未回覆的提問、不在承諾檔的統籌承諾印全文；有效的等外部宣告、統籌要做的事逐條；以及 #1 最近 10 則留言），不另外整串讀 open Issue 與 PR。現況頁是索引，不是依據：對某張單留言、決定、review、合併、派工、勾 AC 或兌現承諾之前，先跑 bash tools/ops/patrol.sh --overview <單號> 看那張單的完整段落（每則留言一行、未勾 AC 的文字、內文更正標記），再讀那張單的本文、那張單上每一則 `決定：`、`統籌承諾：`、`review：` 的全文（限定條件常只寫在內文、不在第一行），以及與這次動作有關的 `提問：` 和工程師最近一則同階段的 `回報：`（按留言 id 讀單則：gh api repos/YiCheng0608/stock-lab/issues/comments/<id> --jq .body）；`決定：` 第一行是「照 A／照建議／Qn」這類要對照才看得懂的，連它回覆的提問一起讀；第一行寫「更正 <id>」或現況頁標「內文更正或取代」的，連被更正的那則一起讀，以更正後的為準。動作會改變某張單的範圍或 AC 歸屬（含把接續單的事提前、把本單的事移走）時，照該單 `統籌承諾：`／`決定：` 原本的安排做；要改，先另留 `決定：` 寫明改什麼與理由。標「未查完」的單照印出的範圍補讀；留言超過 30 則的單不整串展開。處理未處理的事件，處理完以 --done 標記（docs/COORDINATOR.md「無人值守運作」）；以 `決定：` 回覆現況頁列為未回覆的每一則提問，以及沒有類型的舊格式提問；兌現 take_over.sh 與 patrol.sh 列出的承諾，以及現況頁列為「不在承諾檔的統籌承諾」的事（補寫進承諾檔）；核對前任標「已完成」的事（現況頁「最近 24 小時兌現的承諾」附兌現留言），不只接續；然後依手冊推進。回覆使用者一律繁體中文。
-```
-
-`take_over.sh` 中途停下要續跑，或要知道它某一步做什麼（舊 handle 的核對、各步驟的順序與失敗條件、`--from`、`--closed-only`）時讀[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)。
-
-**resume 統籌**（#710）：重開機、terminal 被關要接回原統籌 session 時讀[參考「resume 統籌」](ops/COORDINATOR_REFERENCE.md#resume-統籌)：要帶回開啟時的旗標，`claude --resume <session id> --model claude-opus-5-5 --effort xhigh --autocompact 400k`。
+**resume 統籌**（#710）：重開機、terminal 被關要接回原統籌 session 時讀[參考「resume 統籌」](ops/COORDINATOR_REFERENCE.md#resume-統籌)。
 
 **自動換手機制**（統籌 session 自己執行，不需要人在場）：
 
-1. 偵測：由 `patrol.sh` 做，達下面「統籌換手」的條件時表頭與最後一行印「已達換手條件」、exit 10。壓縮次數與 context 怎麼數、紀錄檔怎麼找、讀不到時印什麼，以及要量接手加了多少 context（`session_cost.py takeover`，#803）時讀[參考「換手偵測」](ops/COORDINATOR_REFERENCE.md#換手偵測)。
-2. 執行：先寫換手標記 `<資料目錄>/logs/handoff-<session id>.json`（舊 handle、時間），之後不再合併、派工、留言（例外只有下面的換手空窗）；手上的定時承諾都要已在承諾檔（`commit.sh list` 核對，缺的先補）；再照[參考「開啟命令」](ops/COORDINATOR_REFERENCE.md#開啟命令)開新 session 並送接手文（`<舊 handle>` 換成自己的 handle）。
-   - **換手空窗**（#1 [6911025182](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6911025182)）：寫了標記到舊 terminal 被關之前，使用者在舊 terminal 講話時，舊統籌先回覆新統籌的 handle，請使用者改到新 terminal 講。講的是決定或交代（不只是問進度）時，仍以 `comment.sh` 在 #1 留一則第一行是「決定：換手空窗：…」的留言（#1 本文由新統籌同步，舊統籌不改），再對新統籌 terminal 送一句附留言連結的短訊：統籌標記的留言不會喚醒新統籌，它也可能已經讀過 #1 最近 10 則。
-3. 接回：新 session 15 分鐘內未在 #1 留言，舊統籌刪標記檔、照常處理事件佇列，在 #1 記「換手失敗：<新 handle>」，下次處理佇列時再試。
-4. 收尾：由新統籌的 [`take_over.sh`](../tools/ops/take_over.sh) 做（步驟見[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)）。`close` 步驟對舊 terminal 送短訊之前，腳本會印出舊 terminal 的畫面與 `draft`（輸入框裡還沒送出的字，短訊送出後就沒了；有字時多印一行提示），新統籌照印出的內容看最後一個回合與 `draft`：有使用者交代、而舊統籌沒照第 2 點留到 #1 的事，由新統籌在 #1 補一則 `決定：` 並照常處理；只是問進度就在回覆使用者時一併回答。讀舊 terminal 那一步就失敗時沒有印出畫面：舊 terminal 多半已不存在，查 `orca terminal list --json` 確認後以 `--no-old-terminal --from close --comment-url <#1 留言>` 續跑。
-5. 換手不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀 `patrol.sh --overview` 的現況頁（動作前再讀該單原文，見接手文）並處理事件佇列（換手前後的留言都在佇列裡），之後 monitor 喚醒的是新心跳記的 terminal。新統籌之後給工程師的留言仍照[開工](WORKFLOW.md#任務流程)的反方向規則通知 terminal。
+1. 偵測：由 `patrol.sh` 做，達下面「統籌換手」的條件時表頭與最後一行印「已達換手條件」、exit 10。壓縮次數與 context 怎麼數、讀不到時印什麼，以及量接手加了多少 context（`session_cost.py takeover`）時讀[參考「換手偵測」](ops/COORDINATOR_REFERENCE.md#換手偵測)。
+2. 執行（含換手空窗）：要換手時讀[參考「執行換手」](ops/COORDINATOR_REFERENCE.md#執行換手)。
+3. 接回：新 session 沒接上時，同上。
+4. 收尾：由新統籌的 [`take_over.sh`](../tools/ops/take_over.sh) 做。`close` 步驟對舊 terminal 送短訊之前，腳本會印出舊 terminal 的畫面與 `draft`（輸入框裡還沒送出的字，短訊送出後就沒了；有字時多印一行提示），新統籌照印出的內容看最後一個回合與 `draft`：有使用者交代、而舊統籌沒照第 2 點（換手空窗）留到 #1 的事，由新統籌在 #1 補一則 `決定：` 並照常處理；只是問進度就在回覆使用者時一併回答。讀舊 terminal 那一步就失敗、沒有印出畫面時，讀[參考「接手腳本的步驟」](ops/COORDINATOR_REFERENCE.md#接手腳本的步驟)。
+5. 換手不通知工程師（細節同第 2 點）。新統籌之後給工程師的留言仍照[開工](WORKFLOW.md#任務流程)的反方向規則通知 terminal。
 
 ## 無人值守運作
 
 使用者不在時統籌照本節持續推進；使用者回來只看 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 本文與看板。
 
-- **事件佇列**：GitHub 與排程狀態由常駐的事件 monitor（[`monitor.sh`](../tools/ops/monitor.sh)，排程與管理見 [統籌事件 monitor](ops/MONITOR.md)）輪詢，不用 LLM；統籌 session 只處理 monitor 送來的事件，不自己輪詢 GitHub、不排定時輪詢的工作，也不自己用 gh 查 PR、CI 或新留言；接手時的 `patrol.sh --overview`，以及對某張單動作前讀那張單的本文與相關留言（[接手文](#統籌-session)）不在此限。monitor 每輪最多 2 次 gh（open PR 的 CI 與 `mergeStateStatus`、repo 層級新留言）、兩輪至少隔 60 秒（5000 次／小時的限流全帳號共用），另讀 task worktree 數（名額事件只是提示，名額只由 patrol 判定）與排程日誌（含看門狗記的 gh 被拒）；新事件去重後寫入 `<資料目錄>/logs/events.jsonl`，並依事件的分級對心跳檔記的統籌 terminal 送一句「有 N 個事件，請處理佇列」，同一事件只喚醒一次：急件（`提問：`、CI 紅、`DIRTY` 等）立即喚醒，terminal 不閒置時每輪重試；CI 綠、`BEHIND` 等立即喚醒；`回報：`、新 PR、名額等搭下一次喚醒，最晚等 15 分鐘（#711，分級表見[統籌事件 monitor](ops/MONITOR.md)）。monitor 在 scheduler 容器裡時（#338），佇列與心跳仍是這兩個主機路徑（bind mount），喚醒與 task worktree 數經主機的 wake listener 用本機 orca 執行；listener 沒在跑時喚醒失敗、事件留在佇列，10 分鐘後再試。
-- **處理佇列**：被喚醒時（或自己開始一輪工作時）先跑 `bash tools/ops/wake_listener_start.sh`（wake listener 已在跑就什麼都不做），再跑 `bash tools/ops/patrol.sh`：[它](../tools/ops/patrol.sh)寫心跳檔、讀自己的計數檔與換手標記，印出 monitor 的心跳與它最後一輪看到的 open PR 與排程日誌最後一列、[未回覆的提問](WORKFLOW.md#留言類型)、並行名額（下一點）、未處理的事件與未兌現的承諾（見下面「統籌承諾」；達換手條件時最後一行另印、exit 10），不讀排程日誌（scheduler 容器的日誌在 volume 裡）。PR、CI 與新留言讀佇列，不呼叫 gh；只有未回覆的提問與並行名額要讀每個 open Issue 與 PR 的最新留言（Issue 是否已關、`決定：` 連到哪則，佇列的留言事件看不出來）與 PR 的 commit、看板待辦，用同一次 GraphQL 讀完、不逐一呼叫，gh 呼叫最多 `--max-gh` 次（預設 1，`--overview` 時是 2；0 或到上限時印「未查完」，其他輸出照常）。`--overview`（[`overview.py`](../tools/ops/overview.py)，#804）在最後幾行之前另印現況頁，用同一次查詢的回應（每張單多讀標題、本文與 milestone），內容見檔頭。分兩層（決定 [6914347432](https://github.com/YiCheng0608/stock-lab/issues/804#issuecomment-6914347432)）：只寫 `--overview` 印索引，接手時讀這一層；`--overview <單號>…` 印那幾張單的完整段落，對某張單動作前讀；有單的留言超過 100 則時才多一次呼叫，以別名一次補齊這些單最舊的 totalCount−100 則（最多 100 則，以留言網址去重），補到的只給現況頁用，提問與名額照主查詢判定；補不到（超過 200 則、到上限或 gh 失敗）時那張單印「未查完」與缺的範圍（決定 [6913246451](https://github.com/YiCheng0608/stock-lab/issues/804#issuecomment-6913246451)）。同一次查詢另外只對 #1 多讀本文，對照下面「決策落地」：表頭印「#1 漏同步：N 則」（GitHub 沒讀到時印「未查完」，不當成 0 則），#1 本文超過 14 KB（`STOCK_GOVERNANCE_BODY_LIMIT` 位元組可改）時另印「#1 本文 N 位元組（K KB），超過上限 M」，這行只是提示；有漏同步的留言時，在最後一行前逐則列出時間、id、第一行，最後一行寫「#1 漏同步 N 則」並以 exit 12 結束（#807）。exit 碼的優先序是換手 10 → 名額空缺 11 → 漏同步 12，同時成立時用前面的碼，但各段照印；有本 session 的換手標記時只印出、exit 0。patrol 只在統籌被喚醒或開始一輪工作時跑一次，不是輪詢。open Issue 或 PR 超過 100 個、單一 Issue 留言超過 100 則時也印「未查完」並寫出沒讀到的範圍。照這個順序處理：open PR 的 CI 與合併 → [未回覆的提問](WORKFLOW.md#留言類型) → #1 漏同步（exit 12）：把列出的決定補進 #1 本文，一次性的決定在它的留言加 `本文：不同步`（見下面「決策落地」）→ 看 patrol 的名額行，名額空缺就派工（下一點）→ 背景工作是否卡住；處理完以 `patrol.sh --done <seq>`（到該 seq 為止的未處理事件，含下述不喚醒的事件）或 `--done <事件 id>` 標記。未處理事件每行前面標分級（`急件`、`立即`、`搭下一次`），表頭寫搭下一次的有幾個、還沒被喚醒涵蓋的最晚何時喚醒（UTC）。不喚醒的事件另列在「不喚醒的事件」下：統籌用 `comment.sh` 發的留言（含 `deploy.sh` 的 #1 留言）、PR 離開 open 清單（`pr_gone`）、與同 PR 同 head 的新 CI 結果同一輪出現的 `CLEAN`／`UNSTABLE` merge 狀態、monitor 自己在 #1 的「請開統籌」、`回報：開工`／`回報：收到…`、任務 PR 已離開 open 的工程師 session（#711）；它們照樣記進佇列，但不算未處理、不喚醒，也不計入 60 分鐘「請開統籌」，看過即可，不用處理（#440）。`gh_auth` 事件（GitHub 拒絕容器的 `GH_TOKEN`，看門狗與 monitor 都無法留言）由統籌用本機 gh 在 #1 留言「待使用者」請換 token（[容器內的 claude 與 gh 認證（.env）](ops/SETUP.md#容器內的-claude-與-gh-認證env)），同一台北日只有一個這種事件。心跳檔若屬於另一個 session 且不到 60 分鐘，又沒有它的換手標記，就不覆寫並非 0 結束；確定要接手才加 `--take-over`。
-- **並行名額**（#727，決定 [6882324819](https://github.com/YiCheng0608/stock-lab/issues/727#issuecomment-6882324819)）：名額由 patrol 經 [`slots.py`](../tools/ops/slots.py) 計算，統籌照名額行派工，不自己數、不沿用前任的數。表頭印「名額：已用 N／3（算：…；不算：…）」，下面每張一行寫判定與依據的留言連結。
-  - **任務**：本機 `git worktree list` 裡 branch 是 `task/<n>-*` 的 worktree；同一 Issue 有多個 worktree 算一張。
-  - **只等合併（不算）**：PR open，PR 上最新一則帶統籌標記的 `review：` 第一行有「可合併，必修 0 項」與 `` head `<sha>` ``，之後 PR 只有 update-branch 的 merge commit（2 個 parent、committer 是 GitHub），PR head 最新一個 `required` check 不是紅（不用 rollup 的總狀態：同 head 被新 run 取消的舊 run 會讓它變 FAILURE），本機 worktree 沒有未 commit 的改動、HEAD 在 PR 的 commit 裡。統籌寫 review（含複核通過）一律以「review：可合併，必修 0 項（head `<sha>`…）」或含這兩段的第一行開頭，否則程式讀不到。PR 已合併、還沒結案的也不算（已合併，等結案）。
-  - **等外部（不算）**：Issue 上一則第一行是 `回報：等外部（head `<sha>`）：<事件>，預計 <YYYY-MM-DD HH:MM>（台北）` 的留言，由工程師（或統籌）在只剩等外部時點時留。本機 HEAD 不是宣告的 sha、工作樹有改動、之後有 `提問：` 或沒有統籌標記的其他 `回報：`、或已過預計時點，就失效、算進名額。
-  - **其餘都算**：開發中（沒有 PR）、review 中、有必修、CI 紅；讀不到的（git status 失敗、留言或 commit 超過一頁）算進名額並印「判定不了（原因）」。GitHub 沒讀到（gh 失敗、`--max-gh 0`）時每張都是判定不了，名額行標「未查完」，不判定空額。
-  - **待辦與依賴**：有空額時列看板「待辦」（project 1 的看板位置順序，milestone 只印出；只列 open 的 `[任務]`、還沒有 task worktree 的）前幾張。GitHub blocked-by 有 open 的單，或本文「依賴的任務／資料：」那一行在等 open 的 Issue 或 PR（同一句裡（以「。」「；」「;」切）出現在「後」之前、和「後」之間有「合併」「完成」「結案」「驗收」其一的 `#n`，例如「#725（登記）合併後派」；只是參考的「#721（規格改版）」與「#729 拿掉…標示後的版本」不算），就印「有依賴，等 #…」、不算可派。
-  - **會失敗**：有空額而待辦有可派的單時，最後一行印「名額空缺 M 個，請派工：#n」、exit 11。換手條件同時成立時它印在換手那行之前、exit 10；有本 session 的換手標記時只印出、exit 0；台北 21:30～23:30 daily 時段也只印出，exit 0，但同時有 #1 漏同步時是 exit 12（#807）。
-- **工程師 session 的狀態**（#595）：佇列有 `engineer_waiting`、`engineer_failed`、`engineer_ended` 事件，或要知道工程師的 turn hook 怎麼寫狀態檔、什麼時候擋一次、有哪些已知限制時讀[參考「工程師 session 的狀態」](ops/COORDINATOR_REFERENCE.md#工程師-session-的狀態)。
-- **工程師 terminal 與 resume**（#595）：要找工程師的 terminal，或要 resume 工程師 session 時讀[參考「工程師 terminal 與 resume」](ops/COORDINATOR_REFERENCE.md#工程師-terminal-與-resume)。
+- **事件佇列**：GitHub 與排程狀態由常駐的事件 monitor（[`monitor.sh`](../tools/ops/monitor.sh)，排程與管理見 [統籌事件 monitor](ops/MONITOR.md)）輪詢，不用 LLM；統籌 session 只處理 monitor 送來的事件，不自己輪詢 GitHub、不排定時輪詢的工作，也不自己用 gh 查 PR、CI 或新留言；接手時的 `patrol.sh --overview`，以及對某張單動作前讀那張單的本文與相關留言（[接手文](ops/COORDINATOR_REFERENCE.md#開啟命令)）不在此限。要判斷某個事件為什麼（沒）喚醒、monitor 每輪讀什麼時讀[參考「事件 monitor」](ops/COORDINATOR_REFERENCE.md#事件-monitor)。
+- **處理佇列**：被喚醒時（或自己開始一輪工作時）先跑 `bash tools/ops/wake_listener_start.sh`（wake listener 已在跑就什麼都不做），再跑 `bash tools/ops/patrol.sh`：[它](../tools/ops/patrol.sh)印出 monitor 的心跳與它最後一輪看到的 open PR 與排程日誌最後一列、[未回覆的提問](WORKFLOW.md#留言類型)、並行名額（下一點）、未處理的事件與未兌現的承諾（見下面「統籌承諾」；達換手條件時最後一行另印、exit 10）。patrol 只在統籌被喚醒或開始一輪工作時跑一次，不是輪詢。照這個順序處理：open PR 的 CI 與合併 → [未回覆的提問](WORKFLOW.md#留言類型) → #1 漏同步（exit 12）：把列出的決定補進 #1 本文，一次性的決定在它的留言加 `本文：不同步`（見下面「決策落地」）→ 看 patrol 的名額行，名額空缺就派工（下一點）→ 背景工作是否卡住；處理完以 `patrol.sh --done <seq>`（到該 seq 為止的未處理事件，含下述不喚醒的事件）或 `--done <事件 id>` 標記。patrol 印的「未查完」、`--overview` 的兩層、exit 碼、分級、「不喚醒的事件」、`gh_auth` 事件，或 patrol 因心跳屬於別的 session 而非 0 結束時，讀[參考「patrol 的輸出」](ops/COORDINATOR_REFERENCE.md#patrol-的輸出)。
+- **並行名額**（#727，決定 [6882324819](https://github.com/YiCheng0608/stock-lab/issues/727#issuecomment-6882324819)）：名額由 patrol 經 [`slots.py`](../tools/ops/slots.py) 計算，統籌照名額行派工，不自己數、不沿用前任的數。名額行怎麼讀、某張單為什麼算或不算、待辦為什麼列成有依賴、什麼時候 exit 11，讀[參考「並行名額的判定」](ops/COORDINATOR_REFERENCE.md#並行名額的判定)。
+  - 統籌寫 review（含複核通過）一律以「review：可合併，必修 0 項（head `<sha>`…）」或含這兩段的第一行開頭，否則程式讀不到。
+  - **等外部（不算）**：Issue 上一則第一行是 `回報：等外部（head `<sha>`）：<事件>，預計 <YYYY-MM-DD HH:MM>（台北）` 的留言，由工程師（或統籌）在只剩等外部時點時留；什麼時候失效見參考。
+- **工程師 session**（#595）：佇列有 `engineer_*` 事件、或要知道 turn hook 怎麼寫狀態檔時讀[參考「工程師 session 的狀態」](ops/COORDINATOR_REFERENCE.md#工程師-session-的狀態)；要找工程師的 terminal 或 resume 時讀[參考「工程師 terminal 與 resume」](ops/COORDINATOR_REFERENCE.md#工程師-terminal-與-resume)。
 - **統籌留言**：統籌在 Issue／PR（含 #1）留言一律用 `bash tools/ops/comment.sh <Issue 或 PR 編號> --body-file <本文檔>`（[它](../tools/ops/comment.sh)在本文最後加一行不顯示的標記 `<!-- stock-lab:coordinator -->`，印出留言 URL；gh 失敗時非 0 結束、不印 URL），不直接用 `gh issue comment`／`gh pr comment`：所有 session 共用同一個 GitHub 帳號，monitor 只能靠這個標記認出統籌自己的留言、不為它喚醒統籌。本文檔照[留言類型](WORKFLOW.md#留言類型)第一行標類型，寫在 session 的 scratchpad。沒有標記的留言（工程師、使用者、獨立 review）照分級喚醒。
-- **monitor 的留言**：佇列有事件等了 60 分鐘、這段期間統籌心跳都沒更新時，monitor 在 #1 留言「待使用者：請開統籌」（同一心跳只留一則），不自己開 session（#1 [6245309556](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6245309556)、[6320448594](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6320448594)）。monitor 停擺超過 10 分鐘由看門狗在 #1 留言（[排程看門狗](ops/WATCHDOG.md)）。統籌兌現定時承諾（例如 G7 每日核對）可以排一次性的定時工作提醒自己，不算輪詢；承諾本身照下面「統籌承諾」寫進承諾檔。
+- **monitor 的留言**：#1 有 monitor 的「待使用者：請開統籌」或看門狗的留言，或要排一次性的定時工作提醒自己兌現承諾時，讀[參考「monitor 與看門狗的留言」](ops/COORDINATOR_REFERENCE.md#monitor-與看門狗的留言)。
 - **待辦隊列**：下一輪任務先建成 Issue（看板待辦），依 ROADMAP 與 milestone 的順序排，優先順序就是看板位置（patrol 照它列待辦）；建單時依賴另一張 Issue 的，除了本文「依賴的任務／資料：」一行，也用 GitHub 的 blocked-by 設上（`gh api -X POST repos/YiCheng0608/stock-lab/issues/<n>/dependencies/blocked_by -F issue_id=<被依賴的 Issue 的 id>`），patrol 才讀得到。[並行名額](../AGENTS.md#任務生命週期)（3 個，做完只等合併與只等外部時點的任務不算，由 patrol 計算，見上面「並行名額」）有空額就從最新 `origin/master` 派下一張。沒有已建 Issue 就先建，不停擺。台北 21:30～23:30 是排程 `daily` 時段（21:30 正式一輪、23:00 保險一輪，#466）：不派新工、不跑全套 pytest、不跑全市場 analyze，也不做吃記憶體的 `docker build`。
 - **需要使用者的事**（來源與付費、刪正式資料、外部帳戶、部署、對外操作、正式資料位置）：在 #1 留言寫清楚問題與統籌建議，標「待使用者」，轉做不受影響的工作；不猜答案、不停工。範圍取捨不在此列：照統籌建議先做，每項先在 #1 留 `決定：`（[AGENTS「角色」](../AGENTS.md#角色)）。部署（[`deploy.sh`](RELEASE.md#部署)）與要發佈的 tag 範圍也在這裡：使用者在 #1 明確授權後統籌才執行，授權留言連結寫進 `--operator`；腳本本身不檢查授權。
-- **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。漏同步由 `patrol.sh` 檢查（#807）：#1 最近 100 則留言裡，第一行是 `決定：`（含 `決定（補充…）`）、`統籌承諾：`，或沒有統籌標記的留言，id 不在本文、也不早於本文的歸檔留言，又沒有被涵蓋，就列出來、exit 12。本文寫留言連結（`issuecomment-<id>`）或只寫 id（6 位數以上，例如 `[6911025182]`）都算有寫。歸檔留言寫在本文唯一一行以 `歸檔：` 開頭的行，那一行只放一個 #1 留言連結，例如 `歸檔：[<id>](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-<id>)（2026-11-16 整理前的本文全文）`；id 小於等於它的留言都算已歸檔。`歸檔：` 開頭的行超過一行，或那一行沒有連結、有多個 #1 連結時，印「未查完」，不列任何一則。一次性的決定（同意某個 PR 合併、確認某天的通知有收到這類用完就沒有後續的決定）不進本文：統籌在那則 `決定：`／`統籌承諾：` 裡另起一行寫 `本文：不同步（<原因>）`。id 在本文、早於歸檔留言，或帶這個標記的統籌留言，內文提到的留言 id（例如「回覆 [id]」回覆的使用者「同意」）也算涵蓋；只往下算一層。不列的有：monitor、看門狗、`deploy.sh` 的自動留言（內文有「`tools/ops/<腳本>` 自動留言」），以及沒有統籌標記的 `部署：`、`回報：統籌 session 更換`、`回報：開工`、`回報：收到`。已被取代的決定：取代它的留言已同步進本文、內文又寫了舊決定的 id 時，就算涵蓋；也可以在本文寫上它的 id 並註明「已取代」。本文超過 14 KB 時表頭會提示，請整理成只列仍有效的決策。
+- **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。一次性的決定（同意某個 PR 合併、確認某天的通知有收到這類用完就沒有後續的決定）不進本文：統籌在那則 `決定：`／`統籌承諾：` 裡另起一行寫 `本文：不同步（<原因>）`。patrol 列 #1 漏同步（exit 12），或要知道哪些留言算已同步（歸檔行、涵蓋、已取代）時讀[參考「決策落地的比對」](ops/COORDINATOR_REFERENCE.md#決策落地的比對)。
 - **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree），或答應日後在某個時點做某件事（例如隔天的實測、21:30 daily 後的核對）時，同時寫兩處：在該 Issue 留一則 `統籌承諾：` 留言（[留言類型](WORKFLOW.md#留言類型)），再以 `bash tools/ops/commit.sh add --due <時間或 none> --url <那則留言的連結> --text <內容>` 寫進承諾檔 `<資料目錄>/logs/commitments.jsonl`（[`commit.sh`](../tools/ops/commit.sh)；時間寫成 `2026-11-07T09:23+08:00`，沒有固定時點寫 `none`）。兌現後在 Issue 留言並 `commit.sh done <id> --url <留言連結>`。`patrol.sh` 每次列出未兌現的承諾，已到期的標「已到期」；session 內排的一次性定時工作只當提醒，跟著 session 消失，不是唯一記錄。換手後由新統籌兌現（`take_over.sh` 也會列出）。
 - **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；最後一次呼叫的 context 超過門檻（預設 450K，#710）；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。
-- **前提與限制**：本機與 Orca 保持開機登入（monitor 在容器裡時，喚醒靠統籌 session 啟動的 wake listener，[統籌事件 monitor](ops/MONITOR.md)）；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。統籌停在權限或信任的確認框時，只有使用者能選，monitor 不替統籌選。monitor 的喚醒會記 `prompt_blocked`，持續 10 分鐘、至少 2 次後在 #1 留言「待使用者：統籌停在確認框」，同一次停住只留一則，這段期間不留「請開統籌」（#720，[統籌事件 monitor](ops/MONITOR.md)）。這只在佇列有事件要喚醒時才偵測得到；沒有事件等著時停住不會被發現，也不會誤事。
+- **前提與限制**：統籌停在權限或信任的確認框時，只有使用者能選，monitor 不替統籌選。其他前提（開機登入、額度用盡、合併把關），以及 #1 有「待使用者：統籌停在確認框」時，讀[參考「前提與限制」](ops/COORDINATOR_REFERENCE.md#前提與限制)。
 
 ## 記憶
 
@@ -66,7 +52,4 @@ Claude Code 的 project memory（`MEMORY.md` 與它列的記憶檔，每個統�
 - **用實際位置改**：統籌改記憶的 Edit／Write 一律寫實際位置，不要寫 session 開場提示給的 `$CLAUDE_CONFIG_DIR` 底下的 symlink 路徑。經 symlink 寫入會跳確認框（「outside working directory via a symlink」），加 `--add-dir` 也一樣；確認框有時停 100 秒以上，統籌就卡在那裡，佇列和喚醒都停住。寫實際位置不跳框，啟動與 resume 命令不必改（實測 [6880462190](https://github.com/YiCheng0608/stock-lab/issues/705#issuecomment-6880462190)）。
 - **誰改**：只有統籌與使用者改記憶（含新增）。工程師 session 不寫記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。checkout 在 `task/*` branch 的 session 以 Edit／Write／NotebookEdit 寫記憶目錄時，實際位置或 symlink 路徑都會被 [`agent_guard.cjs`](../tools/ops/agent_guard.cjs) 擋下（Bash 擋不到，見 [GUARDRAILS](GUARDRAILS.md)）。工程師把任務讓哪幾則記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查）寫在 PR 本文「欄位」區的「會過期的記憶」（[PR 模板](templates/pull-request.md)；沒有就寫「無」，空著時 CI `pr` 規則 f 會紅）。
 - **何時改**：結案時，`close_task.sh` 之後（[任務流程](WORKFLOW.md#任務流程)第 6 步）。照 PR 本文「會過期的記憶」改寫或刪掉那幾則：坑已編成檢查的，改成一句「已由 <檢查> 擋」併入相關主題，或直接刪掉（[encode-lesson](../.claude/skills/encode-lesson/SKILL.md) 第 6 步）。同步 `MEMORY.md`，改名或刪除時一併改掉別則的 `[[舊名稱]]`，再跑一次 `memory_check.py` 確認通過。平時讀到與現況不符的記憶，也當下改或刪。
-- **檢查**：[`memory_check.py`](../tools/ops/memory_check.py) 唯讀，會失敗、不是報告。它檢查五項：`MEMORY.md` 不超過 7,000 位元組、每列不超過 240 位元組（每個 session 開場都載入整份索引，#851；細節寫進記憶檔，索引只留提示）；`MEMORY.md` 每列連到一個存在的檔；目錄裡沒有不在索引的檔；`[[連結]]` 都指得到存在的記憶；反引號裡看起來是 repo 路徑的字串在管理 checkout 的 `origin/master` 上存在。判定規則見檔頭；已刪或改名的路徑要留作歷史時寫成 `<路徑>@<commit>`。失敗時每項印一列「<檔>: <檢查>: <原因>」；找不到記憶目錄時以 2 結束，不會靜默通過。兩支腳本會跑它：
-  - `take_over.sh` 的最後一步 `memory`：失敗時改好記憶，再以 `--from memory` 續跑。
-  - `close_task.sh` 在清理與索引之後、設看板之前：失敗時以 3 結束，看板不動；改好記憶後以 `close_task.sh <issue> --pr <n>` 續跑。
-  - 手動跑：在管理 checkout 執行 `python -X utf8 tools/ops/memory_check.py`。目錄可用 `--memory-dir` 或 `STOCK_MEMORY_DIR` 指定，預設依 `CLAUDE_CONFIG_DIR`（沒有時 `~/.claude`）推出。
+- **檢查**：`memory_check.py` 失敗、要手動跑，或要知道它檢查什麼時，讀[參考「記憶的檢查」](ops/COORDINATOR_REFERENCE.md#記憶的檢查)。

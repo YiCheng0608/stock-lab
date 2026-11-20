@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # A new coordinator's mechanical take-over steps in one run (Issue #534; docs/COORDINATOR.md
-# 統籌 session): the handover text names this script instead of listing the steps, so none
+# 統籌 session): the handover text (docs/ops/COORDINATOR_REFERENCE.md 開啟命令, #850) names
+# this script instead of listing the steps, so none
 # is left to the model's memory. The handbook's account of the steps is in
 # docs/ops/COORDINATOR_REFERENCE.md 接手腳本的步驟 (#828). In order, each read back before
 # the next:
@@ -34,7 +35,7 @@
 #   memory      memory_check.py on the Claude Code memory directory (read only, #705;
 #               $STOCK_MEMORY_DIR or the one Claude Code keeps for this repo): a failure
 #               names the memory and the check; the coordinator fixes it and goes on
-#               --from memory (docs/COORDINATOR.md 記憶)
+#               --from memory (docs/ops/COORDINATOR_REFERENCE.md 記憶的檢查)
 # A step that fails stops the run: nothing after it is done, and the steps already done are
 # printed with the command that goes on from the failed one (--from). The last line is
 # JSON: {"ok", "done": [steps], "failed": step or null, "reason", "comment_url"}.
