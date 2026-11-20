@@ -12,8 +12,13 @@ Two commands, so the download never touches a database:
 
 - ``fetch_archives`` downloads the quarters into a directory with a
   ``manifest.json``; a quarter already there and whole is not asked again.  At least
-  ``REQUEST_INTERVAL_SECONDS`` between requests, none during ``QUIET_HOURS``; no
-  retry, ``ABORT_AFTER_FAILURES`` failed quarters in a row stop it.
+  ``REQUEST_INTERVAL_SECONDS`` between requests, none during ``QUIET_HOURS``.  The
+  server sends no ``Content-Length`` and now and then closes the connection early,
+  so an answer that is zip data cut short (or slower than ``ATTEMPT_SECONDS``) is
+  asked again, at most ``ATTEMPTS_PER_QUARTER`` requests a quarter; nothing else is
+  retried.  Every failed attempt is in the result (bytes, seconds, first bytes) and
+  its file is kept under ``FAILED_DIR``.  ``ABORT_AFTER_FAILURES`` failed quarters in
+  a row stop it.
 - ``apply_archives`` writes the quarters into ``fundamental_snapshots``, one
   ``fundamental_xbrl_backfill`` run, one commit per quarter.  Only ``delisted`` and
   ``transferred`` instruments get rows (an active company is on today's list, so
@@ -99,6 +104,16 @@ QUIET_HOURS = (
 )
 ABORT_AFTER_FAILURES = 3
 USER_AGENT = "taiwan-stock-research/0.1"
+# The server answers HTTP/1.0 with no Content-Length and closed the connection early
+# on 4 of 10 archives on 2026-11-16; a whole one takes about 10 minutes (#786
+# 6906415391).  Only that case is asked again (decision 6906475680): a 200 whose
+# file starts as a zip but has no end, or one attempt over ATTEMPT_SECONDS.
+ATTEMPTS_PER_QUARTER = 3
+ATTEMPT_SECONDS = 30 * 60
+ZIP_LOCAL_HEADER = b"PK\x03\x04"
+# Failed attempts' files, kept for reading what the server sent.
+FAILED_DIR = "failed"
+FAILED_HEAD_BYTES = 16
 
 # --- limits on an archive (2014Q2: 2,037 members, the largest 1.5 MB, 0.54 GB in all) ---
 MAX_ARCHIVE_BYTES = 1 << 30
@@ -160,6 +175,14 @@ _ZERO_FORMATS = {"zerodash", "fixed-zero"}
 
 class ArchiveError(OfficialDataError):
     """A quarter's archive cannot be trusted; nothing of that quarter is used."""
+
+
+class TruncatedArchive(ArchiveError):
+    """The download ended before the archive did (or took too long); asked again."""
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class MemberError(ValueError):
@@ -274,13 +297,20 @@ def archive_members(archive: zipfile.ZipFile, quarter: Quarter) -> list[Member]:
 
 
 def check_archive(path: Path, quarter: Quarter) -> int:
-    """The member count of a downloaded archive; raises ArchiveError when it is not one."""
+    """The member count of a downloaded archive; raises ArchiveError when it is not one.
+
+    ``TruncatedArchive`` when the file starts as a zip but is not a whole one: the
+    connection closed before the end.  Anything else (HTML, a block page) is not.
+    """
 
     try:
         with zipfile.ZipFile(path) as archive:
             return len(archive_members(archive, quarter))
     except zipfile.BadZipFile as exc:
-        raise ArchiveError(f"{quarter.label} is not a whole zip: {exc}") from exc
+        with path.open("rb") as handle:
+            started_as_zip = handle.read(len(ZIP_LOCAL_HEADER)) == ZIP_LOCAL_HEADER
+        error = TruncatedArchive if started_as_zip else ArchiveError
+        raise error(f"{quarter.label} is not a whole zip: {exc}") from exc
 
 
 class ReadBudget:
@@ -463,14 +493,23 @@ def parse_eps(data: bytes, quarter: Quarter) -> tuple[float | None, str | None]:
 # --- download -------------------------------------------------------------------------
 
 
-def download(url: str, target: Path, max_bytes: int) -> int:
+def download(
+    url: str,
+    target: Path,
+    max_bytes: int,
+    *,
+    max_seconds: float = ATTEMPT_SECONDS,
+    clock: Callable[[], float] = time.monotonic,
+) -> int:
     """GET URL into TARGET (at most MAX_BYTES, else ArchiveError); the status code.
 
     Through ``sources._throttle_official_host`` as every official request; the
-    command's own interval (``REQUEST_INTERVAL_SECONDS``) is the longer one.
+    command's own interval (``REQUEST_INTERVAL_SECONDS``) is the longer one.  Over
+    MAX_SECONDS in all is ``TruncatedArchive`` (the 300 s timeout is per read).
     """
 
     sources._throttle_official_host(url)
+    started = clock()
     with httpx.stream(
         "GET", url, headers={"User-Agent": USER_AGENT}, timeout=300
     ) as response:
@@ -483,6 +522,11 @@ def download(url: str, target: Path, max_bytes: int) -> int:
                 if size > max_bytes:
                     raise ArchiveError(f"{url} is over {max_bytes} bytes")
                 handle.write(chunk)
+                if clock() - started > max_seconds:
+                    raise TruncatedArchive(
+                        f"{url} took over {max_seconds:.0f} s ({size} bytes)",
+                        status=200,
+                    )
             handle.flush()
             os.fsync(handle.fileno())
         return 200
@@ -503,7 +547,13 @@ def fetch_archives(
     targets = quarters_between(start, end)
     directory.mkdir(parents=True, exist_ok=True)
     manifest = read_manifest(directory)
-    result: dict[str, Any] = {"downloaded": [], "kept": [], "failed": {}}
+    result: dict[str, Any] = {
+        "downloaded": [],
+        "kept": [],
+        "failed": {},
+        "requests": 0,
+        "attempts": {},
+    }
     failures_in_a_row = 0
     last_request: float | None = None
     stopped: str | None = None
@@ -511,51 +561,85 @@ def fetch_archives(
         if whole_archive(directory, quarter, manifest):
             result["kept"].append(quarter.label)
             continue
-        if last_request is not None:
-            wait = REQUEST_INTERVAL_SECONDS - (clock() - last_request)
-            if wait > 0:
-                sleep(wait)
-        moment = now()
-        if in_quiet_hours(moment):
-            stopped = (
-                f"quiet hours at {moment.astimezone(TAIPEI):%H:%M} Taipei before "
-                f"{quarter.label}; run the same command again after them"
-            )
-            break
         url = archive_url(quarter)
         final = directory / archive_name(quarter)
         partial = final.with_name(final.name + ".part")
-        last_request = clock()
-        try:
-            status = getter(url, partial, MAX_ARCHIVE_BYTES)
-            if status != 200:
-                raise ArchiveError(f"{quarter.label}: HTTP {status}")
-            if not partial.exists() or partial.stat().st_size == 0:
-                raise ArchiveError(f"{quarter.label}: empty response")
-            members = check_archive(partial, quarter)
-        except (ArchiveError, httpx.HTTPError, OSError) as exc:
-            partial.unlink(missing_ok=True)
-            result["failed"][quarter.label] = str(exc)
-            failures_in_a_row += 1
-            if failures_in_a_row >= ABORT_AFTER_FAILURES:
+        failed_attempts: list[dict[str, Any]] = []
+        error: str | None = None
+        _set_aside_stale(directory, partial, quarter)
+        for attempt in range(1, ATTEMPTS_PER_QUARTER + 1):
+            if last_request is not None:
+                wait = REQUEST_INTERVAL_SECONDS - (clock() - last_request)
+                if wait > 0:
+                    sleep(wait)
+            moment = now()
+            if in_quiet_hours(moment):
                 stopped = (
-                    f"{failures_in_a_row} quarters failed in a row at {quarter.label}; "
-                    "停下來問"
+                    f"quiet hours at {moment.astimezone(TAIPEI):%H:%M} Taipei before "
+                    f"{quarter.label}; run the same command again after them"
                 )
                 break
+            last_request = clock()
+            result["requests"] += 1
+            status: int | None = None
+            try:
+                status = getter(url, partial, MAX_ARCHIVE_BYTES)
+                if status != 200:
+                    raise ArchiveError(f"{quarter.label}: HTTP {status}")
+                if not partial.exists() or partial.stat().st_size == 0:
+                    raise ArchiveError(f"{quarter.label}: empty response")
+                members = check_archive(partial, quarter)
+            except (ArchiveError, httpx.HTTPError, OSError) as exc:
+                error = str(exc)
+                status = getattr(exc, "status", None) or status
+                failed_attempts.append(
+                    _failed_attempt(
+                        directory,
+                        partial,
+                        quarter,
+                        attempt,
+                        moment,
+                        status,
+                        exc,
+                        clock() - last_request,
+                    )
+                )
+                if isinstance(exc, TruncatedArchive):
+                    # The interval before asking again counts from the end of the
+                    # cut answer, not from its start (review of PR #797).
+                    last_request = clock()
+                    continue
+                break
+            error = None
+            break
+        if failed_attempts:
+            result["attempts"][quarter.label] = failed_attempts
+        if error is None and stopped is None:
+            failures_in_a_row = 0
+            os.replace(partial, final)
+            manifest["quarters"][quarter.label] = {
+                "url": url,
+                "status": status,
+                "bytes": final.stat().st_size,
+                "sha256": _sha256_file(final),
+                "members": members,
+                "fetched_at": moment.astimezone(timezone.utc).isoformat(),
+                "requests": len(failed_attempts) + 1,
+            }
+            _write_manifest(directory, manifest)
+            result["downloaded"].append(quarter.label)
             continue
-        failures_in_a_row = 0
-        os.replace(partial, final)
-        manifest["quarters"][quarter.label] = {
-            "url": url,
-            "status": status,
-            "bytes": final.stat().st_size,
-            "sha256": _sha256_file(final),
-            "members": members,
-            "fetched_at": moment.astimezone(timezone.utc).isoformat(),
-        }
-        _write_manifest(directory, manifest)
-        result["downloaded"].append(quarter.label)
+        if error is not None:
+            result["failed"][quarter.label] = error
+        if stopped is not None:
+            break
+        failures_in_a_row += 1
+        if failures_in_a_row >= ABORT_AFTER_FAILURES:
+            stopped = (
+                f"{failures_in_a_row} quarters failed in a row at {quarter.label}; "
+                "停下來問"
+            )
+            break
     if stopped and failures_in_a_row >= ABORT_AFTER_FAILURES:
         status_text = "failed"
     elif stopped or result["failed"]:
@@ -569,6 +653,56 @@ def fetch_archives(
         "stopped": stopped,
         **result,
     }
+
+
+def _set_aside_stale(directory: Path, partial: Path, quarter: Quarter) -> None:
+    """A ``.part`` left by a stopped run moves to ``FAILED_DIR``: never read as this run's."""
+
+    if not partial.exists():
+        return
+    kept_dir = directory / FAILED_DIR
+    kept_dir.mkdir(exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    os.replace(partial, kept_dir / f"{archive_name(quarter)}.{stamp}-stale.part")
+
+
+def _failed_attempt(
+    directory: Path,
+    partial: Path,
+    quarter: Quarter,
+    attempt: int,
+    moment: datetime,
+    status: int | None,
+    exc: Exception,
+    seconds: float,
+) -> dict[str, Any]:
+    """One failed request for the result; its file moves to ``FAILED_DIR``, never deleted."""
+
+    record: dict[str, Any] = {
+        "attempt": attempt,
+        "at": moment.astimezone(timezone.utc).isoformat(),
+        "status": status,
+        "error": str(exc),
+        # Only a truncated answer is asked again (while attempts are left).
+        "truncated": isinstance(exc, TruncatedArchive),
+        "seconds": round(seconds, 1),
+        "bytes": 0,
+        "head": "",
+        "kept": None,
+    }
+    if partial.exists():
+        record["bytes"] = partial.stat().st_size
+        with partial.open("rb") as handle:
+            record["head"] = handle.read(FAILED_HEAD_BYTES).hex()
+        kept_dir = directory / FAILED_DIR
+        kept_dir.mkdir(exist_ok=True)
+        kept = kept_dir / (
+            f"{archive_name(quarter)}.{moment.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}"
+            f"-{attempt}.part"
+        )
+        os.replace(partial, kept)
+        record["kept"] = f"{FAILED_DIR}/{kept.name}"
+    return record
 
 
 # --- apply ----------------------------------------------------------------------------

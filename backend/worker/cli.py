@@ -473,7 +473,7 @@ def main() -> None:
     )
     xbrl_fetch_parser = fundamentals_subparsers.add_parser(
         "xbrl-fetch",
-        help="下載 MOPS 季度 XBRL 整包到目錄（一季 1 個請求、間隔 5 秒、不碰 DB；已有的不重抓，#781）",
+        help="下載 MOPS 季度 XBRL 整包到目錄（一季 1 個請求（截斷時整包重抓，最多 3 個）、間隔 5 秒、不碰 DB；已有的不重抓，#781）",
     )
     xbrl_apply_parser = fundamentals_subparsers.add_parser(
         "xbrl-apply",
