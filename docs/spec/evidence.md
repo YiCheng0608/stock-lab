@@ -626,7 +626,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
   - V2 另列子集合檔次與子集合內 `momentum_20` 的缺值比例。
   - V3 另列窗口內有「三欄都是 null」的列的比例與 T 日未還原收盤缺值或 ≤ 0 的比例；兩欄各自計數、不互斥，總缺值是 `cash_yield_12m` 那一欄。
   - V3 第 6 點：依讀到的每一年，列有日線的下市、轉板股（`stock`／`ipo`，`status` 是 `delisted` 或 `transferred`）中當年有任何除權息列（不分種類）的比例，另列同型別全部股票的比例。上櫃除權息 2007-12 起才有來源。
-- **紀錄檔**：和其他四支工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round5_research"`、`"round": 5`。同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **紀錄檔**：和其他四支工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round5_research"`、`"round": 5`。代號不重疊，五支工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
 - **輸出**（檔名、雜湊與公開方式同 `explore_research`）：`explore.md`（第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 3 個、累計 22 個、探索段與驗證段的門檻與 V3 的限制）、`explore.json`（另有 `tool`、`design`（`889`）、`validation_min_t`、`definitions_sha256`）、`<代號>/summary.md`、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名與用到的特徵值；V2 有 `turnover_60` 與 `momentum_20`）、`trades.csv`、`ledger-entries.json`。
 
 **`round5_research` 的版本**：`round5_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（V1～V3 的定義、特徵與排序的規則、分段、兩段的門檻與成本）；規則一樣，判定或報告格式一改就加一。

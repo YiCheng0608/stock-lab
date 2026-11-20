@@ -159,7 +159,10 @@ def definitions() -> dict[str, Any]:
                 "ddof": VOL_DDOF,
                 "missing": "fewer than 61 bars; a close missing or <= 0; a suspended bar",
             },
-            "momentum_20": {"function": "feature_evidence._momentum", "sessions": 20},
+            "momentum_20": {
+                "function": "feature_evidence._momentum",
+                "sessions": MOMENTUM_WINDOW,
+            },
             "turnover_60": {
                 "function": "explore_research.turnover_60",
                 "window": ex.TURNOVER_WINDOW,
@@ -234,7 +237,6 @@ class Context:
     base: ex.Context
     actions: dict[int, Actions] = field(default_factory=dict)
     statuses: dict[int, str] = field(default_factory=dict)
-    cache: dict[tuple[str, int, int], Any] = field(default_factory=dict)
 
     @property
     def market(self) -> pr.Market:
@@ -401,9 +403,8 @@ def rank(
     members: list[tuple[lib.Series, int]],
 ) -> Ranked:
     """The day's members in the hypothesis's order (the subset first) and the
-    counts of missing values.  The cache holds this signal date only."""
+    counts of missing values."""
 
-    ctx.cache.clear()
     names = used_features(spec)
     out = Ranked([], Counter())
     rows = []
