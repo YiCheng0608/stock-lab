@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "design": "703",
+  "registration_commit": "0ba48e9",
+  "segment": "validation",
+  "round": 1,
+  "round_size": 8,
+  "cumulative": 8,
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/explore_research.py --db /research/stock.db --segment validation --exploration-report /out/explore-x.json --exploration-sha256 7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8 --exploration-url https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032779893 --out /out/validation",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2024-09-27",
+  "min_t": 2.0,
+  "exploration": {
+    "sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+    "url": "https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032779893"
+  },
+  "hypotheses": {
+    "X4": {
+      "verdict": "前瞻觀察",
+      "reason": null,
+      "days": 1153,
+      "taiex_excess": {
+        "days": 1153,
+        "mean": 0.0003024370875009974,
+        "annual": 0.07621414605025134,
+        "t": 1.0167716465147043
+      },
+      "excess": {
+        "days": 1153,
+        "mean": 0.0001520177529706767,
+        "annual": 0.03830847374861053,
+        "t": 0.8011722259752428
+      },
+      "absolute_mean": 0.0009306290202608508,
+      "prerequisites": {
+        "days": 1153,
+        "min_days": 250,
+        "delisted": 60,
+        "ok": true
+      }
+    }
+  },
+  "elapsed_seconds": 136.71242705601617,
+  "peak_memory_gb": 1.0851821899414062
+}

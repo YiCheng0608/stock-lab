@@ -1,0 +1,177 @@
+{
+  "version": 2,
+  "design": "703",
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "label": "只取 `revenue_yoy` > 0 且 `eps_growth_yield` > 0，依最新一季 EPS × 4 ÷ T 日未還原收盤大者先",
+  "direction": "籌碼＋基本面",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "filters": [
+      [
+        "revenue_yoy",
+        ">",
+        0.0
+      ],
+      [
+        "eps_growth_yield",
+        ">",
+        0.0
+      ]
+    ],
+    "keys": [
+      "eps_yield_raw"
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "date",
+      "2014-08-14"
+    ]
+  },
+  "hypothesis": "X4",
+  "segment": "validation",
+  "verdict": "前瞻觀察",
+  "reason": null,
+  "window": {
+    "first_signal": "2019-12-31",
+    "first_session": "2020-01-02",
+    "last_session": "2024-09-27",
+    "days": 1153,
+    "signal_days": 1153
+  },
+  "prerequisites": {
+    "days": 1153,
+    "min_days": 250,
+    "delisted": 60,
+    "ok": true
+  },
+  "coverage": {
+    "2019": {
+      "days": 1,
+      "members": 449,
+      "missing": {
+        "revenue_yoy": 16,
+        "eps_growth_yield": 2,
+        "eps_yield_raw": 1
+      }
+    },
+    "2020": {
+      "days": 245,
+      "members": 138611,
+      "missing": {
+        "revenue_yoy": 5167,
+        "eps_growth_yield": 1651,
+        "eps_yield_raw": 1104
+      }
+    },
+    "2021": {
+      "days": 244,
+      "members": 160367,
+      "missing": {
+        "revenue_yoy": 3946,
+        "eps_growth_yield": 1646,
+        "eps_yield_raw": 913
+      }
+    },
+    "2022": {
+      "days": 246,
+      "members": 127925,
+      "missing": {
+        "revenue_yoy": 2295,
+        "eps_growth_yield": 1308,
+        "eps_yield_raw": 497
+      }
+    },
+    "2023": {
+      "days": 239,
+      "members": 138476,
+      "missing": {
+        "revenue_yoy": 2050,
+        "eps_growth_yield": 1295,
+        "eps_yield_raw": 416
+      }
+    },
+    "2024": {
+      "days": 178,
+      "members": 119781,
+      "missing": {
+        "revenue_yoy": 1170,
+        "eps_growth_yield": 985,
+        "eps_yield_raw": 503
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1153,
+      "mean": 0.0001520177529706767,
+      "annual": 0.03830847374861053,
+      "t": 0.8011722259752428
+    },
+    "taiex": {
+      "days": 1153,
+      "mean": 0.0003024370875009974,
+      "annual": 0.07621414605025134,
+      "t": 1.0167716465147043
+    }
+  },
+  "absolute": {
+    "days": 1153,
+    "mean": 0.0009306290202608508
+  },
+  "curves": {
+    "X4": {
+      "days": 1153,
+      "total": 1.6103795256831641,
+      "annual": 0.233317421777002,
+      "volatility": 0.22165575173357838,
+      "max_drawdown": -0.33390888103461935,
+      "invested": 0.9560987581777599,
+      "turnover": 4.192956262482229
+    },
+    "population": {
+      "days": 1153,
+      "total": 1.2159748219034459,
+      "annual": 0.18994460221351472,
+      "volatility": 0.21014410963041916,
+      "max_drawdown": -0.3077773329451119,
+      "invested": 0.9562517222239515,
+      "turnover": 4.1415203658988675
+    },
+    "taiex": {
+      "days": 1153,
+      "total": 0.9023525606936238,
+      "annual": 0.1509114747853486,
+      "volatility": 0.1878460967388565,
+      "max_drawdown": -0.3163186488434039,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 23037,
+    "won": 12228,
+    "rate": 0.5307982810261753,
+    "unsold": 1187
+  },
+  "counts": {
+    "X4": {
+      "bought": 23037,
+      "limit_up": 21,
+      "limit_down": 2,
+      "sale_held": 28,
+      "not_tradable": 2,
+      "unsold": 1187
+    },
+    "population": {
+      "bought": 684714,
+      "not_tradable": 142,
+      "limit_up": 753,
+      "sale_held": 1624,
+      "limit_down": 189,
+      "unsold": 41716
+    }
+  },
+  "min_t": 2.0
+}
