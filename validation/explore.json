@@ -1,0 +1,72 @@
+{
+  "version": 2,
+  "design": "703",
+  "registration_commit": "0ba48e9",
+  "segment": "validation",
+  "round": 1,
+  "round_size": 8,
+  "cumulative": 8,
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/explore_research.py --db /research/stock.db --segment validation --exploration-report /out/exploration/explore.json --exploration-sha256 191f3284422a5cdce7ee51919a0809a2797ab4981a13f3950a863d11461b110e --exploration-url https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687 --out /out/validation",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2024-09-27",
+  "min_t": 2.0,
+  "exploration": {
+    "sha256": "191f3284422a5cdce7ee51919a0809a2797ab4981a13f3950a863d11461b110e",
+    "url": "https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687"
+  },
+  "hypotheses": {
+    "X2": {
+      "verdict": "通過",
+      "reason": null,
+      "days": 1153,
+      "taiex_excess": {
+        "days": 1153,
+        "mean": 0.00043609894961661613,
+        "annual": 0.10989693530338726,
+        "t": 1.5598562138530816
+      },
+      "excess": {
+        "days": 1153,
+        "mean": 0.0002856796150862955,
+        "annual": 0.07199126300174646,
+        "t": 2.050004104499867
+      },
+      "absolute_mean": 0.0010642908823764695,
+      "prerequisites": {
+        "days": 1153,
+        "min_days": 250,
+        "delisted": 60,
+        "ok": true
+      }
+    }
+  },
+  "used": {
+    "X2": {
+      "verdict": null,
+      "reason": null,
+      "days": 514,
+      "taiex_excess": {
+        "days": 514,
+        "mean": -0.00031791264766195147,
+        "annual": -0.08011398721081177,
+        "t": -0.6807192000861343
+      },
+      "excess": {
+        "days": 514,
+        "mean": 0.00042058094485679967,
+        "annual": 0.10598639810391351,
+        "t": 1.47274162816048
+      },
+      "absolute_mean": 0.0010831373668223868,
+      "prerequisites": null
+    }
+  },
+  "elapsed_seconds": 360.8510283330106,
+  "peak_memory_gb": 1.4955711364746094
+}

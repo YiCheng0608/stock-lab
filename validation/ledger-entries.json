@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "hypothesis": "X2",
+      "round": 1,
+      "segment": "validation",
+      "version": 2,
+      "status": "finished",
+      "started_at": "2026-11-20T15:33:29+00:00",
+      "report_sha256": "191f3284422a5cdce7ee51919a0809a2797ab4981a13f3950a863d11461b110e",
+      "url": "https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "finished_at": "2026-11-20T15:37:04+00:00",
+      "verdict": "通過"
+    }
+  ]
+}
