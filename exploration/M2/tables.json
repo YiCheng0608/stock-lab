@@ -1,0 +1,192 @@
+{
+  "tool": "mainstream_research",
+  "version": 1,
+  "design": "813",
+  "definitions_sha256": "5e776480b0fa7d023c9f217671c856ac81ea8d4115d7ff94aac7446a263371f2",
+  "label": "同 M1，持有 60 日",
+  "direction": "主流族群",
+  "parameters": {
+    "rule": "daily",
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "date",
+      "2013-02-10"
+    ]
+  },
+  "hypothesis": "M2",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-02-18",
+    "first_session": "2013-02-19",
+    "last_session": "2019-12-31",
+    "days": 1690,
+    "signal_days": 1690
+  },
+  "prerequisites": {
+    "days": 1690,
+    "min_days": 500,
+    "delisted": 87,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 220,
+      "universe": 102762,
+      "grouped": 102110,
+      "selectable": 99910,
+      "ranked_groups": 4664,
+      "retroactive": 0,
+      "remapped": 1240,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2014": {
+      "days": 248,
+      "universe": 130171,
+      "grouped": 129585,
+      "selectable": 127148,
+      "ranked_groups": 5414,
+      "retroactive": 0,
+      "remapped": 1351,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2015": {
+      "days": 244,
+      "universe": 104887,
+      "grouped": 104426,
+      "selectable": 102715,
+      "ranked_groups": 4857,
+      "retroactive": 0,
+      "remapped": 1551,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2016": {
+      "days": 244,
+      "universe": 94193,
+      "grouped": 93774,
+      "selectable": 92199,
+      "ranked_groups": 4778,
+      "retroactive": 0,
+      "remapped": 1287,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2017": {
+      "days": 246,
+      "universe": 116000,
+      "grouped": 115507,
+      "selectable": 114232,
+      "ranked_groups": 5063,
+      "retroactive": 0,
+      "remapped": 1104,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2018": {
+      "days": 247,
+      "universe": 109430,
+      "grouped": 109135,
+      "selectable": 107931,
+      "ranked_groups": 4710,
+      "retroactive": 0,
+      "remapped": 1156,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2019": {
+      "days": 241,
+      "universe": 100632,
+      "grouped": 100340,
+      "selectable": 98790,
+      "ranked_groups": 4739,
+      "retroactive": 0,
+      "remapped": 1863,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1690,
+      "mean": -3.7319264393422497e-06,
+      "annual": -0.000940445462714247,
+      "t": -0.016265333674678514
+    },
+    "taiex": {
+      "days": 1690,
+      "mean": -3.1997713542580686e-05,
+      "annual": -0.008063423812730333,
+      "t": -0.10151661274488047
+    }
+  },
+  "absolute": {
+    "days": 1690,
+    "mean": 0.00024370219903655326
+  },
+  "curves": {
+    "M2": {
+      "days": 1690,
+      "total": 0.21304731084683648,
+      "annual": 0.029217621363513357,
+      "volatility": 0.25452721376960524,
+      "max_drawdown": -0.527472885209503,
+      "invested": 0.9641188510920211,
+      "turnover": 4.162628832565465
+    },
+    "population": {
+      "days": 1690,
+      "total": 0.4063136842022166,
+      "annual": 0.05215784213898189,
+      "volatility": 0.1510634077880306,
+      "max_drawdown": -0.3457898920356448,
+      "invested": 0.9649155297865419,
+      "turnover": 4.085544838125338
+    },
+    "taiex": {
+      "days": 1690,
+      "total": 0.5103033537986212,
+      "annual": 0.06340989062671776,
+      "volatility": 0.12620748061024076,
+      "max_drawdown": -0.2569687319514852,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 33759,
+    "won": 14885,
+    "rate": 0.44091945851476644,
+    "unsold": 1194
+  },
+  "counts": {
+    "M2": {
+      "bought": 33759,
+      "sale_held": 61,
+      "not_tradable": 11,
+      "limit_down": 19,
+      "limit_up": 30,
+      "unsold": 1194
+    },
+    "population": {
+      "bought": 757602,
+      "not_tradable": 229,
+      "sale_held": 2740,
+      "limit_up": 244,
+      "limit_down": 247,
+      "unsold": 27097
+    }
+  },
+  "min_t": 2.0
+}

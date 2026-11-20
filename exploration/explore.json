@@ -1,0 +1,78 @@
+{
+  "tool": "mainstream_research",
+  "version": 1,
+  "design": "813",
+  "registration_commit": "31a09e9e",
+  "correction_commit": "b417f716",
+  "segment": "exploration",
+  "round": 3,
+  "round_size": 2,
+  "cumulative": 15,
+  "definitions_sha256": "5e776480b0fa7d023c9f217671c856ac81ea8d4115d7ff94aac7446a263371f2",
+  "members_sha256": "2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/mainstream_research.py --db /research/stock.db --segment exploration --hypotheses M1,M2 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "M1",
+    "M2"
+  ],
+  "hypotheses": {
+    "M1": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1690,
+      "taiex_excess": {
+        "days": 1690,
+        "mean": -0.0002101170128690393,
+        "annual": -0.0529494872429979,
+        "t": -0.5918829106523106
+      },
+      "excess": {
+        "days": 1690,
+        "mean": 0.00015403091237167893,
+        "annual": 0.03881578991766309,
+        "t": 0.5645013924376809
+      },
+      "absolute_mean": 6.558289971009464e-05,
+      "prerequisites": {
+        "days": 1690,
+        "min_days": 500,
+        "delisted": 87,
+        "ok": true
+      }
+    },
+    "M2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1690,
+      "taiex_excess": {
+        "days": 1690,
+        "mean": -3.1997713542580686e-05,
+        "annual": -0.008063423812730333,
+        "t": -0.10151661274488047
+      },
+      "excess": {
+        "days": 1690,
+        "mean": -3.7319264393422497e-06,
+        "annual": -0.000940445462714247,
+        "t": -0.016265333674678514
+      },
+      "absolute_mean": 0.00024370219903655326,
+      "prerequisites": {
+        "days": 1690,
+        "min_days": 500,
+        "delisted": 87,
+        "ok": true
+      }
+    }
+  },
+  "elapsed_seconds": 141.82535267600906,
+  "peak_memory_gb": 1.6602401733398438
+}

@@ -1,0 +1,192 @@
+{
+  "tool": "mainstream_research",
+  "version": 1,
+  "design": "813",
+  "definitions_sha256": "5e776480b0fa7d023c9f217671c856ac81ea8d4115d7ff94aac7446a263371f2",
+  "label": "官方產業族群強弱前 5 個族群，成員中 240 日報酬前 20 名",
+  "direction": "主流族群",
+  "parameters": {
+    "rule": "daily",
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "date",
+      "2013-02-10"
+    ]
+  },
+  "hypothesis": "M1",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-02-18",
+    "first_session": "2013-02-19",
+    "last_session": "2019-12-31",
+    "days": 1690,
+    "signal_days": 1690
+  },
+  "prerequisites": {
+    "days": 1690,
+    "min_days": 500,
+    "delisted": 87,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 220,
+      "universe": 102762,
+      "grouped": 102110,
+      "selectable": 99910,
+      "ranked_groups": 4664,
+      "retroactive": 0,
+      "remapped": 1240,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2014": {
+      "days": 248,
+      "universe": 130171,
+      "grouped": 129585,
+      "selectable": 127148,
+      "ranked_groups": 5414,
+      "retroactive": 0,
+      "remapped": 1351,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2015": {
+      "days": 244,
+      "universe": 104887,
+      "grouped": 104426,
+      "selectable": 102715,
+      "ranked_groups": 4857,
+      "retroactive": 0,
+      "remapped": 1551,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2016": {
+      "days": 244,
+      "universe": 94193,
+      "grouped": 93774,
+      "selectable": 92199,
+      "ranked_groups": 4778,
+      "retroactive": 0,
+      "remapped": 1287,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2017": {
+      "days": 246,
+      "universe": 116000,
+      "grouped": 115507,
+      "selectable": 114232,
+      "ranked_groups": 5063,
+      "retroactive": 0,
+      "remapped": 1104,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2018": {
+      "days": 247,
+      "universe": 109430,
+      "grouped": 109135,
+      "selectable": 107931,
+      "ranked_groups": 4710,
+      "retroactive": 0,
+      "remapped": 1156,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2019": {
+      "days": 241,
+      "universe": 100632,
+      "grouped": 100340,
+      "selectable": 98790,
+      "ranked_groups": 4739,
+      "retroactive": 0,
+      "remapped": 1863,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1690,
+      "mean": 0.00015403091237167893,
+      "annual": 0.03881578991766309,
+      "t": 0.5645013924376809
+    },
+    "taiex": {
+      "days": 1690,
+      "mean": -0.0002101170128690393,
+      "annual": -0.0529494872429979,
+      "t": -0.5918829106523106
+    }
+  },
+  "absolute": {
+    "days": 1690,
+    "mean": 6.558289971009464e-05
+  },
+  "curves": {
+    "M1": {
+      "days": 1690,
+      "total": -0.1348625051587854,
+      "annual": -0.021369804353137067,
+      "volatility": 0.2762054755077761,
+      "max_drawdown": -0.5437106998759823,
+      "invested": 0.9425120302005515,
+      "turnover": 12.565195874228888
+    },
+    "population": {
+      "days": 1690,
+      "total": -0.20317268118202159,
+      "annual": -0.0332989755315769,
+      "volatility": 0.15151779082522765,
+      "max_drawdown": -0.41924834530125443,
+      "invested": 0.9449346349345672,
+      "turnover": 12.189631866589673
+    },
+    "taiex": {
+      "days": 1690,
+      "total": 0.5103033537986212,
+      "annual": 0.06340989062671776,
+      "volatility": 0.12620748061024076,
+      "max_drawdown": -0.2569687319514852,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 33759,
+    "won": 14852,
+    "rate": 0.4399419414082171,
+    "unsold": 380
+  },
+  "counts": {
+    "M1": {
+      "bought": 33759,
+      "not_tradable": 11,
+      "sale_held": 40,
+      "limit_down": 28,
+      "limit_up": 30,
+      "unsold": 380
+    },
+    "population": {
+      "bought": 757602,
+      "not_tradable": 229,
+      "sale_held": 1509,
+      "limit_down": 246,
+      "limit_up": 244,
+      "unsold": 8711
+    }
+  },
+  "min_t": 2.0
+}
