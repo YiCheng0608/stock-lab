@@ -6,7 +6,9 @@ registration day on the data no one used to choose it, each month in the same
 report as H1 (#699).  The first object is X4 (#867's validation, comment
 7033243199); the second H2, explore_research's X2, which passed its
 validation (#864 comment 7043710015, kind ``通過驗證`` until the user decides
-on the product, #875).  Nothing here is a command-line option: ``WATCHES`` holds each
+on the product, #875); the third H2 again, in the product from 2026-11-21
+(key ``H2-product``, kind ``已進產品``, #902; the old row stays and runs on,
+and the reports name both H2).  Nothing here is a command-line option: ``WATCHES`` holds each
 object's frozen entry, its definition is the one its own tool ran (imported,
 not copied, and refused when that tool's ``definitions_sha256`` is not the
 frozen one), and the golden test of its output fails on any change.
@@ -102,8 +104,33 @@ WATCHES: dict[str, dict[str, Any]] = {
             "https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043710015"
         ),
     },
+    # The user put H2 in the product (#1 7044998169); its list went live on
+    # 2026-11-21 (v1.2.74, #1 7050216934, #882 7050234452).  The same frozen X2, followed from
+    # that day as a product strategy (#902); the key differs from the row above
+    # (a dict key is unique), the code in the reports is still H2 (``display``).
+    "H2-product": {
+        "kind": PRODUCT,
+        "source": "explore_research",
+        "source_version": 2,
+        "code": "X2",
+        "definitions_sha256": (
+            "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63"
+        ),
+        "since": date(2026, 11, 21),
+        "min_days": MIN_DAYS,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7050216934"
+        ),
+    },
 }
 SOURCES = {"explore_research": er}
+
+
+def display(name: str) -> str:
+    """The object's code in its reports: the ``WATCHES`` key up to its first
+    ``-`` (``H2-product`` is H2, #875 決定 7044311598 第 3 點)."""
+
+    return name.split("-", 1)[0]
 
 
 def definition(name: str) -> dict[str, Any]:
@@ -256,10 +283,12 @@ def run_watch(
     start = since or entry["since"]
     out.mkdir(parents=True, exist_ok=True)
     run = ENGINES[entry["source"]](db, entry, start, cutoff, out)
+    code = display(name)
     # the engine counts under the source's code (X2); the report under the
-    # object's (H2), as its curve and its equity column
+    # object's (H2, also for H2-product: ``display``), as its curve and its
+    # equity column
     run["counts"] = {
-        (name if key == entry["code"] else key): value
+        (code if key == entry["code"] else key): value
         for key, value in run["counts"].items()
     }
     dates = run["dates"]
@@ -287,7 +316,7 @@ def run_watch(
         "first_session": dates[0].isoformat() if dates else None,
         "last_session": dates[-1].isoformat() if dates else None,
         "signal_days": run["signal_days"],
-        **study(run, name, entry["min_days"]),
+        **study(run, code, entry["min_days"]),
     }
     result["elapsed_seconds"] = time.monotonic() - started
     result["peak_memory_gb"] = lib._load("backtest_research").peak_memory_gb()
@@ -316,7 +345,7 @@ def _t(value: float | None) -> str:
 
 
 def markdown(result: dict[str, Any]) -> str:
-    name, entry, spec = result["watch"], result["entry"], result["definition"]
+    name, entry, spec = display(result["watch"]), result["entry"], result["definition"]
     days, threshold = result["days"], result["min_days"]
     e, a = result["excess"], result["absolute"]
     if result["verdict"] == "樣本不足":
@@ -400,7 +429,7 @@ def markdown(result: dict[str, Any]) -> str:
 
 
 def write_outputs(out: Path, result: dict[str, Any], run: dict[str, Any]) -> None:
-    name = result["watch"]
+    name = display(result["watch"])
     (out / "tables.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str) + "\n",
         encoding="utf-8",
