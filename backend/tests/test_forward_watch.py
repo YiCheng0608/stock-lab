@@ -577,3 +577,39 @@ def test_the_command_refuses_production(x4_db, tmp_path, monkeypatch, capsys):
     assert watch(x4_db, out) == 2
     assert "refused" in capsys.readouterr().out
     assert not out.exists()
+
+
+def test_the_entry_is_explore_researchs_x4(x4_db, frozen_run, monkeypatch):
+    """explore_research's own run of X4 on a segment from the start gives the
+    same daily equity, population and picks: the definition and the engine
+    are the ones #867 ran, not a second copy."""
+
+    days = trading_days()
+    first = next(day for day in days if day >= SINCE)
+    # a later segment's first signal is the session before its first day
+    segment = (days[days.index(first) + 1], days[-1])
+    monkeypatch.setattr(er, "SEGMENTS", {**er.SEGMENTS, "used": segment})
+    saved = {key: os.environ.get(key) for key in APP_PATHS}
+    try:
+        ctx = er.load_context(
+            x4_db,
+            SINCE - timedelta(days=er.WARMUP_CALENDAR_DAYS),
+            days[-1],
+            frozen_run.parent / "raw",
+        )
+        result = er.run_one(ctx, x4_db, "X4", "used")
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    mine, population = result["_equity"]
+    equity = read_csv(frozen_run / "equity.csv")
+    assert [row["date"] for row in equity] == [d.isoformat() for d in result["_dates"]]
+    assert [row["X4"] for row in equity] == [f"{v:.8f}" for v in mine]
+    assert [row["population"] for row in equity] == [f"{v:.8f}" for v in population]
+    picks = read_csv(frozen_run / "picks.csv")
+    assert [(row["signal_date"], row["symbol"]) for row in picks] == [
+        (row["signal_date"], row["symbol"]) for row in result["_rows"]
+    ]
