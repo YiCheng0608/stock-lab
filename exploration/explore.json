@@ -1,0 +1,78 @@
+{
+  "tool": "trade_research",
+  "version": 1,
+  "design": "726",
+  "registration_commit": "64a5efe1",
+  "segment": "exploration",
+  "round": 2,
+  "round_size": 5,
+  "cumulative": 13,
+  "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/trade_research.py --db /research/stock.db --segment exploration --hypotheses R1,R2 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "R1",
+    "R2"
+  ],
+  "hypotheses": {
+    "R1": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1227,
+      "trade_days": 1180,
+      "taiex_excess": {
+        "days": 1180,
+        "mean": -0.01020689762568221,
+        "t": -3.8001993595550685
+      },
+      "excess": {
+        "days": 1180,
+        "mean": -0.0005815705117280811,
+        "t": -0.22331761516775686
+      },
+      "absolute_mean": -0.008939267102455989,
+      "trades": 10628,
+      "abandon_rate": 0.05326919650810618,
+      "prerequisites": {
+        "days": 1227,
+        "min_days": 500,
+        "delisted": 71,
+        "ok": true
+      }
+    },
+    "R2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1227,
+      "trade_days": 1183,
+      "taiex_excess": {
+        "days": 1183,
+        "mean": -0.006782735728389189,
+        "t": -2.511207352894877
+      },
+      "excess": {
+        "days": 1183,
+        "mean": 0.002370392920009836,
+        "t": 0.8630690393342987
+      },
+      "absolute_mean": -0.006335243034241766,
+      "trades": 7207,
+      "abandon_rate": 0.06475473656890735,
+      "prerequisites": {
+        "days": 1227,
+        "min_days": 500,
+        "delisted": 71,
+        "ok": true
+      }
+    }
+  },
+  "elapsed_seconds": 146.71650880100788,
+  "peak_memory_gb": 0.8839874267578125
+}

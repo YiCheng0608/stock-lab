@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "design": "726",
+  "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+  "label": "pullback_v4_ablate_group（拿掉族群條件），E0 進出場",
+  "parameters": {
+    "kind": "rule",
+    "strategy": [
+      "pullback_v4",
+      "group"
+    ],
+    "entry_days": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ]
+  },
+  "hypothesis": "R2",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 1183,
+    "mean": -0.006782735728389189,
+    "t": -2.511207352894877
+  },
+  "excess": {
+    "days": 1183,
+    "mean": 0.002370392920009836,
+    "t": 0.8630690393342987
+  },
+  "absolute": {
+    "days": 1183,
+    "mean": -0.006335243034241766
+  },
+  "signals": 7706,
+  "signal_days": 1187,
+  "trade_days": 1183,
+  "trades": 7207,
+  "net_mean": -0.006573189737868227,
+  "net_median": -0.01789901993906893,
+  "win_rate": 0.37879839045372554,
+  "zero": 0,
+  "won_mean": 0.033463573620377135,
+  "lost_mean": -0.030986940903383043,
+  "won": 2730,
+  "lost": 4477,
+  "exit_share": {
+    "stop": 0.6060774247259608,
+    "target": 0.3693631191896767,
+    "time": 0.02053559039822395,
+    "segment_end": 0.0040238656861384765,
+    "delisted": 0.0,
+    "transferred": 0.0
+  },
+  "exits": {
+    "stop": 4368,
+    "target": 2662,
+    "time": 148,
+    "segment_end": 29,
+    "delisted": 0,
+    "transferred": 0
+  },
+  "both_touched": 12,
+  "gapped": 660,
+  "limit_delayed": 2,
+  "suspension_delayed": 0,
+  "holding_mean": 4.590259469959761,
+  "abandoned": 499,
+  "abandon_rate": 0.06475473656890735,
+  "abandon_reasons": {
+    "gap_above_target": 31,
+    "gap_below_invalid": 72,
+    "not_triggered": 396
+  },
+  "entry_limit_blocked": 0,
+  "below_lower": 0,
+  "filter_blocked_days": 0,
+  "filter_missing_days": 0,
+  "population_unbought": 1065,
+  "min_t": 2.0
+}
