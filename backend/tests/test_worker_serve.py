@@ -62,6 +62,12 @@ SERVE_CLI = JOB_FAKE_CLI.replace(
     "\n\nmain()\n",
     r"""
 
+# How long the job waits for HOLDING: far above the 5 s a loaded runner took to get
+# there (#870). Past it the limit stays counted from the job's start, so a worker
+# stuck before collect fails the test at once instead of hanging the CI job.
+HOLDING_WAIT_SECONDS = 60
+
+
 def limit_from(holding):
     # The job's limit counts from HOLDING, which the worker creates as it waits in
     # collect, its run row written, not from the job's start: a loaded runner can
@@ -75,7 +81,10 @@ def limit_from(holding):
 
         def start_and_wait(argv, **kwargs):
             process = start(argv, **kwargs)
+            give_up = time.monotonic() + HOLDING_WAIT_SECONDS
             while process.poll() is None and not holding.exists():
+                if time.monotonic() > give_up:
+                    return process
                 time.sleep(0.05)
             self.deadline = time.monotonic() + self.limit.total_seconds()
             return process
