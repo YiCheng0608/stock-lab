@@ -49,6 +49,7 @@ _CHILDREN = {
     "trading_halts",
     "preopen_news_checks",
     "mainstream_items",
+    "h2_items",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"

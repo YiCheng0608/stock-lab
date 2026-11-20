@@ -26,6 +26,7 @@ from app import mainstream, migrations
 from app.db import enable_sqlite_foreign_keys
 from app.domain import CANDIDATE_SCORE_VERSION
 from app.main import app
+from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
 from app.models import (
     CandidateRun,
@@ -748,4 +749,9 @@ def test_the_upgrade_adds_the_two_tables(tmp_path, monkeypatch, entry):
     assert all(item_columns.values()) and set(item_columns) == {
         column.name for column in MainstreamItem.__table__.columns
     }
-    assert marker == [("0033_mainstream_lists",)]
+    if entry == "alembic":
+        # Later revisions move the head (#881): 0033 is in the chain below it.
+        assert "0033_mainstream_lists" in REVISIONS
+        assert marker == [(REVISIONS[-1],)]
+    else:
+        assert marker == [("0033_mainstream_lists",)]

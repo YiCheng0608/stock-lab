@@ -2,7 +2,7 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
-analyze -> evaluate -> candidates -> indicators -> mainstream ->
+analyze -> evaluate -> candidates -> indicators -> mainstream -> h2_list ->
 plan_tracking -> strategy_levels -> action_tiers -> candidate_notes ->
 period_backfill).  catchup
 first collects recent official
@@ -87,6 +87,7 @@ DAILY_STEPS = (
     "candidates",
     "indicators",
     "mainstream",
+    "h2_list",
     "plan_tracking",
     "strategy_levels",
     "action_tiers",
@@ -101,6 +102,7 @@ STEP_REQUIRES = {
     "candidates": ("analyze",),
     "indicators": (),
     "mainstream": (),
+    "h2_list": (),
     "plan_tracking": (),
     "strategy_levels": ("analyze",),
     "action_tiers": ("analyze",),
@@ -124,6 +126,7 @@ NON_BLOCKING_STEPS = frozenset(
         "strategy_levels",
         "action_tiers",
         "mainstream",
+        "h2_list",
         "period_backfill",
     }
 )
@@ -164,6 +167,8 @@ ACTION_TIERS_MODULE = "worker.action_tiers"
 ACTION_TIERS_FUNCTION = "run_action_tiers"
 MAINSTREAM_MODULE = "worker.mainstream"
 MAINSTREAM_FUNCTION = "run_mainstream"
+H2_LIST_MODULE = "worker.h2_list"
+H2_LIST_FUNCTION = "run_h2_list"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
 TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
 # Set by worker.job for the worker it starts while holding the job's lock (#336).
@@ -270,6 +275,11 @@ def _action_tiers_step(target: date) -> dict[str, Any]:
 def _mainstream_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(MAINSTREAM_MODULE)
     return getattr(module, MAINSTREAM_FUNCTION)(target)
+
+
+def _h2_list_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(H2_LIST_MODULE)
+    return getattr(module, H2_LIST_FUNCTION)(target)
 
 
 def _trading_calendar_step(target: date) -> dict[str, Any]:
@@ -844,15 +854,17 @@ def run_daily_job(
         ("indicators", 6, lambda: _indicator_step(target)),
         # The second list (#768): after the today list, on the bars alone.
         ("mainstream", 7, lambda: _mainstream_step(target)),
+        # The H2 list (#881): on the bars and corporate actions alone.
+        ("h2_list", 8, lambda: _h2_list_step(target)),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
-        ("plan_tracking", 8, lambda: _plan_tracking_step(target)),
-        ("strategy_levels", 9, lambda: _strategy_levels_step(target)),
+        ("plan_tracking", 9, lambda: _plan_tracking_step(target)),
+        ("strategy_levels", 10, lambda: _strategy_levels_step(target)),
         # After strategy_levels, whose rows the tiers read (#476).
-        ("action_tiers", 10, lambda: _action_tiers_step(target)),
-        ("candidate_notes", 11, lambda: _candidate_note_step(target)),
+        ("action_tiers", 11, lambda: _action_tiers_step(target)),
+        ("candidate_notes", 12, lambda: _candidate_note_step(target)),
         # Last: it reads nothing the others write, and no other step waits on it.
-        ("period_backfill", 12, lambda: _period_backfill_step(target)),
+        ("period_backfill", 13, lambda: _period_backfill_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):

@@ -21,7 +21,13 @@ HEAD = "0031_drop_theme_suggestions"
 TABLES = ("theme_suggestions", "theme_suggestion_news")
 PREVIOUS = "0030_trading_halts"
 # What the revisions after 0031 add: an upgrade from 0030 to the head makes them too.
-LATER_TABLES = {"preopen_news_checks", "mainstream_runs", "mainstream_items"}
+LATER_TABLES = {
+    "preopen_news_checks",
+    "mainstream_runs",
+    "mainstream_items",
+    "h2_runs",
+    "h2_items",
+}
 LATER_INDEXES = {
     "ix_preopen_news_checks_list_date",
     "ix_preopen_news_checks_candidate_run_id",
@@ -30,6 +36,10 @@ LATER_INDEXES = {
     "ix_mainstream_items_mainstream_run_id",
     "ix_mainstream_items_trading_date",
     "ix_mainstream_items_instrument_id",
+    "ix_h2_runs_trading_date",
+    "ix_h2_items_h2_run_id",
+    "ix_h2_items_trading_date",
+    "ix_h2_items_instrument_id",
 }
 INDEXES = (
     "ix_theme_suggestions_last_news_date",

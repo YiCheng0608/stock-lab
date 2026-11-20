@@ -39,6 +39,7 @@ REVISIONS = (
     "0031_drop_theme_suggestions",
     "0032_preopen_news_checks",
     "0033_mainstream_lists",
+    "0034_h2_lists",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]

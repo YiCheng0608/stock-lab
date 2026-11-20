@@ -813,6 +813,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0033_mainstream_lists', CURRENT_TIMESTAMP)"
         )
     )
+    # 0034 only adds h2_runs / h2_items (#881), made by create_all with their
+    # indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0034_h2_lists', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
