@@ -4,7 +4,9 @@ docs/spec/evidence.md 前瞻監測與下架: every object (a hypothesis whose
 validation was ``前瞻觀察``, or a strategy in the product) is followed from its
 registration day on the data no one used to choose it, each month in the same
 report as H1 (#699).  The first object is X4 (#867's validation, comment
-7033243199).  Nothing here is a command-line option: ``WATCHES`` holds each
+7033243199); the second H2, explore_research's X2, which passed its
+validation (#864 comment 7043710015, kind ``通過驗證`` until the user decides
+on the product, #875).  Nothing here is a command-line option: ``WATCHES`` holds each
 object's frozen entry, its definition is the one its own tool ran (imported,
 not copied, and refused when that tool's ``definitions_sha256`` is not the
 frozen one), and the golden test of its output fails on any change.
@@ -18,8 +20,8 @@ bars before ``since`` are read for the features only (``WARMUP_CALENDAR_DAYS``,
 as explore_research's later segments).  The verdict is
 ``portfolio_research.forward_judge`` on every session to the cutoff with
 ``min_days`` 60: before 60 sessions it is ``樣本不足`` and the numbers are no
-verdict.  A forward-watch object is never delisted: even ``輸給基準`` is only
-recorded.
+verdict.  What follows a verdict is the kind's (``KIND_NOTES``): only a
+strategy in the product is proposed for delisting on ``輸給基準``.
 
 A next object registers its entry in ``WATCHES`` (its source tool, code,
 definition hash, since and kind), adds an engine to ``ENGINES`` if its tool's
@@ -55,11 +57,14 @@ MIN_DAYS = (
 WARMUP_CALENDAR_DAYS = er.WARMUP_CALENDAR_DAYS
 WATCH = "前瞻觀察"
 PRODUCT = "已進產品"
+PASSED = "通過驗證"  # #875 決定 7044311598: passed, the user not yet decided
 KIND_NOTES = {
     WATCH: "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；"
     "之後的數字再好也不改成「通過」、不進產品",
     PRODUCT: "已進產品的策略：滿 60 日起每月判一次，判到「輸給基準」由統籌在 #1 提案下架；"
     "其餘判定只列出",
+    PASSED: "通過驗證、待使用者決定進不進產品的策略：只當紀錄，不判下架；判到「輸給基準」時由統籌"
+    "在 #1 的進產品提案補一則（是事實，不是下架提案），其餘判定只記錄",
 }
 
 # The frozen entries (#868).  ``definitions_sha256`` is the source tool's at the
@@ -77,6 +82,24 @@ WATCHES: dict[str, dict[str, Any]] = {
         "min_days": MIN_DAYS,
         "registered": (
             "https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7033243199"
+        ),
+    },
+    # X2 passed both segments (#864 7041131687, 7043710015) and is H2 (#875):
+    # the same frozen definition, followed from the day its validation was
+    # written to the ledger.  The user's product decision adds a row, never
+    # edits this one (#875 決定 7044311598).
+    "H2": {
+        "kind": PASSED,
+        "source": "explore_research",
+        "source_version": 2,
+        "code": "X2",
+        "definitions_sha256": (
+            "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63"
+        ),
+        "since": date(2026, 11, 20),
+        "min_days": MIN_DAYS,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043710015"
         ),
     },
 }
@@ -233,6 +256,12 @@ def run_watch(
     start = since or entry["since"]
     out.mkdir(parents=True, exist_ok=True)
     run = ENGINES[entry["source"]](db, entry, start, cutoff, out)
+    # the engine counts under the source's code (X2); the report under the
+    # object's (H2), as its curve and its equity column
+    run["counts"] = {
+        (name if key == entry["code"] else key): value
+        for key, value in run["counts"].items()
+    }
     dates = run["dates"]
     spec = definition(name)
     result = {

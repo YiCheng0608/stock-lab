@@ -1,11 +1,12 @@
-"""tools/research/forward_watch.py: the frozen forward entry of X4 (#868).
+"""tools/research/forward_watch.py: the frozen forward entries of X4 (#868) and
+H2 (#875).
 
-X4's definition is explore_research's (#867 ran it, ``definitions_sha256``
-600dc942…ebec63); the entry adds only the start (2026-11-20), the 60 sessions
-before a verdict and the kind (前瞻觀察).  The runs use a synthetic copy whose
-calendar spans the frozen start, so the entry runs as frozen, and its five
-output files are locked by ``X4_DIGESTS``: a change there is a new entry, not
-an edit.
+X4's and X2's definitions are explore_research's (#867 and #864 ran them,
+``definitions_sha256`` 600dc942…ebec63); an entry adds only the start
+(2026-11-20), the 60 sessions before a verdict and the kind (X4 前瞻觀察, H2
+通過驗證).  The runs use a synthetic copy whose calendar spans the frozen start,
+so the entries run as frozen, and their five output files are locked by
+``X4_DIGESTS`` and ``H2_DIGESTS``: a change there is a new entry, not an edit.
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ SINCE = date(2026, 11, 20)
 
 
 def test_x4_is_the_frozen_entry():
-    assert set(tool.WATCHES) == {"X4"}
+    assert set(tool.WATCHES) == {"X4", "H2"}
     entry = tool.WATCHES["X4"]
     assert entry == {
         "kind": "前瞻觀察",
@@ -95,6 +96,44 @@ def test_x4_is_the_frozen_entry():
     assert tool.WARMUP_CALENDAR_DAYS == er.WARMUP_CALENDAR_DAYS == 730
 
 
+def test_h2_is_x2_frozen_as_passed():
+    """H2 is X2 as #864's exploration (7041131687) and validation (7043710015)
+    ran it: the same definition hash as X4's (one explore_research version 2),
+    the kind 通過驗證 and the start 2026-11-20 (#875 決定 7044311598)."""
+
+    entry = tool.WATCHES["H2"]
+    assert entry == {
+        "kind": "通過驗證",
+        "source": "explore_research",
+        "source_version": 2,
+        "code": "X2",
+        "definitions_sha256": X4_SHA256,
+        "since": SINCE,
+        "min_days": 60,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043710015"
+        ),
+    }
+    assert tool.definition("H2") is er.HYPOTHESES["X2"]
+    assert tool.source_problems("H2") == []
+    assert tool.definition("H2") == {
+        "direction": "持有較久、低換手",
+        "label": "`high_gap_240`（收盤 ÷ 240 日最高價 − 1）大者先",
+        "rule": "daily",
+        "subset": None,
+        "filters": (),
+        "keys": ("high_gap_240",),
+        "top": 20,
+        "hold": 60,
+        "start": ("session", date(2007, 4, 23), 240),
+    }
+    # the two kinds before it are unchanged (X4's golden output holds its note)
+    assert (tool.WATCH, tool.PRODUCT, tool.PASSED) == ("前瞻觀察", "已進產品", "通過驗證")
+    assert set(tool.KIND_NOTES) == {"前瞻觀察", "已進產品", "通過驗證"}
+    assert "在 #1 的進產品提案補一則" in tool.KIND_NOTES["通過驗證"]
+    assert "不是下架提案" in tool.KIND_NOTES["通過驗證"]
+
+
 def test_the_command_has_no_parameter_flags(tmp_path):
     options = {
         option for action in tool._parser()._actions for option in action.option_strings
@@ -118,23 +157,26 @@ def test_the_command_has_no_parameter_flags(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("attribute", "value", "message"),
+    ("name", "attribute", "value", "message"),
     [
-        ("VERSION", 3, "version 3"),
-        ("HYPOTHESES", None, "definitions_sha256"),
+        ("X4", "VERSION", 3, "version 3"),
+        ("X4", "HYPOTHESES", None, "definitions_sha256"),
+        ("H2", "VERSION", 3, "version 3"),
+        ("H2", "HYPOTHESES", None, "definitions_sha256"),
     ],
 )
 def test_a_changed_source_is_refused(
-    x4_db, tmp_path, monkeypatch, capsys, attribute, value, message
+    x4_db, tmp_path, monkeypatch, capsys, name, attribute, value, message
 ):
     no_window(monkeypatch)
     if value is None:
-        changed = {**er.HYPOTHESES, "X4": {**er.HYPOTHESES["X4"], "top": 10}}
+        code = tool.WATCHES[name]["code"]
+        changed = {**er.HYPOTHESES, code: {**er.HYPOTHESES[code], "top": 10}}
         monkeypatch.setattr(er, "HYPOTHESES", changed)
     else:
         monkeypatch.setattr(er, attribute, value)
     out = tmp_path / "out"
-    assert watch(x4_db, out) == 2
+    assert watch(x4_db, out, name=name) == 2
     refused = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["refused"]
     assert any(message in problem for problem in refused)
     assert not out.exists()
@@ -323,7 +365,7 @@ def no_window(monkeypatch):
 APP_PATHS = ("STOCK_DB_PATH", "STOCK_DATA_DIR", "STOCK_RAW_DIR")
 
 
-def watch(db: Path, out: Path, *extra: str) -> int:
+def watch(db: Path, out: Path, *extra: str, name: str = "X4") -> int:
     saved = {key: os.environ.get(key) for key in APP_PATHS}
     try:
         return tool.main(
@@ -331,7 +373,7 @@ def watch(db: Path, out: Path, *extra: str) -> int:
                 "--db",
                 str(db),
                 "--watch",
-                "X4",
+                name,
                 "--out",
                 str(out),
                 "--min-free-gb",
@@ -463,6 +505,77 @@ def test_the_frozen_run_reports_the_object_first_taiex_then_the_population(froze
     assert max(int(row["rank"]) for row in picks) <= 20
 
 
+# H2's forward outputs on ``x4_db`` (written by the commit that added the entry,
+# #875): as X4_DIGESTS, a change is a new entry, not an edit.
+H2_DIGESTS = {
+    "summary.md": "06a07ec3cdd62c1ef2fe8c1a2005b8f3eb00cd39e90a00b4458b7b2424dffebd",
+    "tables.json": "3dc58f4cbead94343cabbae6051e0d380646641eb4a8ea2846ff2e45ac4ff748",
+    "equity.csv": "09b4045e9eb08c5de2cb3a46d2c1d0d265720d7bdc87c55258fc4e59d178cc4b",
+    "picks.csv": "f193e9a073a4ccebe3174e14649bb87f6460a9e9216ee09bbe2284aac856e41f",
+    "trades.csv": "2e364f898db203b495a957c7a09904359a89058d67dbdd105ebecb136c742b68",
+}
+
+
+@pytest.fixture(scope="module")
+def h2_run(x4_db, tmp_path_factory):
+    out = tmp_path_factory.mktemp("h2") / "out"
+    patch = pytest.MonkeyPatch()
+    no_window(patch)
+    try:
+        assert watch(x4_db, out, name="H2") == 0
+    finally:
+        patch.undo()
+    return out
+
+
+def test_h2_output_is_frozen(h2_run):
+    assert digests(h2_run) == H2_DIGESTS
+
+
+def test_h2_reports_its_kind_and_x2s_picks(h2_run):
+    tables = read_json(h2_run / "tables.json")
+    days = trading_days()
+    assert tables["days"] == len([day for day in days if day >= SINCE]) - 1 >= 60
+    assert (tables["watch"], tables["kind"], tables["min_days"]) == ("H2", "通過驗證", 60)
+    assert tables["first_signal"] == next(d for d in days if d >= SINCE).isoformat()
+    # the counts are the object's, under its name as its curve
+    assert set(tables["counts"]) == {"H2", "population"}
+    assert set(tables["curves"]) == {"taiex", "H2", "population"}
+    assert tables["counts"]["H2"]["bought"] > 0
+    summary = (h2_run / "summary.md").read_text(encoding="utf-8").splitlines()
+    assert summary[0].startswith("# H2 通過驗證的前瞻紀錄")
+    first = [line for line in summary if line.startswith("- ")][:4]
+    assert first[0].startswith("- 對加權指數超額（只列出）")
+    assert first[1].startswith("- 對母體超額") and f"累積 {tables['days']} 日" in first[1]
+    assert first[2].startswith("- 判定：") and "在 #1 的進產品提案補一則" in first[2]
+    assert first[3].startswith("- 定義：explore_research 第 2 版的 X2")
+    assert X4_SHA256 in first[3] and "issuecomment-7043710015" in first[3]
+    bought = tables["counts"]["H2"]["bought"]
+    assert f"成交計數：買進 {bought:,}、" in "\n".join(summary)
+    assert read_csv(h2_run / "equity.csv")[0].keys() == {
+        "date",
+        "H2",
+        "population",
+        "taiex_close",
+    }
+    # the picks are X2's: no filter, closest to the 240-session high first
+    picks = read_csv(h2_run / "picks.csv")
+    assert picks and set(picks[0]) == {
+        "signal_date",
+        "rank",
+        "exchange",
+        "symbol",
+        "high_gap_240",
+        "tie",
+    }
+    by_day: dict[str, list[float]] = {}
+    for row in picks:
+        by_day.setdefault(row["signal_date"], []).append(float(row["high_gap_240"]))
+    assert all(len(values) == 20 for values in by_day.values())
+    assert all(values == sorted(values, reverse=True) for values in by_day.values())
+    assert len({row["symbol"] for row in picks}) > 20
+
+
 # --- causality and the start ------------------------------------------------------
 
 
@@ -579,11 +692,14 @@ def test_the_command_refuses_production(x4_db, tmp_path, monkeypatch, capsys):
     assert not out.exists()
 
 
-def test_the_entry_is_explore_researchs_x4(x4_db, frozen_run, monkeypatch):
-    """explore_research's own run of X4 on a segment from the start gives the
-    same daily equity, population and picks: the definition and the engine
-    are the ones #867 ran, not a second copy."""
+@pytest.mark.parametrize(("name", "run"), [("X4", "frozen_run"), ("H2", "h2_run")])
+def test_the_entry_is_explore_researchs_own(x4_db, request, monkeypatch, name, run):
+    """explore_research's own run of the code on a segment from the start gives
+    the same daily equity, population and picks: the definition and the engine
+    are the ones #867 (X4) and #864 (X2) ran, not a second copy."""
 
+    frozen_run = request.getfixturevalue(run)
+    code = tool.WATCHES[name]["code"]
     days = trading_days()
     first = next(day for day in days if day >= SINCE)
     # a later segment's first signal is the session before its first day
@@ -597,7 +713,7 @@ def test_the_entry_is_explore_researchs_x4(x4_db, frozen_run, monkeypatch):
             days[-1],
             frozen_run.parent / "raw",
         )
-        result = er.run_one(ctx, x4_db, "X4", "used")
+        result = er.run_one(ctx, x4_db, code, "used")
     finally:
         for key, value in saved.items():
             if value is None:
@@ -607,7 +723,7 @@ def test_the_entry_is_explore_researchs_x4(x4_db, frozen_run, monkeypatch):
     mine, population = result["_equity"]
     equity = read_csv(frozen_run / "equity.csv")
     assert [row["date"] for row in equity] == [d.isoformat() for d in result["_dates"]]
-    assert [row["X4"] for row in equity] == [f"{v:.8f}" for v in mine]
+    assert [row[name] for row in equity] == [f"{v:.8f}" for v in mine]
     assert [row["population"] for row in equity] == [f"{v:.8f}" for v in population]
     picks = read_csv(frozen_run / "picks.csv")
     assert [(row["signal_date"], row["symbol"]) for row in picks] == [
