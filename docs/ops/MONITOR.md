@@ -13,7 +13,7 @@
   | 分級 | 事件 | 喚醒 |
   | --- | --- | --- |
   | 急件 `urgent` | `提問：`；沒有類型的留言（第一行不是 `提問：`／`決定：`／`回報：`／`review：`／`統籌承諾：`）；#1 上的留言（統籌標記與 monitor 自己的除外）；CI 非 success；`DIRTY`；daily 失敗；`gh_auth`；`rate_limit` 以外的 `engineer_failed` | 立即；沒等到閒置時每輪重試 |
-  | 立即 `now` | CI success；`BEHIND`；不與 CI 同輪的 `CLEAN`／`UNSTABLE`；其他有類型的留言（`決定：`、`review：`、`統籌承諾：`）；news 失敗而它前一個 `end` 列沒有失敗或失敗的種類不同（種類＝`exit` 是否非 0 與 `news_llm_exit`；新出現的失敗） | 立即；失敗的喚醒 10 分鐘後再試 |
+  | 立即 `now` | CI success；`BEHIND`；不與 CI 同輪的 `CLEAN`／`UNSTABLE`；其他有類型的留言（`決定：`、`review：`、`統籌承諾：`）；news 失敗而它前一個 `end` 列沒有失敗或失敗的種類不同（種類＝`exit` 是否非 0 與 `news_llm_exit`；新出現的失敗）；`engineer_prompt_blocked`（#873） | 立即；失敗的喚醒 10 分鐘後再試 |
   | 搭下一次 `batch` | `回報：`（開工、收到以外）；新 PR（第一個 CI 結果中位數 14 分鐘後到）；`slots`；`rate_limit` 的 `engineer_failed`（同帳號的統籌也在限額內）；news 同一種失敗重複（前一個 `end` 列的種類相同）；daily 成功；任務 PR 還開著、還沒有 PR 或不知道的 `engineer_waiting`／`engineer_ended` | 跟著下一次喚醒；最舊一個沒被喚醒涵蓋的已記錄 15 分鐘（`BATCH_CAP`）時當「立即」喚醒 |
 
   「任務 PR 已離開 open」：`gh pr list` 多取 `headRefName`，`monitor-state.json` 記 open PR 的 branch（`pr_branches`）與離開 open 的 PR 的 branch 及時間（`gone_branches`，保留 7 天；同一 branch 又有 open PR 就移除）；工程師狀態檔的 `branch` 在 `gone_branches` 裡才算 quiet。state 讀不到或還沒有 `gone_branches`（#711 部署後第一輪）時照搭下一次，不當 quiet。`patrol.sh` 的未處理事件每行前面標分級，表頭加「搭下一次 N 個，最晚 <UTC> 喚醒」（只算還沒被喚醒涵蓋的）。喚醒前後的效果用 [`wake_replay.py`](../../tools/ops/wake_replay.py) 以佇列的**副本**重放（只讀；老式事件以存下的摘要推分級，近似處寫在它開頭）。
@@ -29,6 +29,12 @@
   - 恢復：下一筆喚醒不是 `prompt_blocked`（`sent`、`not_idle`），或心跳換了 terminal、統籌在最後一筆之後寫了心跳，這次停住就結束。不留恢復通知；之後再停住從新的第一筆起算，所以會再留一則。
   - 只在佇列有待處理事件、monitor 會去喚醒時才偵測得到。沒有事件在等時，停住不會誤事。
   - 判定在 [`event_queue.py`](../../tools/ops/event_queue.py) 的 `prompt_blocked_stop`／`prompt_blocked_comment`。
+- **工程師停在確認框**（#873；11/20 #864、#866 的工程師各停約 7 小時沒人發現）：每輪讀 task worktree 的工程師 terminal（`orca terminal list` 裡 branch 是 `task/*`、有 `agentIdentity` 的那個；同 worktree 的空 shell 沒有，不讀），對每個跑 `orca terminal show`，`agentWait` 是物件就是停在權限或信任確認框（和上面統籌的「wait 逾時」同一條規則），再以 `orca terminal read --screen` 讀確認框裡命令的第一行（「Bash command」這類標題下一行；信任框寫它的問句）。
+  - 起點是第一次看到停住的那一輪，記在 `monitor-state.json` 的 `engineer_menus`；`agentWait` 變 `null` 就結束這一段，之後再停從新的一輪起算；沒有 `agentWait`（Orca 判斷不了）或 terminal 列表讀不到的那一輪不結束也不開始；terminal 不在列表就刪掉。
+  - 同一段滿 10 分鐘（`PROMPT_BLOCKED_AFTER`）發一個「立即」事件 `engineer_prompt_blocked`，去重鍵是 terminal 與起點，同一段只發一次。事件寫 Issue 號、terminal handle、起點（UTC 與台北）、停了幾分鐘、命令第一行。
+  - 心跳記的統籌 terminal 不算，照上面的 `prompt_blocked` 走。monitor 不替工程師選；統籌怎麼處理見[參考「前提與限制」](COORDINATOR_REFERENCE.md#前提與限制)。
+  - `patrol.sh` 的名額列與該任務那一行標「工程師停在確認框」（讀 `engineer_menus`，未滿 10 分鐘的也標）。
+  - 判定在 [`event_queue.py`](../../tools/ops/event_queue.py) 的 `engineer_menu_events`，讀畫面在 [`wake_listener.py`](../../tools/ops/wake_listener.py) 的 `engineer_terminals`／`menu_command`。
 - **請開統籌**：佇列有事件已 60 分鐘、期間統籌心跳都沒更新時，在 #1 留言「待使用者：請開統籌」，同一心跳只留一則（`stale` 列）；不開 session。
 - **自身狀態**：每輪寫 `logs/monitor-heartbeat.json`、把 daily／news 最新日誌的 `end` 列與 `watchdog.log` 最後一列記進 `logs/monitor-state.json`（`patrol.sh` 印這份，不自己讀日誌，#338），並在 `logs/monitor.log` 記一列（UTC 時間、`poll`、`gh_calls`、新事件與未處理數、喚醒結果）；心跳另記 gh 連續失敗的輪數、從何時起與最後的錯誤（失敗那次呼叫自己的 stderr 最後一行；逾時記 `timeout`；沒有輸出記 `exit <碼>`；`patrol.sh` 也印出）。看門狗在心跳超過 10 分鐘或 gh 連續失敗 10 輪時留言（[排程看門狗](WATCHDOG.md)）。同時只跑一個（`logs/monitor.lock/`，內容是持有者的 pid、token 與主機名稱；同一主機時 pid 已不在或心跳超過 10 分鐘就視為殘留接手；鎖是別的主機或容器的（另一個 PID namespace，pid 無從判斷）時，心跳超過 3 分鐘才接手，#338）。每輪開頭、在 #1 留言前與寫佇列前都檢查鎖：被接手的舊 monitor 一發現鎖已不是自己的，就記 `lock_lost` 結束，不再呼叫 gh、留言或寫佇列，也不刪新持有者的鎖與工作目錄（各 monitor 的工作目錄是 `monitor.lock/work.<pid>`）。
 
@@ -52,13 +58,14 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 
 所以 `patrol.sh`、`compact_hook.sh` 與[統籌手冊](../COORDINATOR.md#無人值守運作)的路徑都不變，每個檔仍只有一個寫入者；job 日誌在 volume 裡，`patrol.sh` 印的是 monitor 寫進 `monitor-state.json` 的最後一列。看門狗以 `--monitor-dir /coordination` 讀 monitor 的心跳。停止：`monitor.stop` 對每分鐘一輪的 monitor 沒有作用，改把 `STOCK_MONITOR` 設成 `off` 後 `docker compose up -d scheduler`。回補、回測起跑時自己開[維護模式](SCHEDULING.md#維護模式)（`init-db` 照 RELEASE 手動開），不要停 scheduler：維護模式只停 daily 與 news，monitor 照常每分鐘一輪（#468；停 scheduler 會連 monitor 一起停，事件就沒人記、統籌也不會被喚醒）。
 
-**wake listener**（#338，使用者選的做法 B3）：容器裡沒有 Orca，喚醒與 task worktree 數經主機上常駐的 [`wake_listener.py`](../../tools/ops/wake_listener.py)。serve 的 `--monitor-waker` 預設 [`http_wake.sh`](../../tools/ops/http_wake.sh)、`--monitor-orca` 預設 [`http_orca.sh`](../../tools/ops/http_orca.sh)（只答 `worktree list --json`），兩者都以 `STOCK_WAKE_TOKEN` 呼叫 `STOCK_WAKE_URL`（預設 `http://host.docker.internal:47338/wake`）。
+**wake listener**（#338，使用者選的做法 B3）：容器裡沒有 Orca，喚醒與 task worktree 數經主機上常駐的 [`wake_listener.py`](../../tools/ops/wake_listener.py)。serve 的 `--monitor-waker` 預設 [`http_wake.sh`](../../tools/ops/http_wake.sh)、`--monitor-orca` 預設 [`http_orca.sh`](../../tools/ops/http_orca.sh)（只答 `worktree list --json` 與 `terminal list --json`，後者是 listener 的 `/terminals`，#873），兩者都以 `STOCK_WAKE_TOKEN` 呼叫 `STOCK_WAKE_URL`（預設 `http://host.docker.internal:47338/wake`）。
 
 - **只綁 `127.0.0.1:47338`，而且獨占**：Docker Desktop 把容器對 `host.docker.internal` 的連線代理到主機的 localhost（2026-10-29 實測，listener 看到的來源一律是 `127.0.0.1`），所以不用綁 `0.0.0.0`、不用開防火牆，LAN 連不到；代價是本機任何程序與任何容器都連得到，靠下面的 token、固定模板與限流把關。listener 不設 `SO_REUSEADDR`，Windows 另設 `SO_EXCLUSIVEADDRUSE`：port 已被別的程序（或另一個 listener）占用時，listener 自己就綁不到而結束（`127.0.0.1:47338 綁不到`），不會跟它共用。
-- **請求**：只收 `POST /wake` 與 `POST /worktrees`，都要 `Authorization: Bearer <token>`；不帶或錯的在任何 60 秒內前 10 次回 401 並各記一列 `refused reason=token`，之後回 429、不逐列記，被擋的次數記在下一次 401 那一列（`held_back=N`）。其他方法 405、其他路徑 404；`Content-Length` 不是非負整數（負數、非數字）400，超過 1 KB 413；body 的內容一律不讀。
+- **請求**：只收 `POST /wake`、`POST /worktrees` 與 `POST /terminals`，都要 `Authorization: Bearer <token>`；不帶或錯的在任何 60 秒內前 10 次回 401 並各記一列 `refused reason=token`，之後回 429、不逐列記，被擋的次數記在下一次 401 那一列（`held_back=N`）。其他方法 405、其他路徑 404；`Content-Length` 不是非負整數（負數、非數字）400，超過 1 KB 413；body 的內容一律不讀。
 - **送進 terminal 的只有固定模板**：terminal 取自主機的 `coordinator-heartbeat.json`，handle 只接受英數、`_`、`-` 而且不以 `-` 開頭（`event_queue.HANDLE`；以 `-` 開頭的會被 orca 當成選項，例如 `--enter`），不合就視為沒有心跳、回 `no_heartbeat`；傳給 orca 時寫成 `--terminal=<handle>`。N 由 listener 讀佇列算，文字是「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）」。送出照 `orca_wake.sh`：`tui-idle` 回 `satisfied:true` 才送。orca 對已結束的 terminal 也回 `satisfied:true`，接著 send 失敗，記 `send_failed`，不算已送。
 - **信任邊界**（#338 review）：容器寫得到 bind mount 裡的檔，包括統籌的 `coordinator-heartbeat.json`，所以容器（或拿到容器權限的人）能決定 listener 把固定模板送進哪個 terminal。可以接受，因為能送的只有上面那一句固定文字（呼叫端的任何內容都不會送出，N 是整數），而且只送進 orca 判定為閒置的 Orca terminal：最壞是某個閒置的 agent 收到「請處理佇列：bash tools/ops/patrol.sh」，不會被帶去執行別的指令。容器本來就持有 `GH_TOKEN` 等憑證，這不是新增的權限。
 - **`/worktrees`**：本機 `orca worktree list --json` 裡 `refs/heads/task/` 的 branch，包成 Orca 的 envelope；orca 失敗回 502，monitor 那一輪記 `worktrees=failed`、不記名額事件，不當成名額已空。
+- **`/terminals`**（#873）：工程師 terminal 與它們停不停在確認框（`wake_listener.engineer_terminals`，見上面的「工程師停在確認框」）；`orca terminal list` 失敗回 502，monitor 那一輪記 `terminals=failed`，停住的起點照舊。monitor 在主機用真的 orca 跑時改跑 `wake_listener.py --terminals`，同一段程式。回答裡的命令第一行是工程師畫面上的字，只進佇列給統籌讀，不會送進任何 terminal。
 - **限流**：每種請求同時只處理一個，上次回答後 30 秒內再來回 429 `throttled`；被拒的請求另有上面每分鐘 10 次的限制。
 - **回答與 exit code**：`/wake` 回 `sent`、`not_idle`、`prompt_blocked`（#720）、`send_failed`、`no_heartbeat`、`nothing_pending`；`http_wake.sh` 對 `sent` exit 0、`not_idle` exit 3、`prompt_blocked` exit 4，其他（含 listener 沒在跑、401、429）exit 1，monitor 記失敗的喚醒，10 分鐘後再試，事件留在佇列。每個請求在主機 `<資料目錄>/logs/wake-listener.log` 記一列。
 - **token**：`STOCK_WAKE_TOKEN` 只寫在發佈 checkout 根目錄那份由使用者自己建立的認證檔（`.env`，[容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)），至少 32 字元、不含空白；容器經 `env_file` 拿到它，listener 以 `--token-file` 讀同一個檔、只取這一列。由使用者產生並寫入（例如 `python -c "import secrets; print(secrets.token_urlsafe(32))"`），agent 不產生、不讀；換 token 後重建 scheduler 容器，並結束 listener 後重跑 `wake_listener_start.sh`。

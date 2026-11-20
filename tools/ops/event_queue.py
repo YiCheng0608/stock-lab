@@ -45,7 +45,11 @@ host directory at /coordination, #338), each with a single writer:
         #720); one per ``key``.
   events-done.jsonl       patrol.sh --done: {"type": "done", "at", "session_id", "ids"}
   monitor-state.json      monitor.sh: comment cursor, last poll, open PR snapshot, the
-                          last line of each job log (patrol.sh prints them)
+                          last line of each job log (patrol.sh prints them), and since
+                          #873 engineer_menus: the engineer terminals at a permission or
+                          trust menu, since when (engineer_menu_events; slots.py puts
+                          them on the slot lines). One that has been there
+                          PROMPT_BLOCKED_AFTER is an engineer_prompt_blocked event (now).
   sessions/<id>.json      read only; written on the host by the turn hook of engineer
                           sessions (tools/ops/turn_hook.cjs, #595): state working,
                           stopped (with commented, last_message), failed (an API
@@ -67,7 +71,8 @@ Subcommands (LOGS is <data>/logs):
   stale LOGS NOW [--record-only]  "KEY<TAB>BODY" when a #1 comment is due (請開統籌, or
                                   統籌停在確認框, #720), else nothing
   record LOGS NOW [--prs F] [--comments F] [--worktrees F] [--job-logs DIR]
-         [--gh-refused ERROR]     append the new events and print
+         [--gh-refused ERROR] [--terminals F]
+                                  append the new events and print
                                   "new=N pending=P unnotified=U wake=0|1 terminal=H"
   note-wake LOGS NOW OK TERMINAL DETAIL     OK is 1 or 0
   note-stale LOGS NOW KEY URL     URL "-" in record-only mode: kept in the state only
@@ -119,6 +124,9 @@ STALE_AFTER = 3600
 PROMPT_BLOCKED = "prompt_blocked"
 PROMPT_BLOCKED_AFTER = 600
 PROMPT_BLOCKED_WAKES = 2
+# An engineer terminal at such a menu that long (the same PROMPT_BLOCKED_AFTER) is an
+# event of this kind (#873, engineer_menu_events).
+ENGINEER_PROMPT_BLOCKED = "engineer_prompt_blocked"
 SLOTS = 3
 # The turn hook's state files (#595) and how long a turn may end without a comment
 # before the coordinator is woken for it.
@@ -748,6 +756,82 @@ def session_events(
     return out, skipped
 
 
+def engineer_menu_events(
+    before, terminals, now: float, coordinator: str
+) -> tuple[list[dict], dict | None]:
+    """The engineer terminals at a permission or trust menu (#873) and the stretches
+    kept in monitor-state.json (engineer_menus, by handle: since, branch, issue, command).
+    TERMINALS is wake_listener.py's engineer_terminals answer; a terminal whose agentWait
+    is an object (orca_wake.sh's rule for the coordinator, #720) is at a menu since the
+    first poll that saw it there; null ends the stretch, so the next menu starts a new
+    one; no agentWait (Orca cannot tell) keeps the stretch as it was; a terminal gone
+    from the list is dropped. A stretch PROMPT_BLOCKED_AFTER long is one now event, its
+    id the handle and the start. The coordinator's own terminal is left to #720's
+    prompt_blocked. None for the menus when the list was not read: they stay as they
+    were."""
+    before = before if isinstance(before, dict) else {}
+    if not isinstance(terminals, dict) or terminals.get("ok") is not True:
+        return [], None
+    rows = (terminals.get("result") or {}).get("terminals")
+    if not isinstance(rows, list):
+        return [], None
+    menus: dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        handle, branch = row.get("handle"), row.get("branch")
+        if not (isinstance(handle, str) and HANDLE.fullmatch(handle)):
+            continue
+        if not isinstance(branch, str) or not branch.startswith("refs/heads/task/"):
+            continue
+        if handle == coordinator:
+            continue
+        kept = before.get(handle)
+        kept = kept if isinstance(kept, dict) and kept.get("branch") == branch else None
+        if "agentWait" not in row:
+            if kept and epoch(kept.get("since")) is not None:
+                menus[handle] = kept
+            continue
+        if not isinstance(row["agentWait"], dict):
+            continue
+        entry = dict(kept) if kept and epoch(kept.get("since")) is not None else {}
+        if not entry:
+            found = re.match(r"refs/heads/task/(\d+)-", branch)
+            entry = {
+                "since": iso(now),
+                "branch": branch,
+                "issue": int(found.group(1)) if found else None,
+                "command": "",
+            }
+        command = row.get("command")
+        if not entry.get("command") and isinstance(command, str):
+            entry["command"] = one_line(command, 160)
+        menus[handle] = entry
+    events = []
+    for handle, entry in sorted(menus.items()):
+        since = epoch(entry["since"]) or now
+        if now - since < PROMPT_BLOCKED_AFTER:
+            continue
+        issue = entry.get("issue")
+        issue = (
+            issue if isinstance(issue, int) and not isinstance(issue, bool) else None
+        )
+        events.append(
+            _event(
+                f"{ENGINEER_PROMPT_BLOCKED}:{handle}:{entry['since']}",
+                ENGINEER_PROMPT_BLOCKED,
+                f"#{issue}" if issue is not None else "工程師",
+                f"工程師 terminal {handle} 從 {entry['since']}（台北 {_taipei(since)}）"
+                f"起停在權限或信任確認框 {int((now - since) // 60)} 分鐘："
+                f"{entry.get('command') or '（讀不到命令）'}",
+                ISSUE_URL.format(issue) if issue is not None else "",
+                at=entry["since"],
+                tier=NOW,
+            )
+        )
+    return events, menus
+
+
 def _event(
     id_: str,
     kind: str,
@@ -816,6 +900,7 @@ def record(
     worktrees,
     job_logs: Path | None = None,
     gh_refused: str | None = None,
+    terminals=None,
 ) -> str:
     q = Queue(logs)
     job_logs = job_logs or logs
@@ -857,6 +942,13 @@ def record(
         found += slot_events(worktrees)
     sessions, skipped = session_events(logs, now, task_branches(worktrees), gone_set)
     found += sessions
+    menu_events, menus = engineer_menu_events(
+        q.state.get("engineer_menus"), terminals, now, _heartbeat(logs)[0]
+    )
+    found += menu_events
+    if menus is not None:
+        state["engineer_menus"] = menus
+        state["engineer_menus_at"] = iso(now)
     new = []
     seq = q.seq
     for item in found:
@@ -1169,6 +1261,7 @@ def main(argv: list[str]) -> int:
                 _load(opts.get("--worktrees")),
                 Path(opts["--job-logs"]) if opts.get("--job-logs") else None,
                 opts.get("--gh-refused"),
+                _load(opts.get("--terminals")),
             )
         )
     elif command == "note-wake":

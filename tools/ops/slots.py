@@ -28,7 +28,7 @@ OpenQuestions name and every field coordinator_json.unanswered_questions reads, 
 body for governance_check, #807).
 
   query                      the GraphQL query (no stdin)
-  report NOW WORKTREES STATUS
+  report NOW WORKTREES STATUS [MONITOR_STATE]
                              stdin is the answer, or nothing when GitHub was not read; NOW
                              is epoch seconds, WORKTREES a file with `git worktree list
                              --porcelain` ("" when git could not list it), STATUS a file
@@ -38,7 +38,10 @@ body for governance_check, #807).
                              free and a candidate can be dispatched, the last line is
                              "名額空缺 M 個，請派工：#n" and the exit is 11, or 0 in the
                              daily window (台北 21:30～23:30), the line saying so. Exit 0
-                             otherwise; 64 bad arguments.
+                             otherwise; 64 bad arguments. MONITOR_STATE is the monitor's
+                             monitor-state.json: a task whose engineer terminal it saw at
+                             a permission or trust menu is tagged 工程師停在確認框 in the
+                             名額 line and its own line (#873).
 """
 
 from __future__ import annotations
@@ -437,21 +440,53 @@ def in_daily(now: int) -> bool:
     return 21 * 60 + 30 <= minutes < 23 * 60 + 30
 
 
-def report(doc, tasks: dict[int, list[Worktree]], now: int) -> tuple[list[str], int]:
+MENU_TAG = "［工程師停在確認框］"
+
+
+def menu_notes(state, now: int) -> dict[int, str]:
+    """By Issue, the engineer terminals the monitor last saw at a permission or trust
+    menu (#873, monitor-state.json engineer_menus, event_queue.engineer_menu_events)."""
+    menus = state.get("engineer_menus") if isinstance(state, dict) else None
+    if not isinstance(menus, dict):
+        return {}
+    seen = state.get("engineer_menus_at")
+    seen = seen if isinstance(seen, str) else "?"
+    out: dict[int, list[str]] = {}
+    for handle, entry in sorted(menus.items()):
+        if not isinstance(entry, dict) or not isinstance(entry.get("issue"), int):
+            continue
+        since = entry.get("since") if isinstance(entry.get("since"), str) else ""
+        try:
+            start = datetime.fromisoformat(since.replace("Z", "+00:00")).timestamp()
+            minutes = f" {int((now - start) // 60)} 分鐘"
+        except ValueError:
+            minutes = ""
+        command = entry.get("command") if isinstance(entry.get("command"), str) else ""
+        out.setdefault(entry["issue"], []).append(
+            f"工程師停在確認框{minutes}（terminal {handle}，{since} 起，monitor {seen}"
+            f" 讀到）：{one_line(command, 120) or '（讀不到命令）'}"
+        )
+    return {issue: "；".join(notes) for issue, notes in out.items()}
+
+
+def report(
+    doc, tasks: dict[int, list[Worktree]], now: int, menus: dict[int, str] | None = None
+) -> tuple[list[str], int]:
+    menus = menus or {}
     verdicts = decide(doc, tasks, now)
     counted = [v for v in verdicts if v.counted]
     free = max(SLOTS - len(counted), 0)
     unread = doc is None or get(doc, "data.repository") is None
+
+    def tag(v: Verdict) -> str:
+        return f"#{v.issue} {_short(v.reason)}{MENU_TAG if v.issue in menus else ''}"
+
     parts = []
     if counted:
-        parts.append(
-            "算：" + "、".join(f"#{v.issue} {_short(v.reason)}" for v in counted)
-        )
+        parts.append("算：" + "、".join(tag(v) for v in counted))
     others = [v for v in verdicts if not v.counted]
     if others:
-        parts.append(
-            "不算：" + "、".join(f"#{v.issue} {_short(v.reason)}" for v in others)
-        )
+        parts.append("不算：" + "、".join(tag(v) for v in others))
     head = f"名額：已用 {len(counted)}／{SLOTS}" + (
         f"（{'；'.join(parts)}）" if parts else ""
     )
@@ -461,8 +496,9 @@ def report(doc, tasks: dict[int, list[Worktree]], now: int) -> tuple[list[str], 
     for v in verdicts:
         where = "、".join(w.branch for w in v.worktrees)
         link = f" {v.link}" if v.link else ""
+        menu = f"；{menus[v.issue]}" if v.issue in menus else ""
         lines.append(
-            f"  #{v.issue} {'算' if v.counted else '不算'}：{v.reason}{link}（{where}）"
+            f"  #{v.issue} {'算' if v.counted else '不算'}：{v.reason}{link}（{where}）{menu}"
         )
     if unread or free == 0:
         return lines, 0
@@ -557,11 +593,17 @@ def main(argv: list[str]) -> int:
     if argv[:1] == ["query"]:
         print(QUERY)
         return 0
-    if len(argv) != 4 or argv[0] != "report" or not argv[1].isdigit():
+    if len(argv) not in (4, 5) or argv[0] != "report" or not argv[1].isdigit():
         print(__doc__, file=sys.stderr)
         return 64
     now = int(argv[1])
     porcelain, status = _read(argv[2]), _read(argv[3]) or ""
+    menus = {}
+    if len(argv) == 5:
+        try:
+            menus = menu_notes(json.loads(_read(argv[4]) or "null"), now)
+        except (OSError, ValueError):
+            menus = {}  # no monitor state yet, or one being rewritten
     if porcelain is None:
         print("名額：判定不了（git worktree list 失敗，讀不到 task worktree）")
         return 0
@@ -572,7 +614,7 @@ def main(argv: list[str]) -> int:
         doc = None
     if not isinstance(doc, dict) or get(doc, "data.repository") is None:
         doc = None
-    lines, code = report(doc, task_worktrees(porcelain, _status(status)), now)
+    lines, code = report(doc, task_worktrees(porcelain, _status(status)), now, menus)
     for line in lines:
         print(line)
     return code
