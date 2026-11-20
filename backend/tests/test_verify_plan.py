@@ -86,9 +86,17 @@ TREE = {
     # Issue 769: the today page's list switch and its second list (主流族群前 20), and that list's chart.
     "candidates/MainstreamViews.tsx": (
         "import { CandidatesSection } from './CandidateViews'\n"
+        "import { H2Section } from './H2Views'\n"
         "import { mainstreamState } from './mainstream'\n"
+        "import { ScreenList } from './ScreenList'\n"
     ),
     "candidates/mainstream.ts": "export const mainstreamState = 1\n",
+    # Issue 882: the third list (接近年高前 20), its copy and the rows both lists share.
+    "candidates/H2Views.tsx": (
+        "import { h2State } from './h2'\nimport { ScreenList } from './ScreenList'\n"
+    ),
+    "candidates/h2.ts": "export const h2State = 1\n",
+    "candidates/ScreenList.tsx": "import { Sparkline } from './CandidateViews'\n",
     "candidates/MainstreamChart.tsx": (
         "import { StockBarsChart } from '../stock/StockBarsChart'\n"
     ),
@@ -151,6 +159,12 @@ def test_single_frontend_page_verifies_only_that_page(importers):
 def test_the_second_today_list_verifies_the_today_page(importers):
     # Issue 769: the switch is imported by App.tsx, so without its row it would verify every page.
     for name in ("MainstreamViews.tsx", "mainstream.ts", "MainstreamChart.tsx"):
+        assert plan(FE + "candidates/" + name, importers=importers).pages == ["today"]
+
+
+def test_the_third_today_list_verifies_the_today_page(importers):
+    # Issue 882: its view is listed; its copy and the shared rows reach the page through it.
+    for name in ("H2Views.tsx", "h2.ts", "ScreenList.tsx"):
         assert plan(FE + "candidates/" + name, importers=importers).pages == ["today"]
 
 

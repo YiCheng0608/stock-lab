@@ -5,31 +5,38 @@ import { formatDate } from './candidates'
 // strategy: each row has its groups, its W-session strength, the close and the sparkline, and no price levels (no entry
 // sentence, price ladder, RR or total score; decision #1 6891614350). Copy follows UI_COPY_SPEC §10 主流族群前 20.
 
-export type TodayListKind = 'today' | 'mainstream'
+// The page's three lists (#882 adds 接近年高前 20, the H2 list; h2.ts).
+export type TodayListKind = 'today' | 'mainstream' | 'h2'
 
 export const LIST_PARAM = 'list'
 export const MAINSTREAM_LIST = 'mainstream'
+export const H2_LIST = 'h2'
 // The today list row the page opens on (「今日名單 #n」 on a mainstream row links to it): the stock's symbol.
 export const PICK_PARAM = 'pick'
 
 export const TODAY_LIST_TITLE = '今日名單'
 export const MAINSTREAM_TITLE = '主流族群前 20'
+export const H2_TITLE = '接近年高前 20'
 export const TODAY_LISTS: ReadonlyArray<{ id: TodayListKind; label: string }> = [
   { id: 'today', label: TODAY_LIST_TITLE },
   { id: 'mainstream', label: MAINSTREAM_TITLE },
+  { id: 'h2', label: H2_TITLE },
 ]
 
-// The list the page shows: 今日名單 unless the address says ?list=mainstream (a reload stays on it).
+// The list the page shows: 今日名單 unless the address says ?list=mainstream or ?list=h2 (a reload stays on it); an
+// unknown value shows 今日名單 (#882 decision 7048604437).
 export function todayListKind(search: URLSearchParams): TodayListKind {
-  return search.get(LIST_PARAM) === MAINSTREAM_LIST ? 'mainstream' : 'today'
+  const value = search.get(LIST_PARAM)
+  return value === MAINSTREAM_LIST ? 'mainstream' : value === H2_LIST ? 'h2' : 'today'
 }
 
-// The address of the other list: ?list=mainstream, or nothing for the today list (its default). A pick is dropped,
+// The address of another list: ?list=mainstream or ?list=h2, or nothing for the today list (its default). A pick is dropped,
 // so switching back by the tab starts the today list from its default row.
 export function todayListSearch(search: URLSearchParams, kind: TodayListKind): URLSearchParams {
   const next = new URLSearchParams(search)
   next.delete(PICK_PARAM)
   if (kind === 'mainstream') next.set(LIST_PARAM, MAINSTREAM_LIST)
+  else if (kind === 'h2') next.set(LIST_PARAM, H2_LIST)
   else next.delete(LIST_PARAM)
   return next
 }
