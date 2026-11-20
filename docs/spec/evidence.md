@@ -568,6 +568,43 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #813 | 第一版；沒有人用它對回補資料跑過 |
 
+**第四輪的假設**（[第四輪：C1～C4](#第四輪c1c4)）：`tools/research/round4_research.py`（[#878](https://github.com/YiCheng0608/stock-lab/issues/878)）。C1～C4 寫在 `round4_research.HYPOTHESES`，不在 `trade_research.HYPOTHESES` 裡，所以這支入口跑不了 S1～S3；命令列一樣沒有改參數、起日或 cutoff 的旗標。引擎 import `trade_research`（載入、ATR14、大盤濾網、進場區、成交、出場、基準、統計、`run_segment`），`trade_research` 第 1 版不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足）、分段、段長、公開檢查與紀錄檔都和上面的 `explore_research` 相同，成員表與它的拒絕條件同 `mainstream_research`：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）。成員表預設讀 DB 旁的
+# research/industry_members/industry_members_v1.json（同 mainstream_research）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round4_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **掛點**：`trade_research.signal_day`／`ranked` 的 S 系列有三個掛點（`trade_research.Hooks`），沒給掛點就是 S1～S3 原本的路徑：
+  - 額外的選股條件（`select`）：在 S1 選股之後、排序之前，C1、C3 用。被擋掉的不進排序，由下一名遞補。
+  - 第一排序鍵（`first_key`）：取代 `trust_buy_days`，C2 用 `both_buy_days`；第二鍵與同分同 S1。
+  - 停損函式（`stop`）：取代成交價 − 2×ATR14，C4 用；目標仍是成交價 + 4×ATR14。
+  - 金樣：S1 經掛點（三個掛點都做 S1 的事）與經新入口跑出的筆，和 `trade_research` 第 1 版逐筆相同；S1～S3、R1～R2 的筆與 R1、R2 讀的輸入，以抽出前的程式量得的雜湊鎖住（`backend/tests/test_trade_research.py`）。
+- **算法**：照[第四輪：C1～C4](#第四輪c1c4)與[第四輪實作釋義](#第四輪實作釋義)。
+  - C1：成員是 `mainstream_research` 的成員表、`group_members`（`snapshot_on`、`instrument_on`、`group_of`，含 `REMAP_2023`）；20／60 日報酬是 `feature_evidence._momentum`；族群強弱用 T 日的整個母體，不扣占用。
+  - C2：`round4_research.both_buy_days`，缺值排最後，不當 0。
+  - C3：融資算法是 `trade_research.margin_state`，從 `strategy_inputs` 抽出，R1、R2 與 C3 共用；判法依序是不適用（照選）、變化率 > 0.05（排除）、零基期 0→0（照選）與 0→> 0（排除）、其餘缺值（排除）。測試在同一份 fixture 上和 `app.margin_lists.margin_financing_state`、`app.margin_zero_base.zero_base_state` 比。
+  - C4：`round4_research.volume_band`、`band_stop`。算不出價位帶的原因分四類：不足 60 根、停牌根缺高低價（研究 DB 的停牌根載入時沒有高低價，照第 7 點字面退回 S1，PR #877 review 的建議）、其他根缺高低價、沒有候選格。依序判：先看不足 60 根；再從窗口最早的一根往後找第一根缺高低價（≤ 0 或空值）的根，那一根是停牌根（`is_suspended`）就記「停牌根缺高低價」，否則記「其他根缺高低價」，後面的根不再看；都有高低價才看候選格。
+- **探索**：`python tools/research/round4_research.py --db /research/stock.db --segment exploration --hypotheses <C1,C2,C3,C4 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，成員表也只讀那天以前的快照；載入從起日的錨點（2014-12-01）往前 730 個日曆日。
+- **驗證**：`python tools/research/round4_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `878`），`definitions_sha256` 和現在的程式相同。驗證段讀到 2024-09-27，判「通過」的另跑已用段，寫在 `<代號>/used/`。累計 19 個，門檻仍是 t ≥ 2。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑出場、不算報酬、不記紀錄檔，跑幾次都可以。口徑（#878 決定 [7045084254](https://github.com/YiCheng0608/stock-lab/issues/878#issuecomment-7045084254)、[7045083358](https://github.com/YiCheng0608/stock-lab/issues/878#issuecomment-7045083358)）：
+  - 探索段每個訊號日都數，不套大盤濾網（擋下與缺值的天數另列），不扣占用。
+  - C1：依年列母體中 T 日有族群的比例、可排名的族群數（日均）、湊不滿 5 個族群的天數，以及當天不選的天數（TAIEX 不足 61 個收盤、沒有可排名的族群）。用整個母體。
+  - C2：當天不扣占用的前 10 名裡，`both_buy_days` 缺值的檔次與比例。
+  - C3：S1 選股（`revenue_yoy` > 0、ATR14 > 0）之後的檔次，分「> 5%」「零基期增加」「缺值」三類排除、不適用（照選）與可選。
+  - C4：當天不扣占用的前 10 名裡，算不出價位帶的四類原因（含停牌根缺高低價）的檔次與比例；再對這 10 名**只跑進場**（`trade_research.enter_zone`，T 之後最多 3 根），用成交價分價位帶、夾下限、夾上限、退回 S1 四類停損來源，沒有成交的另列。沒跑出場，不寫成交價、不算報酬、淨值或勝率；每筆的進場與停損算法和正式跑相同；樣本差在不套大盤濾網、不扣占用。
+- **正式跑的另列**（`<代號>/summary.md`）：照正式跑實際看到的數，和 coverage 不是同一個口徑：大盤濾網通過的日子、扣掉占用之後的母體（C1 的族群強弱照登記用整個母體）。C1 同 coverage 的依年四項；C2 前 10 名裡第一鍵缺值的筆數；C3 每年三類排除與不適用照選的檔數；C4 有成交的筆依停損來源與退回原因的筆數，每筆的帶上下緣、夾住前的停損與停損來源在 `trades.csv`。
+- **紀錄檔**：和其他三支工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round4_research"`、`"round": 4`。同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `trade_research`）：`explore.md`（第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 4 個、累計 19 個）、`explore.json`（另有 `tool`、`design`（`878`）、`engine`（`trade_research` 第 1 版）、`definitions_sha256`、`members_sha256`）、`<代號>/summary.md`、`tables.json`（另有 `listed`）、`trades.csv`（另有 `both_buy_days` 與 C4 的 `band_low`、`band_high`、`band_stop`、`band_fallback`、`stop_source`）、`days.csv`、`ledger-entries.json`。
+
+**`round4_research` 的版本**：`round4_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（C1～C4 的定義、成員表與對照表、引擎的分段、門檻與成本）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #878 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。

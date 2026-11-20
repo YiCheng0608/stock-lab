@@ -405,7 +405,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 **誰讀這份清單**：`research_report.benchmark_universe` 與 `benchmark_bars` 是 `stock`／`ipo` 日線的同一個查詢，兩個都跳過清單裡的列。用到它們的工具都不會讀到這些列：
 - `evidence_lib.load_panel`：`feature_evidence`、`candidate_scorecard`。
-- `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`。
+- `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`，以及經 `trade_research.load` 讀的 `round4_research`。
 - `research_report` 的基準一。
 - 另外直接數 `market_bars` 的三處，也用 `research_report.excluded_bar_counts`／`last_kept_bars` 扣掉清單裡的列：`trade_research` 的 `bar_count`（起日前的日線數）與下市、轉板股的最後一根日線，以及 `explore_research.delisted_count`。研究 DB 上有 13 檔上櫃股的日線全在 2007-04-23～11-30，工具讀不到它們。
 
@@ -437,7 +437,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 ## 官方產業的逐月成員表
 
-研究用的「T 日屬於哪個官方產業」，給第三輪 M1、M2（[策略證據「官方產業的成員」](../spec/evidence.md#第三輪m1m2)）。由 [`tools/research/industry_members.py`](../../tools/research/industry_members.py) 從官方的分產業收盤行情產生，不寫進研究 DB（[#779](https://github.com/YiCheng0608/stock-lab/issues/779)）。
+研究用的「T 日屬於哪個官方產業」，給第三輪 M1、M2（[策略證據「官方產業的成員」](../spec/evidence.md#第三輪m1m2)）與第四輪 C1（[第四輪：C1～C4](../spec/evidence.md#第四輪c1c4)）。由 [`tools/research/industry_members.py`](../../tools/research/industry_members.py) 從官方的分產業收盤行情產生，不寫進研究 DB（[#779](https://github.com/YiCheng0608/stock-lab/issues/779)）。
 
 **來源**：每月最後一個交易日 D，兩個市場各取每個產業代號那一天的收盤行情。
 - 上市：TWSE `MI_INDEX?date=<D>&type=<代號>`。
@@ -491,8 +491,8 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的。[日線排除清單](#研究工具的日線排除清單)裡的舊公司那段沒有日線，所以對不到。
 - 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。manifest 的 `completeness` 逐日記原因並分開計數：`checked`（核對過，`missing` 是不在任何產業的普通股）、`no_stored_answer`（研究 DB 沒有那一天的全市場行情）、`raw_missing`（有列但檔案找不到或 sha256 不符）。這也是唯一能看出「代號期間外其實有列」的檢查。
 
-**檔案**：在研究 volume 的 `/data/research/industry_members/`。M1、M2 的研究工具讀 `/data/research/industry_members/industry_members_v1.json`。
-- 研究工具 [`tools/research/mainstream_research.py`](../../tools/research/mainstream_research.py)（#813）照研究工具的跑法把研究 volume 掛在 `/research`，所以預設讀 DB 旁的 `/research/research/industry_members/industry_members_v1.json`。對副本跑 `--coverage-only` 時，副本旁沒有這個目錄，研究 volume 另外唯讀掛載，用 `--members` 指到主檔。主檔的 sha256 寫死在工具裡（`MEMBERS_SHA256`，就是下面那一個），不同就拒絕。
+**檔案**：在研究 volume 的 `/data/research/industry_members/`。M1、M2 與 C1 的研究工具讀 `/data/research/industry_members/industry_members_v1.json`。
+- 研究工具 [`tools/research/mainstream_research.py`](../../tools/research/mainstream_research.py)（#813）與 [`tools/research/round4_research.py`](../../tools/research/round4_research.py)（#878，C1）照研究工具的跑法把研究 volume 掛在 `/research`，所以預設讀 DB 旁的 `/research/research/industry_members/industry_members_v1.json`。對副本跑 `--coverage-only` 時，副本旁沒有這個目錄，研究 volume 另外唯讀掛載，用 `--members` 指到主檔。主檔的 sha256 寫死在工具裡（`MEMBERS_SHA256`，就是下面那一個），不同就拒絕。
 - 2026-11-16 由統籌從產生它的 `task-779_members` volume 整包複製（8,317 個檔、92 MB，#779 決定 [6911923892](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6911923892)）。`task-779_members` 在 #779 結案時刪除。
 - 主檔 sha256 `2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827`，manifest sha256 `03882bce1bfe0da71091fae37448a1bef06dd46869448bd94c75aa52a5dfdb03`（commit `0c8d1710`）。
 - `industry_members_v1.json`：主檔。內容排好序，同一份 raw 重跑位元組相同。

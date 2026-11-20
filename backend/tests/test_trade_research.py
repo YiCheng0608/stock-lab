@@ -1597,3 +1597,169 @@ def test_too_little_free_memory_is_refused(golden_db, tmp_path, monkeypatch, cap
     assert any("free memory 0.5 GB" in line for line in refused(capsys))
     assert not out.exists()
     assert not (db.parent / ex.LEDGER_NAME).exists()
+
+
+# --- version 1 stays version 1 (#878 AC-1) ---------------------------------------
+#
+# #878 adds the round-4 hook points to ``signal_day``／``ranked`` and moves the
+# margin computation of ``strategy_inputs`` into ``margin_state``.  The digests
+# below were taken on the code before that change (master a5bdd20a): every
+# trade of S1～S3 on the golden fixture, of R1／R2 on the rules fixture, and
+# every StrategyInputs R1／R2 read, must stay the same value for value.
+
+V1_DEFINITIONS = "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb"
+V1_ZONE_TRADES = "bff68c02604798b44970351b9a009d04c0394bf70abbd6a534e99238d5931025"
+V1_RULE_TRADES = "20c11c26caea346fed21d155c3f8ad68edf3e345d382c758408943636abf0fd2"
+V1_RULE_INPUTS = "71bc91c2c4c6ee13479aaf1ea717e077011a7a579c722cf01545fa3469a2b998"
+
+
+def digest(value) -> str:
+    import hashlib
+
+    text = json.dumps(value, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def segment_trades(db: Path, names: list[str], tmp_path: Path, start: date, end: date):
+    ctx = one_process(lambda: tool.load(db, start, end, tmp_path / "raw"))
+    results = tool.run_segment(ctx, db, names, "exploration")
+    return {name: results[name]["_trades"] for name in names}
+
+
+def test_version_1_is_unchanged_trade_by_trade(
+    golden_db, rules_db, tmp_path, monkeypatch
+):
+    got = {"version": tool.VERSION, "definitions": tool.definitions_sha256()}
+    compressed(monkeypatch, tmp_path)
+    zone = segment_trades(
+        golden_db, ["S1", "S2", "S3"], tmp_path, date(2013, 1, 1), days_()[110]
+    )
+    assert sum(len(rows) for rows in zone.values()) > 20
+    got["zone"] = digest(zone)
+    days = rule_days()
+    monkeypatch.setattr(
+        tool,
+        "HYPOTHESES",
+        {
+            name: {**spec, "start": ("session", days[0], EVAL_FROM + 1)}
+            for name, spec in REGISTERED.items()
+        },
+    )
+    monkeypatch.setattr(
+        tool,
+        "SEGMENTS",
+        {
+            "exploration": (None, days[-1]),
+            "validation": (days[-1], days[-1]),
+            "used": (days[-1], days[-1]),
+        },
+    )
+    monkeypatch.setattr(ex, "delisted_count", lambda db, first, last: 1)
+    rule = segment_trades(rules_db, ["R1", "R2"], tmp_path, days[0], days[-1])
+    assert all(rule.values())
+    got["rule"] = digest(rule)
+    assert got == {
+        "version": 1,
+        "definitions": V1_DEFINITIONS,
+        "zone": V1_ZONE_TRADES,
+        "rule": V1_RULE_TRADES,
+    }
+
+
+def test_the_r1_r2_inputs_are_unchanged(rules_db, tmp_path):
+    from dataclasses import asdict
+
+    ctx = one_process(
+        lambda: tool.load(rules_db, rule_days()[0], rule_days()[-1], tmp_path)
+    )
+    inputs = []
+    for s in range(EVAL_FROM, len(ctx.panel.sessions)):
+        for item, at in ctx.universe(s):
+            inputs.append(
+                [item.instrument_id, at, asdict(tool.strategy_inputs(ctx, item, at))]
+            )
+    assert len(inputs) > 2000
+    assert digest(inputs) == V1_RULE_INPUTS
+
+
+# The other two tools whose numbers #878 must not move (AC-1).
+OTHER_VERSIONS = {
+    "explore_research": (
+        2,
+        "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+    ),
+    "mainstream_research": (
+        1,
+        "5e776480b0fa7d023c9f217671c856ac81ea8d4115d7ff94aac7446a263371f2",
+    ),
+}
+
+
+def test_explore_and_mainstream_research_are_unchanged():
+    ms = _tool("mainstream_research")
+    got = {
+        "explore_research": (ex.VERSION, ex.definitions_sha256()),
+        "mainstream_research": (ms.VERSION, ms.definitions_sha256()),
+    }
+    assert got == OTHER_VERSIONS
+
+
+def test_s1_through_the_round4_hooks_is_version_1_trade_by_trade(
+    golden_db, tmp_path, monkeypatch
+):
+    """S1 run through round4_research's entry (``run_segment`` with its own
+    registration and the three hooks, each doing what S1 does) is S1 of
+    version 1, trade for trade (#878 AC-1)."""
+
+    compressed(monkeypatch, tmp_path)
+    # this file's trade_research (another test file may have loaded its own)
+    monkeypatch.setitem(sys.modules, "trade_research", tool)
+    monkeypatch.setitem(sys.modules, "round4_research", None)
+    r4 = _tool("round4_research")
+    assert r4.tr is tool
+    ctx = one_process(
+        lambda: tool.load(golden_db, date(2013, 1, 1), days_()[110], tmp_path / "raw")
+    )
+    plain = tool.run_segment(ctx, golden_db, ["S1"], "exploration")["S1"]["_trades"]
+    seen = {"select": 0, "keep": 0, "stop": 0}
+
+    def select(c, s):
+        seen["select"] += 1
+
+        def keep(item, at):
+            seen["keep"] += 1
+            return True
+
+        return keep
+
+    def stop(item, at, atr, fill):
+        seen["stop"] += 1
+        return (None if fill is None else fill - 2.0 * atr), {}
+
+    s1 = {"S1": tool.HYPOTHESES["S1"]}
+    hooked = tool.run_segment(
+        ctx,
+        golden_db,
+        ["S1"],
+        "exploration",
+        hypotheses=s1,
+        hooks=lambda name: tool.Hooks(
+            select=select,
+            first_key=("trust_buy_days", tool.features.trust_buy_days),
+            stop=stop,
+        ),
+    )["S1"]["_trades"]
+    assert all(seen.values())  # every hook point ran
+    assert plain and digest(hooked) == digest(plain)
+    # and the entry's own path: S1's spec, no hooks, through round4's run_segment
+    loaded = r4.Loaded(ctx, None)
+    monkeypatch.setattr(r4, "HYPOTHESES", s1)
+    monkeypatch.setattr(r4, "Run", lambda groups: (lambda name: None))
+    monkeypatch.setattr(r4, "listed", lambda name, run, trades: {})
+    via = r4.run_segment(loaded, golden_db, ["S1"], "exploration")["S1"]["_trades"]
+    assert digest(via) == digest(plain)
+    zone = segment_trades(
+        golden_db, ["S1", "S2", "S3"], tmp_path, date(2013, 1, 1), days_()[110]
+    )
+    assert digest(zone) == V1_ZONE_TRADES  # plain is version 1's S1
+    assert digest(zone["S1"]) == digest(plain)
