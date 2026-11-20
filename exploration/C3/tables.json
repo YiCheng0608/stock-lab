@@ -1,0 +1,144 @@
+{
+  "tool": "round4_research",
+  "version": 1,
+  "design": "878",
+  "definitions_sha256": "2fa7f1826fc1b1b962eb63b45b6a238122d74fd4912e0a14c8eed0a0cf63aa56",
+  "label": "S1，另排除融資 6 日變化 > 5% 的股票（零基期增加與缺值也排除，不適用照選）",
+  "parameters": {
+    "kind": "zone",
+    "market_filter": true,
+    "top": 10,
+    "entry_days": 3,
+    "zone_atr": 1.0,
+    "stop_atr": 2.0,
+    "target_atr": 4.0,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ],
+    "change": "select"
+  },
+  "hypothesis": "C3",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 805,
+    "mean": -0.004280626026585892,
+    "t": -0.9717370106186434
+  },
+  "excess": {
+    "days": 805,
+    "mean": 0.00651829956683185,
+    "t": 1.6044488323499768
+  },
+  "absolute": {
+    "days": 805,
+    "mean": -0.00373250896379188
+  },
+  "signals": 8050,
+  "signal_days": 805,
+  "trade_days": 805,
+  "trades": 7133,
+  "net_mean": -0.004145001477751763,
+  "net_median": -0.02732082196606609,
+  "win_rate": 0.3933828683583345,
+  "zero": 0,
+  "won_mean": 0.07459970618832622,
+  "lost_mean": -0.05520986159122872,
+  "won": 2806,
+  "lost": 4327,
+  "exit_share": {
+    "stop": 0.48086359175662413,
+    "target": 0.2419739240151409,
+    "time": 0.25809617271835134,
+    "segment_end": 0.018785924575914763,
+    "delisted": 0.0,
+    "transferred": 0.00028038693396887705
+  },
+  "exits": {
+    "stop": 3430,
+    "target": 1726,
+    "time": 1841,
+    "segment_end": 134,
+    "delisted": 0,
+    "transferred": 2
+  },
+  "both_touched": 0,
+  "gapped": 634,
+  "limit_delayed": 2,
+  "suspension_delayed": 3,
+  "holding_mean": 11.744006729286415,
+  "abandoned": 917,
+  "abandon_rate": 0.11391304347826087,
+  "abandon_reasons": {
+    "not_triggered": 917
+  },
+  "entry_limit_blocked": 0,
+  "below_lower": 84,
+  "filter_blocked_days": 422,
+  "filter_missing_days": 0,
+  "population_unbought": 834,
+  "min_t": 2.0,
+  "listed": {
+    "c3": {
+      "years": {
+        "2014": {
+          "days": 5,
+          "kept": 853,
+          "over": 178,
+          "not_applicable": 22
+        },
+        "2015": {
+          "days": 123,
+          "kept": 13811,
+          "over": 4061,
+          "not_applicable": 419,
+          "zero_base_increased": 3
+        },
+        "2016": {
+          "days": 171,
+          "kept": 15197,
+          "over": 5389,
+          "not_applicable": 393,
+          "zero_base_increased": 10
+        },
+        "2017": {
+          "days": 209,
+          "kept": 29273,
+          "over": 9870,
+          "not_applicable": 371,
+          "zero_base_increased": 35
+        },
+        "2018": {
+          "days": 114,
+          "kept": 20692,
+          "over": 5958,
+          "not_applicable": 343,
+          "zero_base_increased": 17
+        },
+        "2019": {
+          "days": 183,
+          "kept": 17284,
+          "over": 6594,
+          "not_applicable": 440,
+          "zero_base_increased": 10
+        }
+      }
+    }
+  }
+}

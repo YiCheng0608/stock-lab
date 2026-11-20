@@ -1,0 +1,103 @@
+{
+  "tool": "round4_research",
+  "version": 1,
+  "design": "878",
+  "definitions_sha256": "2fa7f1826fc1b1b962eb63b45b6a238122d74fd4912e0a14c8eed0a0cf63aa56",
+  "label": "S1 的第一排序鍵換成 both_buy_days（近 5 根外資與投信同一天都買超的根數）",
+  "parameters": {
+    "kind": "zone",
+    "market_filter": true,
+    "top": 10,
+    "entry_days": 3,
+    "zone_atr": 1.0,
+    "stop_atr": 2.0,
+    "target_atr": 4.0,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ],
+    "change": "first_key"
+  },
+  "hypothesis": "C2",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 805,
+    "mean": -0.0038194341625146714,
+    "t": -0.8311699430732273
+  },
+  "excess": {
+    "days": 805,
+    "mean": 0.006951879162084032,
+    "t": 1.612082673178666
+  },
+  "absolute": {
+    "days": 805,
+    "mean": -0.0033911124749602816
+  },
+  "signals": 8050,
+  "signal_days": 805,
+  "trade_days": 805,
+  "trades": 7071,
+  "net_mean": -0.003954240090773756,
+  "net_median": -0.028281574832906255,
+  "win_rate": 0.3931551407155989,
+  "zero": 0,
+  "won_mean": 0.07556484195741235,
+  "lost_mean": -0.05547207931099221,
+  "won": 2780,
+  "lost": 4291,
+  "exit_share": {
+    "stop": 0.4927167303068873,
+    "target": 0.2504596238155848,
+    "time": 0.23872153867911186,
+    "segment_end": 0.01796068448592844,
+    "delisted": 0.0,
+    "transferred": 0.0001414227124876255
+  },
+  "exits": {
+    "stop": 3484,
+    "target": 1771,
+    "time": 1688,
+    "segment_end": 127,
+    "delisted": 0,
+    "transferred": 1
+  },
+  "both_touched": 0,
+  "gapped": 587,
+  "limit_delayed": 2,
+  "suspension_delayed": 3,
+  "holding_mean": 11.418186960825908,
+  "abandoned": 979,
+  "abandon_rate": 0.12161490683229814,
+  "abandon_reasons": {
+    "not_triggered": 979
+  },
+  "entry_limit_blocked": 0,
+  "below_lower": 80,
+  "filter_blocked_days": 422,
+  "filter_missing_days": 0,
+  "population_unbought": 840,
+  "min_t": 2.0,
+  "listed": {
+    "c2": {
+      "signals": 8050,
+      "first_key_missing": 0
+    }
+  }
+}

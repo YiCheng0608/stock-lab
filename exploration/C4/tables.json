@@ -1,0 +1,114 @@
+{
+  "tool": "round4_research",
+  "version": 1,
+  "design": "878",
+  "definitions_sha256": "2fa7f1826fc1b1b962eb63b45b6a238122d74fd4912e0a14c8eed0a0cf63aa56",
+  "label": "S1 的停損改成 60 根成交量分布最集中價位帶的下緣 − 0.5×ATR14，距離夾在 [1, 3]×ATR14（R 仍是 2×ATR14，目標仍是 +4×ATR14）",
+  "parameters": {
+    "kind": "zone",
+    "market_filter": true,
+    "top": 10,
+    "entry_days": 3,
+    "zone_atr": 1.0,
+    "stop_atr": 2.0,
+    "target_atr": 4.0,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ],
+    "change": "stop"
+  },
+  "hypothesis": "C4",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 805,
+    "mean": -0.003031513343670526,
+    "t": -0.6465125454542686
+  },
+  "excess": {
+    "days": 805,
+    "mean": 0.00762407887345952,
+    "t": 1.766940334845507
+  },
+  "absolute": {
+    "days": 805,
+    "mean": -0.002143095993063465
+  },
+  "signals": 8050,
+  "signal_days": 805,
+  "trade_days": 805,
+  "trades": 7121,
+  "net_mean": -0.002831449315084472,
+  "net_median": -0.022112169517456516,
+  "win_rate": 0.40050554697373963,
+  "zero": 0,
+  "won_mean": 0.07564898860943631,
+  "lost_mean": -0.05526204405875589,
+  "won": 2852,
+  "lost": 4269,
+  "exit_share": {
+    "stop": 0.42943406824884145,
+    "target": 0.2531947760146047,
+    "time": 0.30009830080044936,
+    "segment_end": 0.017132425221176802,
+    "delisted": 0.0,
+    "transferred": 0.0001404297149276787
+  },
+  "exits": {
+    "stop": 3058,
+    "target": 1803,
+    "time": 2137,
+    "segment_end": 122,
+    "delisted": 0,
+    "transferred": 1
+  },
+  "both_touched": 0,
+  "gapped": 596,
+  "limit_delayed": 2,
+  "suspension_delayed": 4,
+  "holding_mean": 12.090998455273136,
+  "abandoned": 929,
+  "abandon_rate": 0.11540372670807453,
+  "abandon_reasons": {
+    "not_triggered": 929
+  },
+  "entry_limit_blocked": 0,
+  "below_lower": 84,
+  "filter_blocked_days": 422,
+  "filter_missing_days": 0,
+  "population_unbought": 830,
+  "min_t": 2.0,
+  "listed": {
+    "c4": {
+      "trades": 7121,
+      "sources": {
+        "band": 2626,
+        "clamped_low": 745,
+        "clamped_high": 3655,
+        "fallback": 95
+      },
+      "fallbacks": {
+        "short": 28,
+        "suspended_bar": 0,
+        "no_high_low": 0,
+        "no_candidate": 67
+      }
+    }
+  }
+}
