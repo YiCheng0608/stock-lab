@@ -533,10 +533,55 @@ def field_factor(action: Action, reference: float | None) -> float:
     return factor
 
 
+# Before 2009-01-01 the official reference counted 員工紅利轉增資 as free shares
+# (營業細則第 67 條, docs/DATA_SOURCES.md 寫入防呆, #891); own copy, not the product's.
+EMPLOYEE_BONUS_COUNTED_BEFORE = "2009-01-01"
+EMPLOYEE_BONUS_MAX_RATIO = 0.06
+TWSE_EMPLOYEE_BONUS_KEY = "B. 員工紅利轉增資"
+
+
+def employee_bonus_explained(action: Action) -> bool:
+    """Whether employee bonus shares explain the row's gap to 減除股利參考價 (#891).
+
+    Dated before 2009-01-01, no split, a positive shareholders' ratio,
+    ``0 < (before - cash) / deducted - 1 - ratio <= 0.06``, and on TWSE a
+    positive 員工紅利轉增資 in the stored TWT49UDetail (TPEx has no such column).
+    """
+
+    if (
+        action.action_date >= EMPLOYEE_BONUS_COUNTED_BEFORE
+        or positive(action.split)
+        or not positive(action.stock_ratio)
+    ):
+        return False
+    for index, (before_key, deducted_key) in enumerate(DIVIDEND_DEDUCTED_PRICES):
+        before = num(action.details.get(before_key))
+        deducted = num(action.details.get(deducted_key))
+        if positive(before) and positive(deducted):
+            break
+    else:
+        return False
+    if index == 1:  # TWSE TWT49U
+        detail = action.details.get("detail")
+        bonus = (
+            num(detail.get(TWSE_EMPLOYEE_BONUS_KEY))
+            if isinstance(detail, dict)
+            else None
+        )
+        if not positive(bonus):
+            return False
+    extra = (before - (action.cash or 0.0)) / deducted - 1.0 - action.stock_ratio
+    return 0 < extra <= EMPLOYEE_BONUS_MAX_RATIO
+
+
 def action_factor(
     action: Action, previous_close: float | None, basis: str = PRICE_BASIS
 ) -> float:
-    """One event's price factor under ``basis`` (v1: steps 1 and 3; v2: 1, 2, 3)."""
+    """One event's price factor under ``basis`` (v1: steps 1 and 3; v2: 1, 2, 3).
+
+    A row employee bonus shares explain (before 2009, #891) always takes the
+    official ratio in step 2.
+    """
 
     explicit = num(action.details.get("price_factor"))
     if positive(explicit):
@@ -545,6 +590,8 @@ def action_factor(
         prices = official_prices(action.details)
         if prices is not None:
             before, quote = prices
+            if employee_bonus_explained(action):
+                return quote / before
             implied = field_factor(action, before) * before
             if round(abs(implied - quote), 6) > REFERENCE_TOLERANCE:
                 return quote / before

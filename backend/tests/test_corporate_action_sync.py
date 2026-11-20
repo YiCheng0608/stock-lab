@@ -1752,6 +1752,29 @@ def test_the_2451_fields_alone_would_have_moved_its_factor():
     assert abs(own - 122.72 / 127.50) > 1e-5
 
 
+def _dated(row, roc_text, compact):
+    return [roc_text, *row[1:11], f"{row[1]},{compact}", *row[12:]]
+
+
+@pytest.mark.parametrize(
+    "roc_text,compact,day,passed",
+    [
+        ("97年12月31日", "20081231", date(2008, 12, 31), True),
+        ("98年01月01日", "20090101", date(2009, 1, 1), False),
+    ],
+    ids=["2008-12-31", "2009-01-01"],
+)
+def test_employee_bonus_ends_on_the_day_the_rule_changed(
+    roc_text, compact, day, passed
+):
+    # 營業細則第 67 條 stopped counting employee bonus shares from 98-01-01.
+    record = early_record(_dated(TWT49U_3514, roc_text, compact), DETAIL_3514)
+    assert record.action_date == day
+    check = pipeline.action_factor_check(record)
+    assert check["passed"] is passed
+    assert ("basis" in check) is passed
+
+
 @pytest.mark.parametrize(
     "build",
     [

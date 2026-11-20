@@ -6363,6 +6363,9 @@ def official_reference_factor(action: CorporateAction) -> float | None:
     if (
         action.action_date is not None
         and action.action_date < EMPLOYEE_BONUS_COUNTED_BEFORE
+        # The basis needs a positive ratio; a dividend-only or #821 row skips
+        # the comparison.
+        and (action.stock_dividend_ratio or 0) > 0
         and (action_factor_check(action) or {}).get("basis") == EMPLOYEE_BONUS_BASIS
     ):
         return quote / before
