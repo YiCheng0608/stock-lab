@@ -1,0 +1,5 @@
+X3: 沒有通過（探索段） (35.8s)
+X4: 探索通過 (53.1s)
+X7: 沒有通過（探索段） (13.6s)
+{"out": "/out/exploration", "segment": "exploration", "sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8", "verdicts": {"X3": "沒有通過（探索段）", "X4": "探索通過", "X7": "沒有通過（探索段）"}}
+exit 0

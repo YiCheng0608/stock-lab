@@ -1,0 +1,262 @@
+{
+  "version": 2,
+  "design": "703",
+  "registration_commit": "0ba48e9",
+  "segment": "exploration",
+  "round": 1,
+  "round_size": 8,
+  "cumulative": 8,
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/explore_research.py --db /research/stock.db --segment exploration --hypotheses X3,X4,X7 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "hypotheses": {
+    "X3": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1227,
+      "taiex_excess": {
+        "days": 1227,
+        "mean": -0.00026886974560874746,
+        "annual": -0.06775517589340437,
+        "t": -1.5416248902180323
+      },
+      "excess": {
+        "days": 1227,
+        "mean": 0.00013004811948003433,
+        "annual": 0.03277212610896865,
+        "t": 0.7070438576694695
+      },
+      "absolute_mean": -1.979726164263097e-05,
+      "prerequisites": {
+        "days": 1227,
+        "min_days": 500,
+        "delisted": 71,
+        "ok": true
+      },
+      "coverage": {
+        "2014": {
+          "days": 5,
+          "members": 2189,
+          "missing": {
+            "revenue_yoy": 262,
+            "institutional_flow_20": 401
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "revenue_yoy": 10414,
+            "institutional_flow_20": 6001
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "revenue_yoy": 7437,
+            "institutional_flow_20": 6944
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "revenue_yoy": 8705,
+            "institutional_flow_20": 12219
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "revenue_yoy": 7400,
+            "institutional_flow_20": 6007
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "revenue_yoy": 4213,
+            "institutional_flow_20": 2945
+          }
+        }
+      }
+    },
+    "X4": {
+      "verdict": "探索通過",
+      "reason": null,
+      "days": 1321,
+      "taiex_excess": {
+        "days": 1321,
+        "mean": 0.0002617302635126342,
+        "annual": 0.06595602640518382,
+        "t": 1.3339132410173615
+      },
+      "excess": {
+        "days": 1321,
+        "mean": 0.0003079646562354169,
+        "annual": 0.07760709337132506,
+        "t": 2.5152735915497524
+      },
+      "absolute_mean": 0.0004941443896749144,
+      "prerequisites": {
+        "days": 1321,
+        "min_days": 500,
+        "delisted": 79,
+        "ok": true
+      },
+      "coverage": {
+        "2014": {
+          "days": 99,
+          "members": 42212,
+          "missing": {
+            "revenue_yoy": 4714,
+            "eps_growth_yield": 623,
+            "eps_yield_raw": 219
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "revenue_yoy": 10414,
+            "eps_growth_yield": 1785,
+            "eps_yield_raw": 396
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "revenue_yoy": 7437,
+            "eps_growth_yield": 1178,
+            "eps_yield_raw": 317
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "revenue_yoy": 8705,
+            "eps_growth_yield": 968,
+            "eps_yield_raw": 387
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "revenue_yoy": 7400,
+            "eps_growth_yield": 968,
+            "eps_yield_raw": 321
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "revenue_yoy": 4213,
+            "eps_growth_yield": 1347,
+            "eps_yield_raw": 154
+          }
+        }
+      }
+    },
+    "X7": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1464,
+      "taiex_excess": {
+        "days": 1464,
+        "mean": -8.926834244140702e-05,
+        "annual": -0.02249562229523457,
+        "t": -0.30237262710110574
+      },
+      "excess": {
+        "days": 1464,
+        "mean": 0.0002654441281670236,
+        "annual": 0.06689192029808995,
+        "t": 1.3609679501747103
+      },
+      "absolute_mean": 0.0001761823928975404,
+      "prerequisites": {
+        "days": 1464,
+        "min_days": 500,
+        "delisted": 81,
+        "ok": true
+      },
+      "coverage": {
+        "2014": {
+          "days": 12,
+          "members": 6374,
+          "missing": {
+            "revenue_previous_month": 648,
+            "revenue_high_12": 665,
+            "revenue_yoy": 663
+          }
+        },
+        "2015": {
+          "days": 12,
+          "members": 5155,
+          "missing": {
+            "revenue_previous_month": 508,
+            "revenue_high_12": 519,
+            "revenue_yoy": 517
+          }
+        },
+        "2016": {
+          "days": 12,
+          "members": 4615,
+          "missing": {
+            "revenue_previous_month": 347,
+            "revenue_high_12": 355,
+            "revenue_yoy": 367
+          }
+        },
+        "2017": {
+          "days": 12,
+          "members": 5624,
+          "missing": {
+            "revenue_previous_month": 406,
+            "revenue_high_12": 409,
+            "revenue_yoy": 419
+          }
+        },
+        "2018": {
+          "days": 12,
+          "members": 5352,
+          "missing": {
+            "revenue_previous_month": 355,
+            "revenue_high_12": 363,
+            "revenue_yoy": 366
+          }
+        },
+        "2019": {
+          "days": 12,
+          "members": 4967,
+          "missing": {
+            "revenue_previous_month": 197,
+            "revenue_high_12": 202,
+            "revenue_yoy": 208
+          }
+        }
+      }
+    }
+  },
+  "selected": [
+    "X3",
+    "X4",
+    "X7"
+  ],
+  "elapsed_seconds": 241.16199285100447,
+  "peak_memory_gb": 1.5718536376953125
+}

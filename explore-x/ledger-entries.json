@@ -1,0 +1,40 @@
+{
+  "entries": [
+    {
+      "hypothesis": "X3",
+      "round": 1,
+      "segment": "exploration",
+      "version": 2,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:56:39+00:00",
+      "report_sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "X4",
+      "round": 1,
+      "segment": "exploration",
+      "version": 2,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:56:39+00:00",
+      "report_sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "verdict": "探索通過"
+    },
+    {
+      "hypothesis": "X7",
+      "round": 1,
+      "segment": "exploration",
+      "version": 2,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:56:39+00:00",
+      "report_sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "verdict": "沒有通過（探索段）"
+    }
+  ]
+}

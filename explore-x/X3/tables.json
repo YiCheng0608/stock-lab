@@ -1,0 +1,166 @@
+{
+  "version": 2,
+  "design": "703",
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "label": "只取 `revenue_yoy` > 0，依 `institutional_flow_20` 大者先",
+  "direction": "籌碼＋基本面",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "filters": [
+      [
+        "revenue_yoy",
+        ">",
+        0.0
+      ]
+    ],
+    "keys": [
+      "institutional_flow_20"
+    ],
+    "top": 10,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ]
+  },
+  "hypothesis": "X3",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227,
+    "signal_days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "coverage": {
+    "2014": {
+      "days": 5,
+      "members": 2189,
+      "missing": {
+        "revenue_yoy": 262,
+        "institutional_flow_20": 401
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "revenue_yoy": 10414,
+        "institutional_flow_20": 6001
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "revenue_yoy": 7437,
+        "institutional_flow_20": 6944
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "revenue_yoy": 8705,
+        "institutional_flow_20": 12219
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "revenue_yoy": 7400,
+        "institutional_flow_20": 6007
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "revenue_yoy": 4213,
+        "institutional_flow_20": 2945
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1227,
+      "mean": 0.00013004811948003433,
+      "annual": 0.03277212610896865,
+      "t": 0.7070438576694695
+    },
+    "taiex": {
+      "days": 1227,
+      "mean": -0.00026886974560874746,
+      "annual": -0.06775517589340437,
+      "t": -1.5416248902180323
+    }
+  },
+  "absolute": {
+    "days": 1227,
+    "mean": -1.979726164263097e-05
+  },
+  "curves": {
+    "X3": {
+      "days": 1227,
+      "total": -0.07157159396503376,
+      "annual": -0.015136134526430367,
+      "volatility": 0.1428606934209833,
+      "max_drawdown": -0.27130727004280875,
+      "invested": 0.9419958414248895,
+      "turnover": 12.5745263416497
+    },
+    "population": {
+      "days": 1227,
+      "total": -0.21870688200543875,
+      "annual": -0.04942530438718695,
+      "volatility": 0.16002125736527406,
+      "max_drawdown": -0.3739491589168369,
+      "invested": 0.9426844518859371,
+      "turnover": 12.233410662208025
+    },
+    "taiex": {
+      "days": 1227,
+      "total": 0.302045675797993,
+      "annual": 0.05570314480468186,
+      "volatility": 0.1305658424039168,
+      "max_drawdown": -0.2569687319514853,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 12260,
+    "won": 5566,
+    "rate": 0.4539967373572594,
+    "unsold": 189
+  },
+  "counts": {
+    "X3": {
+      "bought": 12260,
+      "not_tradable": 9,
+      "sale_held": 6,
+      "limit_up": 1,
+      "unsold": 189
+    },
+    "population": {
+      "bought": 526899,
+      "not_tradable": 189,
+      "sale_held": 1164,
+      "limit_down": 244,
+      "limit_up": 243,
+      "unsold": 8605
+    }
+  },
+  "min_t": 2.0
+}

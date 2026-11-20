@@ -1,0 +1,176 @@
+{
+  "version": 2,
+  "design": "703",
+  "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+  "label": "事件日（每月 10 日，休市順延）只取最新已知月份是上個月且 `revenue_high_12`＝1，依 `revenue_yoy` 大者先；持有到下一個事件日收盤",
+  "direction": "事件：月營收公布",
+  "parameters": {
+    "rule": "monthly",
+    "subset": null,
+    "filters": [
+      [
+        "revenue_previous_month",
+        "==",
+        1.0
+      ],
+      [
+        "revenue_high_12",
+        "==",
+        1.0
+      ]
+    ],
+    "keys": [
+      "revenue_yoy"
+    ],
+    "top": 20,
+    "hold": "next_event",
+    "start": [
+      "date",
+      "2014-01-10"
+    ]
+  },
+  "hypothesis": "X7",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-01-10",
+    "first_session": "2014-01-13",
+    "last_session": "2019-12-31",
+    "days": 1464,
+    "signal_days": 72
+  },
+  "prerequisites": {
+    "days": 1464,
+    "min_days": 500,
+    "delisted": 81,
+    "ok": true
+  },
+  "coverage": {
+    "2014": {
+      "days": 12,
+      "members": 6374,
+      "missing": {
+        "revenue_previous_month": 648,
+        "revenue_high_12": 665,
+        "revenue_yoy": 663
+      }
+    },
+    "2015": {
+      "days": 12,
+      "members": 5155,
+      "missing": {
+        "revenue_previous_month": 508,
+        "revenue_high_12": 519,
+        "revenue_yoy": 517
+      }
+    },
+    "2016": {
+      "days": 12,
+      "members": 4615,
+      "missing": {
+        "revenue_previous_month": 347,
+        "revenue_high_12": 355,
+        "revenue_yoy": 367
+      }
+    },
+    "2017": {
+      "days": 12,
+      "members": 5624,
+      "missing": {
+        "revenue_previous_month": 406,
+        "revenue_high_12": 409,
+        "revenue_yoy": 419
+      }
+    },
+    "2018": {
+      "days": 12,
+      "members": 5352,
+      "missing": {
+        "revenue_previous_month": 355,
+        "revenue_high_12": 363,
+        "revenue_yoy": 366
+      }
+    },
+    "2019": {
+      "days": 12,
+      "members": 4967,
+      "missing": {
+        "revenue_previous_month": 197,
+        "revenue_high_12": 202,
+        "revenue_yoy": 208
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1464,
+      "mean": 0.0002654441281670236,
+      "annual": 0.06689192029808995,
+      "t": 1.3609679501747103
+    },
+    "taiex": {
+      "days": 1464,
+      "mean": -8.926834244140702e-05,
+      "annual": -0.02249562229523457,
+      "t": -0.30237262710110574
+    }
+  },
+  "absolute": {
+    "days": 1464,
+    "mean": 0.0001761823928975404
+  },
+  "curves": {
+    "X7": {
+      "days": 1464,
+      "total": 0.11219474908759741,
+      "annual": 0.01847215768234034,
+      "volatility": 0.2275638885574422,
+      "max_drawdown": -0.3795394160094422,
+      "invested": 0.8926785717280011,
+      "turnover": 11.583473756864523
+    },
+    "population": {
+      "days": 1464,
+      "total": -0.18661137176862896,
+      "annual": -0.034928460130887795,
+      "volatility": 0.1608539086326128,
+      "max_drawdown": -0.3989510513599449,
+      "invested": 0.9519921861896697,
+      "turnover": 11.933080950304236
+    },
+    "taiex": {
+      "days": 1464,
+      "total": 0.4065714268965428,
+      "annual": 0.06048189655140135,
+      "volatility": 0.12756166731205698,
+      "max_drawdown": -0.2569687319514856,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 1347,
+    "won": 617,
+    "rate": 0.4580549368968077,
+    "unsold": 20
+  },
+  "counts": {
+    "X7": {
+      "bought": 1347,
+      "limit_up": 6,
+      "sale_held": 1,
+      "limit_down": 4,
+      "unsold": 20
+    },
+    "population": {
+      "bought": 32065,
+      "sale_held": 57,
+      "limit_down": 24,
+      "limit_up": 14,
+      "not_tradable": 8,
+      "unsold": 438
+    }
+  },
+  "min_t": 2.0
+}
