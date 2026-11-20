@@ -605,6 +605,36 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #878 | 第一版；沒有人用它對回補資料跑過 |
 
+**第五輪的假設**（[第五輪：V1～V3](#第五輪v1v3)）：`tools/research/round5_research.py`（[#889](https://github.com/YiCheng0608/stock-lab/issues/889)）。V1～V3 寫在 `round5_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標。引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、子集合的寫法、`turnover_60`、`feature_evidence._momentum`、`explore_judge`、公開檢查與紀錄檔都 import 自現有工具，`explore_research` 第 2 版與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round5_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **算法**：照[第五輪：V1～V3](#第五輪v1v3)與[第五輪實作釋義](#第五輪實作釋義)。
+  - V1：`round5_research.vol_60`，61 根還原收盤的 60 個日報酬、ddof＝1；不足 61 根、任一根收盤缺值或 ≤ 0、任一根停牌就缺值。
+  - V2：先取母體中 `turnover_60` 前 150 名（缺值不進、同金額用雜湊），再依 `momentum_20` 排；缺值的檔照樣占名額、排最後，不遞補。
+  - V3：`round5_research.cash_yield_parts`，除權息經 `research_report.load_actions` 載入；`T − 365 < action_date ≤ T` 的列，`cash_dividend` 有值用它、只有配股或分割算 0、三欄都是 null 就整個缺值，沒有列是 0；分母是 T 日 `market_bars.close`，缺值或 ≤ 0 就缺值。
+  - 排序是 `round5_research.order_key`：大者先或小者先，缺值都排最後，同值用 `sha256("<T>:<instrument_id>")`；全是大者先時和 `portfolio_research.ranking_key` 相同（測試鎖住）。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.052，寫死、不在執行時重算，算進 `definitions_sha256`。
+- **探索**：`python tools/research/round5_research.py --db /research/stock.db --segment exploration --hypotheses <V1,V2,V3 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）。
+- **驗證**：`python tools/research/round5_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `889`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27（往前 730 天當暖機），判「通過」的另跑已用段，寫在 `<代號>/used/`。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以。口徑（#889 決定 [7047664789](https://github.com/YiCheng0608/stock-lab/issues/889#issuecomment-7047664789)、[7047665604](https://github.com/YiCheng0608/stock-lab/issues/889#issuecomment-7047665604)）：
+  - 各假設用自己的訊號日，依年列日數、母體檔次與各特徵的缺值比例（分母是母體檔次，同 `explore_research`）。
+  - V2 另列子集合檔次與子集合內 `momentum_20` 的缺值比例。
+  - V3 另列窗口內有「三欄都是 null」的列的比例與 T 日未還原收盤缺值或 ≤ 0 的比例；兩欄各自計數、不互斥，總缺值是 `cash_yield_12m` 那一欄。
+  - V3 第 6 點：依讀到的每一年，列有日線的下市、轉板股（`stock`／`ipo`，`status` 是 `delisted` 或 `transferred`）中當年有任何除權息列（不分種類）的比例，另列同型別全部股票的比例。上櫃除權息 2007-12 起才有來源。
+- **紀錄檔**：和其他四支工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round5_research"`、`"round": 5`。代號不重疊，五支工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：`explore.md`（第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 3 個、累計 22 個、探索段與驗證段的門檻與 V3 的限制）、`explore.json`（另有 `tool`、`design`（`889`）、`validation_min_t`、`definitions_sha256`）、`<代號>/summary.md`、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名與用到的特徵值；V2 有 `turnover_60` 與 `momentum_20`）、`trades.csv`、`ledger-entries.json`。
+
+**`round5_research` 的版本**：`round5_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（V1～V3 的定義、特徵與排序的規則、分段、兩段的門檻與成本）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #889 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
