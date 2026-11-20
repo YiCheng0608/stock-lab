@@ -677,6 +677,10 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | R2 | 2 | 沒有通過（探索段） | 2026-11-20 | 0.86 | 同上 |
 | M1 | 3 | 沒有通過（探索段） | 2026-11-20 | 0.56 | [#866 7041146001](https://github.com/YiCheng0608/stock-lab/issues/866#issuecomment-7041146001) |
 | M2 | 3 | 沒有通過（探索段） | 2026-11-20 | −0.02 | 同上 |
+| C1 | 4 | 沒有通過（探索段） | 2026-11-21 | 0.68 | [#884 7046799783](https://github.com/YiCheng0608/stock-lab/issues/884#issuecomment-7046799783) |
+| C2 | 4 | 沒有通過（探索段） | 2026-11-21 | 1.61 | 同上 |
+| C3 | 4 | 沒有通過（探索段） | 2026-11-21 | 1.60 | 同上 |
+| C4 | 4 | 沒有通過（探索段） | 2026-11-21 | 1.77 | 同上 |
 
 - X6 有一個已知缺口：TWSE 週六補班日，官方三大法人表只列當天有法人進出的證券，沒列的照登記規則缺值排最後。估計影響約 0.3% 的選股檔次（[#864 7043539560](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043539560)、[決定 7043686420](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043686420)）。
 - S1～S3、X3、X4、X7、H1 用到月營收或 EPS。研究 DB 多數下市公司沒有月營收，偏差有利於假設，處理照 [#867 決定 7032683717](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032683717)。

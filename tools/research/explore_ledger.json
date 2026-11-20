@@ -214,6 +214,58 @@
       "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
       "definitions_sha256": "5e776480b0fa7d023c9f217671c856ac81ea8d4115d7ff94aac7446a263371f2",
       "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "C1",
+      "tool": "round4_research",
+      "round": 4,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T17:55:13+00:00",
+      "report_sha256": "ac236ba7acadf595f35db8caf6c25e2f5d0927eb368a3064f6ba23fb92eb577e",
+      "tool_commit": "df5a3abcf49961858e77e4b16758bda8a9842f7e",
+      "definitions_sha256": "2fa7f1826fc1b1b962eb63b45b6a238122d74fd4912e0a14c8eed0a0cf63aa56",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "C2",
+      "tool": "round4_research",
+      "round": 4,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T17:55:13+00:00",
+      "report_sha256": "ac236ba7acadf595f35db8caf6c25e2f5d0927eb368a3064f6ba23fb92eb577e",
+      "tool_commit": "df5a3abcf49961858e77e4b16758bda8a9842f7e",
+      "definitions_sha256": "2fa7f1826fc1b1b962eb63b45b6a238122d74fd4912e0a14c8eed0a0cf63aa56",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "C3",
+      "tool": "round4_research",
+      "round": 4,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T17:55:13+00:00",
+      "report_sha256": "ac236ba7acadf595f35db8caf6c25e2f5d0927eb368a3064f6ba23fb92eb577e",
+      "tool_commit": "df5a3abcf49961858e77e4b16758bda8a9842f7e",
+      "definitions_sha256": "2fa7f1826fc1b1b962eb63b45b6a238122d74fd4912e0a14c8eed0a0cf63aa56",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "C4",
+      "tool": "round4_research",
+      "round": 4,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T17:55:13+00:00",
+      "report_sha256": "ac236ba7acadf595f35db8caf6c25e2f5d0927eb368a3064f6ba23fb92eb577e",
+      "tool_commit": "df5a3abcf49961858e77e4b16758bda8a9842f7e",
+      "definitions_sha256": "2fa7f1826fc1b1b962eb63b45b6a238122d74fd4912e0a14c8eed0a0cf63aa56",
+      "verdict": "沒有通過（探索段）"
     }
   ]
 }
