@@ -3053,6 +3053,58 @@ _OFFICIAL_ACTION_PRICES = (
     ("ClosePriceBeforeExRightsDiviend", "DividendDeductedQuote"),
     ("除權息前收盤價", "減除股利參考價"),
 )
+# Before 98-01-01 the official reference counted 員工紅利轉增資 as free shares
+# (TWSE 營業細則第 67 條, amended 97-01 for 員工分紅費用化, effective
+# 98-01-01; TWSE 97 年報 P24), but the fields only carry the shareholders'
+# ratio, so an ex-right with employee bonus shares misses the reference by
+# that extra dilution (#891: 3514 2008-05-05, 300 股 per thousand plus
+# 693,450 股, reference 260.36 against the fields' 261.54).
+EMPLOYEE_BONUS_COUNTED_BEFORE = date(2009, 1, 1)
+# The extra ratio of the #891 rows is at most 0.0465 (median 0.0083).
+EMPLOYEE_BONUS_MAX_RATIO = 0.06
+EMPLOYEE_BONUS_BASIS = "employee_bonus_before_2009"
+TWSE_EMPLOYEE_BONUS_KEY = "B. 員工紅利轉增資"
+
+
+def _employee_bonus_ratio(
+    action: ActionRecord | CorporateAction,
+    details: dict[str, Any],
+    before: float,
+    deducted: float,
+    *,
+    tpex: bool,
+) -> float | None:
+    """The extra free-share ratio employee bonus shares explain, or None.
+
+    All hold: dated before EMPLOYEE_BONUS_COUNTED_BEFORE, no split, a
+    positive shareholders' ratio, the official 減除股利參考價 implying
+    ``0 < e <= EMPLOYEE_BONUS_MAX_RATIO`` more free shares than the fields
+    (``(before - cash) / deducted - 1 - ratio``; 減除股利參考價 leaves out a
+    cash capital increase, so a subscription row is measured the same way),
+    and on TWSE a positive 員工紅利轉增資 in the TWT49UDetail.  TPEx exDailyQ
+    publishes no employee bonus column, so the first four decide there.
+    """
+    ratio = action.stock_dividend_ratio
+    if (
+        action.action_date >= EMPLOYEE_BONUS_COUNTED_BEFORE
+        or action.split_ratio
+        or not ratio
+        or ratio <= 0
+    ):
+        return None
+    if not tpex:
+        detail = details.get("detail")
+        bonus = (
+            parse_number(detail.get(TWSE_EMPLOYEE_BONUS_KEY))
+            if isinstance(detail, dict)
+            else None
+        )
+        if bonus is None or bonus <= 0:
+            return None
+    extra = (before - (action.cash_dividend or 0.0)) / deducted - 1.0 - ratio
+    if 0 < extra <= EMPLOYEE_BONUS_MAX_RATIO:
+        return extra
+    return None
 
 
 def action_factor_check(
@@ -3066,6 +3118,12 @@ def action_factor_check(
     109.00 / 109.00); the price factor takes that from 除權息參考價
     (``_corporate_action_factor``, #394).  ``None`` when the row publishes no
     official prices (TWT48U), so nothing can be compared.
+
+    A row off by more than the tolerance still passes, with ``basis``
+    EMPLOYEE_BONUS_BASIS and its ``employee_bonus_ratio``, when employee
+    bonus shares the reference counted before 2009 explain the gap
+    (``_employee_bonus_ratio``, #891); its price factor is then the official
+    ratio (``official_reference_factor``).
     """
     details = (
         action.details if isinstance(action, ActionRecord) else action.details_json
@@ -3077,6 +3135,28 @@ def action_factor_check(
             break
     else:
         return None
+    result = _field_reference_check(action, before, deducted)
+    if not result["passed"]:
+        extra = _employee_bonus_ratio(
+            action,
+            details,
+            before,
+            deducted,
+            tpex=before_key == _OFFICIAL_ACTION_PRICES[0][0],
+        )
+        if extra is not None:
+            result.update(
+                passed=True,
+                basis=EMPLOYEE_BONUS_BASIS,
+                employee_bonus_ratio=round(extra, 8),
+            )
+    return result
+
+
+def _field_reference_check(
+    action: ActionRecord | CorporateAction, before: float, deducted: float
+) -> dict[str, Any]:
+    """The fields' implied 減除股利參考價 against the published one (#386)."""
     probe = CorporateAction(
         action_date=action.action_date,
         action_type=action.action_type,
@@ -3166,11 +3246,21 @@ def _upsert_action(
             split_ratio=None,
             details={**action.details, "factor_check": check},
         )
-    elif check is not None and db.scalar(
-        select(DataQuality.id).where(
-            DataQuality.entity_type == "corporate_action",
-            DataQuality.entity_key == quality_key,
-            DataQuality.as_of_date == action.action_date,
+    elif check is not None and check.get("basis"):
+        # Passed only because employee bonus shares explain the gap (#891):
+        # keep the comparison with the row, like a rejected one.
+        action = replace_record(
+            action, details={**action.details, "factor_check": check}
+        )
+    if (
+        check is not None
+        and check["passed"]
+        and db.scalar(
+            select(DataQuality.id).where(
+                DataQuality.entity_type == "corporate_action",
+                DataQuality.entity_key == quality_key,
+                DataQuality.as_of_date == action.action_date,
+            )
         )
     ):
         _upsert_quality(
@@ -6257,6 +6347,12 @@ def official_reference_factor(action: CorporateAction) -> float | None:
     do reproduce it, the field factor is the same official ratio before the
     0.01 cut, so an ordinary dividend keeps its unrounded factor.  An explicit
     ``price_factor`` comes first.
+
+    A row the write guard passed for employee bonus shares (#891, dated
+    before 2009) always takes the official ratio: its fields leave out those
+    shares, and even where they happen to reproduce 除權息參考價 (2451
+    2007-09-10, a subscription: 122.722 against 122.72) the factor stays the
+    one the row had while its fields were empty.
     """
     if _explicit_price_factor(action) is not None:
         return None
@@ -6264,6 +6360,15 @@ def official_reference_factor(action: CorporateAction) -> float | None:
     if official is None:
         return None
     before, quote = official
+    if (
+        action.action_date is not None
+        and action.action_date < EMPLOYEE_BONUS_COUNTED_BEFORE
+        # The basis needs a positive ratio; a dividend-only or #821 row skips
+        # the comparison.
+        and (action.stock_dividend_ratio or 0) > 0
+        and (action_factor_check(action) or {}).get("basis") == EMPLOYEE_BONUS_BASIS
+    ):
+        return quote / before
     own, _applied = _field_action_factor(action, before)
     # Prices are published in 0.01 units; rounding the gap keeps a gap of
     # exactly 0.02 on the field side whatever the float noise.
