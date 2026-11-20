@@ -190,9 +190,15 @@ def test_the_estimate_extrapolates_the_recent_rate_to_both_reference_lines(db):
         sample.estimate([_done(day, 2) for day in days], db)["estimated_list_date"]
         == _weekdays_from(days[-1], 52)[-1]
     )
-    # No negative row lately: no date.
+    # No negative row lately: no date from the rate, but the floor without one:
+    # 60 more lists, one date each at best.
     none = sample.estimate([_done(day, 0) for day in days], db)
     assert none["lists_needed"] is None and none["estimated_list_date"] is None
+    assert none["earliest_lists_needed"] == 60
+    # 60 trading days after the last list, the 2026-09-15 closure skipped.
+    assert none["earliest_list_date"] == _weekdays_from(days[-1], 62)[-1]
+    # 10 dates already: 50 more at best.
+    assert guess["earliest_lists_needed"] == 50
     # Enough already.
     full = sample.estimate([_done(day, 2) for day in _weekdays_from(days[0], 60)], db)
     assert full["reached"] and full["estimated_list_date"] is None

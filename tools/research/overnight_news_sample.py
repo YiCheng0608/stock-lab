@@ -170,10 +170,25 @@ def rebuild(db, newest: datetime | None) -> list[dict[str, Any]]:
     return result
 
 
-def estimate(lists: list[dict[str, Any]], db) -> dict[str, Any]:
-    """When the reference line would be reached at the last ``RATE_WINDOW`` dates' rate."""
+def _trading_days_after(db, day: date, count: int) -> date:
+    """The ``count``-th trading day after ``day`` over the stored calendar (an unknown day counts as trading)."""
 
     from worker.notify import is_trading_day
+
+    cursor, counted = day, 0
+    while counted < count:
+        cursor += timedelta(days=1)
+        if is_trading_day(db, cursor):
+            counted += 1
+    return cursor
+
+
+def estimate(lists: list[dict[str, Any]], db) -> dict[str, Any]:
+    """When the reference line would be reached at the last ``RATE_WINDOW`` dates' rate.
+
+    ``earliest_list_date`` needs no rate: a list adds at most one date, so the
+    dates line cannot be reached before ``NEGATIVE_DATES`` − dates more lists.
+    """
 
     done = [item for item in lists if not item["pending"]]
     rows = sum(item["rows_with_negative"] for item in done)
@@ -191,9 +206,17 @@ def estimate(lists: list[dict[str, Any]], db) -> dict[str, Any]:
         "lists_needed": None,
         "reached": rows >= NEGATIVE_ROWS and dates >= NEGATIVE_DATES,
         "estimated_list_date": None,
+        "earliest_lists_needed": None,
+        "earliest_list_date": None,
     }
     if not recent:
         return result
+    if not result["reached"]:
+        floor = max(NEGATIVE_DATES - dates, 1)
+        result["earliest_lists_needed"] = floor
+        result["earliest_list_date"] = _trading_days_after(
+            db, done[-1]["list_date"], floor
+        )
     row_rate = sum(item["rows_with_negative"] for item in recent) / len(recent)
     date_rate = sum(item["rows_with_negative"] > 0 for item in recent) / len(recent)
     result |= {"rows_per_list": row_rate, "dates_per_list": date_rate}
@@ -207,13 +230,9 @@ def estimate(lists: list[dict[str, Any]], db) -> dict[str, Any]:
     )
     lists_needed = int(-(-needed // 1))  # ceil
     result["lists_needed"] = lists_needed
-    # Forward over the stored calendar (an unknown day counts as trading).
-    cursor, counted = done[-1]["list_date"], 0
-    while counted < lists_needed:
-        cursor += timedelta(days=1)
-        if is_trading_day(db, cursor):
-            counted += 1
-    result["estimated_list_date"] = cursor
+    result["estimated_list_date"] = _trading_days_after(
+        db, done[-1]["list_date"], lists_needed
+    )
     return result
 
 
@@ -404,6 +423,12 @@ def markdown(result: dict[str, Any], command: str) -> str:
         )
     else:
         lines.append("- 最近的名單日沒有「可能負向」列，速率為 0，推估不出日期。")
+    if not guess["reached"] and guess["earliest_list_date"]:
+        lines.append(
+            f"- 不靠速率的下限：一份名單最多加 1 個名單日，至少還要 {guess['earliest_lists_needed']} 個名單日，"
+            f"最快也要到 **{guess['earliest_list_date']}** 的名單"
+            "（每份都有「可能負向」列才會這麼快；休市日用目前存的行事曆，沒存的平日當交易日）。"
+        )
     lines += [
         "",
         "## 每份名單",
