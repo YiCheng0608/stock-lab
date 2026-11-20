@@ -128,7 +128,11 @@ def test_h2_is_x2_frozen_as_passed():
         "start": ("session", date(2007, 4, 23), 240),
     }
     # the two kinds before it are unchanged (X4's golden output holds its note)
-    assert (tool.WATCH, tool.PRODUCT, tool.PASSED) == ("前瞻觀察", "已進產品", "通過驗證")
+    assert (tool.WATCH, tool.PRODUCT, tool.PASSED) == (
+        "前瞻觀察",
+        "已進產品",
+        "通過驗證",
+    )
     assert set(tool.KIND_NOTES) == {"前瞻觀察", "已進產品", "通過驗證"}
     assert "在 #1 的進產品提案補一則" in tool.KIND_NOTES["通過驗證"]
     assert "不是下架提案" in tool.KIND_NOTES["通過驗證"]
@@ -536,7 +540,11 @@ def test_h2_reports_its_kind_and_x2s_picks(h2_run):
     tables = read_json(h2_run / "tables.json")
     days = trading_days()
     assert tables["days"] == len([day for day in days if day >= SINCE]) - 1 >= 60
-    assert (tables["watch"], tables["kind"], tables["min_days"]) == ("H2", "通過驗證", 60)
+    assert (tables["watch"], tables["kind"], tables["min_days"]) == (
+        "H2",
+        "通過驗證",
+        60,
+    )
     assert tables["first_signal"] == next(d for d in days if d >= SINCE).isoformat()
     # the counts are the object's, under its name as its curve
     assert set(tables["counts"]) == {"H2", "population"}
@@ -546,7 +554,9 @@ def test_h2_reports_its_kind_and_x2s_picks(h2_run):
     assert summary[0].startswith("# H2 通過驗證的前瞻紀錄")
     first = [line for line in summary if line.startswith("- ")][:4]
     assert first[0].startswith("- 對加權指數超額（只列出）")
-    assert first[1].startswith("- 對母體超額") and f"累積 {tables['days']} 日" in first[1]
+    assert (
+        first[1].startswith("- 對母體超額") and f"累積 {tables['days']} 日" in first[1]
+    )
     assert first[2].startswith("- 判定：") and "在 #1 的進產品提案補一則" in first[2]
     assert first[3].startswith("- 定義：explore_research 第 2 版的 X2")
     assert X4_SHA256 in first[3] and "issuecomment-7043710015" in first[3]
