@@ -1275,8 +1275,169 @@ def test_a_crash_after_the_start_still_counts_as_the_one_run(
     assert any("the validation runs once" in text for text in refused(capsys))
 
 
-def test_the_repository_ledger_starts_empty():
-    assert json.loads(tool.REPO_LEDGER.read_text(encoding="utf-8")) == {"entries": []}
+HEX64 = frozenset("0123456789abcdef")
+LEDGER_VERDICTS = {
+    tool.EXPLORATION: {
+        tool.UNDECIDED,
+        tool.EXPLORATION_FAILED,
+        tool.EXPLORATION_PASSED,
+    },
+    tool.VALIDATION: {
+        tool.UNDECIDED,
+        tool.PASSED,
+        tool.FORWARD_WATCH,
+        tool.REVERSED,
+        tool.VALIDATION_FAILED,
+    },
+}
+LEDGER_FIELDS = (
+    "hypothesis",
+    "version",
+    "status",
+    "report_sha256",
+    "tool_commit",
+    "definitions_sha256",
+)
+
+
+def _hex(value, length: int) -> bool:
+    return isinstance(value, str) and len(value) == length and set(value) <= HEX64
+
+
+def ledger_problems(entries: list[dict]) -> list[str]:
+    """What is wrong with a ledger, read the way the three tools read it: no
+    ``segment`` is a validation (``explore_research``), no ``tool`` is
+    ``explore_research``."""
+
+    problems: list[str] = []
+    seen: set[tuple] = set()
+    passed: set[tuple] = set()
+    for at, entry in enumerate(entries):
+        where = f"entry {at} ({entry.get('hypothesis')})"
+        segment = entry.get("segment", tool.VALIDATION)
+        key = (
+            entry.get("tool", "explore_research"),
+            entry.get("hypothesis"),
+            entry.get("version"),
+            segment,
+        )
+        missing = [name for name in LEDGER_FIELDS if name not in entry]
+        if segment == tool.VALIDATION and "url" not in entry:
+            missing.append("url")
+        if missing:
+            problems.append(f"{where}: missing {', '.join(missing)}")
+        if segment not in LEDGER_VERDICTS:
+            problems.append(f"{where}: segment {segment!r}")
+            continue
+        for name in ("report_sha256", "definitions_sha256"):
+            if name in entry and not _hex(entry[name], 64):
+                problems.append(f"{where}: {name} is not 64 hex digits")
+        if "tool_commit" in entry and not _hex(entry["tool_commit"], 40):
+            problems.append(f"{where}: tool_commit is not 40 hex digits")
+        status = entry.get("status")
+        if status not in ("started", "finished"):
+            problems.append(f"{where}: status {status!r}")
+        if (
+            status == "finished"
+            and entry.get("verdict") not in LEDGER_VERDICTS[segment]
+        ):
+            problems.append(f"{where}: verdict {entry.get('verdict')!r} for {segment}")
+        if key in seen:
+            problems.append(f"{where}: {key} more than once")
+        seen.add(key)
+        if (
+            segment == tool.EXPLORATION
+            and entry.get("verdict") == tool.EXPLORATION_PASSED
+        ):
+            passed.add(key[:3])
+    for at, entry in enumerate(entries):
+        if entry.get("segment", tool.VALIDATION) != tool.VALIDATION:
+            continue
+        key = (
+            entry.get("tool", "explore_research"),
+            entry.get("hypothesis"),
+            entry.get("version"),
+        )
+        if key not in passed:
+            problems.append(
+                f"entry {at} ({entry.get('hypothesis')}): validation without a "
+                f"「{tool.EXPLORATION_PASSED}」 exploration of {key}"
+            )
+    return problems
+
+
+def test_the_repository_ledger_is_well_formed():
+    """The public ledger (tools/research/explore_ledger.json) gets the
+    ledger-entries.json of each run merged by hand: it must stay what the
+    tools write and read (#867 review)."""
+
+    data = json.loads(tool.REPO_LEDGER.read_text(encoding="utf-8"))
+    assert set(data) == {"entries"}
+    assert ledger_problems(data["entries"]) == []
+
+
+def _ledger_sample() -> list[dict]:
+    common = {
+        "round": 1,
+        "version": 2,
+        "status": "finished",
+        "report_sha256": "a" * 64,
+        "tool_commit": "b" * 40,
+        "definitions_sha256": "c" * 64,
+    }
+    return [
+        {
+            **common,
+            "hypothesis": "X4",
+            "segment": tool.EXPLORATION,
+            "verdict": tool.EXPLORATION_PASSED,
+        },
+        {
+            **common,
+            "hypothesis": "S1",
+            "segment": tool.EXPLORATION,
+            "tool": "trade_research",
+            "version": 1,
+            "verdict": tool.EXPLORATION_FAILED,
+        },
+        {
+            **common,
+            "hypothesis": "X4",
+            "segment": tool.VALIDATION,
+            "url": URL,
+            "verdict": tool.FORWARD_WATCH,
+        },
+    ]
+
+
+def test_the_ledger_check_accepts_what_the_tools_write():
+    assert ledger_problems(_ledger_sample()) == []
+
+
+@pytest.mark.parametrize(
+    "mutate, expected",
+    [
+        (lambda e: e.append(dict(e[0])), "more than once"),
+        (lambda e: e[0].update(verdict=tool.EXPLORATION_FAILED), "validation without"),
+        (lambda e: e[1].update(report_sha256="a" * 63), "not 64 hex"),
+        (lambda e: e[0].update(tool_commit="b" * 12), "not 40 hex"),
+        (lambda e: e[2].update(status="running"), "status"),
+        (lambda e: e[2].update(verdict=tool.EXPLORATION_PASSED), "verdict"),
+        (lambda e: e[2].pop("url"), "missing url"),
+        # no segment is a validation: a second X4 validation
+        (
+            lambda e: e.append({k: v for k, v in e[2].items() if k != "segment"}),
+            "more than once",
+        ),
+        # another tool's validation needs that tool's exploration
+        (lambda e: e[2].update(tool="trade_research"), "validation without"),
+    ],
+)
+def test_the_ledger_check_fails_on_a_broken_ledger(mutate, expected):
+    entries = _ledger_sample()
+    mutate(entries)
+    problems = ledger_problems(entries)
+    assert any(expected in problem for problem in problems), problems
 
 
 def test_the_marker_is_history_backfills():
