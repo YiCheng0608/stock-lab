@@ -1552,6 +1552,111 @@ def test_the_repository_ledger_refuses_an_exploration_too(
     assert not out.exists() and ledger_of(db, "exploration") == []
 
 
+# A directory a non-root POSIX user cannot write, as the research volume
+# mounted :ro is in the container; Windows and root ignore the mode (#899).
+READ_ONLY = pytest.mark.skipif(
+    os.name == "nt" or os.geteuid() == 0,
+    reason="a read-only directory needs a non-root POSIX user (CI's runner)",
+)
+
+
+def no_reads(monkeypatch) -> list:
+    """Every sqlite3.connect from here on is recorded and fails."""
+
+    opened: list = []
+
+    def connect(*args, **kwargs):
+        opened.append(args)
+        raise AssertionError(f"the DB was opened: {args}")
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    return opened
+
+
+def unwritable(problems: list[str], db: Path) -> bool:
+    # the only refusal: a run refused for another reason proves nothing here
+    return len(problems) == 1 and all(
+        str(db.parent / tool.LEDGER_NAME) in text
+        and "not writable" in text
+        and ":ro" in text
+        and "第 2 步的工具" in text
+        for text in problems
+    )
+
+
+@READ_ONLY
+def test_a_read_only_ledger_folder_refuses_the_exploration_before_anything_is_read(
+    explore_db, tmp_path, monkeypatch, capsys
+):
+    db = copy_of(explore_db, tmp_path)
+    compressed(monkeypatch, tmp_path)
+    opened = no_reads(monkeypatch)
+    out = tmp_path / "out"
+    db.parent.chmod(0o555)
+    try:
+        assert explore(db, out, hypotheses="X1") == 2
+    finally:
+        db.parent.chmod(0o755)
+    assert unwritable(refused(capsys), db)
+    assert opened == [] and not out.exists()
+    assert not (db.parent / tool.LEDGER_NAME).exists()
+
+
+@READ_ONLY
+def test_a_read_only_ledger_file_refuses_the_exploration(
+    explore_db, tmp_path, monkeypatch, capsys
+):
+    db = copy_of(explore_db, tmp_path)
+    ledger = db.parent / tool.LEDGER_NAME
+    tool.write_ledger(ledger, [])
+    compressed(monkeypatch, tmp_path)
+    opened = no_reads(monkeypatch)
+    out = tmp_path / "out"
+    ledger.chmod(0o444)
+    assert explore(db, out, hypotheses="X1") == 2
+    assert unwritable(refused(capsys), db)
+    assert opened == [] and not out.exists()
+
+
+@READ_ONLY
+def test_a_read_only_ledger_refuses_the_validation_before_anything_is_read(
+    explored, tmp_path, monkeypatch, capsys
+):
+    """The folder and the exploration's ledger both read-only, as on :ro."""
+
+    db, exploration = explored
+    ledger = db.parent / tool.LEDGER_NAME
+    assert ledger.is_file()
+    capsys.readouterr()
+    opened = no_reads(monkeypatch)
+    out = tmp_path / "v"
+    ledger.chmod(0o444)
+    db.parent.chmod(0o555)
+    try:
+        assert validate(db, out, exploration / "explore.json") == 2
+    finally:
+        db.parent.chmod(0o755)
+        ledger.chmod(0o644)
+    assert unwritable(refused(capsys), db)
+    assert opened == []
+    assert_untouched(db, out)
+
+
+@READ_ONLY
+def test_coverage_only_runs_on_a_read_only_ledger_folder(
+    explore_db, tmp_path, monkeypatch
+):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    out = tmp_path / "out"
+    db.parent.chmod(0o555)
+    try:
+        assert explore(db, out, "--coverage-only") == 0
+    finally:
+        db.parent.chmod(0o755)
+    assert (out / "coverage.json").is_file()
+
+
 def test_an_exploration_record_does_not_block_the_validation(explored, tmp_path):
     db, exploration = explored
     assert ledger_of(db, "exploration")

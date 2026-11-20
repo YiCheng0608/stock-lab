@@ -183,7 +183,12 @@ def test_batched_evaluate_writes_what_one_batch_writes(make_factory, monkeypatch
     expected = pipeline.evaluate(init_schema=False)
     monkeypatch.setattr(pipeline, "EVALUATE_TRACKING_BATCH", BATCH, raising=False)
     batched = make_factory("batched.db")
-    assert pipeline.evaluate(init_schema=False) == expected
+    result = pipeline.evaluate(init_schema=False)
+    # settled_check_seconds is a wall-clock time (#841): a busy runner gives
+    # 0.6 against 0.0 (PR #890 run 44804556957), so it is not compared.
+    for run in (result, expected):
+        assert run.pop("settled_check_seconds") >= 0
+    assert result == expected
 
     rows = tracked_rows(batched)
     assert rows == tracked_rows(whole)

@@ -40,7 +40,9 @@ changes nothing of the today list or ``mainstream_v1``.
 
 The daily writes it after ``mainstream`` (``worker.h2_list``); a rerun of the
 date replaces the run and its items.  ``today_list`` (the stock's rank and
-entry type in the day's today list) is read at request time, not stored.
+entry type in the day's today list) is read at request time, not stored,
+and so are the page's ``market`` (the close of T and its change) and
+``recent_closes`` (the sparkline), as ``/api/mainstream`` reads them (#882).
 """
 
 from __future__ import annotations
@@ -54,8 +56,10 @@ from typing import Any
 from sqlalchemy import delete, desc, select
 from sqlalchemy.orm import Session
 
+from .candidate_view import recent_closes, recent_sessions
 from .clock import utcnow
 from .mainstream import _today_list
+from .market_change import adjacent_change
 from .models import CorporateAction, H2Item, H2Run, Instrument, MarketBar
 
 H2_VERSION = "explore_research_v2_X2"
@@ -430,9 +434,24 @@ def h2_list(db: Session, trading_date: date | None) -> dict[str, Any]:
                 Instrument.symbol,
                 Instrument.name,
                 Instrument.instrument_type,
+                Instrument.listing_date,
             ).where(Instrument.id.in_(ids))
         )
     }
+    # The page's close, change and sparkline (#882), read as /api/mainstream
+    # reads them: the stored bar of T and the last sessions' raw closes.
+    bars = {
+        bar.instrument_id: bar
+        for bar in db.scalars(
+            select(MarketBar).where(
+                MarketBar.instrument_id.in_(ids),
+                MarketBar.trading_date == run.trading_date,
+            )
+        )
+    }
+    days = recent_sessions(db, run.trading_date)
+    closes = recent_closes(db, ids, days)
+    sessions: dict[date, list[date]] = {run.trading_date: days[-2:]}
     today = _today_list(db, run.trading_date, ids)
     items = []
     for row in rows:
@@ -452,6 +471,15 @@ def h2_list(db: Session, trading_date: date | None) -> dict[str, Any]:
                 if value is not None and math.isfinite(value)
                 else None,
                 "close": row.close,
+                "market": adjacent_change(
+                    db,
+                    row.instrument_id,
+                    run.trading_date,
+                    bars.get(row.instrument_id),
+                    sessions,
+                    listing_date=instrument.listing_date,
+                ),
+                "recent_closes": closes[row.instrument_id],
                 "today_list": today.get(row.instrument_id),
             }
         )

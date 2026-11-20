@@ -20,6 +20,7 @@ import json
 import os
 import random
 import shutil
+import sqlite3
 import sys
 from dataclasses import astuple
 from datetime import date, timedelta
@@ -930,3 +931,69 @@ def test_a_wrong_member_table_is_refused_before_reading(
     refused = json.loads(capsys.readouterr().out)["refused"]
     assert any("not the member table" in line for line in refused)
     assert not out.exists()
+
+
+# --- the ledger must be writable (#899) -------------------------------------------
+
+# A directory a non-root POSIX user cannot write, as the research volume
+# mounted :ro is in the container; Windows and root ignore the mode (#899).
+READ_ONLY = pytest.mark.skipif(
+    os.name == "nt" or os.geteuid() == 0,
+    reason="a read-only directory needs a non-root POSIX user (CI's runner)",
+)
+
+
+def no_reads(monkeypatch) -> list:
+    """Every sqlite3.connect from here on is recorded and fails."""
+
+    opened: list = []
+
+    def connect(*args, **kwargs):
+        opened.append(args)
+        raise AssertionError(f"the DB was opened: {args}")
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    return opened
+
+
+def unwritable(problems: list[str], db: Path) -> bool:
+    # the only refusal: a run refused for another reason proves nothing here
+    return len(problems) == 1 and all(
+        str(db.parent / ex.LEDGER_NAME) in text
+        and "not writable" in text
+        and ":ro" in text
+        and "第 2 步的工具" in text
+        for text in problems
+    )
+
+
+@READ_ONLY
+def test_a_read_only_ledger_folder_refuses_the_exploration_before_anything_is_read(
+    fixture_db, tmp_path, monkeypatch, capsys
+):
+    db = copy_of(fixture_db, tmp_path)
+    compressed(monkeypatch, tmp_path, db)
+    opened = no_reads(monkeypatch)
+    out = tmp_path / "out"
+    db.parent.chmod(0o555)
+    try:
+        assert explore(db, out, hypotheses="M1") == 2
+    finally:
+        db.parent.chmod(0o755)
+    assert unwritable(json.loads(capsys.readouterr().out)["refused"], db)
+    assert opened == [] and not out.exists()
+
+
+@READ_ONLY
+def test_coverage_only_runs_on_a_read_only_ledger_folder(
+    fixture_db, tmp_path, monkeypatch
+):
+    db = copy_of(fixture_db, tmp_path)
+    compressed(monkeypatch, tmp_path, db)
+    out = tmp_path / "coverage"
+    db.parent.chmod(0o555)
+    try:
+        assert explore(db, out, "--coverage-only", hypotheses=None) == 0
+    finally:
+        db.parent.chmod(0o755)
+    assert (out / "coverage.json").is_file()
