@@ -1,0 +1,115 @@
+{
+  "tool": "mainstream_research",
+  "version": 1,
+  "design": "813",
+  "registration_commit": "31a09e9e",
+  "correction_commit": "b417f716",
+  "segment": "exploration",
+  "round": 3,
+  "round_size": 2,
+  "cumulative": 15,
+  "definitions_sha256": "5e776480b0fa7d023c9f217671c856ac81ea8d4115d7ff94aac7446a263371f2",
+  "members_sha256": "2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827",
+  "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+  "command": "python tools/research/mainstream_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2019-12-31",
+  "coverage_only": true,
+  "window": {
+    "first_signal": "2013-02-18",
+    "first_session": "2013-02-19",
+    "last_session": "2019-12-31",
+    "days": 1690,
+    "signal_days": 1690
+  },
+  "coverage": {
+    "2013": {
+      "days": 220,
+      "universe": 102762,
+      "grouped": 102110,
+      "selectable": 99910,
+      "ranked_groups": 4664,
+      "retroactive": 0,
+      "remapped": 1240,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2014": {
+      "days": 248,
+      "universe": 130171,
+      "grouped": 129585,
+      "selectable": 127148,
+      "ranked_groups": 5414,
+      "retroactive": 0,
+      "remapped": 1351,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2015": {
+      "days": 244,
+      "universe": 104887,
+      "grouped": 104426,
+      "selectable": 102715,
+      "ranked_groups": 4857,
+      "retroactive": 0,
+      "remapped": 1551,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2016": {
+      "days": 244,
+      "universe": 94193,
+      "grouped": 93774,
+      "selectable": 92199,
+      "ranked_groups": 4778,
+      "retroactive": 0,
+      "remapped": 1287,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2017": {
+      "days": 246,
+      "universe": 116000,
+      "grouped": 115507,
+      "selectable": 114232,
+      "ranked_groups": 5063,
+      "retroactive": 0,
+      "remapped": 1104,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2018": {
+      "days": 247,
+      "universe": 109430,
+      "grouped": 109135,
+      "selectable": 107931,
+      "ranked_groups": 4710,
+      "retroactive": 0,
+      "remapped": 1156,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    },
+    "2019": {
+      "days": 241,
+      "universe": 100632,
+      "grouped": 100340,
+      "selectable": 98790,
+      "ranked_groups": 4739,
+      "retroactive": 0,
+      "remapped": 1863,
+      "taiex_missing": 0,
+      "no_group": 0,
+      "short_groups": 0
+    }
+  }
+}
