@@ -1,0 +1,4 @@
+MemAvailable:    7009644 kB
+M1: 沒有通過（探索段）
+M2: 沒有通過（探索段）
+{"out": "/out/exploration", "segment": "exploration", "sha256": "9e6275deb83d80542a9e4ddd0d7b075cfaa47ea9a839f0f3f21097d4b95276d9", "verdicts": {"M1": "沒有通過（探索段）", "M2": "沒有通過（探索段）"}}
