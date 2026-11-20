@@ -1,3 +1,93 @@
 {
-  "entries": []
+  "entries": [
+    {
+      "hypothesis": "X3",
+      "round": 1,
+      "segment": "exploration",
+      "version": 2,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:56:39+00:00",
+      "report_sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "X4",
+      "round": 1,
+      "segment": "exploration",
+      "version": 2,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:56:39+00:00",
+      "report_sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "verdict": "探索通過"
+    },
+    {
+      "hypothesis": "X7",
+      "round": 1,
+      "segment": "exploration",
+      "version": 2,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:56:39+00:00",
+      "report_sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "S1",
+      "tool": "trade_research",
+      "round": 2,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:58:22+00:00",
+      "report_sha256": "eae22284845cbb3bf3f2ef5e60ecf444a50d2474034d45f32109a6966d4e984f",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "S2",
+      "tool": "trade_research",
+      "round": 2,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:58:22+00:00",
+      "report_sha256": "eae22284845cbb3bf3f2ef5e60ecf444a50d2474034d45f32109a6966d4e984f",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "S3",
+      "tool": "trade_research",
+      "round": 2,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T06:58:22+00:00",
+      "report_sha256": "eae22284845cbb3bf3f2ef5e60ecf444a50d2474034d45f32109a6966d4e984f",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "X4",
+      "round": 1,
+      "segment": "validation",
+      "version": 2,
+      "status": "finished",
+      "started_at": "2026-11-20T07:21:37+00:00",
+      "report_sha256": "7b157b269d800ffa93caaa45703feefb04633bff239c9fe3803dab2dd0bdc1f8",
+      "url": "https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032779893",
+      "tool_commit": "6acdb631f0f75f5aa68b73262e81541bad23b37a",
+      "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+      "finished_at": "2026-11-20T07:23:54+00:00",
+      "verdict": "前瞻觀察"
+    }
+  ]
 }
