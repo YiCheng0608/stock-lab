@@ -2377,6 +2377,22 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items.1.groups[].name",
             ["示範 AI 伺服器", INDUSTRY_DISPLAY_ZH["Computer and Peripherals"]],
         ),
+        # 接近年高前 20 (Issue 882): the stored run of T (_h2_run_rows), the seven
+        # universe members by high_gap_240, 9204's null value last (H2_MISSING).
+        ("h2", "status", "computed"),
+        ("h2", "trading_date", D),
+        ("h2", "window", 240),
+        ("h2", "universe_count", 7),
+        (
+            "h2",
+            "items[].instrument.symbol",
+            ["9101", "9201", "9103", "9102", "9202", "9203", "9204"],
+        ),
+        ("h2", "items.6.high_gap_240", None),
+        ("h2", "items[].today_list.rank", [1, 3, 2, None, None, None, None]),
+        # The page's close, change and sparkline are read at request time (#882).
+        ("h2", "items.0.market.change_status", "known"),
+        ("h2", "items.0.recent_closes.closes", 30),
     ],
     "news": [
         ("news?category=domestic&limit=20", "items", 4),

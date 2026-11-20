@@ -778,8 +778,9 @@ OWNERS: dict[str, tuple[str, str]] = {
 
 def today_shots(run: Run) -> list[Shot]:
     # The market page (/market, Issue 549) was split off the today page and is checked with it (features/today.md);
-    # the page's second list, 主流族群前 20, is its own shot (?list=mainstream, Issue 769).
-    return [TODAY, TODAY_MAINSTREAM, MARKET, MARKET_TPEX, MARKET_TX]
+    # the page's second list, 主流族群前 20, is its own shot (?list=mainstream, Issue 769), and so is its
+    # third, 接近年高前 20 (?list=h2, Issue 882).
+    return [TODAY, TODAY_MAINSTREAM, TODAY_H2, MARKET, MARKET_TPEX, MARKET_TX]
 
 
 def news_shots(run: Run) -> list[Shot]:
@@ -2335,40 +2336,57 @@ def mainstream_row_lines(
     return lines
 
 
-@check("today", "T26")
-def t26(run: Run) -> str:
-    """Issue 769: ?list=mainstream shows mainstream.json: the head, the definition, each row's lines, no price level."""
+@dataclass(frozen=True)
+class ScreenList:
+    """One of the today page's lists without price levels (T26 主流族群前 20, T27 接近年高前 20):
+    the shot, its API file, the title, the empty-state titles, the definition and a row's lines,
+    and the words that must not be on it. ``label`` names it in the messages."""
 
-    payload = mainstream(run)
-    text = run.text(TODAY_MAINSTREAM)
+    shot: Shot
+    api: str
+    title: str
+    empty: dict[str, str]
+    definition: Callable[[dict], str]
+    row_lines: Callable[[dict, dict, str | None], list[str]]
+    words: tuple[str, ...]
+    label: str
+
+
+def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
+    """The checks T26 and T27 share (frontend ScreenList.tsx): the head, the definition, each
+    row's lines, 「今日名單 #n」, no price-level word or rule level line, and the 390 close column.
+    Returns the empty state's summary, or (badge, rows, marks)."""
+
+    payload = run.get(spec.api, f"{spec.api}.json")
+    text = run.text(spec.shot)
     items = payload.get("items") or []
-    found = [n for n, line in enumerate(text.lines) if line == MAINSTREAM_TITLE]
+    found = [n for n, line in enumerate(text.lines) if line == spec.title]
     # The tab reads it too and comes first: the section title is the last one.
-    expect(len(found) >= 2, f"缺標題 `{MAINSTREAM_TITLE}`（分頁之外的整行）")
+    expect(len(found) >= 2, f"缺標題 `{spec.title}`（分頁之外的整行）")
     i = found[-1]
     status = payload.get("status")
     if status != "computed" or not items:
-        title = MAINSTREAM_EMPTY.get(
-            "missing" if status == "missing" else "zero", MAINSTREAM_EMPTY["zero"]
+        title = spec.empty.get(
+            "missing" if status == "missing" else "zero", spec.empty["zero"]
         )
         expect(
             text.has(title),
-            f"mainstream.json {status}、items {len(items)}，缺 `{title}`",
+            f"{spec.api}.json {status}、items {len(items)}，缺 `{title}`",
         )
         expect(
             text.find_where(lambda line: CANDIDATE_ROW.match(line) is not None, i) < 0,
-            f"mainstream.json {status} 卻有名次列",
+            f"{spec.api}.json {status} 卻有名次列",
         )
         return f"{status}：顯示 `{title}`，沒有名次列"
     day = payload.get("trading_date")
-    badge = card_badge(run, text, i, day, MAINSTREAM_TITLE)
+    badge = card_badge(run, text, i, day, spec.title)
     k = 1 if day == page_day(run) else 2
     count_line = f"{len(items)} 檔"
     expect(
         text.after(i, k) == count_line,
-        f"`{MAINSTREAM_TITLE}` 後第 {k} 行是 {text.after(i, k)!r}，預期 `{count_line}`",
+        f"`{spec.title}` 後第 {k} 行是 {text.after(i, k)!r}，預期 `{count_line}`",
     )
-    definition = mainstream_definition(payload)
+    definition = spec.definition(payload)
     expect(
         text.after(i, k + 1) == definition,
         f"定義行是 {text.after(i, k + 1)!r}，預期 `{definition}`",
@@ -2383,7 +2401,7 @@ def t26(run: Run) -> str:
     today_day = candidates(run).get("trading_date")
     other_day = None if today_day and day and today_day[:10] == day[:10] else day
     for row, item in zip(rows, items):
-        want = mainstream_row_lines(item, payload["window"], other_day)
+        want = spec.row_lines(item, payload, other_day)
         got = text.lines[row : row + len(want)]
         expect(
             got == want, f"第 {item['rank']} 列是 {got}，預期 {want}（{text.at(row)}）"
@@ -2394,21 +2412,19 @@ def t26(run: Run) -> str:
     # The list and the chart beside it, up to the hot groups under them.
     end = text.find("熱門族群", i)
     after = text.lines[i : end if end > i else len(text.lines)]
-    words = sorted(
-        {word for line in after for word in MAINSTREAM_LEVEL_WORDS if word in line}
-    )
-    expect(not words, f"第二份名單出現點位用詞 {words}")
+    words = sorted({word for line in after for word in spec.words if word in line})
+    expect(not words, f"{spec.label}出現點位用詞 {words}")
     expect(
         not any(line.startswith(CHART_LEVELS_LINE) for line in after),
-        f"右側 K 線卡有 `{CHART_LEVELS_LINE}`（第二份名單不畫規則價位線）",
+        f"右側 K 線卡有 `{CHART_LEVELS_LINE}`（{spec.label}不畫規則價位線）",
     )
-    meta = run.shoot(TODAY_MAINSTREAM)[390]
+    meta = run.shoot(spec.shot)[390]
     if not meta.get("ready"):
         raise Undetermined(
-            f"{TODAY_MAINSTREAM.name}-390 未 ready {meta.get('error', '')}".strip()
+            f"{spec.shot.name}-390 未 ready {meta.get('error', '')}".strip()
         )
     measured = meta.get("candidateRows")
-    expect(measured is not None, f"{TODAY_MAINSTREAM.name}-390 沒有 candidateRows 量測")
+    expect(measured is not None, f"{spec.shot.name}-390 沒有 candidateRows 量測")
     expect(
         len(measured) == len(items), f"390 量到 {len(measured)} 列，items {len(items)}"
     )
@@ -2423,9 +2439,99 @@ def t26(run: Run) -> str:
         and row["numsScrollWidth"] > row["numsClientWidth"]
     ]
     expect(not problems, "；".join(problems))
+    return badge, len(rows), marks
+
+
+MAINSTREAM_LIST = ScreenList(
+    shot=TODAY_MAINSTREAM,
+    api="mainstream",
+    title=MAINSTREAM_TITLE,
+    empty=MAINSTREAM_EMPTY,
+    definition=mainstream_definition,
+    row_lines=lambda item, payload, other_day: mainstream_row_lines(
+        item, payload["window"], other_day
+    ),
+    words=MAINSTREAM_LEVEL_WORDS,
+    label="第二份名單",
+)
+
+
+@check("today", "T26")
+def t26(run: Run) -> str:
+    """Issue 769: ?list=mainstream shows mainstream.json: the head, the definition, each row's lines, no price level."""
+
+    result = screen_list(run, MAINSTREAM_LIST)
+    if isinstance(result, str):
+        return result
+    badge, rows, marks = result
     return (
-        f"{badge}、`{count_line}`、定義行；{len(rows)} 列的名次、族群、強弱與 "
+        f"{badge}、`{len(mainstream(run).get('items') or [])} 檔`、定義行；{rows} 列的名次、族群、強弱與 "
         f"`今日名單 #n` {marks} 行 = mainstream.json；沒有點位用詞與規則價位線；390 收盤欄不被切"
+    )
+
+
+# ---- T27: 接近年高前 20, the today page's third list (Issue 882; UI_COPY_SPEC §10, decision 7048604437) ----
+# Mirrors frontend/src/candidates/h2.ts (h2Definition, h2GapText, h2State) and H2Views.tsx's line
+# structure: change them together.
+TODAY_H2 = Shot("today-h2", "/?list=h2")
+H2_TITLE = "接近年高前 20"
+H2_EMPTY = {"missing": "尚無接近年高名單", "zero": "當日沒有股票進入母體"}
+# h2.ts H2_MIN_AVERAGE_LOTS, H2_PERIOD_SESSIONS: not in the API.
+H2_MIN_AVERAGE_LOTS = 1000
+H2_PERIOD_SESSIONS = 60
+# No price levels, research status or t on the list (decision #1 7044998169, 6881314294).
+H2_LEVEL_WORDS = MAINSTREAM_LEVEL_WORDS + ("持有", "回測", "t 值", "H2", "X2")
+
+
+def h2_definition(payload: dict) -> str:
+    universe = payload.get("universe_count")
+    count = f"母體 {universe:,} 檔，" if isinstance(universe, int) else ""
+    return (
+        f"收盤最接近一年高點（近 {payload['window']} 個交易日最高價，價格還原除權息）的 20 檔；"
+        f"{count}20 日均量 {H2_MIN_AVERAGE_LOTS:,} 張以上的上市櫃股票；"
+        f"以入選後 {H2_PERIOD_SESSIONS} 個交易日為觀察期"
+    )
+
+
+def h2_row_lines(item: dict, payload: dict, other_day: str | None = None) -> list[str]:
+    """A row's first lines: the title (no group part), 「距一年高點 ±x.xx%」 (— without a value),
+    then 「今日名單 #n」 when it is on the today list (dated when the today list is of another day)."""
+
+    instrument = item["instrument"]
+    market = EXCHANGE_LABELS.get(instrument["exchange"], "市場待核實")
+    lines = [
+        f"#{item['rank']} {instrument['symbol']} {instrument['name']} {market}",
+        f"距一年高點 {signed_percent(item.get('high_gap_240'))}",
+    ]
+    if item.get("today_list"):
+        mark = f"今日名單 #{item['today_list']['rank']}"
+        lines.append(f"{slash(other_day)} {mark}" if other_day else mark)
+    return lines
+
+
+H2_LIST = ScreenList(
+    shot=TODAY_H2,
+    api="h2",
+    title=H2_TITLE,
+    empty=H2_EMPTY,
+    definition=h2_definition,
+    row_lines=h2_row_lines,
+    words=H2_LEVEL_WORDS,
+    label="第三份名單",
+)
+
+
+@check("today", "T27")
+def t27(run: Run) -> str:
+    """Issue 882: ?list=h2 shows h2.json: the head, the definition, each row's lines, no price level or research word."""
+
+    result = screen_list(run, H2_LIST)
+    if isinstance(result, str):
+        return result
+    badge, rows, marks = result
+    return (
+        f"{badge}、`{len(run.get('h2', 'h2.json').get('items') or [])} 檔`、定義行；{rows} 列的名次、"
+        f"距一年高點與 `今日名單 #n` {marks} 行 = h2.json；沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
     )
 
 

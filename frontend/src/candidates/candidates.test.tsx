@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import type { CandidateItem, CandidateLiquidity, MainstreamItem, MainstreamResponse, PreopenNews } from '../types'
+import type { CandidateItem, CandidateLiquidity, H2Item, H2Response, MainstreamItem, MainstreamResponse, PreopenNews } from '../types'
 import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
@@ -37,6 +37,9 @@ import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidate
 import { MainstreamList, MainstreamSection, TodayListsSection, mainstreamQueryOptions } from './MainstreamViews'
 import { TODAY_LISTS, mainstreamGroupsText, mainstreamReturnText, mainstreamState, signedPercent, todayListKind, todayListMark, todayListPickPath, todayListSearch } from './mainstream'
 import { mainstreamItem, mainstreamResponse, missingMainstream, zeroMainstream } from './mainstream.fixtures'
+import { H2List, H2Section, h2QueryOptions } from './H2Views'
+import { h2Definition, h2GapText, h2State } from './h2'
+import { h2Response, missingH2, zeroH2 } from './h2.fixtures'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 // scripts/ci-test.cjs runs this module under Node (the frontend ships no Node typings): the stylesheet check reads a file.
 declare const require: (id: string) => unknown
@@ -477,13 +480,13 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   // The switch and the address: ?list=mainstream opens the second list (a reload stays on it); anything else is 今日名單.
   check(todayListKind(new URLSearchParams('')) === 'today' && todayListKind(new URLSearchParams('list=mainstream')) === 'mainstream' && todayListKind(new URLSearchParams('list=other')) === 'today', 'only ?list=mainstream opens the second list')
   check(todayListSearch(new URLSearchParams('list=mainstream&pick=2330&x=1'), 'today').toString() === 'x=1' && todayListSearch(new URLSearchParams('x=1'), 'mainstream').toString() === 'x=1&list=mainstream', 'the tabs write the list to the address and drop a pick')
-  check(JSON.stringify(TODAY_LISTS.map((list) => list.label)) === JSON.stringify(['今日名單', '主流族群前 20']), 'two tabs, 今日名單 first')
+  check(JSON.stringify(TODAY_LISTS.map((list) => list.label)) === JSON.stringify(['今日名單', '主流族群前 20', '接近年高前 20']), 'three tabs, 今日名單 first (Issue 882)')
   const atToday = renderAt('/', <TodayListsSection today={today} />)
   check(tabOf(atToday, '今日名單').includes('aria-selected="true"') && tabOf(atToday, '主流族群前 20').includes('aria-selected="false"'), 'without ?list the page is on 今日名單')
   check(atToday.includes('id="candidates-title"') && !atToday.includes('mainstream-title') && atToday.indexOf('role="tablist"') < atToday.indexOf('id="candidates-title"'), 'the switch above the today list; the second list not rendered')
   check(atToday.includes('id="today-list-panel-today"') && atToday.includes('aria-labelledby="today-list-tab-today"'), 'the panel is labelled by its tab')
   // The today list itself does not change: the same page text as before the switch, after the two tab labels.
-  check(plain(atToday) === '今日名單主流族群前 20' + plain(render(<CandidatesSection data={listResponse()} loading={false} error={null} />)), 'the today list keeps its page text (page_checks T5–T8, T13)')
+  check(plain(atToday) === '今日名單主流族群前 20接近年高前 20' + plain(render(<CandidatesSection data={listResponse()} loading={false} error={null} />)), 'the today list keeps its page text (page_checks T5–T8, T13)')
   const atMainstream = renderAt('/?list=mainstream', <TodayListsSection today={today} />, withMainstream(mainstreamResponse()))
   check(tabOf(atMainstream, '主流族群前 20').includes('aria-selected="true"') && tabOf(atMainstream, '今日名單').includes('aria-selected="false"'), '?list=mainstream selects the second tab')
   check(atMainstream.includes('id="mainstream-title"') && !atMainstream.includes('candidates-title') && atMainstream.includes('id="today-list-panel-mainstream"'), '?list=mainstream shows the second list instead of the today list')
@@ -596,4 +599,104 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   check(/white-space: normal/.test(wrapTitle) && /overflow: visible/.test(wrapTitle) && /text-overflow: clip/.test(wrapTitle) && /text-indent: -52px/.test(wrapTitle), `the title wraps instead of an ellipsis, hanging under the name: ${wrapTitle}`)
   check(/grid-column: 1 \/ -1/.test(rule(phone, '.candidate-row.mainstream-row .candidate-row-title')) && /text-indent: -42px/.test(rule(phone, '.candidate-row.mainstream-row .candidate-row-title')), 'below 640px the title spans the row')
   check(/grid-column: 1;/.test(rule(phone, '.candidate-row.mainstream-row .mainstream-row-figures')) && /grid-column: 2;/.test(rule(phone, '.candidate-row.mainstream-row .candidate-row-nums')), 'below 640px the sparkline and the close share one line')
+}
+
+// ---- 接近年高前 20 (#882; UI_COPY_SPEC §10, decision 7048604437): the third tab, its rows and states ----
+{
+  const renderAt = (location: string, element: ReactElement, client = new QueryClient()) =>
+    renderToStaticMarkup(<QueryClientProvider client={client}><StaticRouter location={location}>{element}</StaticRouter></QueryClientProvider>)
+  const withH2 = (data: H2Response) => {
+    const client = new QueryClient()
+    client.setQueryData(['h2', 'latest'], data)
+    return client
+  }
+  const plain = (markup: string) => markup.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&')
+  const inner = (markup: string, start: string, end: string) => plain(slice(markup, start, end).replace(/^[^>]*>/, ''))
+  const today = { data: listResponse(), loading: false, error: null }
+  const tabOf = (markup: string, label: string) => markup.match(new RegExp(`<button[^>]*role="tab"[^>]*>${label}</button>`))?.[0] ?? ''
+
+  // The switch and the address: ?list=h2 opens the third list (a reload stays on it); an unknown value is 今日名單.
+  check(todayListKind(new URLSearchParams('list=h2')) === 'h2' && todayListKind(new URLSearchParams('list=H2')) === 'today' && todayListKind(new URLSearchParams('list=')) === 'today', 'only ?list=h2 opens the third list')
+  check(todayListSearch(new URLSearchParams('list=mainstream&pick=2330&x=1'), 'h2').toString() === 'list=h2&x=1' && todayListSearch(new URLSearchParams('list=h2'), 'today').toString() === '' && todayListSearch(new URLSearchParams('list=h2'), 'mainstream').toString() === 'list=mainstream', 'the tabs write ?list=h2, and switch from it to the other two')
+  const atH2 = renderAt('/?list=h2', <TodayListsSection today={today} />, withH2(h2Response()))
+  check(tabOf(atH2, '接近年高前 20').includes('aria-selected="true"') && tabOf(atH2, '今日名單').includes('aria-selected="false"') && tabOf(atH2, '主流族群前 20').includes('aria-selected="false"'), '?list=h2 selects the third tab')
+  check(atH2.includes('id="h2-title"') && !atH2.includes('candidates-title') && !atH2.includes('mainstream-title') && atH2.includes('id="today-list-panel-h2"') && atH2.includes('aria-labelledby="today-list-tab-h2"'), '?list=h2 shows the third list in its own panel')
+  check(renderAt('/?list=h2', <TodayListsSection today={today} />).includes('接近年高前 20 載入中…'), 'the third list loads on its own')
+  const atToday = renderAt('/', <TodayListsSection today={today} />)
+  check(tabOf(atToday, '接近年高前 20').includes('aria-selected="false"') && !atToday.includes('h2-title'), 'without ?list the third list is not rendered')
+  // /api/h2 only on ?list=h2: the page's options, subscribed as useQuery does, call the request only for the third list.
+  const requests: string[] = []
+  for (const kind of ['today', 'mainstream', 'h2'] as const) {
+    const observer = new QueryObserver(new QueryClient(), h2QueryOptions(kind, () => { requests.push(kind); return Promise.resolve(h2Response()) }))
+    observer.subscribe(() => undefined)()
+  }
+  check(JSON.stringify(requests) === JSON.stringify(['h2']), `only the third list requests /api/h2: ${requests.join(',')}`)
+  const enabledAt = (location: string, key: string) => {
+    const client = new QueryClient()
+    renderAt(location, <TodayListsSection today={today} />, client)
+    return (client.getQueryCache().find({ queryKey: [key, 'latest'] })?.options as { enabled?: unknown } | undefined)?.enabled
+  }
+  check(enabledAt('/', 'h2') === false && enabledAt('/?list=mainstream', 'h2') === false && enabledAt('/?list=h2', 'h2') === true && enabledAt('/?list=h2', 'mainstream') === false, 'the section queries /api/h2 only on ?list=h2, and /api/mainstream not there')
+
+  // computed: the head, the definition (W and the universe from the API) and the rows.
+  const computed = render(<H2Section data={h2Response()} loading={false} error={null} todayDate="2026-11-20" />)
+  check(computed.includes('<h2 id="h2-title">接近年高前 20</h2>') && plain(computed).includes('2026/11/20') && plain(computed).includes('3 檔'), `the head: title, data date and count: ${plain(computed).slice(0, 60)}`)
+  const definition = inner(computed, 'h2-definition', '</p>')
+  check(definition === '收盤最接近一年高點（近 240 個交易日最高價，價格還原除權息）的 20 檔；母體 586 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期', `the definition: ${definition}`)
+  check(h2Definition({ window: 120, universe_count: 1234 }).includes('近 120 個交易日最高價') && h2Definition({ window: 120, universe_count: 1234 }).includes('母體 1,234 檔'), 'W and the universe come from the API')
+  const hRow = (markup: string, rank: number) => slice(markup, `data-h2-rank="${rank}"`, '</li>')
+  const first = hRow(computed, 1)
+  const second = hRow(computed, 2)
+  const third = hRow(computed, 3)
+  check(inner(first, '<p class="candidate-row-title"', '</p>') === '#1 2330 台積電 上市' && inner(second, '<p class="candidate-row-title"', '</p>') === '#2 6274 台燿 上櫃', `the first line: rank, name and market, no group part: ${inner(first, '<p class="candidate-row-title"', '</p>')}`)
+  check(first.includes('href="/stocks/TWSE/2330"'), 'the stock links to its page')
+  const gap = (row: string) => inner(row, '<p class="mainstream-return h2-gap"', '</p>')
+  check(gap(first) === '距一年高點 0.00%' && gap(second) === '距一年高點 -3.21%' && gap(third) === '距一年高點 —', `the distance line, two decimals, null as —: ${gap(first)} | ${gap(second)} | ${gap(third)}`)
+  check(!/mainstream-return-value[^"]*tone-/.test(computed), 'the distance is not red or green')
+  check(plain(first).includes('收盤（元）1,085.00+1.40%') && first.includes('candidate-change tone-up') && second.includes('candidate-change tone-down') && plain(second).includes('230.50-0.86%'), `close and change from market: ${plain(second)}`)
+  check(first.includes('class="sparkline sparkline-up"') && second.includes('class="sparkline sparkline-down"'), 'the sparkline on recent_closes')
+  check(h2GapText({ high_gap_240: -0.00004 }) === '0.00%' && h2GapText({ high_gap_240: -0.12345 }) === '-12.35%', 'the distance helper rounds to two decimals')
+
+  // 「今日名單 #n」: a link on the same date, plain text with the list's date otherwise; none off the today list.
+  check(first.includes('<a class="badge badge-compact mainstream-today-mark" data-today-rank="2" href="/?pick=2330">今日名單 #2</a>'), `the mark on a today-list stock: ${slice(first, 'mainstream-today-mark', '</a>')}`)
+  check(!second.includes('mainstream-today-mark') && !plain(second).includes('今日名單'), 'no mark on a stock off the today list')
+  const otherDay = hRow(render(<H2Section data={h2Response()} loading={false} error={null} todayDate="2026-11-23" />), 1)
+  check(otherDay.includes('<span class="badge badge-compact mainstream-today-mark mainstream-today-mark-other" data-today-rank="2">2026/11/20 今日名單 #2</span>') && !otherDay.includes('pick='), "another day's today list: the mark is not a link")
+  check(!atH2.includes('href="/?pick=') && plain(atH2).includes('2026/11/20 今日名單 #2'), "the page passes the today list's date: no link across dates")
+  const sameDayPage = renderAt('/?list=h2', <TodayListsSection today={{ ...today, data: { ...listResponse(), trading_date: '2026-11-20' } }} />, withH2(h2Response()))
+  check(sameDayPage.includes('href="/?pick=2330">今日名單 #2</a>'), 'the same date links the mark to the today list')
+
+  // No price levels, research status or t anywhere on the third list (decision #1 7044998169, 6881314294).
+  const LEVEL_CLASSES = ['price-ladder', 'candidate-entry', 'entry-plan', 'candidate-row-levels', 'candidate-row-rr', 'candidate-rr', 'level-entry', 'level-stop', 'level-target', 'candidate-ai-toggle', 'candidate-detail', 'score-bar']
+  const LEVEL_WORDS = ['進場', '停損', '目標', 'RR', '總分', '可買', '買進', '持有', '加入追蹤', '評分', 'H2', 'X2', '研究', '回測', '驗證', 't 值', '勝率', '報酬']
+  for (const [label, markup] of [['computed', computed], ['switch', atH2]] as const) {
+    const section = slice(markup, 'h2-title', '</section>')
+    const classes = LEVEL_CLASSES.filter((name) => markup.includes(name))
+    const words = LEVEL_WORDS.filter((word) => plain(section).includes(word))
+    check(section !== '' && classes.length === 0 && words.length === 0, `${label}: no price-level element or research word: ${classes.join(',')} ${words.join(',')}`)
+  }
+
+  // The chart: beside the list from 1280px, a row's own card below, none mounted at first.
+  const hCharts: string[] = []
+  const hSpy = (item: H2Item) => { hCharts.push(item.instrument.symbol); return <div data-test-chart={item.instrument.symbol} /> }
+  const hWide = render(<H2Section data={h2Response()} loading={false} error={null} renderChart={hSpy} wide todayDate="2026-11-20" />)
+  check(hWide.includes('class="candidates-terminal"') && hWide.includes('data-chart-rank="1"') && hCharts.join(',') === '2330' && hRow(hWide, 1).includes('aria-pressed="true"'), `from 1280px the first stock's chart is beside the list: ${hCharts.join(',')}`)
+  hCharts.length = 0
+  const hNarrow = render(<H2Section data={h2Response()} loading={false} error={null} renderChart={hSpy} todayDate="2026-11-20" />)
+  check(hCharts.length === 0 && !hNarrow.includes('candidates-terminal') && hNarrow.includes('<div class="candidate-chart" id="h2-chart-1" hidden="">') && hRow(hNarrow, 1).includes('aria-expanded="false"'), 'below 1280px no chart mounts until a row opens its card')
+  check(render(<H2List items={h2Response().items} renderChart={hSpy} initialChartRank={2} />).includes('data-test-chart="6274"') && hCharts.join(',') === '6274', 'an open row mounts its own card')
+  check(plain(hWide) === plain(computed) && plain(hNarrow) === plain(computed), 'the chart slot changes no page text')
+  const pageChart = renderAt('/?list=h2', <TodayListsSection today={today} renderMainstreamChart={(item) => <div data-test-chart={item.instrument.symbol} />} wide />, withH2(h2Response()))
+  check(pageChart.includes('data-test-chart="2330"'), 'the page passes its K-line card to the third list too')
+
+  // missing, zero, loading and a failed load.
+  const missingText = plain(render(<H2Section data={missingH2()} loading={false} error={null} />))
+  check(h2State(missingH2()).kind === 'missing' && missingText === '接近年高前 20資料 2026/11/20尚無接近年高名單2026/11/20 尚未產生接近年高名單', `missing: no definition, rows or count: ${missingText}`)
+  check(plain(render(<H2Section data={missingH2(null)} loading={false} error={null} />)) === '接近年高前 20尚無接近年高名單尚未產生接近年高名單', 'missing with no list at all: no date')
+  const zeroText = plain(render(<H2Section data={zeroH2()} loading={false} error={null} />))
+  check(h2State(zeroH2()).kind === 'zero' && zeroText === '接近年高前 20資料 2026/11/20當日沒有股票進入母體沒有上市櫃股票的 20 日均量達 1,000 張，當日不產生名單', `zero: ${zeroText}`)
+  check(h2State({ ...h2Response(), items: [] }).kind === 'zero', 'computed with no rows reads as zero, not an empty list')
+  check(plain(render(<H2Section data={undefined} loading error={null} />)).includes('接近年高前 20 載入中…'), 'loading')
+  const failed = plain(render(<H2Section data={undefined} loading={false} error={new Error('API 500: boom')} />))
+  check(failed.includes('資料暫時無法載入') && failed.includes('API 500: boom'), `a failed load gives its reason: ${failed}`)
 }
