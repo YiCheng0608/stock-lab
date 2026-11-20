@@ -1597,3 +1597,86 @@ def test_too_little_free_memory_is_refused(golden_db, tmp_path, monkeypatch, cap
     assert any("free memory 0.5 GB" in line for line in refused(capsys))
     assert not out.exists()
     assert not (db.parent / ex.LEDGER_NAME).exists()
+
+
+# --- version 1 stays version 1 (#878 AC-1) ---------------------------------------
+#
+# #878 adds the round-4 hook points to ``signal_day``／``ranked`` and moves the
+# margin computation of ``strategy_inputs`` into ``margin_state``.  The digests
+# below were taken on the code before that change (master a5bdd20a): every
+# trade of S1～S3 on the golden fixture, of R1／R2 on the rules fixture, and
+# every StrategyInputs R1／R2 read, must stay the same value for value.
+
+V1_DEFINITIONS = "80329d4669123683783a2153a132931fe90eecfbbe8fbfa382cfed345d8cfbfb"
+V1_ZONE_TRADES = "bff68c02604798b44970351b9a009d04c0394bf70abbd6a534e99238d5931025"
+V1_RULE_TRADES = "20c11c26caea346fed21d155c3f8ad68edf3e345d382c758408943636abf0fd2"
+V1_RULE_INPUTS = "71bc91c2c4c6ee13479aaf1ea717e077011a7a579c722cf01545fa3469a2b998"
+
+
+def digest(value) -> str:
+    import hashlib
+
+    text = json.dumps(value, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def segment_trades(db: Path, names: list[str], tmp_path: Path, start: date, end: date):
+    ctx = one_process(lambda: tool.load(db, start, end, tmp_path / "raw"))
+    results = tool.run_segment(ctx, db, names, "exploration")
+    return {name: results[name]["_trades"] for name in names}
+
+
+def test_version_1_is_unchanged_trade_by_trade(
+    golden_db, rules_db, tmp_path, monkeypatch
+):
+    got = {"version": tool.VERSION, "definitions": tool.definitions_sha256()}
+    compressed(monkeypatch, tmp_path)
+    zone = segment_trades(
+        golden_db, ["S1", "S2", "S3"], tmp_path, date(2013, 1, 1), days_()[110]
+    )
+    assert sum(len(rows) for rows in zone.values()) > 20
+    got["zone"] = digest(zone)
+    days = rule_days()
+    monkeypatch.setattr(
+        tool,
+        "HYPOTHESES",
+        {
+            name: {**spec, "start": ("session", days[0], EVAL_FROM + 1)}
+            for name, spec in REGISTERED.items()
+        },
+    )
+    monkeypatch.setattr(
+        tool,
+        "SEGMENTS",
+        {
+            "exploration": (None, days[-1]),
+            "validation": (days[-1], days[-1]),
+            "used": (days[-1], days[-1]),
+        },
+    )
+    monkeypatch.setattr(ex, "delisted_count", lambda db, first, last: 1)
+    rule = segment_trades(rules_db, ["R1", "R2"], tmp_path, days[0], days[-1])
+    assert all(rule.values())
+    got["rule"] = digest(rule)
+    assert got == {
+        "version": 1,
+        "definitions": V1_DEFINITIONS,
+        "zone": V1_ZONE_TRADES,
+        "rule": V1_RULE_TRADES,
+    }
+
+
+def test_the_r1_r2_inputs_are_unchanged(rules_db, tmp_path):
+    from dataclasses import asdict
+
+    ctx = one_process(
+        lambda: tool.load(rules_db, rule_days()[0], rule_days()[-1], tmp_path)
+    )
+    inputs = []
+    for s in range(EVAL_FROM, len(ctx.panel.sessions)):
+        for item, at in ctx.universe(s):
+            inputs.append(
+                [item.instrument_id, at, asdict(tool.strategy_inputs(ctx, item, at))]
+            )
+    assert len(inputs) > 2000
+    assert digest(inputs) == V1_RULE_INPUTS
