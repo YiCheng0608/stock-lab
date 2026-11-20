@@ -702,9 +702,7 @@ def test_the_api_reads_the_change_and_the_recent_closes(factory):
         if before is not None and not before.is_suspended and before.close:
             assert market["change_status"] == "known"
             assert market["change"] == pytest.approx(today.close - before.close)
-            assert market["change_pct"] == pytest.approx(
-                today.close / before.close - 1
-            )
+            assert market["change_pct"] == pytest.approx(today.close / before.close - 1)
         closes = row["recent_closes"]
         assert closes["dates"] == [day.isoformat() for day in DAYS[-30:]]
         expected = []

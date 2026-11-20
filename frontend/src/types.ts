@@ -1766,3 +1766,28 @@ export type MainstreamResponse = {
   groups: MainstreamGroup[]
   items: MainstreamItem[]
 }
+
+// 接近年高前 20 (/api/h2, #881/#882): the stored H2 list of a session, no price levels.
+export type H2Item = {
+  rank: number
+  instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
+  // Adjusted close of the date over the highest adjusted high of the last `window` bars, minus one (≤ 0); null when
+  // missing (fewer bars, a missing high): such stocks fill the list after the valued ones.
+  high_gap_240: number | null
+  close: number | null
+  market: CandidateMarket
+  recent_closes: CandidateRecentCloses
+  today_list: MainstreamTodayList | null
+}
+
+export type H2Response = {
+  status: 'computed' | 'zero' | 'missing' | string
+  trading_date: string | null
+  version: string
+  definitions_sha256: string
+  window: number
+  computed_at: string | null
+  // null on missing.
+  universe_count: number | null
+  items: H2Item[]
+}

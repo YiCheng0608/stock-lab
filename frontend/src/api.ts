@@ -5,6 +5,7 @@ import type {
   CoverageReport,
   Dashboard,
   MainstreamResponse,
+  H2Response,
   DataDate,
   ActionSummary,
   ActionsResponse,
@@ -110,6 +111,8 @@ export const getDataDate = () => get<DataDate>('/data-date')
 export const getCandidates = (date?: string, limit?: number) => get<CandidatesResponse>(candidatesPath(date, limit))
 // 主流族群前 20 (#768): the latest stored list without a date.
 export const getMainstream = (date?: string) => get<MainstreamResponse>(`/mainstream${queryString({ date })}`)
+// 接近年高前 20 (#881/#882): the latest stored H2 list without a date.
+export const getH2 = (date?: string) => get<H2Response>(`/h2${queryString({ date })}`)
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)

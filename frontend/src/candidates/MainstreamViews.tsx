@@ -1,23 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import type { MouseEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 
 import { getMainstream } from '../api'
 import { Badge, Card, DateBadge, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId } from '../components/ui'
 import type { CandidateItem, CandidatesResponse, MainstreamItem, MainstreamResponse } from '../types'
 import '../styles/mainstream.css'
-import {
-  candidateChange,
-  chartToggleLabel,
-  exchangeLabel,
-  formatCandidateClose,
-  formatDate,
-  nextChartRank,
-  rowClickToggles,
-  stockPath,
-} from './candidates'
-import { CandidatesSection, Sparkline } from './CandidateViews'
+import { formatDate } from './candidates'
+import { CandidatesSection } from './CandidateViews'
+import { H2Section, h2QueryOptions } from './H2Views'
 import {
   MAINSTREAM_TITLE,
   PICK_PARAM,
@@ -27,29 +18,26 @@ import {
   mainstreamReturnParts,
   mainstreamState,
   todayListKind,
-  todayListMark,
   todayListSearch,
   type TodayListKind,
-  type TodayListMarkView,
 } from './mainstream'
+import { ScreenList, errorReason, type ScreenItem } from './ScreenList'
 
-// The today page's two lists (#769; DESIGN_SYSTEM §5 候選列表, UI_COPY_SPEC §10 主流族群前 20): a two-tab switch
-// 「今日名單｜主流族群前 20」 above the list, the same at every width. The address carries ?list=mainstream, so a reload
-// stays on it; without it the page shows 今日名單, whose rows, order and lines do not change (page_checks T5–T8, T13).
+// The today page's lists (#769, #882; DESIGN_SYSTEM §5 候選列表, UI_COPY_SPEC §10 主流族群前 20 and 接近年高前 20): a
+// three-tab switch 「今日名單｜主流族群前 20｜接近年高前 20」 above the list, the same at every width. The address
+// carries ?list=mainstream or ?list=h2, so a reload stays on it; without it the page shows 今日名單, whose rows, order
+// and lines do not change (page_checks T5–T8, T13).
 
 const LISTS_ID = 'today-list'
 
 // The page imports the chart from here too, so App.tsx needs one import line (decision 6893166683).
 export { MainstreamChart } from './MainstreamChart'
 
-function errorReason(error: unknown): string {
-  return error instanceof Error ? error.message : '請稍後重新整理'
-}
-
 export type TodayListsProps = {
   today: { data: CandidatesResponse | undefined; loading: boolean; error: unknown }
   renderChart?: (item: CandidateItem) => ReactNode
-  renderMainstreamChart?: (item: MainstreamItem) => ReactNode
+  // The K-line card of 主流族群前 20 and 接近年高前 20 (no rule level lines): it reads the stock only.
+  renderMainstreamChart?: (item: ScreenItem) => ReactNode
   wide?: boolean
 }
 
@@ -62,14 +50,18 @@ export function TodayListsSection({ today, renderChart, renderMainstreamChart, w
   const [search, setSearch] = useSearchParams()
   const kind = todayListKind(search)
   const mainstream = useQuery(mainstreamQueryOptions(kind))
+  const h2 = useQuery(h2QueryOptions(kind))
   const change = (next: TodayListKind) => setSearch(todayListSearch(search, next))
+  const todayDate = today.data?.trading_date ?? null
   return (
     <div className="today-lists">
       <Tabs items={TODAY_LISTS} value={kind} onChange={change} label="名單" idPrefix={LISTS_ID} className="tabs-compact today-list-tabs" />
       <div id={tabPanelId(LISTS_ID, kind)} role="tabpanel" aria-labelledby={tabId(LISTS_ID, kind)}>
         {kind === 'today'
           ? <CandidatesSection data={today.data} loading={today.loading} error={today.error} renderChart={renderChart} wide={wide} pick={search.get(PICK_PARAM)} />
-          : <MainstreamSection data={mainstream.data} loading={mainstream.isLoading} error={mainstream.error} renderChart={renderMainstreamChart} wide={wide} todayDate={today.data?.trading_date ?? null} />}
+          : kind === 'mainstream'
+            ? <MainstreamSection data={mainstream.data} loading={mainstream.isLoading} error={mainstream.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />
+            : <H2Section data={h2.data} loading={h2.isLoading} error={h2.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />}
       </div>
     </div>
   )
@@ -86,89 +78,13 @@ function ReturnLine({ item, days }: { item: MainstreamItem; days: number }) {
   )
 }
 
-type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
-
 // One stock (#769): who (rank, name, market · groups) on the first line, its W-session strength and 「今日名單 #n」 on the
-// second, the sparkline under it, the close and change on the right. No entry sentence, price ladder, RR or total
-// score: the list has no price levels. Below 1280px the rank button opens the row's K-line card, as on the today list.
-function MainstreamRow({ item, days, mark, selected, onSelect, chart }: { item: MainstreamItem; days: number; mark: TodayListMarkView | null; selected: boolean; onSelect?: () => void; chart?: RowChart }) {
-  const { instrument } = item
-  const change = candidateChange(item.market)
-  const groups = mainstreamGroupsText(item)
-  const chartId = `mainstream-chart-${item.rank}`
-  const onRowClick = chart
-    ? (event: MouseEvent<HTMLDivElement>) => {
-      const selection = typeof window === 'undefined' ? '' : window.getSelection()?.toString() ?? ''
-      if (rowClickToggles(event.target instanceof Element ? event.target : null, selection)) chart.onToggle()
-    }
-    : undefined
-  return (
-    <li className={cx('candidate-row', 'mainstream-row', selected && 'candidate-row-selected', chart && 'candidate-row-chartable', chart?.open && 'candidate-row-charted')} data-mainstream-rank={item.rank}>
-      <div className="candidate-row-main" onClick={onRowClick}>
-        <div className="candidate-row-body">
-          {/* One line of inline runs, like the today list's title: 「#1 2330 台積電 上市 · 半導體、AI 伺服器」. */}
-          <p className="candidate-row-title">
-            {onSelect
-              ? <button type="button" className="candidate-rank candidate-rank-button" aria-label={`第 ${item.rank} 名，顯示走勢圖`} aria-pressed={selected} onClick={onSelect}>#{item.rank}</button>
-              : chart
-                ? <button type="button" className="candidate-rank candidate-rank-button candidate-chart-toggle" aria-label={chartToggleLabel(item.rank, chart.open)} aria-expanded={chart.open} aria-controls={chartId} onClick={chart.onToggle}>#{item.rank}</button>
-                : <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>}{' '}
-            <Link className="symbol-link candidate-row-name" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>{' '}
-            <span className="candidate-row-meta" title={groups}>{exchangeLabel(instrument.exchange)} · {groups}</span>
-          </p>
-          <div className="mainstream-row-line">
-            <ReturnLine item={item} days={days} />
-            {mark?.link && <Link className="badge badge-compact mainstream-today-mark" to={mark.link} data-today-rank={item.today_list?.rank}>{mark.text}</Link>}
-            {mark && !mark.link && <span className="badge badge-compact mainstream-today-mark mainstream-today-mark-other" data-today-rank={item.today_list?.rank}>{mark.text}</span>}
-          </div>
-          <div className="candidate-row-figures mainstream-row-figures"><Sparkline item={item} /></div>
-        </div>
-        <dl className="candidate-row-nums">
-          <div className="candidate-row-close">
-            <dt>收盤（元）</dt>
-            <dd><div>{formatCandidateClose(item.market)}</div><div className={cx('candidate-change', change.tone && `tone-${change.tone}`)}>{change.text}</div></dd>
-          </div>
-        </dl>
-      </div>
-      {chart && (
-        <div className="candidate-chart" id={chartId} hidden={!chart.open} role={chart.open ? 'region' : undefined}
-          aria-label={chart.open ? `${instrument.symbol} ${instrument.name} 走勢圖` : undefined}>
-          {chart.open && chart.content}
-        </div>
-      )}
-    </li>
-  )
-}
-
-// The rows, and from 1280px the picked stock's K-line card on the right (盤後終端, the today list's layout): the first
-// until another rank is pressed. Below that a row opens its own card, none at first (#665: no chart mounts, no /bars).
+// second, the sparkline under it, the close and change on the right (ScreenList). Below 1280px the rank button opens
+// the row's K-line card, as on the today list.
 export function MainstreamList({ items, days, listDate = null, todayDate = null, renderChart, wide = false, initialChartRank = null }: { items: MainstreamItem[]; days: number; listDate?: string | null; todayDate?: string | null; renderChart?: (item: MainstreamItem) => ReactNode; wide?: boolean; initialChartRank?: number | null }) {
-  const [picked, setPicked] = useState<number | null>(null)
-  const [chartRank, setChartRank] = useState<number | null>(initialChartRank)
-  const lastWide = useRef(wide)
-  useEffect(() => {
-    if (lastWide.current === wide) return
-    lastWide.current = wide
-    setPicked(null)
-    setChartRank(null)
-  }, [wide])
-  const terminal = !!renderChart && wide
-  const selected = items.find((item) => item.rank === picked) ?? items[0]
-  const list = (
-    <ol className="candidate-list mainstream-list">
-      {items.map((item) => (
-        <MainstreamRow key={item.instrument.exchange + item.instrument.symbol} item={item} days={days} mark={todayListMark(item, listDate, todayDate)}
-          selected={terminal && item === selected} onSelect={terminal ? () => setPicked(item.rank) : undefined}
-          chart={renderChart && !wide ? { open: chartRank === item.rank, onToggle: () => setChartRank((current) => nextChartRank(current, item.rank)), content: chartRank === item.rank ? renderChart(item) : null } : undefined} />
-      ))}
-    </ol>
-  )
-  if (!terminal || !selected) return list
   return (
-    <div className="candidates-terminal">
-      <div className="candidates-terminal-list">{list}</div>
-      <aside className="candidates-terminal-chart" aria-label={`${selected.instrument.symbol} ${selected.instrument.name} 走勢圖`} data-chart-rank={selected.rank}>{renderChart(selected)}</aside>
-    </div>
+    <ScreenList kind="mainstream" items={items} listDate={listDate} todayDate={todayDate} renderChart={renderChart} wide={wide} initialChartRank={initialChartRank}
+      parts={(item) => ({ meta: mainstreamGroupsText(item), line: <ReturnLine item={item} days={days} /> })} />
   )
 }
 

@@ -119,7 +119,6 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /backfill-runs/{run_id}` | 回補覆蓋頁，不在主導航 |
 | `GET /coverage` | 回補覆蓋頁，不在主導航 |
 | `GET /strategies` | 系統資料與策略頁，不在主導航 |
-| `GET /h2` | H2 名單（#881）：前端還沒用，畫面在 #882 時移到今日名單頁的驗證範圍；計算、daily 與回應由 `backend/tests/test_h2_list.py` 涵蓋 |
 
 ## 結果表
 
