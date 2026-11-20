@@ -62,8 +62,35 @@ SERVE_CLI = JOB_FAKE_CLI.replace(
     "\n\nmain()\n",
     r"""
 
+def limit_from(holding):
+    # The job's limit counts from HOLDING, which the worker creates as it waits in
+    # collect, its run row written, not from the job's start: a loaded runner can
+    # take longer than a test's limit of seconds to get there (#870).
+    from worker import job
+
+    step = job._Job.step
+
+    def step_from_holding(self, name, step_args):
+        start = self.tree.start
+
+        def start_and_wait(argv, **kwargs):
+            process = start(argv, **kwargs)
+            while process.poll() is None and not holding.exists():
+                time.sleep(0.05)
+            self.deadline = time.monotonic() + self.limit.total_seconds()
+            return process
+
+        self.tree.start = start_and_wait
+        return step(self, name, step_args)
+
+    job._Job.step = step_from_holding
+
+
 def serve_or_real():
     argv = sys.argv[1:]
+    holding = os.environ.get("JOB_DAILY_CHILD_HOLDING")
+    if holding and argv[:2] == ["job", "daily"]:
+        limit_from(Path(holding))
     if argv[:1] == ["serve"]:
         from worker import serve
 
@@ -913,7 +940,7 @@ def test_what_the_2300_trigger_runs_after_the_2130_run(serve_tree, monkeypatch, 
     institutional refetch (#396; faked here, no request). 21:30 partial (the margin
     file not out yet, say): 23:00 is a full daily of the same date again. 21:30
     stuck (decision 6638008818): the job ends it at its limit (80 minutes, 22:50;
-    3 seconds here), and 23:00 takes the lock, records the row abandoned and runs
+    3 seconds here, from when collect waits), and 23:00 takes the lock, records the row abandoned and runs
     the day again.
     """
 
@@ -947,14 +974,19 @@ def test_what_the_2300_trigger_runs_after_the_2130_run(serve_tree, monkeypatch, 
         partial.touch()
     monkeypatch.setenv("JOB_DAILY_CHILD_COLLECT_PARTIAL", str(partial))
     options = ()
+    holding = tree.root / "holding"
     if first == "stuck":
-        # collect waits for a file that never comes.
+        # collect waits for a file that never comes. The 3 seconds count from
+        # when it starts waiting, its run row written (#870).
         monkeypatch.setenv("JOB_DAILY_CHILD_HOLD", str(tree.root / "never"))
+        monkeypatch.setenv("JOB_DAILY_CHILD_HOLDING", str(holding))
         options = ("--daily-time-limit-minutes", "0.05")
     # Friday 2026-10-16 on the injected clock.
     _fire_scheduled_daily(tree, "2026-10-16T21:29:58", *options)
     partial.unlink(missing_ok=True)
     monkeypatch.delenv("JOB_DAILY_CHILD_HOLD", raising=False)
+    monkeypatch.delenv("JOB_DAILY_CHILD_HOLDING", raising=False)
+    assert holding.exists() == (first == "stuck")
     if first == "stuck":
         log = tree.log("daily")
         assert "timeout: killed at the 0.05 minute limit of the daily job" in log

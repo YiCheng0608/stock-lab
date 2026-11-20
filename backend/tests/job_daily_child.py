@@ -9,7 +9,9 @@ institutional refetch (#396) reports success without a request.
 Everything else (schedule_runs, analyze,
 evaluate, candidates, ...) runs for real on the database the job points it at.
 With JOB_DAILY_CHILD_HOLD set, collect waits until that file exists, so that a
-test can kill the run while its row is ``running`` (test_worker_serve). While
+test can kill the run while its row is ``running`` (test_worker_serve); with
+JOB_DAILY_CHILD_HOLDING set too, collect creates that file as it starts waiting,
+so that the test's job counts its limit from then (#870). While
 the file JOB_DAILY_CHILD_COLLECT_PARTIAL names exists, collect reports partial.
 """
 
@@ -37,6 +39,10 @@ def _collect(target, **_kwargs):
     """The fixture's own successful official collect of TARGET, fetched before."""
 
     hold = os.environ.get("JOB_DAILY_CHILD_HOLD")
+    holding = os.environ.get("JOB_DAILY_CHILD_HOLDING")
+    if hold and holding:
+        # The run row and this step's running row are committed by now.
+        Path(holding).touch()
     while hold and not Path(hold).exists():
         time.sleep(0.05)
     partial = os.environ.get("JOB_DAILY_CHILD_COLLECT_PARTIAL")
