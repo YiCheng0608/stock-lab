@@ -609,7 +609,15 @@ def test_the_api_returns_the_latest_and_a_date_with_the_today_list(factory):
         (symbol, pytest.approx(value)) for symbol, value in items
     ]
     top = rows[0]
-    assert set(top) == {"rank", "instrument", "high_gap_240", "close", "today_list"}
+    assert set(top) == {
+        "rank",
+        "instrument",
+        "high_gap_240",
+        "close",
+        "market",
+        "recent_closes",
+        "today_list",
+    }
     assert set(top["instrument"]) == {
         "id",
         "exchange",
@@ -638,6 +646,74 @@ def test_the_api_returns_the_latest_and_a_date_with_the_today_list(factory):
     assert older["trading_date"] == earlier.isoformat()
     assert [row["today_list"] for row in older["items"]] == [None] * 20
     assert older["items"][-1]["high_gap_240"] is None  # a missing value, as null
+
+
+def _taiex(make, days):
+    """TAIEX bars on ``days``: the calendar of the change and the sparkline."""
+    with make() as db:
+        taiex = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="TAIEX",
+            name="TAIEX",
+            instrument_type="index",
+            status="active",
+        )
+        db.add(taiex)
+        db.flush()
+        db.add_all(
+            MarketBar(
+                instrument_id=taiex.id,
+                trading_date=day,
+                open=20000.0,
+                high=20000.0,
+                low=20000.0,
+                close=20000.0,
+                adj_close=20000.0,
+                volume=0,
+                turnover=0,
+                source="twse-fixture",
+            )
+            for day in days
+        )
+        db.commit()
+
+
+def test_the_api_reads_the_change_and_the_recent_closes(factory):
+    # #882: the page's close, change and sparkline, read as /api/mainstream
+    # reads them; the list and its stored rows do not change.
+    run_h2_list(T)
+    _taiex(factory, DAYS[-30:])
+    rows = TestClient(app).get("/api/h2").json()["items"]
+    with factory() as db:
+        symbols = dict(db.execute(select(Instrument.symbol, Instrument.id)).all())
+        bars = {
+            (bar.instrument_id, bar.trading_date): bar
+            for bar in db.scalars(
+                select(MarketBar).where(MarketBar.trading_date.in_(DAYS[-30:]))
+            )
+        }
+    for row in rows:
+        stock = symbols[row["instrument"]["symbol"]]
+        today, before = bars.get((stock, T)), bars.get((stock, DAYS[-2]))
+        market = row["market"]
+        assert market["trading_date"] == T.isoformat()
+        assert market["close"] == today.close == row["close"]
+        if before is not None and not before.is_suspended and before.close:
+            assert market["change_status"] == "known"
+            assert market["change"] == pytest.approx(today.close - before.close)
+            assert market["change_pct"] == pytest.approx(
+                today.close / before.close - 1
+            )
+        closes = row["recent_closes"]
+        assert closes["dates"] == [day.isoformat() for day in DAYS[-30:]]
+        expected = []
+        for day in DAYS[-30:]:
+            bar = bars.get((stock, day))
+            traded = bar is not None and not bar.is_suspended and bar.close
+            expected.append(pytest.approx(bar.close) if traded else None)
+        assert closes["closes"] == expected
+    assert sum(row["market"]["change_status"] == "known" for row in rows) > 10
 
 
 def test_a_day_without_a_list_is_missing(factory):

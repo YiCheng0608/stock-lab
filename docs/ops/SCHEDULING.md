@@ -147,8 +147,9 @@ daily 在主流族群前 20 之後，另算一份「H2 名單」（`explore_rese
 - **誰寫**：daily 的 h2_list 步驟（`worker.h2_list.run_h2_list`），只算 daily 的目標日。catchup 只跑 collect，它補抓的日子沒有 H2 名單，`/api/h2?date=` 對那些日子回 `missing`；主流族群前 20 也一樣。要補時照下面的「重算」逐日跑。
 - **讀取**：`GET /api/h2?date=`，沒給日期時取最新一份。
   - 回傳 `status`、`trading_date`、`version`、`definitions_sha256`、`window`、`computed_at`、`universe_count` 與 `items`。
-  - 每檔有 `rank`、`instrument`（`id`、`exchange`、`symbol`、`name`、`instrument_type`）、`high_gap_240`（缺值為 null）、`close`（T 的原始收盤），以及 `today_list`。
+  - 每檔有 `rank`、`instrument`（`id`、`exchange`、`symbol`、`name`、`instrument_type`）、`high_gap_240`（缺值為 null）、`close`（T 的原始收盤）、`market`、`recent_closes`，以及 `today_list`。
   - `today_list` 在讀取時才查當天的今日名單（名次、`entry_type`、`score_version`），不在今日名單是 null，不寫進表。
+  - `market`（T 的收盤與漲跌）與 `recent_closes`（近 30 個交易日的原始收盤，畫走勢線）也在讀取時才算，不寫進表，寫法同 `/api/mainstream`（`market_change.adjacent_change`、`candidate_view.recent_closes`；[#882](https://github.com/YiCheng0608/stock-lab/issues/882)）。
   - 那天沒有算時 `status` 是 `missing`、`items` 是空的；母體是空的那天是 `zero`。
   - 不附進場區、停損與目標。
 - **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.h2_list as h; print(h.run_h2_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天：catchup 補抓的日子、migration 0034 降級後再升回時，舊日期都要逐日跑。
