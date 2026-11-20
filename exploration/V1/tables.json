@@ -1,0 +1,199 @@
+{
+  "tool": "round5_research",
+  "version": 1,
+  "design": "889",
+  "definitions_sha256": "a3409f1b9dd24a8e32c04148f5d1e36a5e8282e96df975bd0b36a21101993d75",
+  "label": "`vol_60`（近 60 日日報酬的樣本標準差）小者先",
+  "direction": "低波動",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "vol_60",
+        "low"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      61
+    ]
+  },
+  "hypothesis": "V1",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-03-06",
+    "first_session": "2008-03-07",
+    "last_session": "2019-12-31",
+    "days": 2925,
+    "signal_days": 2925
+  },
+  "prerequisites": {
+    "days": 2925,
+    "min_days": 500,
+    "delisted": 147,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 210,
+      "members": 93291,
+      "missing": {
+        "vol_60": 345
+      }
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "vol_60": 732
+      }
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "vol_60": 970
+      }
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "vol_60": 714
+      }
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "vol_60": 641
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "vol_60": 638
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "vol_60": 535
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "vol_60": 492
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "vol_60": 274
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "vol_60": 239
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "vol_60": 340
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "vol_60": 198
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2925,
+      "mean": 6.362670440012969e-05,
+      "annual": 0.01603392950883268,
+      "t": 0.45287330355742417
+    },
+    "taiex": {
+      "days": 2925,
+      "mean": 2.1101351272252758e-05,
+      "annual": 0.005317540520607695,
+      "t": 0.19923945275023494
+    }
+  },
+  "absolute": {
+    "days": 2925,
+    "mean": 0.00019449290297043263
+  },
+  "curves": {
+    "V1": {
+      "days": 2925,
+      "total": 0.639169781306544,
+      "annual": 0.043495733756937716,
+      "volatility": 0.1132636948217941,
+      "max_drawdown": -0.48183082994083604,
+      "invested": 0.9743098641156173,
+      "turnover": 3.728849910061247
+    },
+    "population": {
+      "days": 2925,
+      "total": 0.1594522830072731,
+      "annual": 0.012827845319925979,
+      "volatility": 0.20049783799229895,
+      "max_drawdown": -0.6260610459618153,
+      "invested": 0.9729512617213315,
+      "turnover": 3.939729517354273
+    },
+    "taiex": {
+      "days": 2925,
+      "total": 0.3855686343351794,
+      "annual": 0.028494090481304024,
+      "volatility": 0.17644599538290737,
+      "max_drawdown": -0.5599954815388594,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 58478,
+    "won": 33209,
+    "rate": 0.5678887786860016,
+    "unsold": 1543
+  },
+  "counts": {
+    "V1": {
+      "bought": 58478,
+      "not_tradable": 21,
+      "sale_held": 431,
+      "limit_up": 1,
+      "unsold": 1543
+    },
+    "population": {
+      "bought": 1384014,
+      "not_tradable": 363,
+      "sale_held": 5741,
+      "limit_down": 256,
+      "limit_up": 245,
+      "unsold": 29194
+    }
+  },
+  "min_t": 2.0
+}

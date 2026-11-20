@@ -1,0 +1,309 @@
+{
+  "tool": "round5_research",
+  "version": 1,
+  "design": "889",
+  "registration_commit": "ec72e67d",
+  "segment": "exploration",
+  "round": 5,
+  "round_size": 3,
+  "cumulative": 22,
+  "validation_min_t": 3.052,
+  "definitions_sha256": "a3409f1b9dd24a8e32c04148f5d1e36a5e8282e96df975bd0b36a21101993d75",
+  "tool_commit": "884fe5ee6f6bd0fe715c9bda5778abf24c71c83a",
+  "command": "python tools/research/round5_research.py --db /research/stock.db --segment exploration --hypotheses V1,V2 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T04:56:40.801070+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "V1",
+    "V2"
+  ],
+  "hypotheses": {
+    "V1": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2925,
+      "taiex_excess": {
+        "days": 2925,
+        "mean": 2.1101351272252758e-05,
+        "annual": 0.005317540520607695,
+        "t": 0.19923945275023494
+      },
+      "excess": {
+        "days": 2925,
+        "mean": 6.362670440012969e-05,
+        "annual": 0.01603392950883268,
+        "t": 0.45287330355742417
+      },
+      "absolute_mean": 0.00019449290297043263,
+      "prerequisites": {
+        "days": 2925,
+        "min_days": 500,
+        "delisted": 147,
+        "ok": true
+      },
+      "coverage": {
+        "2008": {
+          "days": 210,
+          "members": 93291,
+          "missing": {
+            "vol_60": 345
+          }
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "vol_60": 732
+          }
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "vol_60": 970
+          }
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "vol_60": 714
+          }
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "vol_60": 641
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "vol_60": 638
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "vol_60": 535
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "vol_60": 492
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "vol_60": 274
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "vol_60": 239
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "vol_60": 340
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "vol_60": 198
+          }
+        }
+      }
+    },
+    "V2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2926,
+      "taiex_excess": {
+        "days": 2926,
+        "mean": -0.0003563706451781539,
+        "annual": -0.08980540258489478,
+        "t": -2.0720292198739214
+      },
+      "excess": {
+        "days": 2926,
+        "mean": -1.5054389302223433e-05,
+        "annual": -0.0037937061041603054,
+        "t": -0.12404783093108439
+      },
+      "absolute_mean": -0.000176001221594734,
+      "prerequisites": {
+        "days": 2926,
+        "min_days": 500,
+        "delisted": 147,
+        "ok": true
+      },
+      "coverage": {
+        "2008": {
+          "days": 211,
+          "members": 93747,
+          "missing": {
+            "turnover_60": 339,
+            "momentum_20": 9
+          },
+          "subset": 31650,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "turnover_60": 715,
+            "momentum_20": 28
+          },
+          "subset": 37650,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "turnover_60": 954,
+            "momentum_20": 36
+          },
+          "subset": 37650,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "turnover_60": 706,
+            "momentum_20": 35
+          },
+          "subset": 37050,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "turnover_60": 627,
+            "momentum_20": 27
+          },
+          "subset": 37500,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "turnover_60": 627,
+            "momentum_20": 39
+          },
+          "subset": 36900,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "turnover_60": 527,
+            "momentum_20": 23
+          },
+          "subset": 37200,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "turnover_60": 481,
+            "momentum_20": 24
+          },
+          "subset": 36600,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "turnover_60": 270,
+            "momentum_20": 13
+          },
+          "subset": 36600,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "turnover_60": 234,
+            "momentum_20": 12
+          },
+          "subset": 36900,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "turnover_60": 338,
+            "momentum_20": 23
+          },
+          "subset": 37050,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "turnover_60": 193,
+            "momentum_20": 10
+          },
+          "subset": 36150,
+          "subset_missing": {
+            "momentum_20": 0
+          }
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 350.27597458899254,
+  "peak_memory_gb": 1.8656387329101562
+}
