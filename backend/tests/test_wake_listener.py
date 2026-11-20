@@ -361,6 +361,58 @@ def _fresh(h: Harness) -> Listener:
 
 
 @needs_exec_orca
+def test_the_listener_answers_the_engineer_terminals(h) -> None:
+    """#873: POST /terminals is the engineer terminals of the task worktrees (not the
+    bare shell) with agentWait and the menu's command; the container monitor reads it
+    through http_orca.sh and records engineer_prompt_blocked after 10 minutes. No list
+    from orca is 502, and the poll keeps the stretch (terminals=failed)."""
+    from test_event_monitor import (
+        ENGINEER,
+        ENGINEER_BRANCH,
+        MENU_COMMAND,
+        _engineer,
+        _menu_events,
+    )
+
+    _engineer(h, wait={"source": "hook"})
+    for at in (None, NOW, NOW + 600):  # a fresh listener each: no throttle
+        one = _fresh(h)
+        try:
+            if at is None:
+                assert one.post("/terminals") == (
+                    200,
+                    {
+                        "ok": True,
+                        "result": {
+                            "terminals": [
+                                {
+                                    "handle": ENGINEER,
+                                    "branch": ENGINEER_BRANCH,
+                                    "title": "#10 x",
+                                    "agentWait": {"source": "hook"},
+                                    "command": MENU_COMMAND,
+                                }
+                            ]
+                        },
+                    },
+                )
+                assert "terminals count=1" in one.log()
+            else:
+                _container_monitor(h, one, at=at)
+        finally:
+            one.stop()
+    [event] = _menu_events(h)
+    assert event["id"] == f"engineer_prompt_blocked:{ENGINEER}:2026-10-25T12:00:00Z"
+    h.answer("orca_terminal_list", {"ok": False, "error": {"code": "x"}})
+    one = _fresh(h)
+    try:
+        assert one.post("/terminals") == (502, {"result": "orca_failed"})
+    finally:
+        one.stop()
+    assert not any("term_shell" in c for c in h.calls("orca"))
+
+
+@needs_exec_orca
 def test_the_worktrees_are_the_task_branches_and_no_list_is_no_slot_event(
     h, listener
 ) -> None:

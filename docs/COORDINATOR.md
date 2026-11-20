@@ -43,13 +43,13 @@
 - **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。一次性的決定（同意某個 PR 合併、確認某天的通知有收到這類用完就沒有後續的決定）不進本文：統籌在那則 `決定：`／`統籌承諾：` 裡另起一行寫 `本文：不同步（<原因>）`。patrol 列 #1 漏同步（exit 12），或要知道哪些留言算已同步（歸檔行、涵蓋、已取代）時讀[參考「決策落地的比對」](ops/COORDINATOR_REFERENCE.md#決策落地的比對)。
 - **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree），或答應日後在某個時點做某件事（例如隔天的實測、21:30 daily 後的核對）時，同時寫兩處：在該 Issue 留一則 `統籌承諾：` 留言（[留言類型](WORKFLOW.md#留言類型)），再以 `bash tools/ops/commit.sh add --due <時間或 none> --url <那則留言的連結> --text <內容>` 寫進承諾檔 `<資料目錄>/logs/commitments.jsonl`（[`commit.sh`](../tools/ops/commit.sh)；時間寫成 `2026-11-07T09:23+08:00`，沒有固定時點寫 `none`）。兌現後在 Issue 留言並 `commit.sh done <id> --url <留言連結>`。`patrol.sh` 每次列出未兌現的承諾，已到期的標「已到期」；session 內排的一次性定時工作只當提醒，跟著 session 消失，不是唯一記錄。換手後由新統籌兌現（`take_over.sh` 也會列出）。
 - **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；最後一次呼叫的 context 超過門檻（預設 450K，#710）；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。
-- **前提與限制**：統籌停在權限或信任的確認框時，只有使用者能選，monitor 不替統籌選。其他前提（開機登入、額度用盡、合併把關），以及 #1 有「待使用者：統籌停在確認框」時，讀[參考「前提與限制」](ops/COORDINATOR_REFERENCE.md#前提與限制)。
+- **前提與限制**：統籌停在權限或信任的確認框時，只有使用者能選，monitor 不替統籌選；工程師停在確認框由 monitor 的 `engineer_prompt_blocked` 事件喚醒（#873）。其他前提，以及 #1 有「待使用者：統籌停在確認框」時，讀[參考「前提與限制」](ops/COORDINATOR_REFERENCE.md#前提與限制)。
 
 ## 記憶
 
 Claude Code 的 project memory（`MEMORY.md` 與它列的記憶檔，每個統籌與工程師 session 開場都載入）在 repo 外，worktree 與管理 checkout 共用同一份。實際位置是 `C:/Users/YiCheng/.claude/projects/<slug>/memory/`，`<slug>` 是管理 checkout 的路徑、英數以外的字元換成 `-`（現在是 `C--Users-YiCheng-Desktop-taiwan-stock-research`）。Orca 開的 session 看到的是 `$CLAUDE_CONFIG_DIR/projects/<slug>/memory/`，那是指向實際位置的 symlink。CI 讀不到它，所以由本機檢查維持（#705）。
 
 - **用實際位置改**：統籌改記憶的 Edit／Write 一律寫實際位置，不要寫 session 開場提示給的 `$CLAUDE_CONFIG_DIR` 底下的 symlink 路徑。經 symlink 寫入會跳確認框（「outside working directory via a symlink」），加 `--add-dir` 也一樣；確認框有時停 100 秒以上，統籌就卡在那裡，佇列和喚醒都停住。寫實際位置不跳框，啟動與 resume 命令不必改（實測 [6880462190](https://github.com/YiCheng0608/stock-lab/issues/705#issuecomment-6880462190)）。
-- **誰改**：只有統籌與使用者改記憶（含新增）。工程師 session 不寫記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。checkout 在 `task/*` branch 的 session 以 Edit／Write／NotebookEdit 寫記憶目錄時，實際位置或 symlink 路徑都會被 [`agent_guard.cjs`](../tools/ops/agent_guard.cjs) 擋下（Bash 擋不到，見 [GUARDRAILS](GUARDRAILS.md)）。工程師把任務讓哪幾則記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查）寫在 PR 本文「欄位」區的「會過期的記憶」（[PR 模板](templates/pull-request.md)；沒有就寫「無」，空著時 CI `pr` 規則 f 會紅）。
+- **誰改**：只有統籌與使用者改記憶（含新增）。工程師 session 不寫記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。checkout 在 `task/*` branch 的 session 以 Edit／Write／NotebookEdit 寫記憶目錄時，實際位置或 symlink 路徑都會被 [`agent_guard.cjs`](../tools/ops/agent_guard.cjs) 擋下（Bash／PowerShell／Monitor 命令提到記憶目錄也擋，#873，見 [GUARDRAILS](GUARDRAILS.md)）。工程師把任務讓哪幾則記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查）寫在 PR 本文「欄位」區的「會過期的記憶」（[PR 模板](templates/pull-request.md)；沒有就寫「無」，空著時 CI `pr` 規則 f 會紅）。
 - **何時改**：結案時，`close_task.sh` 之後（[任務流程](WORKFLOW.md#任務流程)第 6 步）。照 PR 本文「會過期的記憶」改寫或刪掉那幾則：坑已編成檢查的，改成一句「已由 <檢查> 擋」併入相關主題，或直接刪掉（[encode-lesson](../.claude/skills/encode-lesson/SKILL.md) 第 6 步）。同步 `MEMORY.md`，改名或刪除時一併改掉別則的 `[[舊名稱]]`，再跑一次 `memory_check.py` 確認通過。平時讀到與現況不符的記憶，也當下改或刪。
 - **檢查**：`memory_check.py` 失敗、要手動跑，或要知道它檢查什麼時，讀[參考「記憶的檢查」](ops/COORDINATOR_REFERENCE.md#記憶的檢查)。

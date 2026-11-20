@@ -10,6 +10,11 @@ host.docker.internal there), and answers two requests, each with
 - ``POST /worktrees`` (tools/ops/http_orca.sh): the task worktrees' branches from the
   local ``orca worktree list``, in Orca's envelope, for the monitor's slot events. No
   list (orca failed) is an error (502), never an empty list.
+- ``POST /terminals`` (tools/ops/http_orca.sh, #873): the engineer terminals of the task
+  worktrees and whether each is at a permission or trust menu (``engineer_terminals``),
+  for the monitor's engineer_prompt_blocked events; 502 when orca gives no list.
+  ``wake_listener.py --terminals`` prints the same answer and exits: monitor.sh on the
+  host (with the real orca) reads it that way.
 
 Text sent into the coordinator terminal is an instruction to Claude, so the request
 carries nothing that reaches the terminal: the terminal is the one the coordinator
@@ -41,6 +46,7 @@ tools/ops/wake_listener_start.sh (docs/ops/MONITOR.md), which does nothing while
 answers.
 
 Usage: wake_listener.py --token-file F [--data-dir D] [--port P] [--bash B] [--orca O]
+       wake_listener.py --terminals [--orca O]
 """
 
 from __future__ import annotations
@@ -49,6 +55,7 @@ import argparse
 import hmac
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -75,7 +82,22 @@ WAKE_TIMEOUT = 300
 ORCA_TIMEOUT = 120
 TEXT = "有 {n} 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）"
 RESULTS = {0: "sent", 3: "not_idle", 4: "prompt_blocked"}
-KINDS = {"/wake": "wake", "/worktrees": "worktrees"}
+KINDS = {"/wake": "wake", "/worktrees": "worktrees", "/terminals": "terminals"}
+# engineer_terminals: each orca call within this many seconds, all of them within
+# TERMINALS_BUDGET (listener_post gives a request 60 seconds).
+TERMINAL_CALL_TIMEOUT = 15
+TERMINALS_BUDGET = 40
+# Rows of the rendered screen read for the menu's command.
+MENU_ROWS = 60
+# Box drawing, stripped from both ends of a screen row before it is read.
+MENU_FRAME = "│┃║╭╮╰╯─━═┌┐└┘ \t"
+# A row of only these is a rule inside the menu (the command sits between two).
+MENU_RULE = set("╌┄┈─━═-")
+# The heading Claude Code puts above the command of a permission menu: "Bash command",
+# "PowerShell command"; the questions that end a permission or a trust menu.
+MENU_HEADING = re.compile(r"^\S.* command$")
+MENU_QUESTIONS = ("Do you want to", "Do you trust")
+COMMAND_CHARS = 200
 # Refused requests (no token, a wrong one) answered 401 and logged in any 60 seconds;
 # past this, 429, counted in the next 401's line.
 REFUSED_PER_MINUTE = 10
@@ -94,6 +116,109 @@ def read_token(path: Path) -> str:
                     return token
             break
     raise SystemExit(f"{path}: 沒有 {TOKEN_KEY}=（至少 {MIN_TOKEN} 個字元、不含空白）")
+
+
+def _orca_json(orca: str, *args: str, timeout: float):
+    """The answer of `orca ARGS --json` when it says ok, else None."""
+    try:
+        done = subprocess.run(
+            [orca, *args, "--json"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=max(timeout, 1),
+        )
+        doc = json.loads(done.stdout.decode("utf-8"))
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    if done.returncode != 0 or not isinstance(doc, dict) or doc.get("ok") is not True:
+        return None
+    return doc
+
+
+def menu_command(rows) -> str:
+    """The first line of the command a permission menu asks about, read off the rendered
+    screen ROWS (#873): the line under the last "<Tool> command" heading before the
+    menu's question; a trust menu, or a screen without the heading, gives the question
+    itself; "" when no question is on the screen."""
+    lines = [r.strip(MENU_FRAME) for r in rows if isinstance(r, str)]
+    asked = [i for i, line in enumerate(lines) if line.startswith(MENU_QUESTIONS)]
+    if not asked:
+        return ""
+    question = asked[-1]
+    for at in range(question - 1, -1, -1):
+        if MENU_HEADING.match(lines[at]):
+            body = lines[at + 1 : question]
+            # Claude Code 2.1.329 (read 2026-11-20): heading, a tip, the description,
+            # then the command between two ╌ rules; without the rules, the first line.
+            rules = [i for i, x in enumerate(body) if x and set(x) <= MENU_RULE]
+            if rules:
+                body = body[rules[0] + 1 :]
+            command = next((x for x in body if x and not set(x) <= MENU_RULE), "")
+            return command[:COMMAND_CHARS]
+    return lines[question][:COMMAND_CHARS]
+
+
+def engineer_terminals(orca: str) -> list[dict] | None:
+    """The engineer terminals of the task worktrees (#873), each {"handle", "branch",
+    "title", "agentWait", "command"}: the terminals `orca terminal list` puts on a
+    refs/heads/task/* branch with an agentIdentity (Claude Code runs in it; the bare
+    shell Orca opens in the same worktree has none). agentWait is `orca terminal show`'s,
+    read as orca_wake.sh reads the coordinator's (#720): an object at a permission or
+    trust menu, null at none, left out when Orca cannot tell or the show failed. At a
+    menu, command is its first line (menu_command of `orca terminal read --screen`).
+    None when the list cannot be read."""
+    started = time.monotonic()
+
+    def left() -> float:
+        return min(
+            TERMINAL_CALL_TIMEOUT, TERMINALS_BUDGET - (time.monotonic() - started)
+        )
+
+    doc = _orca_json(orca, "terminal", "list", timeout=left())
+    rows = ((doc or {}).get("result") or {}).get("terminals")
+    if not isinstance(rows, list):
+        return None
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        handle, branch = row.get("handle"), row.get("branch")
+        if not (isinstance(handle, str) and isinstance(branch, str)):
+            continue
+        if not branch.startswith("refs/heads/task/") or not row.get("agentIdentity"):
+            continue
+        entry = {"handle": handle, "branch": branch, "title": row.get("title") or ""}
+        out.append(entry)
+        if left() <= 0:
+            continue  # out of time: Orca cannot tell, as with no agentWait
+        shown = _orca_json(
+            orca, "terminal", "show", f"--terminal={handle}", timeout=left()
+        )
+        terminal = ((shown or {}).get("result") or {}).get("terminal")
+        if not isinstance(terminal, dict) or "agentWait" not in terminal:
+            continue
+        wait = terminal["agentWait"]
+        entry["agentWait"] = wait
+        if not isinstance(wait, dict):
+            continue
+        screen = _orca_json(
+            orca,
+            "terminal",
+            "read",
+            f"--terminal={handle}",
+            "--screen",
+            "--limit",
+            str(MENU_ROWS),
+            timeout=left(),
+        )
+        tail = (((screen or {}).get("result") or {}).get("terminal") or {}).get("tail")
+        entry["command"] = menu_command(tail) if isinstance(tail, list) else ""
+    return out
+
+
+def terminals_answer(rows: list[dict]) -> str:
+    """engineer_terminals' rows in Orca's envelope, as monitor.sh reads them."""
+    return json.dumps({"ok": True, "result": {"terminals": rows}}, ensure_ascii=False)
 
 
 class Waker:
@@ -131,7 +256,11 @@ class Waker:
         try:
             if time.monotonic() - self._answered[kind] < THROTTLE:
                 return 429, "throttled"
-            status, result = self.wake() if kind == "wake" else self.worktrees()
+            status, result = {
+                "wake": self.wake,
+                "worktrees": self.worktrees,
+                "terminals": self.terminals,
+            }[kind]()
             self._answered[kind] = time.monotonic()
             return status, result
         finally:
@@ -186,6 +315,12 @@ class Waker:
         worktrees = [{"branch": branch} for branch in branches]
         return 200, json.dumps({"ok": True, "result": {"worktrees": worktrees}})
 
+    def terminals(self) -> tuple[int, str]:
+        rows = engineer_terminals(self.orca)
+        if rows is None:
+            return 502, "orca_failed"
+        return 200, terminals_answer(rows)
+
     def log(self, line: str) -> None:
         at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with open(self.logs / "wake-listener.log", "a", encoding="utf-8") as handle:
@@ -226,8 +361,8 @@ def handler(token: str, waker: Waker):
                 return self._answer(413, "too_large")
             self.rfile.read(length)  # nothing in it is used
             status, result = waker.answer(kind)
-            if kind == "worktrees" and status == 200:
-                waker.log(f"worktrees count={result.count('refs/heads/')}")
+            if kind in ("worktrees", "terminals") and status == 200:
+                waker.log(f"{kind} count={result.count('refs/heads/')}")
                 return self._send(200, result.encode())
             waker.log(f"{kind} result={result}")
             self._answer(status, result.split()[0])
@@ -263,7 +398,12 @@ class ExclusiveServer(ThreadingHTTPServer):
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--token-file", required=True, type=Path)
+    parser.add_argument("--token-file", type=Path)
+    parser.add_argument(
+        "--terminals",
+        action="store_true",
+        help="印出 POST /terminals 的回答後結束（monitor.sh 在本機用真的 orca 時讀它，#873）",
+    )
     parser.add_argument(
         "--data-dir",
         type=Path,
@@ -289,6 +429,17 @@ def main(argv: list[str]) -> int:
             Path(os.environ.get("LOCALAPPDATA", ""))
             / "Programs/orca/resources/bin/orca.exe"
         )
+    if args.terminals:
+        # A command name (orca) as the program to run: orca.cmd on Windows.
+        rows = engineer_terminals(shutil.which(args.orca) or args.orca)
+        if rows is None:
+            print("orca terminal list 讀不到", file=sys.stderr)
+            return 1
+        sys.stdout.reconfigure(encoding="utf-8")
+        print(terminals_answer(rows))
+        return 0
+    if args.token_file is None:
+        parser.error("--token-file 必填（--terminals 以外）")
     token = read_token(args.token_file)
     logs = args.data_dir / "logs"
     logs.mkdir(parents=True, exist_ok=True)

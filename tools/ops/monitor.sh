@@ -13,6 +13,8 @@
 # to open a coordinator; it never opens a session itself (#1 6245309556, 6320448594).
 # When the coordinator terminal has been at a permission or trust menu for 10 minutes
 # (prompt_blocked wakes, #720), that #1 comment says so instead; it never answers the menu.
+# An engineer terminal at such a menu for 10 minutes is an event, engineer_prompt_blocked
+# (#873, event_queue.py engineer_menu_events); nobody's menu is answered here either.
 #
 # gh: at most 2 calls per poll (open PRs, then comments; the #1 comment takes the
 # comments' turn) and polls at least 60 seconds apart: the 5000/hour API limit is
@@ -195,6 +197,7 @@ run_waker() { # run_waker TERMINAL TEXT: the waker's exit code (124 when it hung
 poll() {
   local now gh_calls=0 gh_failed=0 gh_refused=0 gh_error="" since summary new pending wake
   local terminal stale_line key body url args=() ro=() work notes="" text out status
+  local terminals=()
   keep_lock
   now="$(clock)"
   work="$lock_dir/work.$$"
@@ -249,6 +252,18 @@ poll() {
     args+=(--worktrees "$work/worktrees.json")
   else
     notes="$notes worktrees=failed"
+  fi
+  # 4b. the engineer terminals and their menus (#873): in the container the listener's
+  # POST /terminals (http_orca.sh), on the host the same code run here
+  # (wake_listener.py --terminals) with the real orca.
+  terminals=("$python" -X utf8 "$script_dir/wake_listener.py" --terminals --orca "$orca_exe")
+  [ ${#orca_runner[@]} = 0 ] || terminals=("${orca_runner[@]}" "$orca_exe" terminal list --json)
+  if [ "$orca_exe" = none ]; then
+    :
+  elif call "${terminals[@]}" >"$work/terminals.json" 2>/dev/null; then
+    args+=(--terminals "$work/terminals.json")
+  else
+    notes="$notes terminals=failed"
   fi
 
   # 5. queue, then wake; not if another monitor took the lock over meanwhile
