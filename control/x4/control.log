@@ -1,0 +1,4 @@
+      0s X4 exploration fields=['revenue_yoy', 'eps_growth_yield'] load
+    168s recomputed equals published: True
+    194s simulate
+    220s done
