@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 import hashlib
 import json
 import statistics
@@ -932,6 +933,15 @@ def coverage_markdown(body: dict[str, Any]) -> str:
             *coverage_lines(name, row["coverage"]),
             "",
         ]
+        if name == "W3":  # docs 第六輪 W3 第 6 點, listed in the coverage too
+            lines += [
+                "### W3 另列：每年選入的股票中鍵值是 1 的平均檔數（只列出、不判定）",
+                "",
+                "選入＝當天排序後的前 20 名（不論有沒有買到）；只用排序鍵與雜湊，不讀報酬。",
+                "",
+                *picked_lines(row["coverage"]),
+                "",
+            ]
     return "\n".join(lines)
 
 
@@ -1105,6 +1115,13 @@ def run_validation(
         name for name in names if report["hypotheses"][name]["verdict"] == ex.PASSED
     ]
     if passed:  # the used segment only for the passed ones
+        # Both segments read the copy from its start: let the validation's
+        # panel go before the used one is loaded, so the peak is the larger of
+        # the two, not their sum (PR #905 review).
+        header.pop("_panel", None)
+        report.pop("_panel", None)
+        del ctx, result
+        gc.collect()
         used_ctx = load(db, LOAD_FROM, SEGMENTS[USED][1], out / RAW_DIR_NAME)
         used_header = {**header, "_panel": used_ctx.panel}
         report["used"] = {}

@@ -16,6 +16,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import weakref
 from array import array
 from datetime import date, timedelta
 from pathlib import Path
@@ -975,6 +976,53 @@ def test_every_segment_reads_the_copy_from_its_start(explored, tmp_path, monkeyp
     assert starts and set(starts) == {ex.LOAD_FROM}
 
 
+def test_a_passed_validation_lets_its_panel_go_before_the_used_segment(
+    explored, tmp_path, monkeypatch
+):
+    """Both segments read the copy from its start: the validation's panel is
+    collected before the used segment is loaded (PR #905 review), and the used
+    segment of the passed hypothesis is written."""
+
+    db, out = explored
+    real_judge, real_load = ex.explore_judge, tool.load
+
+    def judge(stage, *args, **kwargs):
+        verdict = real_judge(stage, *args, **kwargs)
+        return ex.PASSED if stage == "validation" else verdict
+
+    loads: list[tuple] = []  # (start, end, weakref to the panel, earlier ones alive)
+
+    def spy(db, start, end, raw_dir):
+        alive = [ref() is not None for _s, _e, ref, _a in loads]
+        ctx = real_load(db, start, end, raw_dir)
+        loads.append((start, end, weakref.ref(ctx.panel), alive))
+        return ctx
+
+    monkeypatch.setattr(ex, "explore_judge", judge)
+    monkeypatch.setattr(tool, "load", spy)
+    data = read_json(out / "explore.json")
+    for name in NAMES:
+        data["hypotheses"][name]["verdict"] = ex.EXPLORATION_FAILED
+    data["hypotheses"]["W1"]["verdict"] = ex.EXPLORATION_PASSED
+    report = tmp_path / "passed.json"
+    report.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    assert validate(db, tmp_path / "validation", report) == 0
+    days = trading_days()
+    assert [(start, end) for start, end, _r, _a in loads] == [
+        (ex.LOAD_FROM, days[279]),
+        (ex.LOAD_FROM, days[329]),
+    ]
+    assert loads[1][3] == [False]  # the validation's panel was gone
+    validation = read_json(tmp_path / "validation" / "explore.json")
+    assert validation["hypotheses"]["W1"]["verdict"] == ex.PASSED
+    assert list(validation["used"]) == ["W1"]
+    for file in ("summary.md", "tables.json", "equity.csv", "picks.csv", "trades.csv"):
+        assert (tmp_path / "validation" / "W1" / "used" / file).is_file(), file
+    assert "## 已用段" in (tmp_path / "validation" / "explore.md").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_coverage_only_computes_no_return(fixture_db, tmp_path, monkeypatch):
     db = copy_of(fixture_db, tmp_path)
     compressed(monkeypatch, tmp_path)
@@ -1000,6 +1048,15 @@ def test_coverage_only_computes_no_return(fixture_db, tmp_path, monkeypatch):
     assert year["W3"]["missing"]["expected_ex_28"] == 0
     md = (out / "coverage.md").read_text(encoding="utf-8")
     assert "母體中鍵值是 1 的平均檔數" in md and "cash_dividend 是 null" in md
+    # W3 第 6 點's listed count in the coverage too (PR #905 review)
+    w3 = md.split("## W3", 1)[1].split("## W4", 1)[0]
+    assert "### W3 另列：每年選入的股票中鍵值是 1 的平均檔數" in w3
+    picked = year["W3"]["picked_ones"]
+    assert picked == 40  # every day of stock 3's and 11's windows they are the top 2
+    assert (
+        f"| 2013 | {year['W3']['days']} | {year['W3']['picked']:,} | {picked} "
+        f"| {picked / year['W3']['days']:.2f} |"
+    ) in w3
 
 
 def test_coverage_only_takes_no_hypotheses(tmp_path):
