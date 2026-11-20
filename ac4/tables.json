@@ -44,7 +44,9 @@
     "dates_per_list": 0.0,
     "lists_needed": null,
     "reached": false,
-    "estimated_list_date": null
+    "estimated_list_date": null,
+    "earliest_lists_needed": 60,
+    "earliest_list_date": "2027-02-23"
   },
   "stored_compared": {
     "lists": 4,
