@@ -3,7 +3,8 @@
 An index-condition strategy is named ``<strategy>_index_<code>`` (kind
 ``<kind>_index_<code>``).  Its rule is the registered strategy's rule, called
 exactly as a canonical run calls it, followed by one condition of
-``CONDITIONS`` on the ``market_bars`` rows of the indexes in ``SERIES``:
+``ALL_CONDITIONS`` (#567's ``CONDITIONS`` and #855's ``OVERNIGHT_CONDITIONS``)
+on the ``market_bars`` rows of the indexes in ``SERIES``:
 
 - the condition holds: the strategy's result, unchanged;
 - it fails: a passed result becomes ``rejected`` with
@@ -272,7 +273,7 @@ class IndexView:
         return key
 
     def result(self, code: str) -> RuleEvaluation:
-        """``CONDITIONS[code]`` on this view (memoized: every stock of a market shares it)."""
+        """``ALL_CONDITIONS[code]`` on this view (memoized: every stock of a market shares it)."""
 
         if code not in self._results:
             item = ALL_CONDITIONS[code]
@@ -511,6 +512,10 @@ class IndexHistory:
 
     ``rows[key]`` maps a date to ``(close, contract_month)``; a series missing
     from ``rows`` has no rows (every condition on it is data_incomplete).
+    ``sessions`` are the Taiwan sessions (``worker.pipeline.taiwan_bar_dates``)
+    that give an overnight condition its E (``next_session``); #567's
+    conditions do not read them, and without them an overnight condition
+    raises instead of guessing E.
     """
 
     def __init__(
@@ -724,8 +729,11 @@ def overnight_conditions() -> list[tuple[str, str]]:
 def baselines_of(items: Iterable[tuple[str, str]]) -> dict[str, Strategy]:
     """The bases a run of the condition strategies ``items`` replays.
 
-    #567's conditions alone: ``BASES`` (both, as run 2759); the overnight
-    ones add ``OVERNIGHT_BASES``.
+    #567's conditions: ``BASES`` (both, as run 2759); #855's overnight ones:
+    ``OVERNIGHT_BASES``.  A run takes one or the other: mixing them puts
+    ``pullback_v3`` and ``pullback_v4`` (one kind) in one registry, which
+    ``registry_problems`` refuses (exit 2), so this does not pick between
+    them.
     """
 
     chosen = list(items)

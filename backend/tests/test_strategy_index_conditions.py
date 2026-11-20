@@ -37,6 +37,7 @@ from app.strategies.index_conditions import (
     OVERNIGHT_MIN_REMOVED,
     OVERNIGHT_MIN_REMOVED_DAYS,
     OVERNIGHT_MIN_T20,
+    OVERNIGHT_THRESHOLDS,
     TRACKING_COST,
     OvernightComparison,
     baselines_of,
@@ -855,6 +856,15 @@ def test_the_overnight_conditions_are_the_decided_twelve():
         (key, code) for key in OVERNIGHT_BASES for code in OVERNIGHT_CONDITIONS
     ]
     assert len(overnight_conditions()) == 12
+    # The decided thresholds, written out (decision 7018301183 §3).
+    assert OVERNIGHT_THRESHOLDS == (
+        ("o1", "SOX", -0.02, True),
+        ("o2", "SOX", -0.01, True),
+        ("o3", "SOX", 0.01, False),
+        ("o4", "SPX", -0.02, True),
+        ("o5", "SPX", -0.01, True),
+        ("o6", "SPX", 0.01, False),
+    )
     assert not set(OVERNIGHT_CONDITIONS) & set(CONDITIONS)
     assert ALL_CONDITIONS == {**CONDITIONS, **OVERNIGHT_CONDITIONS}
     assert all(code in CONDITIONS for _, code in all_conditions())
@@ -873,15 +883,18 @@ def test_the_overnight_conditions_are_the_decided_twelve():
     [
         ("o1", 100.0, 98.0, "rejected"),  # −2 % exactly rejects
         ("o1", 100.0, 98.01, "passed"),
-        ("o2", 100.0, 99.0, "rejected"),
-        ("o2", 100.0, 99.5, "passed"),
+        ("o2", 100.0, 99.0, "rejected"),  # −1 % exactly rejects
+        ("o2", 100.0, 99.01, "passed"),
         ("o3", 100.0, 101.0, "rejected"),  # +1 % exactly rejects
         ("o3", 100.0, 100.99, "passed"),
         ("o3", 100.0, 90.0, "passed"),
         ("o1", 100.0, 120.0, "passed"),
-        ("o4", 100.0, 98.0, "rejected"),
-        ("o5", 100.0, 99.5, "passed"),
-        ("o6", 100.0, 101.0, "rejected"),
+        ("o4", 100.0, 98.0, "rejected"),  # −2 % exactly rejects
+        ("o4", 100.0, 98.01, "passed"),
+        ("o5", 100.0, 99.0, "rejected"),  # −1 % exactly rejects
+        ("o5", 100.0, 99.01, "passed"),
+        ("o6", 100.0, 101.0, "rejected"),  # +1 % exactly rejects
+        ("o6", 100.0, 100.99, "passed"),
     ],
 )
 def test_an_overnight_condition_rejects_at_its_threshold(code, previous, close, state):
@@ -1069,6 +1082,19 @@ def _overnight_comparison(**changes) -> OvernightComparison:
 
 def test_the_two_overnight_judgements():
     assert (TRACKING_COST, COMMON_COST) == (0.003, 0.00585)
+    # The sample floor of the decision, written out: 30 removed, 5 days, 100 T+20.
+    assert (OVERNIGHT_MIN_REMOVED, OVERNIGHT_MIN_REMOVED_DAYS, OVERNIGHT_MIN_T20) == (
+        30,
+        5,
+        100,
+    )
+    for field, short, enough in (
+        ("removed", 29, 30),
+        ("removed_days", 4, 5),
+        ("t20_n", 99, 100),
+    ):
+        assert judge_improved(_overnight_comparison(**{field: short})) == "insufficient"
+        assert judge_improved(_overnight_comparison(**{field: enough})) == "improved"
     good = _overnight_comparison()
     assert judge_improved(good) == "improved" and judge_edge(good) == "edge"
     assert good.common_net_mean == pytest.approx(0.01 + 0.003 - 0.00585)
@@ -1113,6 +1139,108 @@ def test_the_two_overnight_judgements():
         "improved": False,
         "edge": False,
     }
+
+
+def test_the_overnight_costs_are_their_sources():
+    # (a) is tracking_v2's settlement (its round trip); (a′) is evidence.md's
+    # 共同口徑, which evidence_lib's tools use.
+    from app.tracking import ROUND_TRIP_TRANSACTION_COST_BPS
+
+    lib = report._evidence_lib()
+    assert TRACKING_COST == pytest.approx(ROUND_TRIP_TRANSACTION_COST_BPS / 10_000)
+    assert COMMON_COST == pytest.approx(lib.DEFAULT_COST_BPS / 10_000)
+
+
+def test_the_population_mean_is_the_t20_return_less_tracking_cost(monkeypatch):
+    day = date(2025, 3, 3)
+    calls = []
+
+    def forward_return(item, at, horizon):
+        calls.append((item, at, horizon))
+        return {"x": 0.02, "y": -0.01, "z": None}[item]
+
+    fake = type(
+        "Lib",
+        (),
+        {
+            "DEFAULT_MIN_LOTS": 7,
+            "load_panel": staticmethod(lambda db, start, raw: "panel"),
+            "universe": staticmethod(
+                lambda panel, at, lots: [("x", 1), ("y", 1), ("z", 1)]
+                if (panel, at, lots) == ("panel", day, 7)
+                else []
+            ),
+            "forward_return": staticmethod(forward_return),
+        },
+    )
+    monkeypatch.setattr(report, "_evidence_lib", lambda: fake)
+    means = report.population_means(Path("/nowhere"), [day], Path("/raw"))
+    # (0.02 − 0.01) / 2 less 30 bps; the one without a T+20 is left out.
+    assert means == {day: pytest.approx(0.005 - 0.003)}
+    assert {horizon for _, _, horizon in calls} == {20}
+
+
+def test_the_overnight_numbers_of_a_hand_written_run():
+    """(a), (b), the removed group and the fill days on numbers worked by hand."""
+
+    import app.strategies.index_conditions as ic
+
+    t1, e1 = date(2025, 3, 3), date(2025, 3, 4)  # exploration; E is Tuesday
+    history = IndexHistory({}, [t1, e1, date(2025, 3, 5), date(2025, 3, 6)])
+    a, b, c, d, e = ((n, t1) for n in range(1, 6))
+    baseline = {
+        a: (101, "x"),
+        b: (102, "x"),
+        c: (103, "x"),
+        d: (104, "x"),
+        e: (105, "x"),
+    }
+    own = {a: (201, "x"), b: (202, "x")}
+    parts = {"rejected": [c, d, e], "data_incomplete": []}
+
+    def t20(value):
+        return {20: (True, value, "target_1_hit")}
+
+    settled = {
+        101: t20(0.02),
+        102: t20(0.0),
+        103: t20(-0.04),
+        104: t20(0.01),
+        201: t20(0.02),
+        202: t20(0.0),
+    }
+    population = {t1: -0.01}
+    # 103 filled at E, 104 the day after, 105 never.
+    executed = {103: e1, 104: date(2025, 3, 5)}
+    judged, fills = report.overnight_judgement(
+        ic, own, baseline, parts, settled, population, executed, history
+    )
+    got = judged["exploration"]
+    assert (got["removed"], got["removed_days"], got["t20_n"]) == (3, 1, 2)
+    # (a): the settled T+20 as stored (already net of tracking's cost).
+    assert got["net_mean"] == pytest.approx(0.01)
+    assert got["baseline_net_mean"] == pytest.approx(-0.0025)
+    assert got["common_net_mean"] == pytest.approx(0.01 + 0.003 - 0.00585)
+    # (b): each (a) less its day's population mean.
+    assert got["excess_mean"] == pytest.approx(0.02)
+    assert got["baseline_excess_mean"] == pytest.approx(0.0075)
+    assert got["improved"] == got["edge"] == "insufficient"
+    removed = got["removed_group"]
+    assert removed["t20_n"] == 2
+    assert removed["net_mean"] == pytest.approx(-0.015)
+    assert removed["excess_mean"] == pytest.approx(-0.005)
+    # The fill day is compared with E, not with T.
+    groups = fills["exploration"]
+    assert {fill: groups[fill]["signals"] for fill in report.FILLS} == {
+        "entry_day": 1,
+        "later": 1,
+        "not_filled": 1,
+    }
+    assert groups["entry_day"]["net_mean"] == pytest.approx(-0.04)
+    assert groups["later"]["net_mean"] == pytest.approx(0.01)
+    assert groups["not_filled"]["t20_n"] == 0
+    assert judged["validation"]["removed"] == 0
+    assert judged["verdict"] == {"improved": False, "edge": False}
 
 
 def test_a_report_of_an_overnight_run_on_the_fixture(backtest_db, tmp_path):
