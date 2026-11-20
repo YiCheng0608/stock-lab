@@ -1273,7 +1273,13 @@ def test_the_waker_is_one_command_and_none_leaves_the_wake_out(mon: Harness) -> 
         (False, "not_idle"),
         (True, "sent"),
     ]
-    assert not [c for c in mon.calls("orca") if c.startswith("terminal")]
+    # The monitor's own orca terminal call is the engineer terminals' list (#873): the
+    # wait and the send are the waker's alone.
+    assert not [
+        c
+        for c in mon.calls("orca")
+        if c.startswith("terminal") and c != "terminal list --json"
+    ]
 
     other = Harness(mon.root / "none")
     other.answer("gh_pr_list", [_pr()])
@@ -2292,3 +2298,281 @@ def test_the_replay_counts_wakes_and_urgent_delays(tmp_path, failed: str) -> Non
     )
     assert "- quiet:echo：1" in text and "- batch：1" in text
     assert "| 4 | 4 | 4 | 2 |" in result.stdout
+
+
+# --- an engineer terminal at a permission or trust menu (#873) -----------------------
+# #864, #866 (2026-11-20): engineers at a permission menu for about 7 hours, no event.
+# The monitor runs here on the host (the fake orca on PATH), so wake_listener.py
+# --terminals runs the fake as a program: Linux only, as test_wake_listener's /worktrees.
+needs_exec_orca = pytest.mark.skipif(
+    os.name == "nt", reason="the fake orca is a bash script run as a program"
+)
+ENGINEER = "term_eng"
+ENGINEER_BRANCH = "refs/heads/task/10-x"
+MENU_COMMAND = "echo '- x' >> /tmp/m/MEMORY.md"
+# As `orca terminal read --screen` gave it for Claude Code 2.1.329 at a Bash permission
+# menu (2026-11-20, the AC-1 trial; only the command changed).
+RULE = "╌" * 40
+MENU_SCREEN = [
+    " ▐▛███▛█   Claude Code v2.1.329",
+    "❯ Run exactly this one command with the Bash tool and nothing else",
+    "● Appending to the memory index",
+    f"  ⎿  $ {MENU_COMMAND}",
+    "─" * 40,
+    " Bash command",
+    ' Tip: auto mode handles these prompts for you — choose "switch to auto mode" below',
+    " Append to the memory index",
+    RULE,
+    f" {MENU_COMMAND}",
+    RULE,
+    " This command requires approval",
+    " Do you want to proceed?",
+    " ❯ 1. Yes",
+    "   2. Yes, and don’t ask again for: echo *",
+    "   4. No",
+    " Esc to cancel · Tab to amend",
+]
+BOXED_SCREEN = [
+    f"⏺ Bash({MENU_COMMAND})",
+    "╭──────────────────────────────────────────────╮",
+    "│ Bash command                                 │",
+    "│                                              │",
+    f"│   {MENU_COMMAND}             │",
+    "│   Append to the memory index                 │",
+    "│                                              │",
+    "│ Do you want to proceed?                      │",
+    "│ ❯ 1. Yes                                     │",
+    "│   2. No, and tell Claude what to do (esc)    │",
+    "╰──────────────────────────────────────────────╯",
+]
+TRUST_SCREEN = [
+    "│ Do you trust the files in this folder?       │",
+    "│ ❯ 1. Yes, proceed                            │",
+    "│   2. No, exit                                │",
+]
+NO_WAIT = object()  # Orca cannot tell: no agentWait in the show answer
+
+
+def _engineer(h: Harness, wait=None, screen=MENU_SCREEN, rows=None) -> None:
+    """`orca terminal list` with the engineer's Claude Code terminal and the bare shell
+    Orca opens in the same worktree; `terminal show` with WAIT as its agentWait."""
+    if rows is None:
+        rows = [
+            {
+                "handle": ENGINEER,
+                "branch": ENGINEER_BRANCH,
+                "title": "#10 x",
+                "agentIdentity": "claude",
+            },
+            {
+                "handle": "term_shell",
+                "branch": ENGINEER_BRANCH,
+                "title": "MINGW64:/c/wt/task-10-x",
+            },
+        ]
+    h.answer("orca_terminal_list", _ok({"terminals": rows}))
+    shown = {"handle": ENGINEER}
+    if wait is not NO_WAIT:
+        shown["agentWait"] = wait
+    h.answer("orca_terminal_show", _ok({"terminal": shown}))
+    h.answer(
+        "orca_terminal_read",
+        _ok({"terminal": {"handle": ENGINEER, "status": "running", "tail": screen}}),
+    )
+
+
+def _menu_events(h: Harness) -> list[dict]:
+    return [e for e in _records(h, "event") if e["kind"] == "engineer_prompt_blocked"]
+
+
+def _polls(h: Harness, minutes) -> None:
+    for minute in minutes:
+        _monitor(h, at=NOW + 60 * minute)
+
+
+@needs_exec_orca
+def test_an_engineer_at_a_permission_menu_for_ten_minutes_is_one_now_event(
+    mon: Harness,
+) -> None:
+    """#873 AC-1: 10 minutes at the menu is one now event (Issue, handle, since, the
+    command's first line), and it wakes the coordinator; under 10 minutes nothing; the
+    same stretch never again; nothing typed into the engineer terminal, the bare shell
+    never read."""
+    _engineer(mon, wait={"source": "hook"})
+    _polls(mon, range(10))  # 12:00 … 12:09
+    assert _menu_events(mon) == []
+    sends = len(_sends(mon))
+    _monitor(mon, at=NOW + 600)
+    [event] = _menu_events(mon)
+    assert event["id"] == f"engineer_prompt_blocked:{ENGINEER}:2026-10-25T12:00:00Z"
+    assert event["tier"] == "now" and event["ref"] == "#10"
+    assert event["url"] == "https://github.com/YiCheng0608/stock-lab/issues/10"
+    assert event["summary"] == (
+        f"工程師 terminal {ENGINEER} 從 2026-10-25T12:00:00Z（台北 2026-10-25 20:00）"
+        f"起停在權限或信任確認框 10 分鐘：{MENU_COMMAND}"
+    )
+    assert len(_sends(mon)) == sends + 1
+    _polls(mon, range(11, 40))
+    assert len(_menu_events(mon)) == 1
+    calls = mon.calls("orca")
+    assert not any("term_shell" in c for c in calls)
+    assert not any(c.startswith("terminal send") and ENGINEER in c for c in calls)
+    assert f"terminal read --terminal={ENGINEER} --screen --limit 60 --json" in calls
+
+
+@needs_exec_orca
+def test_a_menu_that_went_away_starts_a_new_stretch(mon: Harness) -> None:
+    """#873 AC-1: the menu gone (agentWait null), then back: timed again from then."""
+    _engineer(mon, wait={"source": "hook"})
+    _polls(mon, range(9))
+    _engineer(mon, wait=None)
+    _monitor(mon, at=NOW + 540)
+    _engineer(mon, wait={"source": "title"})
+    _polls(mon, range(10, 20))  # 12:10 … 12:19: under 10 minutes of the new stretch
+    assert _menu_events(mon) == []
+    _monitor(mon, at=NOW + 1200)
+    assert [e["id"] for e in _menu_events(mon)] == [
+        f"engineer_prompt_blocked:{ENGINEER}:2026-10-25T12:10:00Z"
+    ]
+
+
+@needs_exec_orca
+def test_a_trust_menu_counts_and_orca_that_cannot_tell_keeps_the_stretch(
+    mon: Harness,
+) -> None:
+    """#873 AC-1: a trust menu is a menu too (its question in place of a command); a
+    poll where Orca cannot tell (no agentWait) or the list fails neither ends nor starts
+    the stretch."""
+    trust = {"source": "prompt-text", "reason": "trust"}
+    _engineer(mon, wait=trust, screen=TRUST_SCREEN)
+    _polls(mon, range(3))
+    _engineer(mon, wait=NO_WAIT)
+    _polls(mon, range(3, 6))
+    mon.answer("orca_terminal_list", {"ok": False, "error": {"code": "x"}})
+    assert "terminals=failed" in _monitor(mon, at=NOW + 360).stdout
+    _engineer(mon, wait=trust, screen=TRUST_SCREEN)
+    _polls(mon, range(7, 11))
+    [event] = _menu_events(mon)
+    assert event["id"].endswith(":2026-10-25T12:00:00Z")
+    assert event["summary"].endswith("：Do you trust the files in this folder?")
+
+
+@needs_exec_orca
+def test_the_coordinator_at_a_menu_stays_on_the_720_path(mon: Harness) -> None:
+    """#873 AC-1: the coordinator's own terminal (master, or the heartbeat's handle on a
+    task branch) is never an engineer event: its wakes are prompt_blocked as before."""
+    _at_menu(mon)
+    _engineer(
+        mon,
+        wait={"source": "hook"},
+        rows=[
+            {
+                "handle": "term_coord",
+                "branch": "refs/heads/master",
+                "agentIdentity": "claude",
+            },
+            {
+                "handle": "term_coord",
+                "branch": "refs/heads/task/316-a",
+                "agentIdentity": "claude",
+            },
+            {"handle": "term_shell", "branch": ENGINEER_BRANCH},
+        ],
+    )
+    _polls(mon, range(12))
+    assert _menu_events(mon) == []
+    assert {w["detail"] for w in _records(mon, "wake")} == {"prompt_blocked"}
+    state = json.loads(
+        (mon.data / "logs" / "monitor-state.json").read_text(encoding="utf-8")
+    )
+    assert state["engineer_menus"] == {}
+
+
+@needs_exec_orca
+def test_patrol_shows_the_engineer_menu_in_the_events_and_the_slots(
+    mon: Harness,
+) -> None:
+    """#873 AC-1: the event line (立即) and the slot lines both name it."""
+    from test_coordinator_scripts import _slot_answer
+
+    root = mon.root.as_posix()
+    mon.write(
+        "git_worktrees.txt",
+        f"worktree {root}/repo\nHEAD {'0' * 40}\nbranch refs/heads/master\n\n"
+        f"worktree {root}/wt\nHEAD {'a' * 40}\nbranch {ENGINEER_BRANCH}\n",
+    )
+    mon.answer("gh_questions", _slot_answer())
+    _engineer(mon, wait={"source": "hook"})
+    _polls(mon, range(11))
+    result = mon.run(
+        "patrol.sh",
+        "--session-id",
+        "coord",
+        "--terminal",
+        "term_coord",
+        PATROL_NOW=str(NOW + 660),
+    )
+    out = result.stdout
+    assert result.returncode == 11, out + result.stderr  # the free slots: #33
+    lines = out.splitlines()
+    assert any(
+        line.startswith("  立即 [")
+        and f"engineer_prompt_blocked #10 2026-10-25T12:00:00Z 工程師 terminal {ENGINEER}"
+        in line
+        for line in lines
+    ), out
+    assert "名額：已用 1／3（算：#10 開發中［工程師停在確認框］）" in lines, out
+    assert (
+        "  #10 算：開發中（沒有 PR）（task/10-x）；工程師停在確認框 11 分鐘"
+        f"（terminal {ENGINEER}，2026-10-25T12:00:00Z 起，monitor 2026-10-25T12:10:00Z"
+        f" 讀到）：{MENU_COMMAND}"
+    ) in lines, out
+
+
+def _listener_module():
+    sys.path.insert(0, str(OPS))
+    try:
+        import wake_listener
+    finally:
+        sys.path.remove(str(OPS))
+    return wake_listener
+
+
+POWERSHELL_SCREEN = [
+    " PowerShell command",
+    "",
+    "   Add-Content -Path x -Value y",
+    "   append",
+    "",
+    " Do you want to proceed?",
+    " ❯ 1. Yes",
+]
+
+
+@pytest.mark.parametrize(
+    ("screen", "expected"),
+    [
+        (MENU_SCREEN, MENU_COMMAND),
+        (BOXED_SCREEN, MENU_COMMAND),
+        (TRUST_SCREEN, "Do you trust the files in this folder?"),
+        (POWERSHELL_SCREEN, "Add-Content -Path x -Value y"),
+        (["$ ls", "a b"], ""),
+    ],
+)
+def test_the_menu_command_is_read_off_the_screen(screen, expected) -> None:
+    assert _listener_module().menu_command(screen) == expected
+
+
+def test_engineer_menus_without_a_listing_stay_as_they_were() -> None:
+    eq = _eq()
+    before = {
+        ENGINEER: {
+            "since": "2026-10-25T12:00:00Z",
+            "branch": ENGINEER_BRANCH,
+            "issue": 10,
+            "command": "x",
+        }
+    }
+    for answer in (None, {"ok": False}, {"ok": True, "result": {}}):
+        found = eq.engineer_menu_events(before, answer, NOW + 900, "term_coord")
+        assert found == ([], None)

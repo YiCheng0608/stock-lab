@@ -380,10 +380,56 @@ def _chip(item: lib.Series, name: str, k: int) -> float | None:
     return None if value != value else value
 
 
+@dataclass(frozen=True)
+class Margin:
+    """The margin inputs of one signal date (decision D4)."""
+
+    ratio: float | None  # margin_change_ratio_5d
+    financing: str  # app.margin_lists' state
+    zero_base: str | None  # app.margin_zero_base's state
+
+
+def margin_state(ctx: Context, item: lib.Series, at: int) -> Margin:
+    """The margin ratio of the six unsuspended sessions to T, its
+    ``margin_lists`` state and its zero-base state, as ``worker.pipeline``
+    computes them.  R1, R2 and round 4's C3 (#878) read the same function."""
+
+    from app import margin_lists, margin_zero_base
+
+    six = _unsuspended(ctx, item, at, margin_lists.WINDOW_SESSIONS)
+    balances = None
+    if len(six) == 6 and all(_chip_row(item, k) for k in six):
+        balances = (
+            _chip(item, "margin_balance", six[0]),
+            _chip(item, "margin_balance", six[-1]),
+        )
+    ratio = None
+    if (
+        balances is not None
+        and balances[0] not in (None, 0)
+        and balances[1] is not None
+    ):
+        ratio = (balances[1] - balances[0]) / abs(balances[0])
+    zero_base = (
+        None
+        if ratio is not None or balances is None
+        else margin_zero_base.zero_base_state(*balances)
+    )
+    exchange, symbol, _name = ctx.panel.symbols.get(item.instrument_id, ("", "", ""))
+    if ratio is not None:
+        financing = margin_lists.APPLICABLE
+    elif not six or six[-1] != at:
+        financing = margin_lists.MISSING
+    else:
+        financing = margin_lists.margin_financing_state(
+            symbol, ratio, [ctx.codes(exchange, item.dates[k]) for k in six]
+        )
+    return Margin(ratio, financing, zero_base)
+
+
 def strategy_inputs(ctx: Context, item: lib.Series, at: int):
     """``worker.pipeline._signal_context``'s StrategyInputs from the panel."""
 
-    from app import margin_lists, margin_zero_base
     from app.domain import moving_average
     from app.strategies.base import StrategyInputs
 
@@ -428,35 +474,7 @@ def strategy_inputs(ctx: Context, item: lib.Series, at: int):
             average = sum(item.volume[k] for k in days) / len(days)
             flow = sum(value for row in parts for value in row)
             flow_ratio = flow / average if average > 0 else None
-    # the margin ratio of the six unsuspended sessions to T
-    six = _unsuspended(ctx, item, at, margin_lists.WINDOW_SESSIONS)
-    balances = None
-    if len(six) == 6 and all(_chip_row(item, k) for k in six):
-        balances = (
-            _chip(item, "margin_balance", six[0]),
-            _chip(item, "margin_balance", six[-1]),
-        )
-    ratio = None
-    if (
-        balances is not None
-        and balances[0] not in (None, 0)
-        and balances[1] is not None
-    ):
-        ratio = (balances[1] - balances[0]) / abs(balances[0])
-    zero_base = (
-        None
-        if ratio is not None or balances is None
-        else margin_zero_base.zero_base_state(*balances)
-    )
-    exchange, symbol, _name = ctx.panel.symbols.get(iid, ("", "", ""))
-    if ratio is not None:
-        financing = margin_lists.APPLICABLE
-    elif not six or six[-1] != at:
-        financing = margin_lists.MISSING
-    else:
-        financing = margin_lists.margin_financing_state(
-            symbol, ratio, [ctx.codes(exchange, item.dates[k]) for k in six]
-        )
+    margin = margin_state(ctx, item, at)
     close = _number(raw_close[at])
     return StrategyInputs(
         bar_count=ctx.bars_before.get(iid, 0) + at + 1,
@@ -469,9 +487,9 @@ def strategy_inputs(ctx: Context, item: lib.Series, at: int):
         prior_volumes=prior_volumes,
         group_excess_return_20d=GROUP_PLACEHOLDER,
         institutional_flow_ratio_5d=flow_ratio,
-        margin_change_ratio_5d=ratio,
-        margin_financing=financing,
-        margin_zero_base=zero_base,
+        margin_change_ratio_5d=margin.ratio,
+        margin_financing=margin.financing,
+        margin_zero_base=margin.zero_base,
     )
 
 
@@ -592,11 +610,50 @@ def market_filter(ctx: Context, day: date) -> bool | None:
     return close > mean
 
 
-def ranked(
-    ctx: Context, day: date, members: list[tuple[lib.Series, int]]
-) -> list[dict[str, Any]]:
-    """The S members that pass, high first by the two keys, missing last, ties by hash."""
+@dataclass(frozen=True)
+class Hooks:
+    """The three hook points of round 4 (#878: C1～C4 are S1 with one layer
+    changed).  None keeps S1～S3's own path.
 
+    - ``select(ctx, s)``: the extra condition of signal date ``s``, after
+      S1's selection and before the ranking (C1, C3): a predicate on
+      (item, at), or None when the date makes no new signal.
+    - ``first_key``: (name, function) of the first ranking key in place of
+      ``trust_buy_days`` (C2); the second key and the tie stay S1's.
+    - ``stop(item, at, atr, fill)``: (the stop, the fields it adds to the
+      trade) in place of fill − stop_atr × ATR14 (C4); ``fill`` is None for
+      an abandoned signal (the stop is then None)."""
+
+    select: (
+        Callable[[Context, int], Callable[[lib.Series, int], bool] | None] | None
+    ) = None
+    first_key: tuple[str, Callable[[lib.Series, int], float | None]] | None = None
+    stop: (
+        Callable[[lib.Series, int, float, float | None], tuple[float | None, dict]]
+        | None
+    ) = None
+
+
+def score_keys(hooks: Hooks | None) -> tuple[tuple[str, ...], dict[str, Callable]]:
+    """The ranking keys and their functions: S1's, or C2's first key."""
+
+    if hooks is None or hooks.first_key is None:
+        return SCORE_KEYS, SCORE_FUNCTIONS
+    name, function = hooks.first_key
+    return (name, *SCORE_KEYS[1:]), {**SCORE_FUNCTIONS, name: function}
+
+
+def ranked(
+    ctx: Context,
+    day: date,
+    members: list[tuple[lib.Series, int]],
+    hooks: Hooks | None = None,
+    keep: Callable[[lib.Series, int], bool] | None = None,
+) -> list[dict[str, Any]]:
+    """The S members that pass, high first by the two keys, missing last, ties
+    by hash.  ``keep`` is the hook's extra condition, after S1's selection."""
+
+    keys, functions = score_keys(hooks)
     rows = []
     for item, at in members:
         yoy = features.revenue_yoy(item, at)
@@ -605,9 +662,11 @@ def ranked(
         atr = atr14(item, at)
         if atr is None or not atr > 0:
             continue
+        if keep is not None and not keep(item, at):
+            continue
         values = {}
-        for key in SCORE_KEYS:
-            value = SCORE_FUNCTIONS[key](item, at)
+        for key in keys:
+            value = functions[key](item, at)
             values[key] = None if value is None or value != value else float(value)
         tie = pr.tie_break(day, item.instrument_id)
         rows.append(
@@ -618,7 +677,7 @@ def ranked(
                 "revenue_yoy": yoy,
                 **values,
                 "tie": tie,
-                "key": pr.ranking_key(values, SCORE_KEYS, tie),
+                "key": pr.ranking_key(values, keys, tie),
             }
         )
     rows.sort(key=lambda row: row["key"])
@@ -937,6 +996,7 @@ class State:
     filter_missing: int = 0
     signal_days: int = 0
     strategy: Any = None
+    hooks: Hooks | None = None  # round 4's (#878); None is S1～S3's path
 
 
 def _trade_row(
@@ -1045,7 +1105,15 @@ def signal_day(ctx: Context, state: State, s: int, s_last: int) -> None:
     ]
     made = 0
     if spec["kind"] == "zone":
-        for rank, row in enumerate(ranked(ctx, day, members)[: spec["top"]], start=1):
+        hooks = state.hooks
+        keep = None
+        if hooks is not None and hooks.select is not None:
+            keep = hooks.select(ctx, s)
+            if keep is None:  # the hook's day makes no new signal (C1)
+                return
+        keys, _functions = score_keys(hooks)
+        rows = ranked(ctx, day, members, hooks, keep)
+        for rank, row in enumerate(rows[: spec["top"]], start=1):
             item, at = row["item"], row["at"]
             close, atr = item.close[at], row["atr"]
             upper, lower = close, close - spec["zone_atr"] * atr
@@ -1057,6 +1125,11 @@ def signal_day(ctx: Context, state: State, s: int, s_last: int) -> None:
                 else min(spec["entry_days"], len(bars)) - 1
             )
             fill = None if entry.price is None else entry.price / (1.0 + SLIPPAGE)
+            if hooks is not None and hooks.stop is not None:
+                stop, added = hooks.stop(item, at, atr, fill)
+            else:
+                stop = None if fill is None else fill - spec["stop_atr"] * atr
+                added = {}
             state.trades.append(
                 _trade_row(
                     ctx,
@@ -1067,7 +1140,7 @@ def signal_day(ctx: Context, state: State, s: int, s_last: int) -> None:
                     bars,
                     entry,
                     ends,
-                    None if fill is None else fill - spec["stop_atr"] * atr,
+                    stop,
                     None if fill is None else fill + spec["target_atr"] * atr,
                     s_last,
                     {
@@ -1075,9 +1148,9 @@ def signal_day(ctx: Context, state: State, s: int, s_last: int) -> None:
                         "zone_low": lower,
                         "zone_high": upper,
                         "below_lower": below,
-                        "trust_buy_days": row["trust_buy_days"],
-                        "institutional_flow_20": row["institutional_flow_20"],
+                        **{key: row[key] for key in keys},
                         "revenue_yoy": row["revenue_yoy"],
+                        **added,
                     },
                 )
             )
@@ -1202,15 +1275,22 @@ def run_segment(
     segment: str,
     min_t: float = MIN_T,
     progress: Callable[[str], None] = lambda text: None,
+    hypotheses: dict[str, dict[str, Any]] | None = None,
+    hooks: Callable[[str], Hooks | None] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Every hypothesis of ``names`` on ``segment``: its numbers and verdict."""
+    """Every hypothesis of ``names`` on ``segment``: its numbers and verdict.
 
+    ``hypotheses`` and ``hooks`` are round 4's entry point (#878): its own
+    registration (default: this tool's) and a fresh ``Hooks`` per hypothesis
+    and segment (default: none, S1～S3's path)."""
+
+    hypotheses = HYPOTHESES if hypotheses is None else hypotheses
     sessions = ctx.panel.sessions
     results: dict[str, dict[str, Any]] = {}
     states: list[State] = []
     bounds: dict[str, tuple[int, int]] = {}
     for name in names:
-        spec = HYPOTHESES[name]
+        spec = hypotheses[name]
         result: dict[str, Any] = {
             "hypothesis": name,
             "segment": segment,
@@ -1244,7 +1324,7 @@ def run_segment(
             if not result["prerequisites"]["ok"]:
                 result["reason"] = "segment_too_short" if days < need else "no_delisted"
                 continue  # not run (docs 段長下限、先決條件)
-        state = State(name, spec)
+        state = State(name, spec, hooks=None if hooks is None else hooks(name))
         if spec["kind"] == "rule":
             state.strategy = strategy_of(name)
         states.append(state)

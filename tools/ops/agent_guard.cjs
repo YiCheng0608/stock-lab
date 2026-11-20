@@ -1247,7 +1247,8 @@ function fileDenial(file, cwd) {
 // its real location or through any other path to it (the profile's symlink). The directories:
 // <$CLAUDE_CONFIG_DIR and ~/.claude>/projects/<slug>/memory, the slug the main checkout's path
 // with every character but A-Z a-z 0-9 turned into "-" (as Claude Code and memory_check.py name
-// it), and $STOCK_MEMORY_DIR; each also as it resolves. Bash writes are not caught.
+// it), and $STOCK_MEMORY_DIR; each also as it resolves. Bash, PowerShell and Monitor commands that
+// name one are refused by memoryCommandDenial below (#873).
 const MEMORY_REASON = '記憶只由統籌與使用者改；把會過期的記憶寫進 PR 本文「會過期的記憶」（docs/COORDINATOR.md「記憶」）';
 
 function samePathKey(file) {
@@ -1297,6 +1298,55 @@ function memoryDenial(file, cwd) {
   return dir ? `${file} 在記憶目錄 ${dir}，這個 session 在 task/* branch：${MEMORY_REASON}` : null;
 }
 
+// Bash, PowerShell and Monitor commands (#873): in a task/* session, a command that names a memory
+// directory anywhere in its text (heredoc bodies included) is refused, whatever it does with it:
+// #861, #864 and #866 wrote memories with `sed -i` and `echo >>`, stopped at the permission menu
+// that path raised and sat there for hours. Compared after quotes are dropped, backslashes turned
+// into "/", ~, $HOME, ${HOME}, $env:USERPROFILE, %USERPROFILE%, $CLAUDE_CONFIG_DIR and
+// $STOCK_MEMORY_DIR replaced with their values, /c/ (Git Bash) turned into C:, case ignored; a glob
+// in the slug (projects/*/memory) counts too. Reading a memory with the Read tool is not affected.
+const COMMAND_PATH_VARS = [
+  [['HOME', 'USERPROFILE'], () => os.homedir()],
+  [['CLAUDE_CONFIG_DIR'], () => process.env.CLAUDE_CONFIG_DIR],
+  [['STOCK_MEMORY_DIR'], () => process.env.STOCK_MEMORY_DIR],
+];
+const PATH_END = '(?=/|$|[^a-z0-9_.-])';
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const commandPathKey = (file) => normalizeTarget(file).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+function commandPathText(command) {
+  let text = command.replace(/["'`]/g, '').replace(/\\/g, '/');
+  for (const [names, value] of COMMAND_PATH_VARS) {
+    const dir = value();
+    if (!dir) continue;
+    const forms = names.map((n) => `\\$\\{${n}\\}|\\$env:${n}\\b|\\$${n}\\b|%${n}%`).join('|');
+    text = text.replace(new RegExp(forms, 'gi'), () => commandPathKey(dir));
+  }
+  return text
+    .replace(/(^|[\s=;|&(<>,])~(?=\/|$|\s)/g, (_, before) => before + commandPathKey(os.homedir()))
+    .replace(/(^|[\s=;|&(<>,])\/(?:cygdrive\/)?([a-zA-Z])(?=\/)/g, (_, before, drive) => `${before}${drive}:`)
+    .replace(/\/{2,}/g, '/')
+    .toLowerCase();
+}
+
+function memoryCommandDenial(command, cwd) {
+  const projectDir = normalizeTarget(process.env.CLAUDE_PROJECT_DIR || cwd || process.cwd());
+  if (!(branchAt(projectDir) || '').startsWith('task/')) return null;
+  const text = commandPathText(command);
+  for (const dir of memoryDirs(projectDir)) {
+    const key = commandPathKey(dir);
+    const projects = path.posix.dirname(path.posix.dirname(key));
+    const named = [new RegExp(escapeRegExp(key) + PATH_END)];
+    if (path.posix.basename(key) === 'memory' && path.posix.basename(projects) === 'projects') {
+      named.push(new RegExp(`${escapeRegExp(projects)}/[^/\\s]*[*?[][^/\\s]*/memory${PATH_END}`));
+    }
+    if (named.some((re) => re.test(text))) {
+      return `命令提到記憶目錄 ${dir}，這個 session 在 task/* branch：${MEMORY_REASON}`;
+    }
+  }
+  return null;
+}
+
 // Tool input fields this script reads as text. Any other type is malformed input, which blocks.
 const TEXT_FIELDS = ['file_path', 'notebook_path', 'path', 'glob', 'type', 'pattern', 'command'];
 // Tools that upload or read local files under keys of their own: every string is checked.
@@ -1336,7 +1386,8 @@ function denial(input) {
     case 'PowerShell':
     case 'Monitor': // runs its command in the Bash tool's shell
       return typeof tool.command === 'string'
-        ? commandDenial(tool.command, name === 'PowerShell' ? 'powershell' : 'bash', ALLOW, input.cwd || process.cwd())
+        ? memoryCommandDenial(tool.command, input.cwd) ||
+            commandDenial(tool.command, name === 'PowerShell' ? 'powershell' : 'bash', ALLOW, input.cwd || process.cwd())
         : null;
     default: {
       return UPLOADERS.test(name) ? uploadDenial(tool, input.cwd) : null;

@@ -331,6 +331,86 @@ describe('memory directory rules', () => {
     // Reading memories stays allowed.
     assert.equal(hook({ tool_name: 'Read', tool_input: { file_path: path.join(real, 'MEMORY.md') } }, from(task)).code, 0);
   });
+
+  // Bash and PowerShell (#873): #861 `sed -i`, #864 and #866 `echo >> …/memory/MEMORY.md`.
+  const ps = (command) => ({ tool_name: 'PowerShell', tool_input: { command } });
+  const forward = (dir) => normalizeTarget(dir).replace(/\\/g, '/');
+  const backslash = (dir) => forward(dir).replace(/\//g, '\\');
+  const commands = (dir) => {
+    const f = `${forward(dir)}/MEMORY.md`;
+    const b = `${backslash(dir)}\\MEMORY.md`;
+    return [
+      bash(`echo '- x' >> ${f}`),
+      bash(`sed -i 's/a/b/' "${f}"`),
+      bash(`printf 'x\\n' | tee -a '${f}'`),
+      bash(`cp /tmp/x.md ${path.posix.dirname(f)}/new.md`),
+      ps(`Add-Content -Path '${b}' -Value 'x'`),
+      ps(`Set-Content -LiteralPath "${b}" -Value x -Encoding utf8`),
+      bash(`echo x >> "${b}"`),
+    ];
+  };
+
+  test('an engineer session (task/*) naming a memory directory in Bash or PowerShell is blocked', () => {
+    for (const dir of [real, linked]) {
+      for (const input of commands(dir)) {
+        const result = hook(input, from(task));
+        assert.equal(result.code, 2, `${input.tool_input.command}: ${result.stderr}`);
+        assert.match(result.stderr, /記憶只由統籌與使用者改/);
+        assert.match(result.stderr, /會過期的記憶/);
+      }
+    }
+  });
+
+  test('~, $HOME, $env:USERPROFILE, $CLAUDE_CONFIG_DIR, upper case and a slug glob name it too', () => {
+    const slug = path.basename(path.dirname(real));
+    for (const input of [
+      bash(`echo x >> ~/.claude/projects/${slug}/memory/MEMORY.md`),
+      bash(`sed -i 's/a/b/' "$HOME/.claude/projects/${slug}/memory/a.md"`),
+      bash(`tee -a \${HOME}/.claude/projects/${slug}/memory/a.md < x`),
+      bash(`cp x "$CLAUDE_CONFIG_DIR/projects/${slug}/memory/"`),
+      bash(`echo x >> ~/.claude/projects/*/memory/MEMORY.md`),
+      bash(`echo x >> ${forward(real).toUpperCase()}/MEMORY.md`),
+      // Git Bash's /c/… for C:/… (Windows paths only).
+      ...(/^[A-Za-z]:\//.test(forward(real))
+        ? [bash(`sed -i 's/a/b/' /${forward(real)[0].toLowerCase()}${forward(real).slice(2)}/MEMORY.md`)]
+        : []),
+      ps(`Add-Content "$env:USERPROFILE\\.claude\\projects\\${slug}\\memory\\MEMORY.md" x`),
+      ps(`Set-Content -Path $env:CLAUDE_CONFIG_DIR\\projects\\${slug}\\memory\\a.md -Value x`),
+    ]) {
+      const result = hook(input, from(task));
+      assert.equal(result.code, 2, `${input.tool_input.command}: ${result.stderr}`);
+      assert.match(result.stderr, /記憶只由統籌與使用者改/);
+    }
+    const other = path.join(tmp, 'other-memory');
+    const named = bash(`echo x >> ${forward(other)}/a.md`);
+    assert.equal(hook(named, from(task)).code, 0);
+    assert.equal(hook(named, { ...from(task), STOCK_MEMORY_DIR: other }).code, 2);
+    assert.equal(hook(bash('echo x >> $STOCK_MEMORY_DIR/a.md'), { ...from(task), STOCK_MEMORY_DIR: other }).code, 2);
+  });
+
+  test('the same commands in the management checkout (master) are allowed', () => {
+    for (const dir of [real, linked]) {
+      for (const input of commands(dir)) {
+        const result = hook(input, from(master));
+        assert.equal(result.code, 0, `${input.tool_input.command}: ${result.stderr}`);
+      }
+    }
+  });
+
+  test('commands that name no memory directory are not affected', () => {
+    const sibling = forward(path.join(path.dirname(real), 'memory-old'));
+    for (const input of [
+      bash(`echo x >> ${forward(task)}/a.md`),
+      bash(`sed -i 's/a/b/' ${sibling}/a.md`),
+      bash(`cp a.md ${forward(path.join(path.dirname(path.dirname(real)), 'C--other-project', 'memory'))}/a.md`),
+      bash('grep -n memory docs/COORDINATOR.md'),
+      ps(`Add-Content -Path '${backslash(tmp)}\\memory.md' -Value x`),
+      ps("Set-Content -Path .\\MEMORY.md -Value x"),
+    ]) {
+      const result = hook(input, from(task));
+      assert.equal(result.code, 0, `${input.tool_input.command}: ${result.stderr}`);
+    }
+  });
 });
 
 // .env files: every fixture is a fake file in a temporary directory; no test opens a real .env.
