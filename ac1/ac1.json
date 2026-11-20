@@ -1,0 +1,235 @@
+{
+ "read": [
+  "2012-12-01",
+  "2019-12-31"
+ ],
+ "first_signal_day": "2014-12-26",
+ "sessions": {
+  "2012": 21,
+  "2013": 246,
+  "2014": 248,
+  "2015": 244,
+  "2016": 244,
+  "2017": 246,
+  "2018": 247,
+  "2019": 242
+ },
+ "list_sessions": {
+  "TWSE:2012": 21,
+  "TPEx:2012": 21,
+  "TWSE:2013": 246,
+  "TPEx:2013": 246,
+  "TWSE:2014": 248,
+  "TPEx:2014": 248,
+  "TWSE:2015": 244,
+  "TPEx:2015": 244,
+  "TWSE:2016": 244,
+  "TPEx:2016": 244,
+  "TWSE:2017": 246,
+  "TPEx:2017": 246,
+  "TWSE:2018": 247,
+  "TPEx:2018": 247,
+  "TWSE:2019": 242,
+  "TPEx:2019": 242
+ },
+ "by_year": {
+  "2012:TPEx": {
+   "member_days": 182,
+   "chip_row": 156,
+   "foreign_buy_null": 182,
+   "trust_buy_null": 182,
+   "dealer_buy_null": 182,
+   "in_list": 156,
+   "margin_balance_null": 26,
+   "margin_balance_zero": 1
+  },
+  "2012:TWSE": {
+   "member_days": 640,
+   "chip_row": 640,
+   "institutional_all3": 634,
+   "in_list": 636,
+   "margin_balance_zero": 20,
+   "foreign_buy_null": 6,
+   "trust_buy_null": 6,
+   "dealer_buy_null": 6,
+   "margin_balance_null": 4
+  },
+  "2013:TPEx": {
+   "member_days": 26235,
+   "chip_row": 24394,
+   "foreign_buy_null": 26235,
+   "trust_buy_null": 26235,
+   "dealer_buy_null": 26235,
+   "in_list": 24394,
+   "margin_balance_zero": 785,
+   "margin_balance_null": 1841
+  },
+  "2013:TWSE": {
+   "member_days": 87843,
+   "chip_row": 87830,
+   "institutional_all3": 87170,
+   "in_list": 87160,
+   "foreign_buy_null": 673,
+   "trust_buy_null": 673,
+   "dealer_buy_null": 673,
+   "margin_balance_zero": 2566,
+   "margin_balance_null": 683
+  },
+  "2014:TPEx": {
+   "member_days": 34976,
+   "chip_row": 33147,
+   "foreign_buy_null": 32684,
+   "trust_buy_null": 32684,
+   "dealer_buy_null": 32684,
+   "in_list": 33026,
+   "institutional_all3": 2292,
+   "margin_balance_zero": 1267,
+   "margin_balance_null": 1950
+  },
+  "2014:TWSE": {
+   "member_days": 95195,
+   "chip_row": 95159,
+   "institutional_all3": 94657,
+   "in_list": 94549,
+   "foreign_buy_null": 538,
+   "trust_buy_null": 538,
+   "dealer_buy_null": 538,
+   "margin_balance_zero": 3330,
+   "margin_balance_null": 646
+  },
+  "2015:TPEx": {
+   "member_days": 25261,
+   "chip_row": 25242,
+   "foreign_buy_null": 521,
+   "trust_buy_null": 521,
+   "dealer_buy_null": 521,
+   "in_list": 23891,
+   "institutional_all3": 24740,
+   "margin_balance_null": 1370,
+   "margin_balance_zero": 690
+  },
+  "2015:TWSE": {
+   "member_days": 79626,
+   "chip_row": 79621,
+   "institutional_all3": 79404,
+   "in_list": 79205,
+   "margin_balance_zero": 2413,
+   "foreign_buy_null": 222,
+   "trust_buy_null": 222,
+   "dealer_buy_null": 222,
+   "margin_balance_null": 421
+  },
+  "2016:TPEx": {
+   "member_days": 23100,
+   "chip_row": 23083,
+   "institutional_all3": 22700,
+   "in_list": 21914,
+   "foreign_buy_null": 400,
+   "trust_buy_null": 400,
+   "dealer_buy_null": 400,
+   "margin_balance_null": 1186,
+   "margin_balance_zero": 572
+  },
+  "2016:TWSE": {
+   "member_days": 71093,
+   "chip_row": 71093,
+   "institutional_all3": 70767,
+   "in_list": 70789,
+   "foreign_buy_null": 326,
+   "trust_buy_null": 326,
+   "dealer_buy_null": 326,
+   "margin_balance_zero": 1880,
+   "margin_balance_null": 304
+  },
+  "2017:TPEx": {
+   "member_days": 30103,
+   "chip_row": 30092,
+   "institutional_all3": 29676,
+   "in_list": 29364,
+   "foreign_buy_null": 427,
+   "trust_buy_null": 427,
+   "dealer_buy_null": 427,
+   "margin_balance_zero": 1270,
+   "margin_balance_null": 739
+  },
+  "2017:TWSE": {
+   "member_days": 85897,
+   "chip_row": 85891,
+   "institutional_all3": 85298,
+   "in_list": 85107,
+   "foreign_buy_null": 599,
+   "trust_buy_null": 599,
+   "dealer_buy_null": 599,
+   "margin_balance_zero": 3081,
+   "margin_balance_null": 790
+  },
+  "2018:TPEx": {
+   "member_days": 27071,
+   "chip_row": 27045,
+   "institutional_all3": 26771,
+   "in_list": 26090,
+   "foreign_buy_null": 300,
+   "trust_buy_null": 300,
+   "dealer_buy_null": 300,
+   "margin_balance_zero": 634,
+   "margin_balance_null": 981
+  },
+  "2018:TWSE": {
+   "member_days": 82359,
+   "chip_row": 82350,
+   "institutional_all3": 81996,
+   "in_list": 81793,
+   "foreign_buy_null": 363,
+   "trust_buy_null": 363,
+   "dealer_buy_null": 363,
+   "margin_balance_zero": 2177,
+   "margin_balance_null": 566
+  },
+  "2019:TPEx": {
+   "member_days": 23545,
+   "chip_row": 23541,
+   "institutional_all3": 23388,
+   "in_list": 22774,
+   "foreign_buy_null": 157,
+   "trust_buy_null": 157,
+   "dealer_buy_null": 157,
+   "margin_balance_null": 771,
+   "margin_balance_zero": 585
+  },
+  "2019:TWSE": {
+   "member_days": 77536,
+   "chip_row": 77536,
+   "institutional_all3": 77380,
+   "in_list": 76948,
+   "margin_balance_zero": 1469,
+   "foreign_buy_null": 156,
+   "trust_buy_null": 156,
+   "dealer_buy_null": 156,
+   "margin_balance_null": 588
+  }
+ },
+ "signal_period": {
+  "TWSE": {
+   "member_days": 398164,
+   "chip_row": 398144,
+   "institutional_all3": 396435,
+   "in_list": 395480,
+   "foreign_buy_null": 1729,
+   "trust_buy_null": 1729,
+   "dealer_buy_null": 1729,
+   "margin_balance_zero": 11079,
+   "margin_balance_null": 2684
+  },
+  "TPEx": {
+   "member_days": 129616,
+   "chip_row": 129538,
+   "institutional_all3": 127771,
+   "in_list": 124538,
+   "foreign_buy_null": 1845,
+   "trust_buy_null": 1845,
+   "dealer_buy_null": 1845,
+   "margin_balance_null": 5078,
+   "margin_balance_zero": 3772
+  }
+ }
+}
