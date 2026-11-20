@@ -370,6 +370,10 @@ describe('memory directory rules', () => {
       bash(`cp x "$CLAUDE_CONFIG_DIR/projects/${slug}/memory/"`),
       bash(`echo x >> ~/.claude/projects/*/memory/MEMORY.md`),
       bash(`echo x >> ${forward(real).toUpperCase()}/MEMORY.md`),
+      // Git Bash's /c/… for C:/… (Windows paths only).
+      ...(/^[A-Za-z]:\//.test(forward(real))
+        ? [bash(`sed -i 's/a/b/' /${forward(real)[0].toLowerCase()}${forward(real).slice(2)}/MEMORY.md`)]
+        : []),
       ps(`Add-Content "$env:USERPROFILE\\.claude\\projects\\${slug}\\memory\\MEMORY.md" x`),
       ps(`Set-Content -Path $env:CLAUDE_CONFIG_DIR\\projects\\${slug}\\memory\\a.md -Value x`),
     ]) {

@@ -52,7 +52,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 
 ## 工程師 terminal 與 resume
 
-- **工程師 terminal 與 resume**（#595）：工程師的 terminal 是 `dispatch.sh` 回報的 handle，也就是 `orca terminal list --json` 裡 `paneTitle` 是 `#<issue> <slug>` 的那個（列表裡有 `agentIdentity`，monitor 讀確認框也認這一欄，#873）。同一個 worktree 另有 Orca 自動建的裸 shell terminal，它停在 `$` 不代表 session 退出；`lastOutputAt` 會被畫面重繪推進，`preview` 尾端是輸入框的建議草稿，都不能當成工作中或閒置的證據。resume 前先確認沒有該任務的 claude 程序（`Get-CimInstance Win32_Process -Filter "Name='claude.exe'"` 的命令列帶 `additionalDirectories` 的 `…/t<issue>/task`（#835 起；之前是 `--add-dir …/t<issue>/task`）或 `--resume <id>`）；有就是 session 還在，回到它的 terminal，不另開，否則同一個 session id 會有兩個程序。確定沒有才在 dispatch 回報的 terminal（不在了就新開一個）照[本機檢查](../WORKFLOW.md#本機檢查)的 resume 命令接回。
+- **工程師 terminal 與 resume**（#595）：工程師的 terminal 是 `dispatch.sh` 回報的 handle，也就是 `orca terminal list --json` 裡該 worktree 有 `agentIdentity` 的那個（`paneTitle` 不一定有；monitor 讀確認框也認 `agentIdentity`，#873）。同一個 worktree 另有 Orca 自動建的裸 shell terminal，它停在 `$` 不代表 session 退出；`lastOutputAt` 會被畫面重繪推進，`preview` 尾端是輸入框的建議草稿，都不能當成工作中或閒置的證據。resume 前先確認沒有該任務的 claude 程序（`Get-CimInstance Win32_Process -Filter "Name='claude.exe'"` 的命令列帶 `additionalDirectories` 的 `…/t<issue>/task`（#835 起；之前是 `--add-dir …/t<issue>/task`）或 `--resume <id>`）；有就是 session 還在，回到它的 terminal，不另開，否則同一個 session id 會有兩個程序。確定沒有才在 dispatch 回報的 terminal（不在了就新開一個）照[本機檢查](../WORKFLOW.md#本機檢查)的 resume 命令接回。
 
 ## 執行換手
 
@@ -111,7 +111,7 @@ patrol 寫心跳檔、讀自己的計數檔與換手標記，不讀排程日誌�
 
 monitor 的喚醒會記 `prompt_blocked`，持續 10 分鐘、至少 2 次後在 #1 留言「待使用者：統籌停在確認框」，同一次停住只留一則，這段期間不留「請開統籌」（#720，[統籌事件 monitor](MONITOR.md)）。這只在佇列有事件要喚醒時才偵測得到；沒有事件等著時停住不會被發現，也不會誤事。
 
-工程師 terminal 停在權限或信任確認框滿 10 分鐘，monitor 發一個「立即」事件 `engineer_prompt_blocked`（Issue、terminal handle、從幾點起、確認框裡命令的第一行；#873，[GUARDRAILS](../GUARDRAILS.md) 對照表、[統籌事件 monitor](MONITOR.md)），patrol 的名額列也標「工程師停在確認框」。monitor 不替工程師選：讀那個 terminal 的畫面判斷，要擋的命令選 No，再在 Issue 留 `決定：` 說怎麼繼續；該核准的（例如工程師要讀任務檔目錄外的檔）才選 Yes。寫記憶目錄的命令已由 `agent_guard.cjs` 直接拒絕，不會再跳框。
+工程師 terminal 停在權限或信任確認框滿 10 分鐘，monitor 發一個「立即」事件 `engineer_prompt_blocked`（Issue、terminal handle、從幾點起、確認框裡命令的第一行；#873，[GUARDRAILS](../GUARDRAILS.md) 對照表、[統籌事件 monitor](MONITOR.md)），patrol 的名額列也標「工程師停在確認框」。monitor 不替工程師選。統籌讀那個 terminal 的畫面判斷：要擋的命令，統籌可以選 No，再在 Issue 留 `決定：` 說怎麼繼續；需要核准的，統籌不代選 Yes，在 #1 留「待使用者」，請使用者到那個 terminal 自己選（[WORKFLOW 任務流程](../WORKFLOW.md#任務流程)：確認框只有使用者能選）。寫記憶目錄的命令已由 `agent_guard.cjs` 直接拒絕，不會再跳框。
 
 ## 記憶的檢查
 
