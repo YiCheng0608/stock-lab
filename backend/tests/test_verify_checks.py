@@ -612,6 +612,8 @@ def test_today_shots_include_the_market_page():
         ("today", "/", (1280, 390)),
         # The page's second list (Issue 769), selected through ?list=.
         ("today-mainstream", "/?list=mainstream", (1280, 390)),
+        # And its third (Issue 882).
+        ("today-h2", "/?list=h2", (1280, 390)),
         ("market", "/market", (1280, 390)),
         ("market-tpex", "/market?index=tpex", (1280,)),
         ("market-tx", "/market?index=tx", (1280,)),
@@ -3665,3 +3667,177 @@ def test_t26_marks_of_another_days_today_list_carry_the_date(tmp_path):
         page_checks.t26(_t26_run(tmp_path, today_day="2026-10-19"))
     with pytest.raises(page_checks.Fail, match="第 1 列是"):
         page_checks.t26(_t26_run(tmp_path, dated))
+
+
+# ---- T27: 接近年高前 20, the today page's third list (Issue 882) ----
+
+
+def _h2(status="computed", items=None):
+    if items is None:
+        items = [
+            {
+                "rank": 1,
+                "instrument": {
+                    "exchange": "TWSE",
+                    "symbol": "9101",
+                    "name": "示範晶圓",
+                },
+                "high_gap_240": 0.0,
+                "today_list": {"rank": 1},
+            },
+            {
+                "rank": 2,
+                "instrument": {
+                    "exchange": "TPEx",
+                    "symbol": "9202",
+                    "name": "示範板卡",
+                },
+                "high_gap_240": -0.032144,
+                "today_list": None,
+            },
+            {
+                "rank": 3,
+                "instrument": {
+                    "exchange": "TPEx",
+                    "symbol": "9204",
+                    "name": "示範新上櫃",
+                },
+                "high_gap_240": None,
+                "today_list": None,
+            },
+        ]
+    return {
+        "status": status,
+        "trading_date": "2026-10-16",
+        "window": 240,
+        "universe_count": 1586 if status == "computed" else None,
+        "items": items if status == "computed" else [],
+    }
+
+
+T27_DEFINITION = (
+    "收盤最接近一年高點（近 240 個交易日最高價，價格還原除權息）的 20 檔；"
+    "母體 1,586 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期"
+)
+T27_ROWS = (
+    "#1 9101 示範晶圓 上市\n距一年高點 0.00%\n今日名單 #1\n收盤（元）\n360.00\n+1.20%\n"
+    "#2 9202 示範板卡 上櫃\n距一年高點 -3.21%\n收盤（元）\n50.00\n-0.40%\n"
+    "#3 9204 示範新上櫃 上櫃\n距一年高點 —\n收盤（元）\n20.00\n+0.50%\n"
+)
+T27_PAGE = (
+    "今日名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n接近年高前 20\n"
+    "接近年高前 20\n3 檔\n"
+    + T27_DEFINITION
+    + "\n"
+    + T27_ROWS
+    + T26_CARD
+    + "熱門族群\n#1\n"
+)
+
+
+def _t27_run(tmp_path, page=T27_PAGE, payload=None, rows=None, today_day="2026-10-16"):
+    metas = {
+        "today-h2": {
+            1280: {"width": 1280, "ready": True},
+            390: {
+                "width": 390,
+                "ready": True,
+                "candidateRows": [T26_ROW_METRICS[0]] * 3 if rows is None else rows,
+            },
+        }
+    }
+    payloads = {
+        "h2": _h2() if payload is None else payload,
+        "dashboard": {"as_of": "2026-10-16T17:30:00+08:00"},
+        "candidates": {"trading_date": today_day},
+    }
+    return FakeRun(tmp_path, payloads, {"today-h2-1280": page}, metas=metas)
+
+
+def test_t27_passes_on_the_lines_h2_json_gives(tmp_path):
+    assert page_checks.t27(_t27_run(tmp_path)) == (
+        "`接近年高前 20` 與頁面同日 2026/10/16，不另標、`3 檔`、定義行；3 列的名次、"
+        "距一年高點與 `今日名單 #n` 1 行 = h2.json；沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
+    )
+
+
+def test_t27_mirrors_the_frontend_definition():
+    # h2.ts h2Definition: the universe is left out when the API has none.
+    assert page_checks.h2_definition({"window": 240, "universe_count": None}) == (
+        "收盤最接近一年高點（近 240 個交易日最高價，價格還原除權息）的 20 檔；"
+        "20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期"
+    )
+
+
+@pytest.mark.parametrize(
+    ("page", "message"),
+    [
+        # A research word or a price level on the list.
+        (
+            T27_PAGE.replace("收盤（元）\n360.00", "持有 60 日\n收盤（元）\n360.00"),
+            "持有",
+        ),
+        (
+            T27_PAGE.replace("收盤（元）\n50.00", "回測 t 值 3.1\n收盤（元）\n50.00"),
+            "回測",
+        ),
+        (
+            T27_PAGE.replace("收盤（元）\n360.00", "停損 300\n收盤（元）\n360.00"),
+            "停損",
+        ),
+        (T27_PAGE.replace("最近 130 根日線", "規則價位線：三條虛線"), "規則價位線"),
+        # A group part on the title, a coloured or rounded distance, a missing value as 0.
+        (
+            T27_PAGE.replace(
+                "#1 9101 示範晶圓 上市\n", "#1 9101 示範晶圓 上市 · 半導體業\n"
+            ),
+            "第 1 列是",
+        ),
+        (T27_PAGE.replace("距一年高點 -3.21%", "距一年高點 -3.2%"), "第 2 列是"),
+        (T27_PAGE.replace("距一年高點 —", "距一年高點 0.00%"), "第 3 列是"),
+        (T27_PAGE.replace("今日名單 #1\n", ""), "第 1 列是"),
+        (T27_PAGE.replace("母體 1,586 檔", "母體 1586 檔"), "定義行是"),
+        (T27_PAGE.replace("入選後 60 個交易日", "入選後 20 個交易日"), "定義行是"),
+        (T27_PAGE.replace("3 檔\n", "20 檔\n"), "預期 `3 檔`"),
+        (
+            T27_PAGE.replace("接近年高前 20\n接近年高前 20\n", "接近年高前 20\n"),
+            "缺標題",
+        ),
+    ],
+)
+def test_t27_fails(tmp_path, page, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t27(_t27_run(tmp_path, page))
+
+
+def test_t27_fails_on_a_clipped_phone_row(tmp_path):
+    rows = [T26_ROW_METRICS[0]] * 2 + [{**T26_ROW_METRICS[0], "clipped": ["dd 20.00"]}]
+    with pytest.raises(page_checks.Fail, match="#3 超出列邊被切：dd 20.00"):
+        page_checks.t27(_t27_run(tmp_path, rows=rows))
+
+
+@pytest.mark.parametrize(
+    ("status", "line"),
+    [("missing", "尚無接近年高名單"), ("zero", "當日沒有股票進入母體")],
+)
+def test_t27_empty_states(tmp_path, status, line):
+    page = (
+        "今日名單\n主流族群前 20\n接近年高前 20\n接近年高前 20\n"
+        + line
+        + "\n熱門族群\n"
+    )
+    run = _t27_run(tmp_path, page, payload=_h2(status))
+    assert page_checks.t27(run) == f"{status}：顯示 `{line}`，沒有名次列"
+    with pytest.raises(page_checks.Fail, match=f"缺 `{line}`"):
+        page_checks.t27(
+            _t27_run(tmp_path, page.replace(line, "x"), payload=_h2(status))
+        )
+
+
+def test_t27_marks_of_another_days_today_list_carry_the_date(tmp_path):
+    dated = T27_PAGE.replace("今日名單 #1\n", "2026/10/16 今日名單 #1\n")
+    assert "`今日名單 #n` 1 行" in page_checks.t27(
+        _t27_run(tmp_path, dated, today_day="2026-10-19")
+    )
+    with pytest.raises(page_checks.Fail, match="第 1 列是"):
+        page_checks.t27(_t27_run(tmp_path, today_day="2026-10-19"))
