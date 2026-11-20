@@ -163,3 +163,20 @@ def test_the_handover_text_is_kept_once() -> None:
     assert "接手文固定如下" not in handbook
     assert reference.count("接手文固定如下") == 1
     assert _part(reference, "接手文").startswith("你是 stock-lab 的統籌。")
+
+
+# Every take-over reads the whole handbook, so each byte is paid on every new coordinator
+# (#850 AC-4, #857). The limit: after #857 moved the details of 記憶「檢查」 to the
+# reference, docs/COORDINATOR.md was 14,082 bytes; 14,200 is #857 AC-1's target and leaves
+# 118 bytes, less than one line of it. A new paragraph belongs in the reference behind a
+# "遇到 X 時讀 Y" line; raising the limit is a change to this file, reviewed like any other.
+HANDBOOK_MAX_BYTES = 14_200
+
+
+def test_the_handbook_stays_within_its_byte_limit() -> None:
+    """#857 AC-2: docs/COORDINATOR.md, as UTF-8 bytes on disk, is at most the limit."""
+    size = (ROOT / "docs/COORDINATOR.md").stat().st_size
+    assert size <= HANDBOOK_MAX_BYTES, (
+        f"docs/COORDINATOR.md is {size:,} bytes, over {HANDBOOK_MAX_BYTES:,}: move what a "
+        "take-over does not need to docs/ops/COORDINATOR_REFERENCE.md"
+    )

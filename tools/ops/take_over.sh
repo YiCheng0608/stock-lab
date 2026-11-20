@@ -35,7 +35,7 @@
 #   memory      memory_check.py on the Claude Code memory directory (read only, #705;
 #               $STOCK_MEMORY_DIR or the one Claude Code keeps for this repo): a failure
 #               names the memory and the check; the coordinator fixes it and goes on
-#               --from memory (docs/COORDINATOR.md 記憶)
+#               --from memory (docs/ops/COORDINATOR_REFERENCE.md 記憶的檢查)
 # A step that fails stops the run: nothing after it is done, and the steps already done are
 # printed with the command that goes on from the failed one (--from). The last line is
 # JSON: {"ok", "done": [steps], "failed": step or null, "reason", "comment_url"}.
