@@ -237,7 +237,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 - 只用日線、籌碼、月營收，不讀研究回測 run。
 
 **凍結**
-- 參數寫死在 `HYPOTHESES`，命令列沒有改參數的旗標；要改就是 H2，另開單。
+- 參數寫死在 `HYPOTHESES`，命令列沒有改參數的旗標；要改就是新的代號（下一個沒用過的 `H<n>`），另開單。H2 已是第一輪 X2 通過驗證後的代號（[狀態紀錄](#狀態紀錄)）。
 - 測試以金樣鎖住 H1 在測試資料上的五個輸出檔，引擎、特徵、成本或報告一改就紅。
 - 一致性：起日設成 #689 的第一個訊號日時，H1 的淨值、每日前 20 名與成交，和 `--rankings 689` 的 `trust_rev-all` 的 `K20:top5` 逐位元組相同（測試與副本試跑各驗一次）。
 - 凍結的 commit：`1b42e4180559d26b647fb339c7cf5bab25054236`（加入 H1 入口與金樣的 commit，經 PR 合併進 master）。之後 `tools/research/` 有改動時，以 H1 金樣測試仍綠為準。
@@ -267,6 +267,12 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 - **前瞻**：只當紀錄，不是 H1 成立的條件（使用者決定 [6880114734](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880114734) 第 3 項）。引擎是因果的，判定只用前 250 日，之後重跑同一份資料得到同一個判定。滿 250 日之前每月只輸出「樣本不足（累積 X／250 日）」與目前的數字，標明不是判定，不因中途 t 碰巧過 2 就宣告通過。M 取 250：以 #689 的效果量估（每日 t ÷ √日數，驗證段約 0.21、探索段約 0.14），120 日的預期 t 只有約 1.6～2.3，判出「方向一致但不顯著」的機會高。`forward_judge`、M 與金樣都不改，只改對結果的解讀。
 - **歷史樣本外**：2024-09-30 以前的資料從沒被用來挑 H1。等 [#692](https://github.com/YiCheng0608/stock-lab/issues/692) 把 H1 需要的資料（日線、投信、月營收）回補並驗收後，用同一個凍結的 H1 跑一次，只跑一次。加註（2026-11-15，[#781](https://github.com/YiCheng0608/stock-lab/issues/781)）：研究 DB 的月營收在下市、轉板標的上是 0 列，H1 的次鍵 `revenue_high_12` 對它們缺值、排在最後；月營收由 [#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補齊並由統籌看過剩下的缺口以前，不跑這一次。起日取主鍵有值的日子，因為各來源補到的年份可能不同；之前排序只剩雜湊。命令會載入副本從頭到現在的日線，跑之前先看記憶體。結果由統籌在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 回報使用者。
 - **H1 成立**：歷史樣本外那一次判「通過」才算成立，其餘判定都是不成立，之後前瞻的數字再好也不改。成立之後要不要進產品，提案由使用者決定；進產品後照[新策略探索](#新策略探索)的「前瞻監測與下架」監測。
+- **歷史樣本外的結果**（2026-11-20，[#867 回報 7033025924](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7033025924)，[原始輸出](https://github.com/YiCheng0608/stock-lab/tree/pr-assets/867/h1-historical)）：
+  - 只跑一次，凍結的 H1 原樣跑；有淨值的交易日 2012-05-09～2024-09-27，共 3,037 日，M＝60。
+  - 對母體超額年化 6.47%、t 2.17，判「**通過**」，所以 **H1 成立**。
+  - 對加權指數超額年化 −2.05%、t −0.54，只列出。
+  - 對照（只列出、不改判定，[7033796844](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7033796844)）：基準去掉缺 `revenue_high_12` 的下市股後，t 是 1.92。
+  - 要不要進產品待使用者決定（[#1 7034137713](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7034137713)）。
 
 **每月流程**（統籌）
 1. 每月第一個交易日之後的白天（不在台北 21:30～23:30），以 `copy_db.py` 複製唯讀副本到任務 volume（空閒記憶體 ≥ 5 GB）。
@@ -612,6 +618,31 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | 起日 | 各資料兩市場都有值的最晚起始日＋暖機 |
 | 登記日、登記 commit | — |
 | 狀態 | 同上表 |
+
+#### 狀態紀錄
+
+各輪登記時的狀態都是「登記」，寫在各輪那一段，不改。之後的狀態寫在這張表，只往下加列，不改前面的列。t 是對母體超額的 t，也就是判定用的那一個；工具的紀錄是 `tools/research/explore_ledger.json`。
+
+| 代號 | 輪 | 狀態 | 日期 | 對母體 t（探索／驗證） | 報告 |
+| --- | --- | --- | --- | --- | --- |
+| X1 | 1 | 沒有通過（探索段） | 2026-11-20 | 0.76 | [#864 7041131687](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687) |
+| X2 | 1 | 通過 → H2 | 2026-11-20 | 2.70／2.05 | [探索 #864 7041131687](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687)、[驗證 #864 7043710015](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043710015)；H2 的前瞻入口在 [#875](https://github.com/YiCheng0608/stock-lab/issues/875) |
+| X3 | 1 | 沒有通過（探索段） | 2026-11-20 | 0.71 | [#867 7032779893](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032779893) |
+| X4 | 1 | 前瞻觀察 | 2026-11-20 | 2.52／0.80 | [探索 #867 7032779893](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032779893)、[驗證 #867 7033243199](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7033243199) |
+| X5 | 1 | 沒有通過（探索段） | 2026-11-20 | −1.53 | [#864 7041131687](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687) |
+| X6 | 1 | 沒有通過（探索段） | 2026-11-20 | 0.05 | [#864 7043843003](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043843003) |
+| X7 | 1 | 沒有通過（探索段） | 2026-11-20 | 1.36 | [#867 7032779893](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032779893) |
+| X8 | 1 | 沒有通過（探索段） | 2026-11-20 | 0.71 | [#864 7041131687](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687) |
+| S1 | 2 | 沒有通過（探索段） | 2026-11-20 | 1.73 | [#867 7032806940](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032806940) |
+| S2 | 2 | 沒有通過（探索段） | 2026-11-20 | 1.83 | 同上 |
+| S3 | 2 | 沒有通過（探索段） | 2026-11-20 | 1.46 | 同上 |
+| R1 | 2 | 沒有通過（探索段） | 2026-11-20 | −0.22 | [#865 7031992568](https://github.com/YiCheng0608/stock-lab/issues/865#issuecomment-7031992568) |
+| R2 | 2 | 沒有通過（探索段） | 2026-11-20 | 0.86 | 同上 |
+| M1 | 3 | 沒有通過（探索段） | 2026-11-20 | 0.56 | [#866 7041146001](https://github.com/YiCheng0608/stock-lab/issues/866#issuecomment-7041146001) |
+| M2 | 3 | 沒有通過（探索段） | 2026-11-20 | −0.02 | 同上 |
+
+- X6 有一個已知缺口：TWSE 週六補班日，官方三大法人表只列當天有法人進出的證券，沒列的照登記規則缺值排最後。估計影響約 0.3% 的選股檔次（[#864 7043539560](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043539560)、[決定 7043686420](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043686420)）。
+- S1～S3、X3、X4、X7、H1 用到月營收或 EPS。研究 DB 多數下市公司沒有月營收，偏差有利於假設，處理照 [#867 決定 7032683717](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032683717)。
 
 ### 第一輪：X1～X8
 
