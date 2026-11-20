@@ -25,9 +25,26 @@ from app.models import Instrument, MarketBar
 from app.strategies import REGISTRY, StrategyInputs, canonical_config_snapshot
 from app.strategies.breakout_v3 import BREAKOUT_V3
 from app.strategies.pullback_v3 import PULLBACK_V3
+from app.strategies.pullback_v4 import PULLBACK_V4
 from app.strategies.index_conditions import (
+    ALL_CONDITIONS,
     BASES,
+    COMMON_COST,
     CONDITIONS,
+    NEXT_SESSION_UNKNOWN,
+    OVERNIGHT_BASES,
+    OVERNIGHT_CONDITIONS,
+    OVERNIGHT_MIN_REMOVED,
+    OVERNIGHT_MIN_REMOVED_DAYS,
+    OVERNIGHT_MIN_T20,
+    OVERNIGHT_THRESHOLDS,
+    TRACKING_COST,
+    OvernightComparison,
+    baselines_of,
+    judge_edge,
+    judge_improved,
+    overnight_conditions,
+    overnight_verdict,
     EXPLORATION,
     MARKET_INDEX_UNKNOWN,
     MIN_REMOVED,
@@ -805,3 +822,482 @@ def test_the_report_refuses_the_production_database(tmp_path):
     argv = ["--db", str(production), "--run-id", "1", "--out", str(tmp_path / "o")]
     assert report.main(argv) == 2
     assert not (tmp_path / "o").exists()
+
+
+# ---- #855: the overnight conditions ----
+
+
+def _overnight(us: dict[date, float], sessions: list[date], key: str = "SOX"):
+    """SOX (or SPX) rows ``us`` and the Taiwan sessions ``sessions``."""
+
+    return IndexHistory(
+        {key: {day: (close, None) for day, close in us.items()}}, sessions
+    )
+
+
+def _us_run(last: date, count: int = 10, close: float = 1000.0) -> dict[date, float]:
+    return {day: close for day in _weekdays(count, last)}
+
+
+def _overnight_result(history: IndexHistory, session: date, code: str):
+    return IndexView(history, session, "TWSE").result(code)
+
+
+def test_the_overnight_conditions_are_the_decided_twelve():
+    # 提問 7018248685 §1, decision 7018301183: SOX and SPX, three thresholds
+    # each, on the strategies the 08:45 list uses; #567 is left as it was.
+    assert list(OVERNIGHT_CONDITIONS) == ["o1", "o2", "o3", "o4", "o5", "o6"]
+    assert [item.series for item in OVERNIGHT_CONDITIONS.values()] == [("SOX",)] * 3 + [
+        ("SPX",)
+    ] * 3
+    assert OVERNIGHT_BASES == {"breakout_v3": BREAKOUT_V3, "pullback_v4": PULLBACK_V4}
+    assert BASES == {"breakout_v3": BREAKOUT_V3, "pullback_v3": PULLBACK_V3}
+    assert overnight_conditions() == [
+        (key, code) for key in OVERNIGHT_BASES for code in OVERNIGHT_CONDITIONS
+    ]
+    assert len(overnight_conditions()) == 12
+    # The decided thresholds, written out (decision 7018301183 §3).
+    assert OVERNIGHT_THRESHOLDS == (
+        ("o1", "SOX", -0.02, True),
+        ("o2", "SOX", -0.01, True),
+        ("o3", "SOX", 0.01, False),
+        ("o4", "SPX", -0.02, True),
+        ("o5", "SPX", -0.01, True),
+        ("o6", "SPX", 0.01, False),
+    )
+    assert not set(OVERNIGHT_CONDITIONS) & set(CONDITIONS)
+    assert ALL_CONDITIONS == {**CONDITIONS, **OVERNIGHT_CONDITIONS}
+    assert all(code in CONDITIONS for _, code in all_conditions())
+    assert research.condition_items(["overnight"]) == overnight_conditions()
+    assert research.condition_items(["pullback_v4:o1"]) == [("pullback_v4", "o1")]
+    with pytest.raises(research.Refused, match="unknown index-condition"):
+        research.condition_items(["pullback_v3:o1"])
+    with pytest.raises(research.Refused, match="unknown index-condition"):
+        research.condition_items(["pullback_v4:c1"])
+    assert baselines_of([("breakout_v3", "c1")]) == BASES
+    assert baselines_of(overnight_conditions()) == OVERNIGHT_BASES
+
+
+@pytest.mark.parametrize(
+    ("code", "previous", "close", "state"),
+    [
+        ("o1", 100.0, 98.0, "rejected"),  # −2 % exactly rejects
+        ("o1", 100.0, 98.01, "passed"),
+        ("o2", 100.0, 99.0, "rejected"),  # −1 % exactly rejects
+        ("o2", 100.0, 99.01, "passed"),
+        ("o3", 100.0, 101.0, "rejected"),  # +1 % exactly rejects
+        ("o3", 100.0, 100.99, "passed"),
+        ("o3", 100.0, 90.0, "passed"),
+        ("o1", 100.0, 120.0, "passed"),
+        ("o4", 100.0, 98.0, "rejected"),  # −2 % exactly rejects
+        ("o4", 100.0, 98.01, "passed"),
+        ("o5", 100.0, 99.0, "rejected"),  # −1 % exactly rejects
+        ("o5", 100.0, 99.01, "passed"),
+        ("o6", 100.0, 101.0, "rejected"),  # +1 % exactly rejects
+        ("o6", 100.0, 100.99, "passed"),
+    ],
+)
+def test_an_overnight_condition_rejects_at_its_threshold(code, previous, close, state):
+    # Taipei Tuesday 2026-03-03, E Wednesday 03-04: the US Tuesday row decides.
+    session, entry = date(2026, 3, 3), date(2026, 3, 4)
+    us = _us_run(date(2026, 3, 2), close=previous) | {session: close}
+    key = OVERNIGHT_CONDITIONS[code].series[0]
+    result = _overnight_result(_overnight(us, [session, entry], key), session, code)
+    assert result.state == state
+    if state == "rejected":
+        assert result.reasons == (f"index_condition_{code}_not_met",)
+
+
+def test_an_overnight_condition_never_reads_the_us_row_dated_the_entry_session():
+    # The US close dated E (Taipei T+1) is in only after E's open (about
+    # 05:00 on E + 1): a fall that day must not reject T's list.
+    session, entry = date(2026, 3, 3), date(2026, 3, 4)
+    flat = _us_run(session)
+    for later in ({entry: 1.0}, {entry: 1.0, date(2026, 3, 5): 1.0}):
+        history = _overnight(flat | later, [session, entry])
+        assert _overnight_result(history, session, "o1").passed
+        row = IndexView(history, session, None).overnight_row("SOX")
+        assert row == {
+            "entry": entry,
+            "date": session,
+            "previous_date": date(2026, 3, 2),
+            "return": 0.0,
+            "rows": 1,
+        }
+    # Only the row dated E exists after T − 1: the US market was closed on T,
+    # and the E row is not read in its place.
+    closed = _us_run(date(2026, 3, 2)) | {entry: 1.0}
+    history = _overnight(closed, [session, entry])
+    assert _overnight_result(history, session, "o1").passed
+    assert IndexView(history, session, None).overnight_row("SOX")["rows"] == 0
+
+
+def test_an_overnight_condition_does_not_read_the_row_before_the_score_date():
+    # T − 1's close was in before T's 21:30 list; with no row in [T, E) the
+    # night had no US close (US holiday), so a fall on T − 1 rejects nothing.
+    # Thanksgiving: Taipei Thursday 2025-11-27 (no US row), E Friday 11-28.
+    session, entry = date(2025, 11, 27), date(2025, 11, 28)
+    us = _us_run(date(2025, 11, 25)) | {date(2025, 11, 26): 500.0, entry: 1000.0}
+    history = _overnight(us, [session, entry])
+    for code in ("o1", "o2", "o3"):
+        assert _overnight_result(history, session, code).passed
+    row = IndexView(history, session, None).overnight_row("SOX")
+    assert row == {"entry": entry, "date": None, "return": None, "rows": 0}
+
+
+def test_an_overnight_condition_reads_friday_over_a_weekend():
+    friday, monday = date(2026, 3, 6), date(2026, 3, 9)
+    us = _us_run(date(2026, 3, 5)) | {friday: 970.0}
+    history = _overnight(us, [friday, monday])
+    row = IndexView(history, friday, None).overnight_row("SOX")
+    assert (row["date"], row["entry"], row["rows"]) == (friday, monday, 1)
+    assert _overnight_result(history, friday, "o1").state == "rejected"
+
+
+def test_a_taiwan_holiday_reads_the_newest_us_row_alone():
+    # Lunar New Year 2026: T Wednesday 02-11, Taiwan closed 02-12..02-20,
+    # E Monday 02-23.  The US rows 02-11..02-20 are all before E's open; the
+    # newest (Friday 02-20) decides, over the row before it; the earlier
+    # fall is not added up.
+    session, entry = date(2026, 2, 11), date(2026, 2, 23)
+    us = _us_run(date(2026, 2, 10)) | {
+        date(2026, 2, 11): 900.0,  # −10 %: not the newest, not read
+        date(2026, 2, 12): 900.0,
+        date(2026, 2, 13): 900.0,
+        # 02-16 is a US holiday: no row
+        date(2026, 2, 17): 900.0,
+        date(2026, 2, 18): 900.0,
+        date(2026, 2, 19): 900.0,
+        date(2026, 2, 20): 891.0,  # −1 %
+    }
+    history = _overnight(us, [session, entry])
+    row = IndexView(history, session, None).overnight_row("SOX")
+    assert (row["date"], row["previous_date"], row["rows"]) == (
+        date(2026, 2, 20),
+        date(2026, 2, 19),
+        7,
+    )
+    assert row["return"] == pytest.approx(-0.01)
+    assert _overnight_result(history, session, "o1").passed
+    assert _overnight_result(history, session, "o2").state == "rejected"
+
+
+TUE, WED = date(2026, 3, 3), date(2026, 3, 4)
+
+
+@pytest.mark.parametrize(
+    ("us", "sessions", "reason"),
+    [
+        # Rows end before T and none after: not collected yet, not a holiday.
+        (_us_run(date(2026, 3, 2)), [TUE, WED], "us_sox_overnight_pending"),
+        # The row before the overnight one is more than US_STALE_DAYS older.
+        (
+            {date(2026, 2, 20): 1000.0, TUE: 1000.0},
+            [TUE, WED],
+            "us_sox_bar_stale",
+        ),
+        # The only row: no previous close.
+        ({TUE: 1000.0}, [TUE, WED], "us_sox_closes_insufficient"),
+        # A missing or non-finite close in the pair.
+        (
+            {date(2026, 3, 2): None, TUE: 1000.0},
+            [TUE, WED],
+            "us_sox_close_missing_or_non_finite",
+        ),
+        (
+            {date(2026, 3, 2): 1000.0, TUE: float("nan")},
+            [TUE, WED],
+            "us_sox_close_missing_or_non_finite",
+        ),
+        # No series at all.
+        ({}, [TUE, WED], "us_sox_overnight_pending"),
+        # T is the last Taiwan session: E is not known.
+        (_us_run(TUE), [date(2026, 3, 2), TUE], NEXT_SESSION_UNKNOWN),
+    ],
+)
+def test_missing_overnight_data_is_data_incomplete(us, sessions, reason):
+    for code in ("o1", "o2", "o3"):
+        result = _overnight_result(_overnight(us, sessions), TUE, code)
+        assert (result.state, result.reasons) == ("data_incomplete", (reason,))
+
+
+def test_the_stale_limit_of_the_previous_overnight_row():
+    for gap, state in (
+        (US_STALE_DAYS, "passed"),
+        (US_STALE_DAYS + 1, "data_incomplete"),
+    ):
+        us = {TUE - timedelta(days=gap): 1000.0, TUE: 1000.0}
+        assert _overnight_result(_overnight(us, [TUE, WED]), TUE, "o1").state == state
+
+
+def test_the_entry_session_is_the_next_taiwan_session_not_the_next_weekday():
+    # A Taiwan session list without 03-04 (a typhoon day): E is 03-05, so the
+    # US rows of 03-03 and 03-04 are both before E, and 03-04 decides.
+    us = _us_run(date(2026, 3, 2)) | {TUE: 1000.0, WED: 970.0}
+    history = _overnight(us, [TUE, date(2026, 3, 5)])
+    row = IndexView(history, TUE, None).overnight_row("SOX")
+    assert (row["entry"], row["date"], row["rows"]) == (date(2026, 3, 5), WED, 2)
+    assert _overnight_result(history, TUE, "o1").state == "rejected"
+    # Without the Taiwan sessions an overnight condition refuses to guess.
+    with pytest.raises(RuntimeError, match="Taiwan sessions"):
+        _overnight_result(IndexHistory({"SOX": {}}), TUE, "o1")
+
+
+def test_an_overnight_condition_on_pullback_v4_keeps_its_result_when_it_holds():
+    history = _overnight(_us_run(TUE), [TUE, WED])
+    strategy = condition_strategy("pullback_v4", "o2", history)
+    snapshot = strategy.config["index_condition"]
+    assert strategy.key == "pullback_v4_index_o2"
+    assert snapshot["base_strategy"] == "pullback_v4"
+    assert snapshot["base_version"] == PULLBACK_V4.version
+    assert snapshot["issue"] == 855 and snapshot["series"] == ["SOX"]
+    assert snapshot["us_market_closed"] == "condition_holds"
+    assert type(strategy) is type(PULLBACK_V4)
+    with pytest.raises(KeyError):
+        condition_strategy("pullback_v3", "o2", history)
+    # #567's snapshots keep their issue.
+    c4a = condition_strategy("pullback_v3", "c4a", history)
+    assert c4a.config["index_condition"]["issue"] == 567
+    rng = random.Random(855)
+    view = IndexView(history, TUE, "TWSE")
+    for _ in range(DRAWS // 10):
+        arguments = _random_arguments("pullback_v4", rng)
+        assert strategy.rule(**arguments, index_view=view) == PULLBACK_V4.rule(
+            **arguments
+        )
+
+
+def _overnight_comparison(**changes) -> OvernightComparison:
+    values = {
+        "removed": OVERNIGHT_MIN_REMOVED,
+        "removed_days": OVERNIGHT_MIN_REMOVED_DAYS,
+        "t20_n": OVERNIGHT_MIN_T20,
+        "net_mean": 0.01,
+        "baseline_net_mean": 0.005,
+        "excess_mean": 0.004,
+        "baseline_excess_mean": 0.001,
+    }
+    return OvernightComparison(**(values | changes))
+
+
+def test_the_two_overnight_judgements():
+    assert (TRACKING_COST, COMMON_COST) == (0.003, 0.00585)
+    # The sample floor of the decision, written out: 30 removed, 5 days, 100 T+20.
+    assert (OVERNIGHT_MIN_REMOVED, OVERNIGHT_MIN_REMOVED_DAYS, OVERNIGHT_MIN_T20) == (
+        30,
+        5,
+        100,
+    )
+    for field, short, enough in (
+        ("removed", 29, 30),
+        ("removed_days", 4, 5),
+        ("t20_n", 99, 100),
+    ):
+        assert judge_improved(_overnight_comparison(**{field: short})) == "insufficient"
+        assert judge_improved(_overnight_comparison(**{field: enough})) == "improved"
+    good = _overnight_comparison()
+    assert judge_improved(good) == "improved" and judge_edge(good) == "edge"
+    assert good.common_net_mean == pytest.approx(0.01 + 0.003 - 0.00585)
+    # The sample floor: one short of each is insufficient, never a pass.
+    for field, value in (
+        ("removed", OVERNIGHT_MIN_REMOVED - 1),
+        ("removed_days", OVERNIGHT_MIN_REMOVED_DAYS - 1),
+        ("t20_n", OVERNIGHT_MIN_T20 - 1),
+        ("net_mean", None),
+        ("baseline_excess_mean", None),
+    ):
+        item = _overnight_comparison(**{field: value})
+        assert judge_improved(item) == judge_edge(item) == "insufficient"
+    # Improved needs both (a) and (b) strictly above the baseline.
+    for changes in (
+        {"net_mean": 0.005},
+        {"excess_mean": 0.001},
+        {"net_mean": 0.004},
+        {"excess_mean": 0.0},
+    ):
+        item = _overnight_comparison(**changes)
+        assert judge_improved(item) == "not_improved"
+        assert judge_edge(item) == "no_edge"
+    # Improved over a losing baseline is not an edge: (a) at 58.5 bps and (b) > 0.
+    losing = _overnight_comparison(
+        net_mean=-0.002,
+        baseline_net_mean=-0.01,
+        excess_mean=0.001,
+        baseline_excess_mean=-0.002,
+    )
+    assert judge_improved(losing) == "improved" and judge_edge(losing) == "no_edge"
+    # (a) 0.28 % at 30 bps is −0.005 % at 58.5 bps: no edge.
+    thin = _overnight_comparison(net_mean=0.0028, baseline_net_mean=0.0)
+    assert judge_improved(thin) == "improved" and judge_edge(thin) == "no_edge"
+    # (a) positive but (b) not above 0: no edge.
+    beta = _overnight_comparison(excess_mean=0.0, baseline_excess_mean=-0.003)
+    assert judge_improved(beta) == "improved" and judge_edge(beta) == "no_edge"
+    # Both segments must pass each level.
+    assert overnight_verdict(good, good) == {"improved": True, "edge": True}
+    assert overnight_verdict(good, losing) == {"improved": True, "edge": False}
+    assert overnight_verdict(good, _overnight_comparison(removed=0)) == {
+        "improved": False,
+        "edge": False,
+    }
+
+
+def test_the_overnight_costs_are_their_sources():
+    # (a) is tracking_v2's settlement (its round trip); (a′) is evidence.md's
+    # 共同口徑, which evidence_lib's tools use.
+    from app.tracking import ROUND_TRIP_TRANSACTION_COST_BPS
+
+    lib = report._evidence_lib()
+    assert TRACKING_COST == pytest.approx(ROUND_TRIP_TRANSACTION_COST_BPS / 10_000)
+    assert COMMON_COST == pytest.approx(lib.DEFAULT_COST_BPS / 10_000)
+
+
+def test_the_population_mean_is_the_t20_return_less_tracking_cost(monkeypatch):
+    day = date(2025, 3, 3)
+    calls = []
+
+    def forward_return(item, at, horizon):
+        calls.append((item, at, horizon))
+        return {"x": 0.02, "y": -0.01, "z": None}[item]
+
+    fake = type(
+        "Lib",
+        (),
+        {
+            "DEFAULT_MIN_LOTS": 7,
+            "load_panel": staticmethod(lambda db, start, raw: "panel"),
+            "universe": staticmethod(
+                lambda panel, at, lots: [("x", 1), ("y", 1), ("z", 1)]
+                if (panel, at, lots) == ("panel", day, 7)
+                else []
+            ),
+            "forward_return": staticmethod(forward_return),
+        },
+    )
+    monkeypatch.setattr(report, "_evidence_lib", lambda: fake)
+    means = report.population_means(Path("/nowhere"), [day], Path("/raw"))
+    # (0.02 − 0.01) / 2 less 30 bps; the one without a T+20 is left out.
+    assert means == {day: pytest.approx(0.005 - 0.003)}
+    assert {horizon for _, _, horizon in calls} == {20}
+
+
+def test_the_overnight_numbers_of_a_hand_written_run():
+    """(a), (b), the removed group and the fill days on numbers worked by hand."""
+
+    import app.strategies.index_conditions as ic
+
+    t1, e1 = date(2025, 3, 3), date(2025, 3, 4)  # exploration; E is Tuesday
+    history = IndexHistory({}, [t1, e1, date(2025, 3, 5), date(2025, 3, 6)])
+    a, b, c, d, e = ((n, t1) for n in range(1, 6))
+    baseline = {
+        a: (101, "x"),
+        b: (102, "x"),
+        c: (103, "x"),
+        d: (104, "x"),
+        e: (105, "x"),
+    }
+    own = {a: (201, "x"), b: (202, "x")}
+    parts = {"rejected": [c, d, e], "data_incomplete": []}
+
+    def t20(value):
+        return {20: (True, value, "target_1_hit")}
+
+    settled = {
+        101: t20(0.02),
+        102: t20(0.0),
+        103: t20(-0.04),
+        104: t20(0.01),
+        201: t20(0.02),
+        202: t20(0.0),
+    }
+    population = {t1: -0.01}
+    # 103 filled at E, 104 the day after, 105 never.
+    executed = {103: e1, 104: date(2025, 3, 5)}
+    judged, fills = report.overnight_judgement(
+        ic, own, baseline, parts, settled, population, executed, history
+    )
+    got = judged["exploration"]
+    assert (got["removed"], got["removed_days"], got["t20_n"]) == (3, 1, 2)
+    # (a): the settled T+20 as stored (already net of tracking's cost).
+    assert got["net_mean"] == pytest.approx(0.01)
+    assert got["baseline_net_mean"] == pytest.approx(-0.0025)
+    assert got["common_net_mean"] == pytest.approx(0.01 + 0.003 - 0.00585)
+    # (b): each (a) less its day's population mean.
+    assert got["excess_mean"] == pytest.approx(0.02)
+    assert got["baseline_excess_mean"] == pytest.approx(0.0075)
+    assert got["improved"] == got["edge"] == "insufficient"
+    removed = got["removed_group"]
+    assert removed["t20_n"] == 2
+    assert removed["net_mean"] == pytest.approx(-0.015)
+    assert removed["excess_mean"] == pytest.approx(-0.005)
+    # The fill day is compared with E, not with T.
+    groups = fills["exploration"]
+    assert {fill: groups[fill]["signals"] for fill in report.FILLS} == {
+        "entry_day": 1,
+        "later": 1,
+        "not_filled": 1,
+    }
+    assert groups["entry_day"]["net_mean"] == pytest.approx(-0.04)
+    assert groups["later"]["net_mean"] == pytest.approx(0.01)
+    assert groups["not_filled"]["t20_n"] == 0
+    assert judged["validation"]["removed"] == 0
+    assert judged["verdict"] == {"improved": False, "edge": False}
+
+
+def test_a_report_of_an_overnight_run_on_the_fixture(backtest_db, tmp_path):
+    factory, path = backtest_db
+    with factory() as db:
+        days = pipeline.taiwan_bar_dates(db)
+    start, end = days[-45], days[-1]
+    with closing(sqlite3.connect(path)) as connection:
+        rows = report.series_rows(connection, SERIES)
+    assert rows.get("SOX") and rows.get("SPX")
+    history = IndexHistory(rows, days)
+    items = [(key, code) for key in OVERNIGHT_BASES for code in ("o2", "o6")]
+    registry = with_conditions(baselines_of(items), items, history)
+    with (
+        research.score_dates(research.SessionTargets(history), pipeline),
+        research.instruments(history, pipeline),
+    ):
+        run = pipeline.backtest(start, end, registry=registry)["run"]
+
+    result = report.build(path, run["id"], raw_dir=tmp_path / "raw")
+    assert result["overnight_codes"] == ["o2", "o6"]
+    assert list(result["strategies"]) == ["breakout_v3", "pullback_v4"]
+    alignment = result["market"]["overnight_rows"]
+    assert set(alignment) == {"SOX", "SPX"}
+    for entry in alignment.values():
+        assert entry["read_on_or_after_entry"] == entry["read_before_score_date"] == 0
+        assert sum(entry["all"].values()) == 45
+        # The last score date has no next session in the copy.
+        assert entry["missing_dates"][str(end)] == NEXT_SESSION_UNKNOWN
+    for base, data in result["strategies"].items():
+        assert not data["judgement"]
+        for code in ("o2", "o6"):
+            name = f"{base}_index_{code}"
+            check = data["consistency"][name]
+            assert check["only_in_baseline"] == check["only_in_condition"] == 0
+            assert check["status_or_settlement_differs"] == 0
+            judged = data["overnight"][name]
+            for segment in ("exploration", "validation"):
+                item = judged[segment]
+                assert item["improved"] in {"improved", "not_improved", "insufficient"}
+                assert item["edge"] in {"edge", "no_edge", "insufficient"}
+                fills = data["fills"][name][segment]
+                assert (
+                    sum(cell["signals"] for cell in fills.values()) == item["removed"]
+                )
+            assert set(judged["verdict"]) == {"improved", "edge"}
+    out = tmp_path / "out"
+    argv = ["--db", str(path), "--run-id", str(run["id"]), "--out", str(out)]
+    assert report.main(argv) == 0
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    assert summary.startswith("# 隔夜美股條件研究（#855）")
+    assert "隔夜條件判定" in summary and "隔夜美股讀哪一列" in summary
+    assert "依成交日" in summary and "比較次數：隔夜條件 4 組" in summary
+    # 4 groups: 4/16 to 4/4 expected to pass 改善 by chance; the sample limits.
+    assert "預期碰巧「改善」約 0.25～1 組" in summary
+    assert "樣本限制（tracking 規格第 5 條" in summary
+    # #567's TX rolls and C4 US dates are not this run's.
+    assert "台指期換月" not in summary and "美股日期對齊" not in summary
+    csv_text = (out / "overnight.csv").read_text(encoding="utf-8")
+    assert csv_text.startswith("series,score_date,entry_session,us_date")
