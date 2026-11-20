@@ -1680,3 +1680,86 @@ def test_the_r1_r2_inputs_are_unchanged(rules_db, tmp_path):
             )
     assert len(inputs) > 2000
     assert digest(inputs) == V1_RULE_INPUTS
+
+
+# The other two tools whose numbers #878 must not move (AC-1).
+OTHER_VERSIONS = {
+    "explore_research": (
+        2,
+        "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+    ),
+    "mainstream_research": (
+        1,
+        "5e776480b0fa7d023c9f217671c856ac81ea8d4115d7ff94aac7446a263371f2",
+    ),
+}
+
+
+def test_explore_and_mainstream_research_are_unchanged():
+    ms = _tool("mainstream_research")
+    got = {
+        "explore_research": (ex.VERSION, ex.definitions_sha256()),
+        "mainstream_research": (ms.VERSION, ms.definitions_sha256()),
+    }
+    assert got == OTHER_VERSIONS
+
+
+def test_s1_through_the_round4_hooks_is_version_1_trade_by_trade(
+    golden_db, tmp_path, monkeypatch
+):
+    """S1 run through round4_research's entry (``run_segment`` with its own
+    registration and the three hooks, each doing what S1 does) is S1 of
+    version 1, trade for trade (#878 AC-1)."""
+
+    compressed(monkeypatch, tmp_path)
+    # this file's trade_research (another test file may have loaded its own)
+    monkeypatch.setitem(sys.modules, "trade_research", tool)
+    monkeypatch.setitem(sys.modules, "round4_research", None)
+    r4 = _tool("round4_research")
+    assert r4.tr is tool
+    ctx = one_process(
+        lambda: tool.load(golden_db, date(2013, 1, 1), days_()[110], tmp_path / "raw")
+    )
+    plain = tool.run_segment(ctx, golden_db, ["S1"], "exploration")["S1"]["_trades"]
+    seen = {"select": 0, "keep": 0, "stop": 0}
+
+    def select(c, s):
+        seen["select"] += 1
+
+        def keep(item, at):
+            seen["keep"] += 1
+            return True
+
+        return keep
+
+    def stop(item, at, atr, fill):
+        seen["stop"] += 1
+        return (None if fill is None else fill - 2.0 * atr), {}
+
+    s1 = {"S1": tool.HYPOTHESES["S1"]}
+    hooked = tool.run_segment(
+        ctx,
+        golden_db,
+        ["S1"],
+        "exploration",
+        hypotheses=s1,
+        hooks=lambda name: tool.Hooks(
+            select=select,
+            first_key=("trust_buy_days", tool.features.trust_buy_days),
+            stop=stop,
+        ),
+    )["S1"]["_trades"]
+    assert all(seen.values())  # every hook point ran
+    assert plain and digest(hooked) == digest(plain)
+    # and the entry's own path: S1's spec, no hooks, through round4's run_segment
+    loaded = r4.Loaded(ctx, None)
+    monkeypatch.setattr(r4, "HYPOTHESES", s1)
+    monkeypatch.setattr(r4, "Run", lambda groups: (lambda name: None))
+    monkeypatch.setattr(r4, "listed", lambda name, run, trades: {})
+    via = r4.run_segment(loaded, golden_db, ["S1"], "exploration")["S1"]["_trades"]
+    assert digest(via) == digest(plain)
+    zone = segment_trades(
+        golden_db, ["S1", "S2", "S3"], tmp_path, date(2013, 1, 1), days_()[110]
+    )
+    assert digest(zone) == V1_ZONE_TRADES  # plain is version 1's S1
+    assert digest(zone["S1"]) == digest(plain)
