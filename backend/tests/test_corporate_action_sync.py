@@ -1582,3 +1582,216 @@ def test_a_second_sync_of_reference_rows_changes_nothing(early_factory):
         ]
         assert after == before
         assert db.scalar(select(func.count(DataQuality.id))) == 0
+
+
+# #891: before 98-01-01 the official reference counted 員工紅利轉增資 as
+# free shares, the fields only the shareholders' ratio.  Rows as stored in
+# the research DB (TWT49U + TWT49UDetail, TPEx exDailyQ).
+TWT49U_3514 = ["97年05月05日", "3514", "昱晶", "340.00", "260.36", "79.640000", "權", "278.50", "242.50", "260.50", "260.36", "3514,20080505", "107年第2季", "19.02", "-1.73"]  # fmt: skip
+DETAIL_3514 = ["3514", "昱晶", "0 元／股", "", "300 股", "693,450 股", "0 股", "0 元／股", "0 股", "0 股", "0 股", "0.00000000 股"]  # fmt: skip
+TWT49U_3514_2009 = ["98年05月05日", *TWT49U_3514[1:11], "3514,20090505", *TWT49U_3514[12:]]  # fmt: skip
+# A cash capital increase as well; its fields happen to reproduce 除權息參考價.
+TWT49U_2451 = ["96年09月10日", "2451", "創見", "127.50", "122.72", "4.783023", "權息", "131.00", "114.00", "122.50", "122.34", "2451,20070910", "115年第3季", "105.42", "62.74"]  # fmt: skip
+DETAIL_2451 = ["2451", "創見", "3.563023 元／股", "", "9.9 股", "1,154,700 股", "25,000,000 股", "128 元／股", "2,500,000 股", "3,750,000 股", "18,750,000 股", "54.98157463 股"]  # fmt: skip
+TPEX_5211 = {
+    "Date": "0970605",
+    "SecuritiesCompanyCode": "5211",
+    "CompanyName": "蒙恬",
+    "ClosePriceBeforeExRightsDiviend": "42.50",
+    "ExRightsDiviendQuote": "39.20",
+    "StockDividend": "1.70",
+    "CashDividend": "1.60000000",
+    "StockDividendPlusCashDividend": "3.30",
+    "ExRightsDiviend": "除權息",
+    "LimitUp": "41.90",
+    "LimitDown": "36.50",
+    "OpeningReferencePrice": "39.20",
+    "DividendDeductedQuote": "39.20",
+    "CashDivdend": "1.60000000",
+    "StockDivdendThousandShares": "39.99999869",
+    "CashCapitalIncreaseShares": "0",
+    "SubscriptionPricePerShare": "0.00",
+    "AllocatedForPublicUnderwriting": "0",
+    "SubscribedByEmployees": "0",
+    "SubscribedByExistingShareholders": "0",
+    "SubscribedProRataThousandShares": "0.00000000",
+}
+FREE_SHARES = "A. 按普通股股東持股比例每千股無償配股"
+EMPLOYEE_BONUS = "B. 員工紅利轉增資"
+
+
+def early_record(row, detail):
+    [parsed] = sources.parse_twse_action_history(
+        twt49u(row), start=date(2007, 1, 1), end=date(2009, 12, 31)
+    )
+    return sources.twse_action_history_record(
+        parsed,
+        sources.parse_twse_action_detail(
+            {"stat": "ok", "fields": DETAIL_FIELDS, "data": [detail]}, row[1]
+        ),
+        payload_sha256=None,
+        detail_sha256=None,
+    )
+
+
+def _detail_with(detail, name, value):
+    names = [field.strip() for field in DETAIL_FIELDS]
+    result = list(detail)
+    result[names.index(name)] = value
+    return result
+
+
+def _add_instrument(db, record):
+    db.add(
+        Instrument(
+            exchange=record.exchange,
+            symbol=record.symbol,
+            name=record.symbol,
+            instrument_type="stock",
+            status="active",
+        )
+    )
+    db.flush()
+
+
+def _rewrite_rejected_row(factory, record):
+    """The research DB row before #891 (fields empty, factor_mismatch), written again."""
+    with factory() as db:
+        _add_instrument(db, record)
+        instrument = instruments(db)[(record.exchange, record.symbol)]
+        db.add(
+            CorporateAction(
+                instrument_id=instrument.id,
+                action_date=record.action_date,
+                action_type=record.action_type,
+                reference_price=record.reference_price,
+                details_json=record.details,
+                source=record.exchange.lower(),
+            )
+        )
+        pipeline._upsert_quality(
+            db,
+            "corporate_action",
+            f"{record.exchange}:{record.symbol}:{record.action_type}",
+            record.action_date,
+            "factor_mismatch",
+            ["cash_dividend", "stock_dividend_ratio", "split_ratio"],
+            {"cash_dividend": record.cash_dividend},
+            source=record.exchange.lower(),
+        )
+        db.flush()
+        empty = pipeline._corporate_action_factor([stored(db, record.symbol)])[0]
+        pipeline._upsert_action(db, record, instruments(db), None)
+        db.flush()
+        row = stored(db, record.symbol)
+        return {
+            "row": row,
+            "empty_factor": empty,
+            "factor": pipeline._corporate_action_factor([row])[0],
+            "quality": db.scalar(select(DataQuality.status)),
+            "mismatches": sync.check_corporate_actions(db)["mismatches"],
+        }
+
+
+@pytest.mark.parametrize(
+    "build,cash,ratio,extra,quote,before",
+    [
+        (
+            lambda: early_record(TWT49U_3514, DETAIL_3514),
+            0.0,
+            0.3,
+            0.00588416,
+            260.36,
+            340.0,
+        ),  # fmt: skip
+        (
+            lambda: sources.tpex_action_record(TPEX_5211, payload_sha256=None),
+            1.6,
+            0.04,
+            0.00336735,
+            39.20,
+            42.50,
+        ),  # fmt: skip
+        (
+            lambda: early_record(TWT49U_2451, DETAIL_2451),
+            3.563023,
+            0.0099,
+            0.0031536,
+            122.72,
+            127.50,
+        ),  # fmt: skip
+    ],
+    ids=["3514", "5211", "2451-subscription"],
+)
+def test_employee_bonus_rows_before_2009_keep_their_fields_and_factor(
+    factory, build, cash, ratio, extra, quote, before
+):
+    record = build()
+    check = pipeline.action_factor_check(record)
+    assert check["difference"] > pipeline.ACTION_REFERENCE_TOLERANCE
+    assert check["passed"] and check["basis"] == "employee_bonus_before_2009"
+    assert check["employee_bonus_ratio"] == pytest.approx(extra, abs=1e-7)
+    result = _rewrite_rejected_row(factory, record)
+    row = result["row"]
+    # The shareholders' fields as published are written ...
+    assert row.cash_dividend == pytest.approx(cash)
+    assert row.stock_dividend_ratio == pytest.approx(ratio, abs=1e-7)
+    assert row.details_json["factor_check"]["basis"] == "employee_bonus_before_2009"
+    assert result["quality"] == "complete"
+    assert result["mismatches"] == []
+    # ... and the price factor stays the official ratio it had while empty.
+    assert result["empty_factor"] == pytest.approx(quote / before, abs=1e-12)
+    assert result["factor"] == pytest.approx(result["empty_factor"], abs=1e-12)
+
+
+def test_the_2451_fields_alone_would_have_moved_its_factor():
+    # Why the factor is pinned: these fields reproduce 除權息參考價 within 0.02.
+    record = early_record(TWT49U_2451, DETAIL_2451)
+    own, _applied = pipeline._field_action_factor(_row(record), 127.50)
+    assert abs(own * 127.50 - 122.72) <= pipeline.ACTION_REFERENCE_TOLERANCE
+    assert abs(own - 122.72 / 127.50) > 1e-5
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        # From 98-01-01 the reference no longer counts employee bonus shares.
+        lambda: early_record(TWT49U_3514_2009, DETAIL_3514),
+        lambda: sources.tpex_action_record(
+            {**TPEX_5211, "Date": "0980605"}, payload_sha256=None
+        ),
+        # e < 0: the reference implies fewer free shares than the fields.
+        lambda: early_record(
+            TWT49U_3514, _detail_with(DETAIL_3514, FREE_SHARES, "310 股")
+        ),
+        # e > 0.06: more than employee bonus shares explain.
+        lambda: early_record(
+            TWT49U_3514, _detail_with(DETAIL_3514, FREE_SHARES, "200 股")
+        ),
+        # No employee bonus shares in the detail.
+        lambda: early_record(
+            TWT49U_3514, _detail_with(DETAIL_3514, EMPLOYEE_BONUS, "0 股")
+        ),
+        # No shareholders' free shares (like TPEx 6156 2007-12-17).
+        lambda: sources.tpex_action_record(
+            {**TPEX_5211, "StockDivdendThousandShares": "0.00000000"},
+            payload_sha256=None,
+        ),
+    ],
+    ids=["twse-2009", "tpex-2009", "e-below-0", "e-above-0.06", "no-bonus", "no-ratio"],
+)
+def test_other_mismatches_are_still_rejected(factory, build):
+    record = build()
+    check = pipeline.action_factor_check(record)
+    assert not check["passed"] and "basis" not in check
+    with factory() as db:
+        _add_instrument(db, record)
+        pipeline._upsert_action(db, record, instruments(db), None)
+        db.flush()
+        row = stored(db, record.symbol)
+        assert (row.cash_dividend, row.stock_dividend_ratio, row.split_ratio) == (
+            None,
+            None,
+            None,
+        )
+        assert db.scalar(select(DataQuality.status)) == "factor_mismatch"

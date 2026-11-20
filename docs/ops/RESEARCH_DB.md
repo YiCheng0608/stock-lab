@@ -35,6 +35,20 @@
 - **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。研究用的當時分類見[官方產業的逐月成員表](#官方產業的逐月成員表)。
 - **除權息**（[#821](https://github.com/YiCheng0608/stock-lab/issues/821)）：
   - **上市 2005-01-24 以前的除權**：`TWT49UDetail` 對這段的含權列都回「無相關資料」，2005-01-25 起才有明細。這些事件照樣寫入，但現金股利、配股率留空，`details_json.factor_source` 是 `twt49u_reference`。還原因子用 `TWT49U` 的 `除權息參考價／除權息前收盤價`，和欄位推得出的因子是同一種官方比值，所以還原價、報酬、指標都不受影響；只有個股頁的除權息清單看不到拆分。例外是參考價與前收盤價差在 0.02 元內的列，因子照用 1：370 列裡只有 2343 精業 2004-12-20（10.50／10.49，差不到 0.1%）。2004-02-11～2005-01-24 共 370 列（2004 年 367、2005 年 3，[AC-1](https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6916456620)）。
+  - **2009 年以前有員工紅利轉增資的除權列**（[#891](https://github.com/YiCheng0608/stock-lab/issues/891)）：
+    - **原因**：98-01-01 以前的官方參考價把員工紅利轉增資也算成配股（[寫入防呆](../DATA_SOURCES.md#寫入防呆)）。#891 以前的程式因此擋下 997 列，三欄寫成 null：上市 2005～2008 年 818 列、上櫃 2007～2008 年 178 列、上市 2018 年 1 列。
+    - **影響**：價格因子本來就用官方 `除權息參考價／除權息前收盤價`，還原價不受影響；受影響的是只讀欄位的 V3 `cash_yield_12m`（[evidence 第五輪](../spec/evidence.md#第五輪v1v3)）。
+    - **補回 989 列**：#891 的防呆判為通過，對 2005-01-25～2008-12-31 重跑 `corporate-actions sync --apply` 一次，寫回來源印的股東欄位。這些列的因子固定用官方比，逐列和補前相同（AC-2），所以沒跑 `rebuild`。
+    - **剩 8 列**，三欄仍是 null，原因都不是員工紅利：
+
+      | 列 | 原因 |
+      | --- | --- |
+      | 上市 3142 2005-09-01、3050 2005-10-07 | 官方的配股比欄位少（e −0.0101、−0.0032），原因未明 |
+      | 上櫃 6156 2007-12-17 | 除權（權值 1.35），但來源的每仟股無償配股與現金都是 0，沒有配股率 |
+      | 上櫃 6266 2008-09-03、5488 2008-09-15、5210 2008-09-18、5475 2008-11-07 | 官方的配股比欄位少（e −0.003～−0.012，差 0.021～0.035 元），原因未明 |
+      | 上市 2723 2018-06-21 | 沒有員工紅利；明細印每千股 104 股，`權值+息值` 推得 104.34 股，差 0.0999 元 |
+
+      上市 2005 年那兩列早於 V3 的窗口，其餘 6 列在窗口內（2007-12-02～2019-12-31）。
   - **上櫃 2007-04-23～2007-11-30 沒有除權息事件**：TPEx `exDailyQ` 在 2007-12 以前都回空表，舊版網址也只回當期。研究 DB 的上櫃日線卻從 2007-04-23 開始，所以這段上櫃日線在除權息日會假跌（2007-07、08 是除權息旺季）。研究工具不讀這段上櫃日線（[日線排除清單](#研究工具的日線排除清單)，[#821 決定](https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6917103976)）。 MOPS 舊站的「公司股利分派公告資料彙總表」（`t108sb27`）有這段的除權、除息交易日與配發內容，但它只收現在還在的公司：2007 年有日線的 547 檔上櫃普通股裡，之後下市的 100 檔一檔都不在表裡（[查證](https://github.com/YiCheng0608/stock-lab/issues/821#issuecomment-6916792081)）。而且它是公告，沒有官方參考價可以核對因子，所以沒有用它補。
 - **月營收**：MOPS 的 `t21sc03` 頁只列今天的公司，回補不到下市股的任何一個月。轉板公司上櫃那幾年的月份則接在上市標的上（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。[#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補其中補得到的部分，規則見 [DATA_SOURCES 的下市與轉板公司的月營收](../DATA_SOURCES.md#下市與轉板公司的月營收)：
   - **轉板**：`revenue transfers --apply` 把上櫃標的範圍內的月份從上市標的複製過來（0 個請求）。2026-11-15 在研究 DB 副本上實測（日線從 2017-03 起）：21 檔都通過同一家公司的核對，寫 1,360 列，重跑全部 `unchanged`，和上市標的逐列比對沒有不同。批 3～5 把日線往前補之後要再跑一次，補上新增的月份。
@@ -189,7 +203,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 
 | 資料 | 命令 | 備註 |
 | --- | --- | --- |
-| 除權息 | `corporate-actions sync --start-date 2004-01-01 --end-date 2024-09-30 --apply` | 每月 TWSE、TPEx 各 1 個請求，含權的列另查明細；TWT49U 的起日自動夾到 2003-05-05。民國 99 年（2010）以前 TWT49U 的資料日期寫成兩位數民國年（`93年02月11日`），[#818](https://github.com/YiCheng0608/stock-lab/issues/818) 起才讀得懂；之前的 image 在第一個月就以 `TWSE TWT49U row without a code or date` 失敗，要用含 #818 的 image 跑。早於 2005-01-25 的含權列沒有明細，要用含 [#821](https://github.com/YiCheng0608/stock-lab/issues/821) 的 image：之前的 image 會跳過這些列、run 以 `partial` 結束；#821 起寫成欄位空白、以參考價還原的列（輸出的 `reference_factor_rows`，見上面的[已知限制](#下市與轉板的標的)）。上櫃 2007-11 以前 `exDailyQ` 沒有列 |
+| 除權息 | `corporate-actions sync --start-date 2004-01-01 --end-date 2024-09-30 --apply` | 每月 TWSE、TPEx 各 1 個請求，含權的列另查明細；TWT49U 的起日自動夾到 2003-05-05。民國 99 年（2010）以前 TWT49U 的資料日期寫成兩位數民國年（`93年02月11日`），[#818](https://github.com/YiCheng0608/stock-lab/issues/818) 起才讀得懂；之前的 image 在第一個月就以 `TWSE TWT49U row without a code or date` 失敗，要用含 #818 的 image 跑。早於 2005-01-25 的含權列沒有明細，要用含 [#821](https://github.com/YiCheng0608/stock-lab/issues/821) 的 image：之前的 image 會跳過這些列、run 以 `partial` 結束；#821 起寫成欄位空白、以參考價還原的列（輸出的 `reference_factor_rows`，見上面的[已知限制](#下市與轉板的標的)）。2009 年以前有員工紅利轉增資的除權列要用含 [#891](https://github.com/YiCheng0608/stock-lab/issues/891) 的 image，之前的 image 會把三欄寫成 null（同一節）。上櫃 2007-11 以前 `exDailyQ` 沒有列 |
 | 指數日 K | `index-bars backfill --from-month 2004-02 --to-month 2007-12`，之後每 48 個月一段 | 一次最多 48 個月（`MAX_MONTHS`） |
 | 月營收 | `revenue backfill --months 60 --end-month 2018-08`、`--end-month 2023-08`，再 `--months 8 --end-month 2013-08` | 從 2013-01 起（#692 D4） |
 | 季報 | `fundamentals backfill --quarters 20 --end-quarter 2017Q4`，再 `--quarters 20 --end-quarter 2022Q4` | 從 2013Q1 起 |
