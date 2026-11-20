@@ -272,7 +272,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
   - 對母體超額年化 6.47%、t 2.17，判「**通過**」，所以 **H1 成立**。
   - 對加權指數超額年化 −2.05%、t −0.54，只列出。
   - 對照（只列出、不改判定，[7033796844](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7033796844)）：基準去掉缺 `revenue_high_12` 的下市股後，t 是 1.92。
-  - 要不要進產品待使用者決定（[#1 7034137713](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7034137713)）。
+  - 進不進產品：統籌提案（[#1 7034137713](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7034137713)），使用者 2026-11-21 選 A，**先不進產品**，照下面的「每月流程」繼續每月記前瞻、只當紀錄（[#1 7044998169](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7044998169)）。
 
 **每月流程**（統籌）
 1. 每月第一個交易日之後的白天（不在台北 21:30～23:30），以 `copy_db.py` 複製唯讀副本到任務 volume（空閒記憶體 ≥ 5 GB）。
