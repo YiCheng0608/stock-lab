@@ -28,15 +28,15 @@
   - **單次上限**：daily 2.5 小時（serve 的排程觸發傳 80 分鐘，見 [daily 的 21:30 與 23:00](#scheduler-容器的排程serve)）；news 90 分鐘，news 與 news-llm 合計（`--time-limit-minutes` 可改）。到時 job 結束 worker 與它啟動的程序（程序群組），記 `--- timeout: killed at the <分> minute limit of the <job> job (exit=1)`（news 段落前加 `news ` 或 `news-llm `），該步驟的碼記 1；news 用完時間時 news-llm 不啟動，記 `--- news-llm timeout: not started …`。job 被強制終止時 worker 也一起結束（以 PR_SET_PDEATHSIG，只保證 worker 本身），所以 run 列的 PID 已不存在，下一次執行立即把它記 abandoned（見下表 `failed`）。
   - **news 日誌的分段**：`--- news stdout`／`--- news stderr`／`--- news end exit=<碼> seconds=<秒>`，接著 `--- news-llm start claude_cli=<路徑>`、`--- news-llm stdout`／`stderr`、`--- news-llm end exit=<碼> seconds=<秒>`；結束列為 `===== <時間> end exit=<news 的碼> seconds=<秒> news_llm_exit=<碼>`，`news_llm_exit` 另有 `disabled`（`--skip-news-llm`）、`not_run`（起跑前檢查未通過或另一個 news job 持有鎖）、`timeout`（news 用完單次上限，news-llm 未啟動）、`wrapper_error`（job 啟動 news-llm 失敗）。daily 日誌格式與 #313 前的包裝腳本相同，只多了版本列。
 - **exit code**：daily 0＝`success`／`skipped`／`non_trading_day`／`non_trading_unconfirmed`，2＝`partial`，1＝`failed`；serve 的 `end exit=<碼>` 列與工作排程器的「上次執行結果」即此值。news 工作的碼是 `worker.cli news` 的碼；`worker.cli news-llm` 的碼（0＝`success`／`skipped`，2＝`partial`，1＝`failed`）只記在日誌的 `news-llm end` 與 `news_llm_exit`，不影響工作的碼。
-- **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），摘要 `summary_json` 每列都有 `runtime`：跑的 image 與 commit（`image`、`head`，見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理) 執行的版本與 [scheduler 容器的排程（serve）](#scheduler-容器的排程serve)），這是一列唯一的版本欄位（#340 拿掉 #314 的 `git_tag`／`HEAD`）；`schedule_run_steps` 每步一列（catchup／collect／trading_calendar／analyze／evaluate／candidates／indicators／mainstream／plan_tracking／strategy_levels／action_tiers／candidate_notes／period_backfill 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`；`already_complete` 的列若重抓了三大法人檔，只有一列 institutional_refetch 步驟，連到 `run_type=institutional_refetch` 的 ingestion run；catchup 的 `details_json` 列出檢查與補抓的日期及各日結果）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run，news-llm 的在 `run_type=news_llm`（`metadata_json` 記每批則數、耗時、模型與 token 用量，API 查詢要加 `include_metadata=true`）。
+- **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），摘要 `summary_json` 每列都有 `runtime`：跑的 image 與 commit（`image`、`head`，見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理) 執行的版本與 [scheduler 容器的排程（serve）](#scheduler-容器的排程serve)），這是一列唯一的版本欄位（#340 拿掉 #314 的 `git_tag`／`HEAD`）；`schedule_run_steps` 每步一列（catchup／collect／trading_calendar／analyze／evaluate／candidates／indicators／mainstream／h2_list／plan_tracking／strategy_levels／action_tiers／candidate_notes／period_backfill 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`；`already_complete` 的列若重抓了三大法人檔，只有一列 institutional_refetch 步驟，連到 `run_type=institutional_refetch` 的 ingestion run；catchup 的 `details_json` 列出檢查與補抓的日期及各日結果）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run，news-llm 的在 `run_type=news_llm`（`metadata_json` 記每批則數、耗時、模型與 token 用量，API 查詢要加 `include_metadata=true`）。
 
 | run 狀態 | 意義 |
 | --- | --- |
-| `success` | collect、analyze、evaluate、candidates、indicators、plan_tracking 都成功（或該步驟回 `no_data`；沒有任何追蹤計畫時 plan_tracking 是 `success`、0 筆）；trading_calendar、mainstream、strategy_levels、action_tiers、candidate_notes 與 period_backfill 的狀態不列入，`success` 的定義不因新增這些步驟而改變（G7 起的判定照舊）。catchup 沒補齊不改變 run 狀態，記在該步驟與 `summary_json.steps.catchup`，由看門狗留言。 |
+| `success` | collect、analyze、evaluate、candidates、indicators、plan_tracking 都成功（或該步驟回 `no_data`；沒有任何追蹤計畫時 plan_tracking 是 `success`、0 筆）；trading_calendar、mainstream、h2_list、strategy_levels、action_tiers、candidate_notes 與 period_backfill 的狀態不列入，`success` 的定義不因新增這些步驟而改變（G7 起的判定照舊）。catchup 沒補齊不改變 run 狀態，記在該步驟與 `summary_json.steps.catchup`，由看門狗留言。 |
 | `partial` | collect 有缺（例如籌碼尚未公布）；後續步驟記 `skipped`，錯誤欄列 collect 警告。 |
 | `non_trading_day` | 官方來源明確回報該週間日無交易，且已確認（當日目標要兩次觸發都回 no-data）。 |
 | `non_trading_unconfirmed` | 當日目標第一次回 no-data，等下一次觸發確認；不算完成，exit code 0。 |
-| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 與 candidates 依賴 analyze；trading_calendar、indicators、mainstream 與 plan_tracking 只依賴 collect；strategy_levels 與 action_tiers 依賴 analyze；candidate_notes 依賴 candidates）。run 列記錄執行的主機與 PID；由 job 持鎖啟動的 run 列另記鎖的路徑（`summary_json.runtime.job_lock`），下一次拿到同一把鎖的 daily 不看主機與 PID，立即把它記 `failed`（`abandoned: process <PID> on <主機> no longer holds <鎖>`）：重建的容器 hostname 不同，PID 也可能被新程序重用（#336）。其餘的列：同主機的新執行發現該 PID 已不存在（例如被系統終止）時，立即把舊列改記 `failed`（abandoned）並照常執行；其他情況要超過 2.5 小時（與 job 預設的單次上限相同）仍為 `running` 才記 abandoned，在那之前同日的新執行記 `skipped`（`already_running`）。 |
+| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 與 candidates 依賴 analyze；trading_calendar、indicators、mainstream、h2_list 與 plan_tracking 只依賴 collect；strategy_levels 與 action_tiers 依賴 analyze；candidate_notes 依賴 candidates）。run 列記錄執行的主機與 PID；由 job 持鎖啟動的 run 列另記鎖的路徑（`summary_json.runtime.job_lock`），下一次拿到同一把鎖的 daily 不看主機與 PID，立即把它記 `failed`（`abandoned: process <PID> on <主機> no longer holds <鎖>`）：重建的容器 hostname 不同，PID 也可能被新程序重用（#336）。其餘的列：同主機的新執行發現該 PID 已不存在（例如被系統終止）時，立即把舊列改記 `failed`（abandoned）並照常執行；其他情況要超過 2.5 小時（與 job 預設的單次上限相同）仍為 `running` 才記 abandoned，在那之前同日的新執行記 `skipped`（`already_running`）。 |
 | `skipped` | 同目標日已有 `success`／`non_trading_day`（`already_complete`）、另一次執行仍在進行（`already_running`：run 列仍在 running，或 job 拿不到鎖，後者 `related_run_id` 指向當時 running 的列、沒有則為空；DB 不在 head 時不寫列，見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)），或起跑前檢查未通過（`low_memory`／`git_busy`；#314 前的列另有 `git_pull_failed`）；不碰資料，唯一的例外是 `already_complete` 時重抓三大法人檔：結果記在 `summary_json.institutional_refetch`（`status`、`run_id`、`idempotent_reuse`、`requests`、`revised_rows`、`unchanged_rows`、`value_fills`，失敗時有 `error`），run 的 `records` 是更正的列數。重抓失敗也維持 `skipped`、exit code 0，當日是否完成仍看先前那列 `success`。 |
 
 trading_calendar 步驟呼叫 `worker.trading_calendar.run_trading_calendar(目標日)`，在 collect 成功後、analyze 之前執行，抓目標日的年度與下一年度的[官方休市表](../DATA_SOURCES.md#交易日曆)（2 個請求），供 analyze 推算訊號的[規則最早執行日](../spec/README.md#價位etf-與生命週期)。寫入列數記在步驟列的 `records`，`details_json.years` 記各年度結果。它的任何狀態（`failed`、`partial`、例外）都只記在該步驟列（原因寫在 `error`，例如 `holiday schedule 2027 unavailable: …`）與 `summary_json.steps`，**不改變 run 狀態與 exit code**；analyze 照跑並使用表內已有的日曆，日曆答不出來時訊號的日期留空，analyze 步驟的 `details_json.execution_calendar` 記 `status`（`available`／`unavailable`）、`reason`、`missing_year`、`next_session` 與 `signals_without_date`，看門狗以 `invariant_execution_calendar` 留言（[排程看門狗](WATCHDOG.md)）。休市日 collect 為 skipped 時它也記 `skipped`。手動更新：`python -m worker.cli trading-calendar`（[現有 worker CLI](CLI.md#現有-worker-cli)）。
@@ -45,9 +45,11 @@ indicators 步驟呼叫 `worker.indicator_batch.run_indicator_batch(目標日)`�
 
 mainstream 步驟呼叫 `worker.mainstream.run_mainstream(目標日)`（[#768](https://github.com/YiCheng0608/stock-lab/issues/768)），排在 candidates 與 indicators 之後，寫[主流族群前 20](#主流族群前-20)。只讀日線、公司行動與族群成員，所以只要 collect 成功就跑：analyze 或 candidates 失敗也照算，`today_list` 那天就全是 null。步驟列的 `records` 是寫入的檔數。它不阻擋 daily，任何狀態（`failed`、例外）都只記在該步驟列與 `summary_json.steps`，另在 stderr 寫一行 `warning: mainstream_v1 <日期> failed: <原因>`（進 daily 日誌），**不改變 run 狀態與 exit code**，今日名單也不受影響。
 
+h2_list 步驟呼叫 `worker.h2_list.run_h2_list(目標日)`（[#881](https://github.com/YiCheng0608/stock-lab/issues/881)），排在 mainstream 之後，寫 [H2 名單](#h2-名單)。只讀日線與公司行動，所以只要 collect 成功就跑：analyze 或 candidates 失敗也照算，`today_list` 那天就全是 null。步驟列的 `records` 是寫入的檔數。它不阻擋 daily，任何狀態（`failed`、例外）都只記在該步驟列與 `summary_json.steps`，另在 stderr 寫一行 `warning: explore_research_v2_X2 <日期> failed: <原因>`（進 daily 日誌），**不改變 run 狀態與 exit code**，今日名單與主流族群前 20 也不受影響。
+
 candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀當日訊號、籌碼、族群榜與新聞，不改行情、訊號與追蹤；失敗時 run 記 `failed`（exit code 1，看門狗與排程異常處理照 `failed` 處置）、錯誤欄記 candidates 訊息，indicators 照跑。行情與訊號已寫入，只需重跑候選：`python -m worker.cli candidates --date YYYY-MM-DD`（不需 `daily --force`；接著會補該日的 AI 說明，`--skip-notes` 跳過，[CLI](CLI.md)）。
 
-plan_tracking 步驟呼叫 `worker.plan_tracking.run_plan_tracking(目標日)`，在 indicators 之後、candidate_notes 之前執行（candidate_notes 可能跑很久），只讀日線、公司行動、停牌事件與計畫自己的價位快照，更新[使用者追蹤計畫](../spec/tracking.md#使用者追蹤計畫)；collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 plan_tracking 訊息，其他步驟的結果不變。只需重算計畫：`python -m worker.cli track-plans --date YYYY-MM-DD`。`schedule_run_steps` 以 run 與步驟名稱找列，`sequence` 只用來排序（trading_calendar 為 2、analyze 為 3，mainstream 為 7（#768），plan_tracking 為 8、strategy_levels 為 9、action_tiers 為 10、candidate_notes 為 11（#476 以前 candidate_notes 為 10）、period_backfill 為 12；之前的 run 維持寫入當時的號碼）。
+plan_tracking 步驟呼叫 `worker.plan_tracking.run_plan_tracking(目標日)`，在 indicators 之後、candidate_notes 之前執行（candidate_notes 可能跑很久），只讀日線、公司行動、停牌事件與計畫自己的價位快照，更新[使用者追蹤計畫](../spec/tracking.md#使用者追蹤計畫)；collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 plan_tracking 訊息，其他步驟的結果不變。只需重算計畫：`python -m worker.cli track-plans --date YYYY-MM-DD`。`schedule_run_steps` 以 run 與步驟名稱找列，`sequence` 只用來排序（trading_calendar 為 2、analyze 為 3，mainstream 為 7（#768），h2_list 為 8（#881），plan_tracking 為 9、strategy_levels 為 10、action_tiers 為 11、candidate_notes 為 12、period_backfill 為 13（#881 以前依序是 8～12；#476 以前 candidate_notes 為 10）；之前的 run 維持寫入當時的號碼）。
 
 strategy_levels 步驟呼叫 `worker.strategy_levels.run_strategy_levels(目標日)`，在 plan_tracking 之後、candidate_notes 之前執行，analyze 成功（含 `no_data`）才跑，否則記 `skipped`（`analyze_not_successful`）；為當日 analysis 訊號寫[條件價位](../spec/strategy_levels.md)，只讀已存資料、不改訊號、候選與追蹤，處理的訊號數記在步驟列的 `records`，`details_json` 有寫入列數與 `availability` 分佈。它的任何狀態（`failed`、`partial`、例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**，不觸發 daily 失敗的看門狗；失敗由看門狗的資料不變量 `invariant_strategy_levels`（[排程](#)）回報，個股頁策略總表對沒有條件價位列的觀察訊號顯示「觀察價位未產生」（#274）。daily 已 success 後不會重跑，補算或重算以 `python -m worker.cli strategy-levels --date YYYY-MM-DD`（[現有 worker CLI](CLI.md#現有-worker-cli)）。
 
@@ -126,6 +128,31 @@ daily 在今日名單之後，另算一份「主流族群前 20」（`mainstream
   - `recent_closes` 和 `/api/candidates` 同形。
 - **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.mainstream as m; print(m.run_mainstream(datetime.date(2026, 11, 13)))'`（日期換成要重算的那天）。
 - **實測**（2026-11-15，正式 DB 副本，2026-11-13）：計算 1.8 秒，母體 579 檔、可排名族群 30 個；`/api/mainstream` 讀取 0.07 秒。
+
+## H2 名單
+
+daily 在主流族群前 20 之後，另算一份「H2 名單」（`explore_research_v2_X2`，[#881](https://github.com/YiCheng0608/stock-lab/issues/881)）。它是研究工具 `explore_research` 第 2 版的 X2：通過探索段與驗證段，使用者決定進產品、先只顯示名單（[#1 7044998169](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7044998169)）。定義凍結，產品程式 [`app.h2_list`](../../backend/app/h2_list.py) 照研究程式逐項重寫，模組說明列出每一項；AC-1 的決定是 [7045371555](https://github.com/YiCheng0608/stock-lab/issues/881#issuecomment-7045371555)。產品不 import `tools/research`，兩邊是否相同由 `backend/tests/test_h2_list.py` 的金樣鎖住：同一份 fixture 的每個交易日，名單要和研究工具逐筆相同。它不附點位，也不改今日名單與主流族群前 20。
+
+- **選法**：當天母體依 `high_gap_240`（還原收盤 ÷ 最近 240 根日線的還原最高價 − 1）大者先，取 20 檔。
+  - 同分依 `sha256("<日期>:<instrument_id>")` 排。
+  - 缺值（不到 240 根、窗口內有最高價缺值）排在有值的後面，但不剔除。有值的不到 20 檔時，缺值的會補進名單，`high_gap_240` 存 null。
+- **母體和 `mainstream_v1` 不同**，兩者沒有共用函式：
+  - 停牌：H2 照研究，`is_suspended` 為真**或**「零量且開高低收相同」都算，T 那根停牌就不在母體。mainstream 只看 `is_suspended`。
+  - 均量：兩者都是最近 20 根日線（含 T）平均 ≥ 1,000 張。H2 不足 20 根就不在母體，不另要求 241 根。
+  - 種類：這點兩者相同，都只取 `stock`／`ipo`（依 `instrument_type`，不看 `status`）。
+  - 日線：只算交易日（當天有 `stock` 日線的日子）上的日線，「最近 240 根」是這種日線的根數，停牌沒日線的日子不算。
+  - 還原：每筆公司行動各自算因子（`worker.pipeline._corporate_action_factor`），只取 T 以前（含）的；沒有參考價的，用該日前最近一根 > 0 的收盤補。不用 mainstream 的 `_action_factor_by_bar`。
+  - 研究工具的 `bar_exclusions.json` 不搬進產品：三段 code_reuse 只在 DB 存有舊公司日線時才生效。正式 DB 的 stock 日線從 2024-09-30 起，那三檔沒有舊公司日線（#881 AC-4 查過）；上櫃 2007 那段也早於正式 DB。只有在研究 DB 這類更早的歷史上重算舊日期，才可能和研究工具不同。
+- **存放**：`h2_runs`（每個交易日、每個版本一列：`definitions_sha256` 記研究定義的雜湊 `600dc942…ebec63`，`status` 是 `computed` 或 `zero`，`universe_count` 是母體檔數，`config_json` 是參數）與 `h2_items`（每檔一列：名次、`high_gap_240`、T 的原始收盤）。同一天重算時整份換掉；算失敗時不寫入，前一份留著。T 不是交易日（沒有 `stock` 日線）時算失敗。
+- **誰寫**：daily 的 h2_list 步驟（`worker.h2_list.run_h2_list`），只算 daily 的目標日。catchup 只跑 collect，它補抓的日子沒有 H2 名單，`/api/h2?date=` 對那些日子回 `missing`；主流族群前 20 也一樣。要補時照下面的「重算」逐日跑。
+- **讀取**：`GET /api/h2?date=`，沒給日期時取最新一份。
+  - 回傳 `status`、`trading_date`、`version`、`definitions_sha256`、`window`、`computed_at`、`universe_count` 與 `items`。
+  - 每檔有 `rank`、`instrument`（`id`、`exchange`、`symbol`、`name`、`instrument_type`）、`high_gap_240`（缺值為 null）、`close`（T 的原始收盤），以及 `today_list`。
+  - `today_list` 在讀取時才查當天的今日名單（名次、`entry_type`、`score_version`），不在今日名單是 null，不寫進表。
+  - 那天沒有算時 `status` 是 `missing`、`items` 是空的；母體是空的那天是 `zero`。
+  - 不附進場區、停損與目標。
+- **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.h2_list as h; print(h.run_h2_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天：catchup 補抓的日子、migration 0034 降級後再升回時，舊日期都要逐日跑。
+- **實測**（2026-11-21，正式 DB 副本，2026-11-20）：計算 8.2～9.6 秒，母體 586 檔（有值 584）；`/api/h2` 讀取 0.01 秒。2026-11-13 在研究 DB 上，研究工具與本模組的 20 檔逐檔相同。
 
 ## 重跑與回補
 

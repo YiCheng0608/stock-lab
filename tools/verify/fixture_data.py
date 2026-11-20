@@ -2032,6 +2032,74 @@ def _mainstream_item_rows() -> list[dict[str, Any]]:
     ]
 
 
+# ---- H2 名單 (explore_research_v2_X2, #881; the page is #882) ----
+# The fixture has SESSION_COUNT bars, fewer than app.h2_list.WINDOW, so worker.h2_list would
+# list every member with a null value. This is a stored computed run written over what the
+# fixture has: the universe is app.h2_list's (stock/ipo with a bar on T and 20 bars averaging
+# MIN_AVERAGE_LOTS), each value is T's close over the highest high of all its fixture bars
+# (in place of the last WINDOW), and H2_MISSING keeps a null value, ranked last as the
+# definition ranks a missing one, so the page has one to show. No fixture bar is suspended or off
+# the sessions, so the suspended rule and the session filter change nothing here and are not
+# repeated. /api/h2 reads the stored rows.
+H2_MISSING = {"9204"}
+
+
+def _h2_plan() -> tuple[list[tuple[int, float | None, float]], int]:
+    from app.h2_list import LIQUIDITY_BARS, LIST_SIZE, MIN_AVERAGE_LOTS, tie_key
+
+    members = []
+    for instrument_id, _exchange, symbol, _name, kind, *_rest in _INSTRUMENTS:
+        bars = SERIES.get(symbol, [])
+        if kind not in ("stock", "ipo") or not bars or bars[-1]["day"] != T:
+            continue
+        lots = sum(row["volume"] for row in bars[-LIQUIDITY_BARS:]) / LIQUIDITY_BARS
+        if lots / 1000 < MIN_AVERAGE_LOTS:
+            continue
+        top = max(row["high"] for row in bars)
+        value = None if symbol in H2_MISSING else bars[-1]["close"] / top - 1.0
+        members.append((instrument_id, value, bars[-1]["close"]))
+    members.sort(key=lambda row: (row[1] is None, -(row[1] or 0.0), tie_key(T, row[0])))
+    return members[:LIST_SIZE], len(members)
+
+
+def _h2_run_rows() -> list[dict[str, Any]]:
+    from app.h2_list import DEFINITIONS_SHA256, H2_CONFIG, H2_VERSION
+
+    items, universe = _h2_plan()
+    return [
+        {
+            "id": 1,
+            "trading_date": T,
+            "version": H2_VERSION,
+            "definitions_sha256": DEFINITIONS_SHA256,
+            "status": "computed",
+            "universe_count": universe,
+            "item_count": len(items),
+            "config_json": dict(H2_CONFIG),
+            "computed_at": _at(T, 10, 6),
+        }
+    ]
+
+
+def _h2_item_rows() -> list[dict[str, Any]]:
+    from app.h2_list import H2_VERSION
+
+    items, _universe = _h2_plan()
+    return [
+        {
+            "id": rank,
+            "h2_run_id": 1,
+            "trading_date": T,
+            "instrument_id": instrument_id,
+            "version": H2_VERSION,
+            "rank": rank,
+            "high_gap_240": value,
+            "close": close,
+        }
+        for rank, (instrument_id, value, close) in enumerate(items, start=1)
+    ]
+
+
 # ---- assembled tables (insertion order respects foreign keys) ----
 
 TABLES: dict[str, list[dict[str, Any]]] = {
@@ -2060,6 +2128,8 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "candidate_llm_notes": _candidate_note_rows(),
     "mainstream_runs": _mainstream_run_rows(),
     "mainstream_items": _mainstream_item_rows(),
+    "h2_runs": _h2_run_rows(),
+    "h2_items": _h2_item_rows(),
     "tracking_plans": _tracking_plan_rows(),
     "tracking_plan_sessions": _tracking_plan_session_rows(),
     "portfolio_positions": _portfolio_rows(),

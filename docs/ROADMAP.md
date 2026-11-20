@@ -77,6 +77,10 @@
   - **不附點位**：這份是篩選，不附進場區、停損、目標，因為點位要是通過驗證的假設的一部分（上面「現況與方向」第 4 項）。當天也在今日名單的，標「今日名單 #n」。
   - **研究**：同一個選法另外登記成第三輪假設 M1（持有 20 日）、M2（持有 60 日）（[#773](https://github.com/YiCheng0608/stock-lab/issues/773)，[策略證據「第三輪：M1、M2」](spec/evidence.md#第三輪m1m2)）。研究只用官方產業，成員取 MOPS 月營收頁的產業分表（[#779](https://github.com/YiCheng0608/stock-lab/issues/779)）；產品的第二份名單含題材，研究的 M1、M2 不含，因為題材沒有歷史成員。判定以前只顯示。
   - **08:45 Telegram**：先不帶這份名單。
+- **H2 名單**（[#881](https://github.com/YiCheng0608/stock-lab/issues/881) 計算與 API → [#882](https://github.com/YiCheng0608/stock-lab/issues/882) 畫面）：第一輪 X2 通過探索與驗證兩段，成為 H2（[策略證據「狀態紀錄」](spec/evidence.md#狀態紀錄)）。使用者 2026-11-21 決定 H2 進產品，先只顯示名單（[#1 7044998169](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7044998169)）。
+  - **選法**：照凍結的研究定義（`explore_research` 第 2 版 X2），每個交易日從共同口徑母體依「收盤距 240 日最高價」大者先取 20 檔。產品與研究的名單由金樣鎖成逐筆相同；任何簡化都是新的假設，另開單（[排程「H2 名單」](ops/SCHEDULING.md#h2-名單)）。
+  - **不附點位**：只有名單、`high_gap_240` 與收盤，不附進場區、停損與目標。當天也在今日名單的帶出名次。
+  - **前瞻**：H2 從 2026-11-20 起照常前瞻監測（[#875](https://github.com/YiCheng0608/stock-lab/issues/875)），進產品不改它的判定。
 
 使用者 2026-11-15 決定不做（[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）：08:45 通知加「我的追蹤觸發」（要的是上面的盤中即時版）、「資料或排程異常」通知、實際交易紀錄。
 
