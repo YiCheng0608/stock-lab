@@ -1,0 +1,3598 @@
+{
+ "db": "/research/stock.db",
+ "load": [
+  "2011-06-01",
+  "2024-09-27"
+ ],
+ "hypotheses": {
+  "X3": {
+   "exploration": {
+    "window": [
+     "2014-12-26",
+     "2019-12-30"
+    ],
+    "years": {
+     "2014": {
+      "days": 5,
+      "member_days": {
+       "active": 1917,
+       "delisted": 257,
+       "transferred": 15
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 10,
+        "delisted": 247,
+        "transferred": 5
+       },
+       "any": {
+        "active": 10,
+        "delisted": 247,
+        "transferred": 5
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 1907,
+        "no_rows_ever": 5,
+        "no_prior": 5
+       },
+       "delisted": {
+        "no_rows_ever": 247,
+        "ok": 10
+       },
+       "transferred": {
+        "ok": 10,
+        "no_rows_ever": 5
+       }
+      },
+      "known_all_filters": {
+       "active": 1907,
+       "delisted": 10,
+       "transferred": 10
+      },
+      "passed_all_filters": {
+       "active": 1138,
+       "delisted": 5,
+       "transferred": 5
+      },
+      "instruments": {
+       "active": 400,
+       "delisted": 56,
+       "transferred": 3
+      },
+      "instruments_missing_every_day": {
+       "active": 2,
+       "delisted": 54,
+       "transferred": 1
+      },
+      "picks_by_status": {
+       "active": 50
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 12
+      }
+     },
+     "2015": {
+      "days": 244,
+      "member_days": {
+       "active": 93161,
+       "delisted": 10556,
+       "transferred": 962,
+       "other": 208
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 343,
+        "delisted": 9894,
+        "transferred": 177
+       },
+       "any": {
+        "active": 343,
+        "delisted": 9894,
+        "transferred": 177
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 92818,
+        "no_rows_ever": 141,
+        "no_prior": 202
+       },
+       "delisted": {
+        "no_rows_ever": 9894,
+        "ok": 662
+       },
+       "transferred": {
+        "ok": 785,
+        "no_rows_ever": 177
+       },
+       "other": {
+        "ok": 208
+       }
+      },
+      "known_all_filters": {
+       "active": 92818,
+       "delisted": 662,
+       "transferred": 785,
+       "other": 208
+      },
+      "passed_all_filters": {
+       "active": 50041,
+       "delisted": 319,
+       "transferred": 716,
+       "other": 188
+      },
+      "instruments": {
+       "active": 784,
+       "delisted": 82,
+       "transferred": 12,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 6,
+       "delisted": 75,
+       "transferred": 2,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2415,
+       "delisted": 25
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 399,
+       "transferred": 3
+      }
+     },
+     "2016": {
+      "days": 244,
+      "member_days": {
+       "active": 85756,
+       "other": 158,
+       "delisted": 7809,
+       "transferred": 470
+      },
+      "missing": {
+       "revenue_yoy": {
+        "delisted": 6939,
+        "active": 498
+       },
+       "any": {
+        "delisted": 6939,
+        "active": 498
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 85258,
+        "no_prior": 436,
+        "no_rows_ever": 62
+       },
+       "other": {
+        "ok": 158
+       },
+       "delisted": {
+        "ok": 870,
+        "no_rows_ever": 6931,
+        "no_prior": 8
+       },
+       "transferred": {
+        "ok": 470
+       }
+      },
+      "known_all_filters": {
+       "active": 85258,
+       "other": 158,
+       "delisted": 870,
+       "transferred": 470
+      },
+      "passed_all_filters": {
+       "active": 46289,
+       "other": 41,
+       "delisted": 564,
+       "transferred": 306
+      },
+      "instruments": {
+       "active": 757,
+       "other": 1,
+       "delisted": 71,
+       "transferred": 7
+      },
+      "instruments_missing_every_day": {
+       "active": 6,
+       "other": 0,
+       "delisted": 65,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 2402,
+       "other": 16,
+       "transferred": 16,
+       "delisted": 6
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 201
+      }
+     },
+     "2017": {
+      "days": 246,
+      "member_days": {
+       "active": 105911,
+       "delisted": 8944,
+       "transferred": 1087,
+       "other": 58
+      },
+      "missing": {
+       "revenue_yoy": {
+        "delisted": 8294,
+        "active": 411
+       },
+       "any": {
+        "delisted": 8294,
+        "active": 411
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 105500,
+        "no_prior": 274,
+        "no_rows_ever": 137
+       },
+       "delisted": {
+        "no_rows_ever": 8294,
+        "ok": 650
+       },
+       "transferred": {
+        "ok": 1087
+       },
+       "other": {
+        "ok": 58
+       }
+      },
+      "known_all_filters": {
+       "active": 105500,
+       "delisted": 650,
+       "transferred": 1087,
+       "other": 58
+      },
+      "passed_all_filters": {
+       "active": 67806,
+       "delisted": 354,
+       "transferred": 903,
+       "other": 5
+      },
+      "instruments": {
+       "active": 878,
+       "delisted": 73,
+       "transferred": 8,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 5,
+       "delisted": 67,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2403,
+       "delisted": 44,
+       "transferred": 13
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 137
+      }
+     },
+     "2018": {
+      "days": 247,
+      "member_days": {
+       "active": 100568,
+       "delisted": 7800,
+       "transferred": 938,
+       "other": 124
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 279,
+        "delisted": 7121
+       },
+       "any": {
+        "active": 279,
+        "delisted": 7121
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 100289,
+        "no_rows_ever": 33,
+        "no_prior": 246
+       },
+       "delisted": {
+        "no_rows_ever": 7121,
+        "ok": 679
+       },
+       "transferred": {
+        "ok": 938
+       },
+       "other": {
+        "ok": 124
+       }
+      },
+      "known_all_filters": {
+       "active": 100289,
+       "delisted": 679,
+       "transferred": 938,
+       "other": 124
+      },
+      "passed_all_filters": {
+       "active": 68443,
+       "delisted": 305,
+       "transferred": 764,
+       "other": 31
+      },
+      "instruments": {
+       "active": 859,
+       "delisted": 66,
+       "transferred": 9,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 6,
+       "delisted": 59,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2444,
+       "delisted": 20,
+       "transferred": 6
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 265
+      }
+     },
+     "2019": {
+      "days": 241,
+      "member_days": {
+       "active": 94839,
+       "delisted": 4811,
+       "transferred": 778,
+       "other": 204
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 225,
+        "delisted": 3988
+       },
+       "any": {
+        "active": 225,
+        "delisted": 3988
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 94614,
+        "no_prior": 219,
+        "no_rows_ever": 6
+       },
+       "delisted": {
+        "ok": 823,
+        "no_rows_ever": 3986,
+        "no_prior": 2
+       },
+       "transferred": {
+        "ok": 778
+       },
+       "other": {
+        "ok": 204
+       }
+      },
+      "known_all_filters": {
+       "active": 94614,
+       "delisted": 823,
+       "transferred": 778,
+       "other": 204
+      },
+      "passed_all_filters": {
+       "active": 51372,
+       "delisted": 546,
+       "transferred": 489,
+       "other": 184
+      },
+      "instruments": {
+       "active": 787,
+       "delisted": 44,
+       "transferred": 10,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 39,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2410
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 49
+      }
+     }
+    }
+   },
+   "validation": {
+    "window": [
+     "2019-12-31",
+     "2024-09-26"
+    ],
+    "years": {
+     "2019": {
+      "days": 1,
+      "member_days": {
+       "active": 427,
+       "delisted": 19,
+       "transferred": 3
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1,
+        "delisted": 15
+       },
+       "any": {
+        "active": 1,
+        "delisted": 15
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 426,
+        "no_prior": 1
+       },
+       "delisted": {
+        "ok": 4,
+        "no_rows_ever": 15
+       },
+       "transferred": {
+        "ok": 3
+       }
+      },
+      "known_all_filters": {
+       "active": 426,
+       "delisted": 4,
+       "transferred": 3
+      },
+      "passed_all_filters": {
+       "active": 235,
+       "delisted": 1,
+       "transferred": 1
+      },
+      "instruments": {
+       "active": 427,
+       "delisted": 19,
+       "transferred": 3
+      },
+      "instruments_missing_every_day": {
+       "active": 1,
+       "delisted": 15,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 10
+      },
+      "missing_would_rank_in_top": {}
+     },
+     "2020": {
+      "days": 245,
+      "member_days": {
+       "active": 132122,
+       "delisted": 5113,
+       "transferred": 1201,
+       "other": 175
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1242,
+        "delisted": 3925
+       },
+       "any": {
+        "active": 1242,
+        "delisted": 3925
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 130880,
+        "no_prior": 505,
+        "no_rows_ever": 737
+       },
+       "delisted": {
+        "ok": 1188,
+        "no_rows_ever": 3925
+       },
+       "transferred": {
+        "ok": 1201
+       },
+       "other": {
+        "ok": 175
+       }
+      },
+      "known_all_filters": {
+       "active": 130880,
+       "delisted": 1188,
+       "transferred": 1201,
+       "other": 175
+      },
+      "passed_all_filters": {
+       "active": 75893,
+       "delisted": 551,
+       "transferred": 900,
+       "other": 168
+      },
+      "instruments": {
+       "active": 1001,
+       "delisted": 42,
+       "transferred": 10,
+       "other": 2
+      },
+      "instruments_missing_every_day": {
+       "active": 9,
+       "delisted": 34,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2357,
+       "delisted": 83,
+       "transferred": 10
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 240
+      }
+     },
+     "2021": {
+      "days": 244,
+      "member_days": {
+       "active": 156124,
+       "other": 65,
+       "delisted": 3637,
+       "transferred": 541
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1151,
+        "delisted": 2795
+       },
+       "any": {
+        "active": 1151,
+        "delisted": 2795
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 154973,
+        "no_rows_ever": 443,
+        "no_prior": 708
+       },
+       "other": {
+        "ok": 65
+       },
+       "delisted": {
+        "ok": 842,
+        "no_rows_ever": 2795
+       },
+       "transferred": {
+        "ok": 541
+       }
+      },
+      "known_all_filters": {
+       "active": 154973,
+       "other": 65,
+       "delisted": 842,
+       "transferred": 541
+      },
+      "passed_all_filters": {
+       "active": 122941,
+       "other": 61,
+       "delisted": 368,
+       "transferred": 369
+      },
+      "instruments": {
+       "active": 1116,
+       "other": 1,
+       "delisted": 28,
+       "transferred": 9
+      },
+      "instruments_missing_every_day": {
+       "active": 8,
+       "other": 0,
+       "delisted": 22,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 2427,
+       "delisted": 13
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 171
+      }
+     },
+     "2022": {
+      "days": 246,
+      "member_days": {
+       "active": 124595,
+       "delisted": 2479,
+       "transferred": 675,
+       "other": 176
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 503,
+        "delisted": 1792
+       },
+       "any": {
+        "active": 503,
+        "delisted": 1792
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 124092,
+        "no_prior": 289,
+        "no_rows_ever": 212,
+        "stale": 2
+       },
+       "delisted": {
+        "ok": 687,
+        "no_rows_ever": 1792
+       },
+       "transferred": {
+        "ok": 675
+       },
+       "other": {
+        "ok": 176
+       }
+      },
+      "known_all_filters": {
+       "active": 124092,
+       "delisted": 687,
+       "transferred": 675,
+       "other": 176
+      },
+      "passed_all_filters": {
+       "active": 81027,
+       "delisted": 253,
+       "transferred": 548,
+       "other": 63
+      },
+      "instruments": {
+       "active": 1025,
+       "delisted": 24,
+       "transferred": 4,
+       "other": 2
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 19,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2443,
+       "other": 12,
+       "delisted": 5
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 176
+      }
+     },
+     "2023": {
+      "days": 239,
+      "member_days": {
+       "active": 135263,
+       "delisted": 2390,
+       "transferred": 707,
+       "other": 116
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 587,
+        "delisted": 1463
+       },
+       "any": {
+        "active": 587,
+        "delisted": 1463
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 134676,
+        "no_rows_ever": 138,
+        "no_prior": 449
+       },
+       "delisted": {
+        "ok": 927,
+        "no_rows_ever": 1440,
+        "no_prior": 23
+       },
+       "transferred": {
+        "ok": 707
+       },
+       "other": {
+        "ok": 116
+       }
+      },
+      "known_all_filters": {
+       "active": 134676,
+       "delisted": 927,
+       "transferred": 707,
+       "other": 116
+      },
+      "passed_all_filters": {
+       "active": 63445,
+       "delisted": 682,
+       "transferred": 463,
+       "other": 76
+      },
+      "instruments": {
+       "active": 1099,
+       "delisted": 17,
+       "transferred": 5,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 11,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2348,
+       "other": 1,
+       "delisted": 34,
+       "transferred": 7
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 203
+      }
+     },
+     "2024": {
+      "days": 178,
+      "member_days": {
+       "active": 118453,
+       "delisted": 1215,
+       "transferred": 85,
+       "other": 28
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 765,
+        "delisted": 405
+       },
+       "any": {
+        "active": 765,
+        "delisted": 405
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 117688,
+        "no_prior": 546,
+        "no_rows_ever": 219
+       },
+       "delisted": {
+        "ok": 810,
+        "no_rows_ever": 405
+       },
+       "transferred": {
+        "ok": 85
+       },
+       "other": {
+        "ok": 28
+       }
+      },
+      "known_all_filters": {
+       "active": 117688,
+       "delisted": 810,
+       "transferred": 85,
+       "other": 28
+      },
+      "passed_all_filters": {
+       "active": 74548,
+       "delisted": 708,
+       "transferred": 65,
+       "other": 6
+      },
+      "instruments": {
+       "active": 1158,
+       "delisted": 12,
+       "transferred": 3,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 7,
+       "delisted": 6,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 1746,
+       "delisted": 34
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 1
+      }
+     }
+    }
+   }
+  },
+  "X4": {
+   "exploration": {
+    "window": [
+     "2014-08-14",
+     "2019-12-30"
+    ],
+    "years": {
+     "2014": {
+      "days": 99,
+      "member_days": {
+       "active": 37038,
+       "other": 90,
+       "delisted": 4813,
+       "transferred": 271
+      },
+      "missing": {
+       "eps_growth_yield": {
+        "active": 623
+       },
+       "any": {
+        "active": 680,
+        "delisted": 4498,
+        "transferred": 38
+       },
+       "revenue_yoy": {
+        "active": 178,
+        "delisted": 4498,
+        "transferred": 38
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 36860,
+        "no_prior": 97,
+        "no_rows_ever": 81
+       },
+       "other": {
+        "ok": 90
+       },
+       "delisted": {
+        "no_rows_ever": 4498,
+        "ok": 315
+       },
+       "transferred": {
+        "ok": 233,
+        "no_rows_ever": 38
+       }
+      },
+      "known_all_filters": {
+       "active": 36358,
+       "other": 90,
+       "delisted": 315,
+       "transferred": 233
+      },
+      "passed_all_filters": {
+       "active": 17419,
+       "other": 90,
+       "delisted": 191,
+       "transferred": 113
+      },
+      "instruments": {
+       "active": 634,
+       "other": 1,
+       "delisted": 74,
+       "transferred": 6
+      },
+      "instruments_missing_every_day": {
+       "active": 15,
+       "other": 0,
+       "delisted": 69,
+       "transferred": 1
+      },
+      "picks_by_status": {
+       "active": 1932,
+       "delisted": 48
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 222,
+       "transferred": 15
+      }
+     },
+     "2015": {
+      "days": 244,
+      "member_days": {
+       "active": 93161,
+       "delisted": 10556,
+       "transferred": 962,
+       "other": 208
+      },
+      "missing": {
+       "eps_growth_yield": {
+        "active": 1712,
+        "transferred": 8,
+        "delisted": 65
+       },
+       "any": {
+        "active": 1861,
+        "delisted": 9959,
+        "transferred": 185
+       },
+       "revenue_yoy": {
+        "active": 343,
+        "delisted": 9894,
+        "transferred": 177
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 92818,
+        "no_rows_ever": 141,
+        "no_prior": 202
+       },
+       "delisted": {
+        "no_rows_ever": 9894,
+        "ok": 662
+       },
+       "transferred": {
+        "ok": 785,
+        "no_rows_ever": 177
+       },
+       "other": {
+        "ok": 208
+       }
+      },
+      "known_all_filters": {
+       "active": 91300,
+       "delisted": 597,
+       "transferred": 777,
+       "other": 208
+      },
+      "passed_all_filters": {
+       "active": 33020,
+       "delisted": 167,
+       "transferred": 506,
+       "other": 125
+      },
+      "instruments": {
+       "active": 784,
+       "delisted": 82,
+       "transferred": 12,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 26,
+       "delisted": 76,
+       "transferred": 3,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 4854,
+       "delisted": 26
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 1267,
+       "transferred": 40
+      }
+     },
+     "2016": {
+      "days": 244,
+      "member_days": {
+       "active": 85756,
+       "other": 158,
+       "delisted": 7809,
+       "transferred": 470
+      },
+      "missing": {
+       "eps_growth_yield": {
+        "active": 1067,
+        "delisted": 68,
+        "transferred": 43
+       },
+       "any": {
+        "active": 1394,
+        "delisted": 7005,
+        "transferred": 43
+       },
+       "revenue_yoy": {
+        "delisted": 6939,
+        "active": 498
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 85258,
+        "no_prior": 436,
+        "no_rows_ever": 62
+       },
+       "other": {
+        "ok": 158
+       },
+       "delisted": {
+        "ok": 870,
+        "no_rows_ever": 6931,
+        "no_prior": 8
+       },
+       "transferred": {
+        "ok": 470
+       }
+      },
+      "known_all_filters": {
+       "active": 84362,
+       "other": 158,
+       "delisted": 804,
+       "transferred": 427
+      },
+      "passed_all_filters": {
+       "active": 30423,
+       "other": 41,
+       "transferred": 259,
+       "delisted": 317
+      },
+      "instruments": {
+       "active": 757,
+       "other": 1,
+       "delisted": 71,
+       "transferred": 7
+      },
+      "instruments_missing_every_day": {
+       "active": 14,
+       "other": 0,
+       "delisted": 65,
+       "transferred": 1
+      },
+      "picks_by_status": {
+       "active": 4679,
+       "delisted": 138,
+       "transferred": 63
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 902
+      }
+     },
+     "2017": {
+      "days": 246,
+      "member_days": {
+       "active": 105911,
+       "delisted": 8944,
+       "transferred": 1087,
+       "other": 58
+      },
+      "missing": {
+       "eps_growth_yield": {
+        "active": 866,
+        "delisted": 25,
+        "transferred": 77
+       },
+       "any": {
+        "active": 1125,
+        "delisted": 8294,
+        "transferred": 77
+       },
+       "revenue_yoy": {
+        "delisted": 8294,
+        "active": 411
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 105500,
+        "no_prior": 274,
+        "no_rows_ever": 137
+       },
+       "delisted": {
+        "no_rows_ever": 8294,
+        "ok": 650
+       },
+       "transferred": {
+        "ok": 1087
+       },
+       "other": {
+        "ok": 58
+       }
+      },
+      "known_all_filters": {
+       "active": 104786,
+       "delisted": 650,
+       "transferred": 1010,
+       "other": 58
+      },
+      "passed_all_filters": {
+       "active": 44376,
+       "delisted": 279,
+       "transferred": 570
+      },
+      "instruments": {
+       "active": 878,
+       "delisted": 73,
+       "transferred": 8,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 13,
+       "delisted": 67,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 4686,
+       "delisted": 229,
+       "transferred": 5
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 440
+      }
+     },
+     "2018": {
+      "days": 247,
+      "member_days": {
+       "active": 100568,
+       "delisted": 7800,
+       "transferred": 938,
+       "other": 124
+      },
+      "missing": {
+       "eps_growth_yield": {
+        "active": 934,
+        "delisted": 34
+       },
+       "any": {
+        "active": 1014,
+        "delisted": 7155
+       },
+       "revenue_yoy": {
+        "active": 279,
+        "delisted": 7121
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 100289,
+        "no_rows_ever": 33,
+        "no_prior": 246
+       },
+       "delisted": {
+        "no_rows_ever": 7121,
+        "ok": 679
+       },
+       "transferred": {
+        "ok": 938
+       },
+       "other": {
+        "ok": 124
+       }
+      },
+      "known_all_filters": {
+       "active": 99554,
+       "delisted": 645,
+       "transferred": 938,
+       "other": 124
+      },
+      "passed_all_filters": {
+       "active": 47250,
+       "delisted": 183,
+       "transferred": 716
+      },
+      "instruments": {
+       "active": 859,
+       "delisted": 66,
+       "transferred": 9,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 27,
+       "delisted": 59,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 4921,
+       "delisted": 19
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 316
+      }
+     },
+     "2019": {
+      "days": 241,
+      "member_days": {
+       "active": 94839,
+       "delisted": 4811,
+       "transferred": 778,
+       "other": 204
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 225,
+        "delisted": 3988
+       },
+       "eps_growth_yield": {
+        "active": 1341,
+        "transferred": 6
+       },
+       "any": {
+        "active": 1420,
+        "delisted": 3988,
+        "transferred": 6
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 94614,
+        "no_prior": 219,
+        "no_rows_ever": 6
+       },
+       "delisted": {
+        "ok": 823,
+        "no_rows_ever": 3986,
+        "no_prior": 2
+       },
+       "transferred": {
+        "ok": 778
+       },
+       "other": {
+        "ok": 204
+       }
+      },
+      "known_all_filters": {
+       "active": 93419,
+       "delisted": 823,
+       "transferred": 772,
+       "other": 204
+      },
+      "passed_all_filters": {
+       "active": 33400,
+       "delisted": 332,
+       "transferred": 422,
+       "other": 75
+      },
+      "instruments": {
+       "active": 787,
+       "delisted": 44,
+       "transferred": 10,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 10,
+       "delisted": 39,
+       "transferred": 1,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 4753,
+       "delisted": 67
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 424
+      }
+     }
+    }
+   },
+   "validation": {
+    "window": [
+     "2019-12-31",
+     "2024-09-26"
+    ],
+    "years": {
+     "2019": {
+      "days": 1,
+      "member_days": {
+       "active": 427,
+       "delisted": 19,
+       "transferred": 3
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1,
+        "delisted": 15
+       },
+       "any": {
+        "active": 3,
+        "delisted": 15
+       },
+       "eps_growth_yield": {
+        "active": 2
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 426,
+        "no_prior": 1
+       },
+       "delisted": {
+        "ok": 4,
+        "no_rows_ever": 15
+       },
+       "transferred": {
+        "ok": 3
+       }
+      },
+      "known_all_filters": {
+       "active": 424,
+       "delisted": 4,
+       "transferred": 3
+      },
+      "passed_all_filters": {
+       "active": 158,
+       "delisted": 1,
+       "transferred": 1
+      },
+      "instruments": {
+       "active": 427,
+       "delisted": 19,
+       "transferred": 3
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 15,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 20
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 2
+      }
+     },
+     "2020": {
+      "days": 245,
+      "member_days": {
+       "active": 132122,
+       "delisted": 5113,
+       "transferred": 1201,
+       "other": 175
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1242,
+        "delisted": 3925
+       },
+       "any": {
+        "active": 2104,
+        "delisted": 3925
+       },
+       "eps_growth_yield": {
+        "active": 1651
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 130880,
+        "no_prior": 505,
+        "no_rows_ever": 737
+       },
+       "delisted": {
+        "ok": 1188,
+        "no_rows_ever": 3925
+       },
+       "transferred": {
+        "ok": 1201
+       },
+       "other": {
+        "ok": 175
+       }
+      },
+      "known_all_filters": {
+       "active": 130018,
+       "delisted": 1188,
+       "transferred": 1201,
+       "other": 175
+      },
+      "passed_all_filters": {
+       "active": 50257,
+       "delisted": 322,
+       "transferred": 485,
+       "other": 120
+      },
+      "instruments": {
+       "active": 1001,
+       "delisted": 42,
+       "transferred": 10,
+       "other": 2
+      },
+      "instruments_missing_every_day": {
+       "active": 18,
+       "delisted": 34,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 4856,
+       "delisted": 44
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 477
+      }
+     },
+     "2021": {
+      "days": 244,
+      "member_days": {
+       "active": 156124,
+       "other": 65,
+       "delisted": 3637,
+       "transferred": 541
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1151,
+        "delisted": 2795
+       },
+       "eps_growth_yield": {
+        "active": 1621,
+        "transferred": 10,
+        "delisted": 15
+       },
+       "any": {
+        "active": 2106,
+        "delisted": 2810,
+        "transferred": 10
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 154973,
+        "no_rows_ever": 443,
+        "no_prior": 708
+       },
+       "other": {
+        "ok": 65
+       },
+       "delisted": {
+        "ok": 842,
+        "no_rows_ever": 2795
+       },
+       "transferred": {
+        "ok": 541
+       }
+      },
+      "known_all_filters": {
+       "active": 154018,
+       "other": 65,
+       "delisted": 827,
+       "transferred": 531
+      },
+      "passed_all_filters": {
+       "active": 94914,
+       "other": 61,
+       "transferred": 282,
+       "delisted": 177
+      },
+      "instruments": {
+       "active": 1116,
+       "other": 1,
+       "delisted": 28,
+       "transferred": 9
+      },
+      "instruments_missing_every_day": {
+       "active": 21,
+       "other": 0,
+       "delisted": 23,
+       "transferred": 1
+      },
+      "picks_by_status": {
+       "active": 4839,
+       "delisted": 41
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 308
+      }
+     },
+     "2022": {
+      "days": 246,
+      "member_days": {
+       "active": 124595,
+       "delisted": 2479,
+       "transferred": 675,
+       "other": 176
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 503,
+        "delisted": 1792
+       },
+       "eps_growth_yield": {
+        "active": 1283,
+        "delisted": 25
+       },
+       "any": {
+        "active": 1531,
+        "delisted": 1817
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 124092,
+        "no_prior": 289,
+        "no_rows_ever": 212,
+        "stale": 2
+       },
+       "delisted": {
+        "ok": 687,
+        "no_rows_ever": 1792
+       },
+       "transferred": {
+        "ok": 675
+       },
+       "other": {
+        "ok": 176
+       }
+      },
+      "known_all_filters": {
+       "active": 123064,
+       "delisted": 662,
+       "transferred": 675,
+       "other": 176
+      },
+      "passed_all_filters": {
+       "active": 59431,
+       "delisted": 61,
+       "transferred": 424
+      },
+      "instruments": {
+       "active": 1025,
+       "delisted": 24,
+       "transferred": 4,
+       "other": 2
+      },
+      "instruments_missing_every_day": {
+       "active": 12,
+       "delisted": 19,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 4901,
+       "transferred": 19
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 107
+      }
+     },
+     "2023": {
+      "days": 239,
+      "member_days": {
+       "active": 135263,
+       "delisted": 2390,
+       "transferred": 707,
+       "other": 116
+      },
+      "missing": {
+       "eps_growth_yield": {
+        "active": 1295
+       },
+       "any": {
+        "active": 1588,
+        "delisted": 1463
+       },
+       "revenue_yoy": {
+        "active": 587,
+        "delisted": 1463
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 134676,
+        "no_rows_ever": 138,
+        "no_prior": 449
+       },
+       "delisted": {
+        "ok": 927,
+        "no_rows_ever": 1440,
+        "no_prior": 23
+       },
+       "transferred": {
+        "ok": 707
+       },
+       "other": {
+        "ok": 116
+       }
+      },
+      "known_all_filters": {
+       "active": 133675,
+       "delisted": 927,
+       "transferred": 707,
+       "other": 116
+      },
+      "passed_all_filters": {
+       "active": 39977,
+       "delisted": 406,
+       "transferred": 391,
+       "other": 65
+      },
+      "instruments": {
+       "active": 1099,
+       "delisted": 17,
+       "transferred": 5,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 15,
+       "delisted": 11,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 4716,
+       "transferred": 9,
+       "delisted": 55
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 138
+      }
+     },
+     "2024": {
+      "days": 178,
+      "member_days": {
+       "active": 118453,
+       "delisted": 1215,
+       "transferred": 85,
+       "other": 28
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 765,
+        "delisted": 405
+       },
+       "any": {
+        "active": 1470,
+        "delisted": 405
+       },
+       "eps_growth_yield": {
+        "active": 985
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 117688,
+        "no_prior": 546,
+        "no_rows_ever": 219
+       },
+       "delisted": {
+        "ok": 810,
+        "no_rows_ever": 405
+       },
+       "transferred": {
+        "ok": 85
+       },
+       "other": {
+        "ok": 28
+       }
+      },
+      "known_all_filters": {
+       "active": 116983,
+       "delisted": 810,
+       "transferred": 85,
+       "other": 28
+      },
+      "passed_all_filters": {
+       "active": 49701,
+       "delisted": 580,
+       "transferred": 65
+      },
+      "instruments": {
+       "active": 1158,
+       "delisted": 12,
+       "transferred": 3,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 14,
+       "delisted": 6,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "delisted": 179,
+       "active": 3381
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 74
+      }
+     }
+    }
+   }
+  },
+  "X7": {
+   "exploration": {
+    "window": [
+     "2014-01-10",
+     "2019-12-10"
+    ],
+    "years": {
+     "2014": {
+      "days": 12,
+      "member_days": {
+       "active": 5644,
+       "other": 11,
+       "delisted": 674,
+       "transferred": 45
+      },
+      "missing": {
+       "revenue_high_12": {
+        "active": 32,
+        "delisted": 630,
+        "transferred": 3
+       },
+       "any": {
+        "active": 32,
+        "delisted": 630,
+        "transferred": 3
+       },
+       "revenue_previous_month": {
+        "delisted": 630,
+        "transferred": 3,
+        "active": 15
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 5614,
+        "no_prior": 15,
+        "no_rows_ever": 15
+       },
+       "other": {
+        "ok": 11
+       },
+       "delisted": {
+        "no_rows_ever": 630,
+        "ok": 44
+       },
+       "transferred": {
+        "ok": 42,
+        "no_rows_ever": 3
+       }
+      },
+      "known_all_filters": {
+       "active": 5612,
+       "other": 11,
+       "delisted": 44,
+       "transferred": 42
+      },
+      "passed_all_filters": {
+       "active": 892,
+       "other": 2,
+       "transferred": 10,
+       "delisted": 4
+      },
+      "instruments": {
+       "active": 892,
+       "other": 1,
+       "delisted": 97,
+       "transferred": 12
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "other": 0,
+       "delisted": 90,
+       "transferred": 1
+      },
+      "picks_by_status": {
+       "active": 230,
+       "transferred": 3,
+       "other": 1,
+       "delisted": 1
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 59
+      }
+     },
+     "2015": {
+      "days": 12,
+      "member_days": {
+       "active": 4573,
+       "delisted": 524,
+       "transferred": 48,
+       "other": 10
+      },
+      "missing": {
+       "revenue_previous_month": {
+        "active": 8,
+        "delisted": 491,
+        "transferred": 9
+       },
+       "revenue_high_12": {
+        "active": 16,
+        "delisted": 494,
+        "transferred": 9
+       },
+       "any": {
+        "active": 16,
+        "delisted": 494,
+        "transferred": 9
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 4556,
+        "no_rows_ever": 8,
+        "no_prior": 9
+       },
+       "delisted": {
+        "no_rows_ever": 491,
+        "ok": 33
+       },
+       "transferred": {
+        "ok": 39,
+        "no_rows_ever": 9
+       },
+       "other": {
+        "ok": 10
+       }
+      },
+      "known_all_filters": {
+       "active": 4557,
+       "delisted": 30,
+       "transferred": 39,
+       "other": 10
+      },
+      "passed_all_filters": {
+       "active": 525,
+       "delisted": 4,
+       "transferred": 9,
+       "other": 1
+      },
+      "instruments": {
+       "active": 729,
+       "delisted": 76,
+       "transferred": 10,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 71,
+       "transferred": 2,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 211,
+       "transferred": 7,
+       "delisted": 2
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 41,
+       "transferred": 1
+      }
+     },
+     "2016": {
+      "days": 12,
+      "member_days": {
+       "active": 4198,
+       "other": 7,
+       "delisted": 386,
+       "transferred": 24
+      },
+      "missing": {
+       "revenue_high_12": {
+        "active": 11,
+        "delisted": 344
+       },
+       "any": {
+        "active": 11,
+        "delisted": 344
+       },
+       "revenue_previous_month": {
+        "delisted": 343,
+        "active": 4
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 4174,
+        "no_prior": 20,
+        "no_rows_ever": 4
+       },
+       "other": {
+        "ok": 7
+       },
+       "delisted": {
+        "ok": 43,
+        "no_rows_ever": 343
+       },
+       "transferred": {
+        "ok": 24
+       }
+      },
+      "known_all_filters": {
+       "active": 4187,
+       "other": 7,
+       "delisted": 42,
+       "transferred": 24
+      },
+      "passed_all_filters": {
+       "active": 500,
+       "other": 1,
+       "delisted": 3,
+       "transferred": 3
+      },
+      "instruments": {
+       "active": 699,
+       "other": 1,
+       "delisted": 64,
+       "transferred": 7
+      },
+      "instruments_missing_every_day": {
+       "active": 4,
+       "other": 0,
+       "delisted": 58,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 204,
+       "transferred": 3,
+       "delisted": 1
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 63
+      }
+     },
+     "2017": {
+      "days": 12,
+      "member_days": {
+       "active": 5142,
+       "delisted": 431,
+       "transferred": 48,
+       "other": 3
+      },
+      "missing": {
+       "revenue_previous_month": {
+        "delisted": 399,
+        "active": 7
+       },
+       "revenue_high_12": {
+        "delisted": 399,
+        "active": 10
+       },
+       "any": {
+        "delisted": 399,
+        "active": 10
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 5122,
+        "no_prior": 13,
+        "no_rows_ever": 7
+       },
+       "delisted": {
+        "ok": 32,
+        "no_rows_ever": 399
+       },
+       "transferred": {
+        "ok": 48
+       },
+       "other": {
+        "ok": 3
+       }
+      },
+      "known_all_filters": {
+       "active": 5132,
+       "delisted": 32,
+       "transferred": 48,
+       "other": 3
+      },
+      "passed_all_filters": {
+       "active": 849,
+       "delisted": 2,
+       "transferred": 15
+      },
+      "instruments": {
+       "active": 819,
+       "delisted": 66,
+       "transferred": 8,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 60,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 221,
+       "transferred": 12,
+       "delisted": 1
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 73
+      }
+     },
+     "2018": {
+      "days": 12,
+      "member_days": {
+       "active": 4920,
+       "delisted": 385,
+       "transferred": 41,
+       "other": 6
+      },
+      "missing": {
+       "revenue_high_12": {
+        "active": 10,
+        "delisted": 353
+       },
+       "any": {
+        "active": 10,
+        "delisted": 353
+       },
+       "revenue_previous_month": {
+        "active": 2,
+        "delisted": 353
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 4907,
+        "no_rows_ever": 2,
+        "no_prior": 11
+       },
+       "delisted": {
+        "no_rows_ever": 353,
+        "ok": 32
+       },
+       "transferred": {
+        "ok": 41
+       },
+       "other": {
+        "ok": 6
+       }
+      },
+      "known_all_filters": {
+       "active": 4910,
+       "delisted": 32,
+       "transferred": 41,
+       "other": 6
+      },
+      "passed_all_filters": {
+       "active": 884,
+       "transferred": 16,
+       "delisted": 5
+      },
+      "instruments": {
+       "active": 801,
+       "delisted": 63,
+       "transferred": 7,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 2,
+       "delisted": 56,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 216,
+       "transferred": 13
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 31
+      }
+     },
+     "2019": {
+      "days": 12,
+      "member_days": {
+       "active": 4677,
+       "delisted": 240,
+       "transferred": 40,
+       "other": 10
+      },
+      "missing": {
+       "revenue_high_12": {
+        "active": 5,
+        "delisted": 197
+       },
+       "any": {
+        "active": 5,
+        "delisted": 197
+       },
+       "revenue_previous_month": {
+        "delisted": 197
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 4667,
+        "no_prior": 10
+       },
+       "delisted": {
+        "ok": 42,
+        "no_rows_ever": 197,
+        "no_prior": 1
+       },
+       "transferred": {
+        "ok": 40
+       },
+       "other": {
+        "ok": 10
+       }
+      },
+      "known_all_filters": {
+       "active": 4672,
+       "delisted": 43,
+       "transferred": 40,
+       "other": 10
+      },
+      "passed_all_filters": {
+       "active": 582,
+       "delisted": 7,
+       "transferred": 3,
+       "other": 4
+      },
+      "instruments": {
+       "active": 731,
+       "delisted": 41,
+       "transferred": 9,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 1,
+       "delisted": 36,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 221,
+       "transferred": 3,
+       "other": 3
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 20
+      }
+     }
+    }
+   },
+   "validation": {
+    "window": [
+     "2020-01-10",
+     "2024-09-10"
+    ],
+    "years": {
+     "2020": {
+      "days": 12,
+      "member_days": {
+       "active": 6343,
+       "other": 9,
+       "delisted": 253,
+       "transferred": 59
+      },
+      "missing": {
+       "revenue_previous_month": {
+        "active": 33,
+        "delisted": 195
+       },
+       "revenue_high_12": {
+        "active": 35,
+        "delisted": 195
+       },
+       "any": {
+        "active": 35,
+        "delisted": 195
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 6286,
+        "no_rows_ever": 33,
+        "no_prior": 24
+       },
+       "other": {
+        "ok": 9
+       },
+       "delisted": {
+        "ok": 58,
+        "no_rows_ever": 195
+       },
+       "transferred": {
+        "ok": 59
+       }
+      },
+      "known_all_filters": {
+       "active": 6308,
+       "other": 9,
+       "delisted": 58,
+       "transferred": 59
+      },
+      "passed_all_filters": {
+       "active": 1147,
+       "other": 4,
+       "delisted": 4,
+       "transferred": 10
+      },
+      "instruments": {
+       "active": 927,
+       "other": 2,
+       "delisted": 38,
+       "transferred": 10
+      },
+      "instruments_missing_every_day": {
+       "active": 8,
+       "other": 0,
+       "delisted": 31,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 230,
+       "delisted": 1,
+       "transferred": 3
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 36
+      }
+     },
+     "2021": {
+      "days": 12,
+      "member_days": {
+       "active": 7616,
+       "delisted": 176,
+       "transferred": 26,
+       "other": 3
+      },
+      "missing": {
+       "revenue_previous_month": {
+        "active": 21,
+        "delisted": 135
+       },
+       "revenue_high_12": {
+        "active": 31,
+        "delisted": 135
+       },
+       "any": {
+        "active": 31,
+        "delisted": 135
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 7559,
+        "no_prior": 36,
+        "no_rows_ever": 21
+       },
+       "delisted": {
+        "ok": 41,
+        "no_rows_ever": 135
+       },
+       "transferred": {
+        "ok": 26
+       },
+       "other": {
+        "ok": 3
+       }
+      },
+      "known_all_filters": {
+       "active": 7585,
+       "delisted": 41,
+       "transferred": 26,
+       "other": 3
+      },
+      "passed_all_filters": {
+       "active": 1904,
+       "delisted": 4,
+       "transferred": 3
+      },
+      "instruments": {
+       "active": 1065,
+       "delisted": 24,
+       "transferred": 7,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 4,
+       "delisted": 18,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 237,
+       "delisted": 2,
+       "transferred": 1
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 1
+      }
+     },
+     "2022": {
+      "days": 12,
+      "member_days": {
+       "active": 6084,
+       "delisted": 123,
+       "transferred": 34,
+       "other": 9
+      },
+      "missing": {
+       "revenue_previous_month": {
+        "active": 10,
+        "delisted": 87
+       },
+       "revenue_high_12": {
+        "active": 11,
+        "delisted": 87
+       },
+       "any": {
+        "active": 11,
+        "delisted": 87
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 6059,
+        "no_prior": 15,
+        "no_rows_ever": 10
+       },
+       "delisted": {
+        "ok": 36,
+        "no_rows_ever": 87
+       },
+       "transferred": {
+        "ok": 34
+       },
+       "other": {
+        "ok": 9
+       }
+      },
+      "known_all_filters": {
+       "active": 6073,
+       "delisted": 36,
+       "transferred": 34,
+       "other": 9
+      },
+      "passed_all_filters": {
+       "active": 1011,
+       "delisted": 4,
+       "transferred": 4
+      },
+      "instruments": {
+       "active": 972,
+       "delisted": 21,
+       "transferred": 4,
+       "other": 2
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 16,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "delisted": 1,
+       "active": 225,
+       "transferred": 4
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 8
+      }
+     },
+     "2023": {
+      "days": 12,
+      "member_days": {
+       "active": 6737,
+       "delisted": 118,
+       "transferred": 36,
+       "other": 7
+      },
+      "missing": {
+       "revenue_previous_month": {
+        "active": 8,
+        "delisted": 72
+       },
+       "revenue_high_12": {
+        "active": 12,
+        "delisted": 72
+       },
+       "any": {
+        "active": 12,
+        "delisted": 72
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 6710,
+        "no_rows_ever": 8,
+        "no_prior": 19
+       },
+       "delisted": {
+        "ok": 45,
+        "no_rows_ever": 72,
+        "no_prior": 1
+       },
+       "transferred": {
+        "ok": 36
+       },
+       "other": {
+        "ok": 7
+       }
+      },
+      "known_all_filters": {
+       "active": 6725,
+       "delisted": 46,
+       "transferred": 36,
+       "other": 7
+      },
+      "passed_all_filters": {
+       "active": 747,
+       "delisted": 11,
+       "other": 1,
+       "transferred": 5
+      },
+      "instruments": {
+       "active": 1043,
+       "delisted": 16,
+       "transferred": 5,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 11,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 231,
+       "delisted": 5,
+       "transferred": 1
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 8
+      }
+     },
+     "2024": {
+      "days": 9,
+      "member_days": {
+       "active": 5930,
+       "delisted": 61,
+       "transferred": 4,
+       "other": 2
+      },
+      "missing": {
+       "revenue_previous_month": {
+        "active": 11,
+        "delisted": 20
+       },
+       "revenue_high_12": {
+        "active": 13,
+        "delisted": 20
+       },
+       "any": {
+        "active": 13,
+        "delisted": 20
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 5892,
+        "no_prior": 27,
+        "no_rows_ever": 11
+       },
+       "delisted": {
+        "ok": 41,
+        "no_rows_ever": 20
+       },
+       "transferred": {
+        "ok": 4
+       },
+       "other": {
+        "ok": 2
+       }
+      },
+      "known_all_filters": {
+       "active": 5917,
+       "delisted": 41,
+       "transferred": 4,
+       "other": 2
+      },
+      "passed_all_filters": {
+       "active": 992,
+       "delisted": 5,
+       "transferred": 1
+      },
+      "instruments": {
+       "active": 1099,
+       "delisted": 11,
+       "transferred": 2,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 5,
+       "delisted": 5,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 179,
+       "delisted": 1
+      },
+      "missing_would_rank_in_top": {}
+     }
+    }
+   }
+  },
+  "S": {
+   "exploration": {
+    "window": [
+     "2014-12-26",
+     "2019-12-30"
+    ],
+    "years": {
+     "2014": {
+      "days": 5,
+      "member_days": {
+       "active": 1917,
+       "delisted": 257,
+       "transferred": 15
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 10,
+        "delisted": 247,
+        "transferred": 5
+       },
+       "any": {
+        "active": 10,
+        "delisted": 247,
+        "transferred": 5
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 1907,
+        "no_rows_ever": 5,
+        "no_prior": 5
+       },
+       "delisted": {
+        "no_rows_ever": 247,
+        "ok": 10
+       },
+       "transferred": {
+        "ok": 10,
+        "no_rows_ever": 5
+       }
+      },
+      "known_all_filters": {
+       "active": 1907,
+       "delisted": 10,
+       "transferred": 10
+      },
+      "passed_all_filters": {
+       "active": 1138,
+       "delisted": 5,
+       "transferred": 5
+      },
+      "instruments": {
+       "active": 400,
+       "delisted": 56,
+       "transferred": 3
+      },
+      "instruments_missing_every_day": {
+       "active": 2,
+       "delisted": 54,
+       "transferred": 1
+      },
+      "picks_by_status": {
+       "active": 50
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 22
+      }
+     },
+     "2015": {
+      "days": 244,
+      "member_days": {
+       "active": 93161,
+       "delisted": 10556,
+       "transferred": 962,
+       "other": 208
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 343,
+        "delisted": 9894,
+        "transferred": 177
+       },
+       "any": {
+        "active": 343,
+        "delisted": 9894,
+        "transferred": 177
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 92818,
+        "no_rows_ever": 141,
+        "no_prior": 202
+       },
+       "delisted": {
+        "no_rows_ever": 9894,
+        "ok": 662
+       },
+       "transferred": {
+        "ok": 785,
+        "no_rows_ever": 177
+       },
+       "other": {
+        "ok": 208
+       }
+      },
+      "known_all_filters": {
+       "active": 92818,
+       "delisted": 662,
+       "transferred": 785,
+       "other": 208
+      },
+      "passed_all_filters": {
+       "active": 50041,
+       "delisted": 319,
+       "transferred": 716,
+       "other": 188
+      },
+      "instruments": {
+       "active": 784,
+       "delisted": 82,
+       "transferred": 12,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 6,
+       "delisted": 75,
+       "transferred": 2,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2397,
+       "transferred": 14,
+       "other": 29
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 248,
+       "transferred": 12
+      }
+     },
+     "2016": {
+      "days": 244,
+      "member_days": {
+       "active": 85756,
+       "other": 158,
+       "delisted": 7809,
+       "transferred": 470
+      },
+      "missing": {
+       "revenue_yoy": {
+        "delisted": 6939,
+        "active": 498
+       },
+       "any": {
+        "delisted": 6939,
+        "active": 498
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 85258,
+        "no_prior": 436,
+        "no_rows_ever": 62
+       },
+       "other": {
+        "ok": 158
+       },
+       "delisted": {
+        "ok": 870,
+        "no_rows_ever": 6931,
+        "no_prior": 8
+       },
+       "transferred": {
+        "ok": 470
+       }
+      },
+      "known_all_filters": {
+       "active": 85258,
+       "other": 158,
+       "delisted": 870,
+       "transferred": 470
+      },
+      "passed_all_filters": {
+       "active": 46289,
+       "other": 41,
+       "delisted": 564,
+       "transferred": 306
+      },
+      "instruments": {
+       "active": 757,
+       "other": 1,
+       "delisted": 71,
+       "transferred": 7
+      },
+      "instruments_missing_every_day": {
+       "active": 6,
+       "other": 0,
+       "delisted": 65,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 2401,
+       "other": 14,
+       "delisted": 5,
+       "transferred": 20
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 218
+      }
+     },
+     "2017": {
+      "days": 246,
+      "member_days": {
+       "active": 105911,
+       "delisted": 8944,
+       "transferred": 1087,
+       "other": 58
+      },
+      "missing": {
+       "revenue_yoy": {
+        "delisted": 8294,
+        "active": 411
+       },
+       "any": {
+        "delisted": 8294,
+        "active": 411
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 105500,
+        "no_prior": 274,
+        "no_rows_ever": 137
+       },
+       "delisted": {
+        "no_rows_ever": 8294,
+        "ok": 650
+       },
+       "transferred": {
+        "ok": 1087
+       },
+       "other": {
+        "ok": 58
+       }
+      },
+      "known_all_filters": {
+       "active": 105500,
+       "delisted": 650,
+       "transferred": 1087,
+       "other": 58
+      },
+      "passed_all_filters": {
+       "active": 67806,
+       "delisted": 354,
+       "transferred": 903,
+       "other": 5
+      },
+      "instruments": {
+       "active": 878,
+       "delisted": 73,
+       "transferred": 8,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 5,
+       "delisted": 67,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2432,
+       "delisted": 9,
+       "transferred": 19
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 165
+      }
+     },
+     "2018": {
+      "days": 247,
+      "member_days": {
+       "active": 100568,
+       "delisted": 7800,
+       "transferred": 938,
+       "other": 124
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 279,
+        "delisted": 7121
+       },
+       "any": {
+        "active": 279,
+        "delisted": 7121
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 100289,
+        "no_rows_ever": 33,
+        "no_prior": 246
+       },
+       "delisted": {
+        "no_rows_ever": 7121,
+        "ok": 679
+       },
+       "transferred": {
+        "ok": 938
+       },
+       "other": {
+        "ok": 124
+       }
+      },
+      "known_all_filters": {
+       "active": 100289,
+       "delisted": 679,
+       "transferred": 938,
+       "other": 124
+      },
+      "passed_all_filters": {
+       "active": 68443,
+       "delisted": 305,
+       "transferred": 764,
+       "other": 31
+      },
+      "instruments": {
+       "active": 859,
+       "delisted": 66,
+       "transferred": 9,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 6,
+       "delisted": 59,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2409,
+       "transferred": 58,
+       "delisted": 3
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 107
+      }
+     },
+     "2019": {
+      "days": 241,
+      "member_days": {
+       "active": 94839,
+       "delisted": 4811,
+       "transferred": 778,
+       "other": 204
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 225,
+        "delisted": 3988
+       },
+       "any": {
+        "active": 225,
+        "delisted": 3988
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 94614,
+        "no_prior": 219,
+        "no_rows_ever": 6
+       },
+       "delisted": {
+        "ok": 823,
+        "no_rows_ever": 3986,
+        "no_prior": 2
+       },
+       "transferred": {
+        "ok": 778
+       },
+       "other": {
+        "ok": 204
+       }
+      },
+      "known_all_filters": {
+       "active": 94614,
+       "delisted": 823,
+       "transferred": 778,
+       "other": 204
+      },
+      "passed_all_filters": {
+       "active": 51372,
+       "delisted": 546,
+       "transferred": 489,
+       "other": 184
+      },
+      "instruments": {
+       "active": 787,
+       "delisted": 44,
+       "transferred": 10,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 39,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2357,
+       "transferred": 37,
+       "other": 16
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 52
+      }
+     }
+    }
+   },
+   "validation": {
+    "window": [
+     "2019-12-31",
+     "2024-09-26"
+    ],
+    "years": {
+     "2019": {
+      "days": 1,
+      "member_days": {
+       "active": 427,
+       "delisted": 19,
+       "transferred": 3
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1,
+        "delisted": 15
+       },
+       "any": {
+        "active": 1,
+        "delisted": 15
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 426,
+        "no_prior": 1
+       },
+       "delisted": {
+        "ok": 4,
+        "no_rows_ever": 15
+       },
+       "transferred": {
+        "ok": 3
+       }
+      },
+      "known_all_filters": {
+       "active": 426,
+       "delisted": 4,
+       "transferred": 3
+      },
+      "passed_all_filters": {
+       "active": 235,
+       "delisted": 1,
+       "transferred": 1
+      },
+      "instruments": {
+       "active": 427,
+       "delisted": 19,
+       "transferred": 3
+      },
+      "instruments_missing_every_day": {
+       "active": 1,
+       "delisted": 15,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 10
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 1
+      }
+     },
+     "2020": {
+      "days": 245,
+      "member_days": {
+       "active": 132122,
+       "delisted": 5113,
+       "transferred": 1201,
+       "other": 175
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1242,
+        "delisted": 3925
+       },
+       "any": {
+        "active": 1242,
+        "delisted": 3925
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 130880,
+        "no_prior": 505,
+        "no_rows_ever": 737
+       },
+       "delisted": {
+        "ok": 1188,
+        "no_rows_ever": 3925
+       },
+       "transferred": {
+        "ok": 1201
+       },
+       "other": {
+        "ok": 175
+       }
+      },
+      "known_all_filters": {
+       "active": 130880,
+       "delisted": 1188,
+       "transferred": 1201,
+       "other": 175
+      },
+      "passed_all_filters": {
+       "active": 75893,
+       "delisted": 551,
+       "transferred": 900,
+       "other": 168
+      },
+      "instruments": {
+       "active": 1001,
+       "delisted": 42,
+       "transferred": 10,
+       "other": 2
+      },
+      "instruments_missing_every_day": {
+       "active": 9,
+       "delisted": 34,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2421,
+       "delisted": 5,
+       "transferred": 19,
+       "other": 5
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 59
+      }
+     },
+     "2021": {
+      "days": 244,
+      "member_days": {
+       "active": 156124,
+       "other": 65,
+       "delisted": 3637,
+       "transferred": 541
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 1151,
+        "delisted": 2795
+       },
+       "any": {
+        "active": 1151,
+        "delisted": 2795
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 154973,
+        "no_rows_ever": 443,
+        "no_prior": 708
+       },
+       "other": {
+        "ok": 65
+       },
+       "delisted": {
+        "ok": 842,
+        "no_rows_ever": 2795
+       },
+       "transferred": {
+        "ok": 541
+       }
+      },
+      "known_all_filters": {
+       "active": 154973,
+       "other": 65,
+       "delisted": 842,
+       "transferred": 541
+      },
+      "passed_all_filters": {
+       "active": 122941,
+       "other": 61,
+       "delisted": 368,
+       "transferred": 369
+      },
+      "instruments": {
+       "active": 1116,
+       "other": 1,
+       "delisted": 28,
+       "transferred": 9
+      },
+      "instruments_missing_every_day": {
+       "active": 8,
+       "other": 0,
+       "delisted": 22,
+       "transferred": 0
+      },
+      "picks_by_status": {
+       "active": 2435,
+       "transferred": 1,
+       "delisted": 4
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 62
+      }
+     },
+     "2022": {
+      "days": 246,
+      "member_days": {
+       "active": 124595,
+       "delisted": 2479,
+       "transferred": 675,
+       "other": 176
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 503,
+        "delisted": 1792
+       },
+       "any": {
+        "active": 503,
+        "delisted": 1792
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 124092,
+        "no_prior": 289,
+        "no_rows_ever": 212,
+        "stale": 2
+       },
+       "delisted": {
+        "ok": 687,
+        "no_rows_ever": 1792
+       },
+       "transferred": {
+        "ok": 675
+       },
+       "other": {
+        "ok": 176
+       }
+      },
+      "known_all_filters": {
+       "active": 124092,
+       "delisted": 687,
+       "transferred": 675,
+       "other": 176
+      },
+      "passed_all_filters": {
+       "active": 81027,
+       "delisted": 253,
+       "transferred": 548,
+       "other": 63
+      },
+      "instruments": {
+       "active": 1025,
+       "delisted": 24,
+       "transferred": 4,
+       "other": 2
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 19,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2442,
+       "transferred": 12,
+       "delisted": 6
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 9
+      }
+     },
+     "2023": {
+      "days": 239,
+      "member_days": {
+       "active": 135263,
+       "delisted": 2390,
+       "transferred": 707,
+       "other": 116
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 587,
+        "delisted": 1463
+       },
+       "any": {
+        "active": 587,
+        "delisted": 1463
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 134676,
+        "no_rows_ever": 138,
+        "no_prior": 449
+       },
+       "delisted": {
+        "ok": 927,
+        "no_rows_ever": 1440,
+        "no_prior": 23
+       },
+       "transferred": {
+        "ok": 707
+       },
+       "other": {
+        "ok": 116
+       }
+      },
+      "known_all_filters": {
+       "active": 134676,
+       "delisted": 927,
+       "transferred": 707,
+       "other": 116
+      },
+      "passed_all_filters": {
+       "active": 63445,
+       "delisted": 682,
+       "transferred": 463,
+       "other": 76
+      },
+      "instruments": {
+       "active": 1099,
+       "delisted": 17,
+       "transferred": 5,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 3,
+       "delisted": 11,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 2363,
+       "transferred": 8,
+       "other": 4,
+       "delisted": 15
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 48
+      }
+     },
+     "2024": {
+      "days": 178,
+      "member_days": {
+       "active": 118453,
+       "delisted": 1215,
+       "transferred": 85,
+       "other": 28
+      },
+      "missing": {
+       "revenue_yoy": {
+        "active": 765,
+        "delisted": 405
+       },
+       "any": {
+        "active": 765,
+        "delisted": 405
+       }
+      },
+      "yoy_reason": {
+       "active": {
+        "ok": 117688,
+        "no_prior": 546,
+        "no_rows_ever": 219
+       },
+       "delisted": {
+        "ok": 810,
+        "no_rows_ever": 405
+       },
+       "transferred": {
+        "ok": 85
+       },
+       "other": {
+        "ok": 28
+       }
+      },
+      "known_all_filters": {
+       "active": 117688,
+       "delisted": 810,
+       "transferred": 85,
+       "other": 28
+      },
+      "passed_all_filters": {
+       "active": 74548,
+       "delisted": 708,
+       "transferred": 65,
+       "other": 6
+      },
+      "instruments": {
+       "active": 1158,
+       "delisted": 12,
+       "transferred": 3,
+       "other": 1
+      },
+      "instruments_missing_every_day": {
+       "active": 7,
+       "delisted": 6,
+       "transferred": 0,
+       "other": 0
+      },
+      "picks_by_status": {
+       "active": 1764,
+       "delisted": 16
+      },
+      "missing_would_rank_in_top": {
+       "delisted": 1
+      }
+     }
+    }
+   }
+  },
+  "H1": {
+   "historical_start": "2012-05-08",
+   "until": "2024-09-27",
+   "years": {
+    "2012": {
+     "days": 168,
+     "member_days": {
+      "active": 51148,
+      "delisted": 7576,
+      "other": 1,
+      "transferred": 190
+     },
+     "missing_high12": {
+      "active": 51148,
+      "delisted": 7576,
+      "other": 1,
+      "transferred": 190
+     },
+     "tied_at_cut_missing_high12": {
+      "active": 1773,
+      "delisted": 123
+     },
+     "days_cut_tie_has_missing_nonactive": 89,
+     "days_high12_decides_cut": 160
+    },
+    "2013": {
+     "days": 246,
+     "member_days": {
+      "active": 100478,
+      "delisted": 12296,
+      "transferred": 1188,
+      "other": 116
+     },
+     "missing_high12": {
+      "active": 100478,
+      "delisted": 12296,
+      "transferred": 1188,
+      "other": 116
+     },
+     "tied_at_cut_missing_high12": {
+      "active": 2433,
+      "delisted": 185,
+      "other": 19
+     },
+     "days_cut_tie_has_missing_nonactive": 145,
+     "days_high12_decides_cut": 227
+    },
+    "2014": {
+     "days": 248,
+     "member_days": {
+      "active": 115182,
+      "other": 222,
+      "delisted": 13910,
+      "transferred": 857
+     },
+     "missing_high12": {
+      "active": 3571,
+      "other": 6,
+      "delisted": 12972,
+      "transferred": 102
+     },
+     "tied_at_cut_missing_high12": {
+      "active": 91,
+      "delisted": 279
+     },
+     "days_cut_tie_has_missing_nonactive": 151,
+     "days_high12_decides_cut": 228
+    },
+    "2015": {
+     "days": 244,
+     "member_days": {
+      "active": 93161,
+      "delisted": 10556,
+      "transferred": 962,
+      "other": 208
+     },
+     "missing_high12": {
+      "active": 314,
+      "delisted": 9959,
+      "transferred": 177
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 213,
+      "transferred": 9,
+      "active": 29
+     },
+     "days_cut_tie_has_missing_nonactive": 137,
+     "days_high12_decides_cut": 237
+    },
+    "2016": {
+     "days": 244,
+     "member_days": {
+      "active": 85756,
+      "other": 158,
+      "delisted": 7809,
+      "transferred": 470
+     },
+     "missing_high12": {
+      "active": 218,
+      "delisted": 6955
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 152,
+      "active": 5
+     },
+     "days_cut_tie_has_missing_nonactive": 116,
+     "days_high12_decides_cut": 226
+    },
+    "2017": {
+     "days": 246,
+     "member_days": {
+      "active": 105911,
+      "delisted": 8944,
+      "transferred": 1087,
+      "other": 58
+     },
+     "missing_high12": {
+      "delisted": 8294,
+      "active": 206
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 122,
+      "active": 1
+     },
+     "days_cut_tie_has_missing_nonactive": 104,
+     "days_high12_decides_cut": 230
+    },
+    "2018": {
+     "days": 247,
+     "member_days": {
+      "active": 100568,
+      "delisted": 7800,
+      "transferred": 938,
+      "other": 124
+     },
+     "missing_high12": {
+      "active": 212,
+      "delisted": 7121
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 92,
+      "active": 4
+     },
+     "days_cut_tie_has_missing_nonactive": 78,
+     "days_high12_decides_cut": 238
+    },
+    "2019": {
+     "days": 242,
+     "member_days": {
+      "active": 95266,
+      "delisted": 4830,
+      "transferred": 781,
+      "other": 204
+     },
+     "missing_high12": {
+      "active": 105,
+      "delisted": 4001
+     },
+     "tied_at_cut_missing_high12": {
+      "active": 9,
+      "delisted": 53
+     },
+     "days_cut_tie_has_missing_nonactive": 44,
+     "days_high12_decides_cut": 232
+    },
+    "2020": {
+     "days": 245,
+     "member_days": {
+      "active": 132122,
+      "delisted": 5113,
+      "transferred": 1201,
+      "other": 175
+     },
+     "missing_high12": {
+      "delisted": 3925,
+      "active": 789
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 73
+     },
+     "days_cut_tie_has_missing_nonactive": 64,
+     "days_high12_decides_cut": 244
+    },
+    "2021": {
+     "days": 244,
+     "member_days": {
+      "active": 156124,
+      "other": 65,
+      "delisted": 3637,
+      "transferred": 541
+     },
+     "missing_high12": {
+      "active": 669,
+      "delisted": 2795
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 93,
+      "active": 5
+     },
+     "days_cut_tie_has_missing_nonactive": 63,
+     "days_high12_decides_cut": 237
+    },
+    "2022": {
+     "days": 246,
+     "member_days": {
+      "active": 124595,
+      "delisted": 2479,
+      "transferred": 675,
+      "other": 176
+     },
+     "missing_high12": {
+      "active": 236,
+      "delisted": 1792
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 47
+     },
+     "days_cut_tie_has_missing_nonactive": 47,
+     "days_high12_decides_cut": 245
+    },
+    "2023": {
+     "days": 239,
+     "member_days": {
+      "active": 135263,
+      "delisted": 2390,
+      "transferred": 707,
+      "other": 116
+     },
+     "missing_high12": {
+      "active": 251,
+      "delisted": 1440
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 70,
+      "active": 6
+     },
+     "days_cut_tie_has_missing_nonactive": 70,
+     "days_high12_decides_cut": 239
+    },
+    "2024": {
+     "days": 179,
+     "member_days": {
+      "active": 119080,
+      "delisted": 1221,
+      "transferred": 86,
+      "other": 28
+     },
+     "missing_high12": {
+      "active": 247,
+      "delisted": 407
+     },
+     "tied_at_cut_missing_high12": {
+      "delisted": 57
+     },
+     "days_cut_tie_has_missing_nonactive": 57,
+     "days_high12_decides_cut": 179
+    }
+   }
+  }
+ }
+}
