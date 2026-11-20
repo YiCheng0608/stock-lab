@@ -37,6 +37,7 @@ from app import h2_list, migrations
 from app.db import enable_sqlite_foreign_keys
 from app.domain import CANDIDATE_SCORE_VERSION
 from app.main import app
+from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
 from app.models import (
     CandidateRun,
@@ -758,7 +759,9 @@ def test_the_upgrade_adds_the_two_tables(tmp_path, monkeypatch, entry):
     shape = _shape(path)
     _check_head(shape)
     if entry == "alembic":
-        assert shape["alembic"] == [("0034_h2_lists",)]
+        # Later revisions move the head: 0034 is in the chain below it.
+        assert "0034_h2_lists" in REVISIONS
+        assert shape["alembic"] == [(REVISIONS[-1],)]
     else:
         assert shape["fallback"] == [("0034_h2_lists",)]
 
@@ -772,9 +775,11 @@ def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
     path = tmp_path / "down.db"
     engine = create_engine(f"sqlite:///{path.as_posix()}")
     enable_sqlite_foreign_keys(engine)
+    # To 0034 itself, not the head: a later forward-only revision cannot go down.
+    config = _alembic_config(engine)
     try:
-        upgrade_database(engine)
-        command.downgrade(_alembic_config(engine), "0033_mainstream_lists")
+        command.upgrade(config, "0034_h2_lists")
+        command.downgrade(config, "0033_mainstream_lists")
         down = _shape(path)
         assert down["tables"] == {"mainstream_runs"}
         assert down["alembic"] == [("0033_mainstream_lists",)]
@@ -782,7 +787,7 @@ def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
             assert not connection.execute(
                 "SELECT name FROM sqlite_master WHERE name LIKE 'ix_h2_%'"
             ).fetchall()
-        upgrade_database(engine)
+        command.upgrade(config, "0034_h2_lists")
     finally:
         engine.dispose()
     again = _shape(path)

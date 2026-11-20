@@ -6,8 +6,10 @@ Revises: 0033_mainstream_lists
 ``h2_runs`` keeps one row per trading date and definition version, and
 ``h2_items`` one row per ranked stock (Issue #881).  The daily's ``h2_list``
 step writes them (``app.h2_list``); ``/api/h2`` reads them.  Additive: no
-existing row is read or changed.  The downgrade drops the two tables; every
-list is computed again from the stored bars by the step.
+existing row is read or changed.  The downgrade drops the two tables and the
+lists in them; after an upgrade the daily writes its own target date only, so
+an older date is computed again one date at a time with ``worker.h2_list.
+run_h2_list`` (docs/ops/SCHEDULING.md「H2 名單」, 重算).
 """
 
 from __future__ import annotations
