@@ -126,8 +126,18 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 
 - **第 1 步用維護模式就夠**（#468）：維護模式中 serve 啟動的程序都不寫 `stock.db`。daily、news 只記日誌、不啟動 worker（連 skipped run 列也不寫）；看門狗以 `mode=ro`、`query_only` 讀 DB，DB 是 WAL，讀取不擋 `init-db` 的寫入；monitor 不開 DB（[維護模式](ops/SCHEDULING.md#維護模式)的「serve 不寫 DB 的範圍」）。開啟前就在跑的 job 由 `status` 的 `running_jobs` 看出來，所以要等它是 `[]`。手動開的維護模式沒有心跳、不會逾時解除，由第 6 步的 `deploy.sh` 關掉；作業持有的（例如同時在跑的回補）`deploy.sh` 不動，記 `kept_command_held`。好處是看門狗與 monitor 不停，部署期間的留言與 CI 事件照常喚醒統籌。`v1.2.1` 部署前是在 scheduler 停止的狀態下跑 `init-db`；正式 scheduler 還是 #468 以前的 image 時照那樣做。
 - **時間**：`init-db` 會先做遷移前的 schema 檢查。0023 → 0024 在正式副本上約 4 分鐘（238.5 s，建 index 本身不到 1 秒）；0025 → 0026 約 1 分 40 秒（98.9 s，含回補 15,614 筆 `events.updated_at`，[#476](https://github.com/YiCheng0608/stock-lab/issues/476)）；0026 → 0027 約 2 分 16 秒（136 s，2026-11-05 副本 3.0 GB，只建空表 `emerging_issuers`，[#512](https://github.com/YiCheng0608/stock-lab/issues/512)；名冊要等升級後第一次 collect 才有資料，在那之前興櫃候選照「查無」隱藏）。這段時間 api 照常服務。
-- **部署後的補算**（#476 起）：第 6 步完成後，在新的 api 容器跑以下兩個命令。兩者都冪等，不跑也不會錯，只是第一個開頁的人要等即時計算：
+- **部署後的補算**（#476 起）：第 6 步完成後，在新的 api 容器跑以下命令，`action-tiers` 放最後。`news-project` 與 `action-tiers` 不跑也不會錯，只是第一個開頁的人要等即時計算：
   - `docker compose -p "$P" exec api python -m worker.cli news-project`：tag 改了投影規則（`NEWS_PROJECTION_VERSION`），或第一次部署含 #476 的版本時跑。
+  - **tag 改了 `STRATEGY_LEVELS_VERSION` 時**（例如 #925 的 `strategy_levels_v2`），要對每個有舊版本列的訊號日跑 `strategy-levels`：
+    - 為什麼要補：個股頁策略總表、候選的 `entry_plan` 與 action tier 的接近成立只讀現行版本的列。不補的話，任何舊日期的策略總表都寫「這個資料日的條件明細尚未產生」，`/api/candidates?date=<舊日>` 的 `entry_plan` 是 null。
+    - 命令：先以唯讀連線列出日期，再逐日跑。
+      ```bash
+      for d in $(docker compose -p "$P" exec -T api python -c "import sqlite3; from app.domain import STRATEGY_LEVELS_VERSION as v; c = sqlite3.connect('file:/data/stock.db?mode=ro', uri=True); print(*[d for (d,) in c.execute('select distinct s.signal_date from strategy_levels l join signals s on s.id = l.signal_id where l.levels_version <> ? order by 1', (v,))])"); do
+        docker compose -p "$P" exec -T api python -m worker.cli strategy-levels --date "$d" || break
+      done
+      ```
+    - 費時：每天約 9 秒，含程序啟動（[CLI](ops/CLI.md#現有-worker-cli) 的實測），總共約天數 × 9 秒。
+    - 為什麼可以重算：同日重跑冪等，只讀已存的資料，不改 `signals`，舊版本的列不動（[strategy_levels](spec/strategy_levels.md)）。`strategy_levels_v2` 只換升降單位表，而 2027-07-05 以前的隔日取整和 v1 相同。新列與舊列不同，只會出在事後才存入的資料上，例如 T 之後才存的公司行動。
   - `docker compose -p "$P" exec api python -m worker.cli action-tiers`：預算最新官方日的 action tier。之後由 daily 的 action_tiers 步驟寫入（[action tier 預算與新聞投影](ops/SCHEDULING.md#action-tier-預算與新聞投影)）。
 - **`deploy.sh` 不會因為前面幾步拒絕**：發佈 checkout 停在同一個 tag，工作樹乾淨；本機已有的同名 tag 指向同一個 commit，fetch 照常通過；維護模式下 scheduler 照常在跑，`deploy.sh` 在它裡面取鎖（第 1 步停了 scheduler 時改在 api 容器）；第 4 步之後 DB 已在 tag 的 head，revision 比對通過。新 scheduler 起來時標記檔還在，所以它不在啟動時補跑 daily；`deploy.sh` 關掉維護模式後，serve 在一分鐘內偵測到解除，需要時補跑。
 - **第 6 步完成前不要關維護模式，也不要再啟動舊的 scheduler**：舊 scheduler 的 daily 起跑時會用自己的程式跑 `init_db`。舊 image 不認得新 revision，會失敗。第 6 步被拒絕或失敗時，修好原因後以同一個 tag 重跑 `deploy.sh`；要放棄這個版本，就照[版本回退](#版本回退)從第 2 步的備份還原。

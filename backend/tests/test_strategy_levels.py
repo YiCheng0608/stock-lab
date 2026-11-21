@@ -19,10 +19,12 @@ from app.models import (
     CorporateAction,
     Instrument,
     MarketBar,
+    RawPayload,
     Signal,
     StrategyLevel,
     StrategyVersion,
     TechnicalFeature,
+    TradingCalendarDay,
 )
 from app.strategies import REGISTRY, SUPERSEDED, Condition, NextSessionInputs
 from app.strategies import levels
@@ -141,6 +143,31 @@ def test_the_tick_of_1000_and_above_follows_the_session(
         levels.tick_ceil(1012.3, kind, strict=True, **where),
         levels.tick_floor(1012.3, kind, **where),
     ) == expected
+
+
+@pytest.mark.parametrize(
+    "value, strict, friday, monday",
+    [
+        # Strictly above 1000 itself: 1005 (tick 5) or 1001 (tick 1).
+        (1000.0, True, 1005.0, 1001.0),
+        (1000.0, False, 1000.0, 1000.0),
+        # Not strict, between ticks above 1,000 (a limit down near close 1,123).
+        (1010.7, False, 1015.0, 1011.0),
+        (999.4, True, 1000.0, 1000.0),
+    ],
+)
+def test_the_1000_edge_on_both_ladders(value, strict, friday, monday):
+    on = {"exchange": "TWSE", "strict": strict}
+    assert levels.tick_ceil(value, "stock", session=FRIDAY, **on) == friday
+    assert levels.tick_ceil(value, "stock", session=MONDAY, **on) == monday
+
+
+def test_a_limit_down_above_1000_rounds_up_on_the_session_ladder():
+    # 1123 x 0.9 = 1010.7 -> 1015 (tick 5) or 1011; 1123 x 1.1 = 1235.3 -> 1235.
+    friday = ladder_inputs("TWSE", FRIDAY, close=1123.0, high=1123.0)
+    monday = ladder_inputs("TWSE", MONDAY, close=1123.0, high=1123.0)
+    assert levels.price_limits(friday) == (1015.0, 1235.0)
+    assert levels.price_limits(monday) == (1011.0, 1235.0)
 
 
 @pytest.mark.parametrize("session", [FRIDAY, MONDAY])
@@ -1208,3 +1235,34 @@ def test_a_row_of_the_old_levels_version_stays_as_it_is(db):
     assert (old.trigger_price, old.computed_at) == (1015.0, stamp)
     new = level_of_version(db, signals["breakout"], "strategy_levels_v2")
     assert new.trigger_price == 1013.0
+
+
+def test_the_official_calendar_picks_the_ladder_after_a_holiday(db):
+    # Fixture choice: the stored 2027 schedule closes 07-02, so the session
+    # after Thursday 07-01 is Monday 07-05 by the calendar (not the weekday
+    # fallback), and the trigger takes the new TWSE tick: 1013.
+    raw = RawPayload(
+        source="twse",
+        endpoint="fixture-holiday-schedule",
+        sha256="20270702".ljust(64, "0"),
+        data_as_of="2027-07-02",
+    )
+    db.add(raw)
+    db.flush()
+    db.add(
+        TradingCalendarDay(
+            exchange="TWSE",
+            calendar_date=FRIDAY,
+            year=2027,
+            kind="closed",
+            name="fixture",
+            description="",
+            source="twse_holiday_schedule",
+            collected_at=datetime(2027, 1, 1),
+            raw_payload_id=raw.id,
+        )
+    )
+    signals = seed_listed_1000(db, "TWSE", date(2027, 7, 1))
+    compute_strategy_levels(db, date(2027, 7, 1))
+    row = level_of_version(db, signals["breakout"], STRATEGY_LEVELS_VERSION)
+    assert (row.next_session_date, row.trigger_price) == (MONDAY, 1013.0)
