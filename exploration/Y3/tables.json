@@ -1,0 +1,216 @@
+{
+  "tool": "round7_research",
+  "version": 1,
+  "design": "912",
+  "definitions_sha256": "180c21a4307b5cfd16db0b246478f5da3406a9779b0956dfc13cb32dc0cd47d7",
+  "label": "`delay_52w`（個股週報酬加入 4 週大盤落後項後多解釋的比例）大者先",
+  "direction": "價格延遲",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "delay_52w",
+        "high"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      261
+    ]
+  },
+  "hypothesis": "Y3",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-12-18",
+    "first_session": "2008-12-19",
+    "last_session": "2019-12-31",
+    "days": 2725,
+    "signal_days": 2725
+  },
+  "prerequisites": {
+    "days": 2725,
+    "min_days": 500,
+    "delisted": 129,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 10,
+      "members": 4007,
+      "missing": {
+        "delay_52w": 171
+      },
+      "no_index_days": 0
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "delay_52w": 9018
+      },
+      "no_index_days": 0
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "delay_52w": 11532
+      },
+      "no_index_days": 0
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "delay_52w": 7316
+      },
+      "no_index_days": 0
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "delay_52w": 5435
+      },
+      "no_index_days": 0
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "delay_52w": 5521
+      },
+      "no_index_days": 0
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "delay_52w": 6331
+      },
+      "no_index_days": 0
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "delay_52w": 4986
+      },
+      "no_index_days": 0
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "delay_52w": 5114
+      },
+      "no_index_days": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "delay_52w": 7504
+      },
+      "no_index_days": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "delay_52w": 5719
+      },
+      "no_index_days": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "delay_52w": 6835
+      },
+      "no_index_days": 0
+    }
+  },
+  "seconds": {
+    "plan": 70.36267206099001,
+    "delay_52w": 57.17743541538948
+  },
+  "excess": {
+    "population": {
+      "days": 2725,
+      "mean": -0.0001347168612243632,
+      "annual": -0.03394864902853953,
+      "t": -1.5301963037977007
+    },
+    "taiex": {
+      "days": 2725,
+      "mean": -0.00013496797029704236,
+      "annual": -0.03401192851485468,
+      "t": -0.865137624593505
+    }
+  },
+  "absolute": {
+    "days": 2725,
+    "mean": 0.0002588664051371663
+  },
+  "curves": {
+    "Y3": {
+      "days": 2725,
+      "total": 0.7011384625722914,
+      "annual": 0.05035988442948125,
+      "volatility": 0.1790474740401049,
+      "max_drawdown": -0.4477016596825276,
+      "invested": 0.9677294526884823,
+      "turnover": 3.843325664687413
+    },
+    "population": {
+      "days": 2725,
+      "total": 1.4594422572140413,
+      "annual": 0.08678447102627729,
+      "volatility": 0.1780049048360263,
+      "max_drawdown": -0.3950709598510951,
+      "invested": 0.9720441719927815,
+      "turnover": 3.9613727031866577
+    },
+    "taiex": {
+      "days": 2725,
+      "total": 1.5554047980642376,
+      "annual": 0.09063813081332106,
+      "volatility": 0.15776214657739143,
+      "max_drawdown": -0.2746772950187806,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 54425,
+    "won": 24200,
+    "rate": 0.444648598989435,
+    "unsold": 1494
+  },
+  "counts": {
+    "Y3": {
+      "bought": 54425,
+      "not_tradable": 38,
+      "limit_down": 32,
+      "sale_held": 526,
+      "limit_up": 37,
+      "unsold": 1494
+    },
+    "population": {
+      "bought": 1294749,
+      "not_tradable": 344,
+      "limit_down": 253,
+      "sale_held": 5112,
+      "limit_up": 245,
+      "unsold": 28765
+    }
+  },
+  "min_t": 2.0
+}

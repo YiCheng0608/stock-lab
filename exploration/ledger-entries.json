@@ -1,0 +1,56 @@
+{
+  "entries": [
+    {
+      "hypothesis": "Y1",
+      "tool": "round7_research",
+      "round": 7,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-21T02:11:20+00:00",
+      "report_sha256": "a7372390788113867f8ab07b49f95a0ac9c28e13b244d199c05ddb440265e88a",
+      "tool_commit": "fbe38b5888df00fb414bb1051befe5ef7bfb817a",
+      "definitions_sha256": "180c21a4307b5cfd16db0b246478f5da3406a9779b0956dfc13cb32dc0cd47d7",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "Y2",
+      "tool": "round7_research",
+      "round": 7,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-21T02:11:20+00:00",
+      "report_sha256": "a7372390788113867f8ab07b49f95a0ac9c28e13b244d199c05ddb440265e88a",
+      "tool_commit": "fbe38b5888df00fb414bb1051befe5ef7bfb817a",
+      "definitions_sha256": "180c21a4307b5cfd16db0b246478f5da3406a9779b0956dfc13cb32dc0cd47d7",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "Y3",
+      "tool": "round7_research",
+      "round": 7,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-21T02:11:20+00:00",
+      "report_sha256": "a7372390788113867f8ab07b49f95a0ac9c28e13b244d199c05ddb440265e88a",
+      "tool_commit": "fbe38b5888df00fb414bb1051befe5ef7bfb817a",
+      "definitions_sha256": "180c21a4307b5cfd16db0b246478f5da3406a9779b0956dfc13cb32dc0cd47d7",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "Y4",
+      "tool": "round7_research",
+      "round": 7,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-21T02:11:20+00:00",
+      "report_sha256": "a7372390788113867f8ab07b49f95a0ac9c28e13b244d199c05ddb440265e88a",
+      "tool_commit": "fbe38b5888df00fb414bb1051befe5ef7bfb817a",
+      "definitions_sha256": "180c21a4307b5cfd16db0b246478f5da3406a9779b0956dfc13cb32dc0cd47d7",
+      "verdict": "沒有通過（探索段）"
+    }
+  ]
+}

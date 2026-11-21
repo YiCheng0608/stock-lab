@@ -1,0 +1,663 @@
+{
+  "tool": "round7_research",
+  "version": 1,
+  "design": "912",
+  "registration_commit": "a5d32c89",
+  "segment": "exploration",
+  "round": 7,
+  "round_size": 4,
+  "cumulative": 30,
+  "validation_min_t": 3.144,
+  "definitions_sha256": "180c21a4307b5cfd16db0b246478f5da3406a9779b0956dfc13cb32dc0cd47d7",
+  "members_sha256": "2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827",
+  "tool_commit": "fbe38b5888df00fb414bb1051befe5ef7bfb817a",
+  "command": "python tools/research/round7_research.py --db /research/stock.db --segment exploration --hypotheses Y1,Y2,Y3,Y4 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T23:00:00.813683+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "Y1",
+    "Y2",
+    "Y3",
+    "Y4"
+  ],
+  "hypotheses": {
+    "Y1": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2965,
+      "taiex_excess": {
+        "days": 2965,
+        "mean": 3.51979298976641e-05,
+        "annual": 0.008869878334211354,
+        "t": 0.29198572154137736
+      },
+      "excess": {
+        "days": 2965,
+        "mean": 5.0339072128635604e-05,
+        "annual": 0.012685446176416173,
+        "t": 0.7939658082075596
+      },
+      "absolute_mean": 0.00021532881565721075,
+      "prerequisites": {
+        "days": 2965,
+        "min_days": 500,
+        "delisted": 152,
+        "ok": true
+      },
+      "coverage": {
+        "2007": {
+          "days": 1,
+          "members": 426,
+          "missing": {
+            "margin_flow_20": 9
+          },
+          "markets": {
+            "TWSE": {
+              "members": 349,
+              "missing": 6
+            },
+            "TPEx": {
+              "members": 77,
+              "missing": 3
+            }
+          }
+        },
+        "2008": {
+          "days": 249,
+          "members": 109905,
+          "missing": {
+            "margin_flow_20": 1935
+          },
+          "markets": {
+            "TWSE": {
+              "members": 91532,
+              "missing": 1227
+            },
+            "TPEx": {
+              "members": 18373,
+              "missing": 708
+            }
+          }
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "margin_flow_20": 3685
+          },
+          "markets": {
+            "TWSE": {
+              "members": 114236,
+              "missing": 2229
+            },
+            "TPEx": {
+              "members": 32653,
+              "missing": 1456
+            }
+          }
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "margin_flow_20": 4516
+          },
+          "markets": {
+            "TWSE": {
+              "members": 117642,
+              "missing": 2079
+            },
+            "TPEx": {
+              "members": 40288,
+              "missing": 2437
+            }
+          }
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "margin_flow_20": 3313
+          },
+          "markets": {
+            "TWSE": {
+              "members": 94583,
+              "missing": 1402
+            },
+            "TPEx": {
+              "members": 23257,
+              "missing": 1911
+            }
+          }
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "margin_flow_20": 3149
+          },
+          "markets": {
+            "TWSE": {
+              "members": 81489,
+              "missing": 1314
+            },
+            "TPEx": {
+              "members": 17792,
+              "missing": 1835
+            }
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "margin_flow_20": 2786
+          },
+          "markets": {
+            "TWSE": {
+              "members": 87843,
+              "missing": 821
+            },
+            "TPEx": {
+              "members": 26235,
+              "missing": 1965
+            }
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "margin_flow_20": 2804
+          },
+          "markets": {
+            "TWSE": {
+              "members": 95195,
+              "missing": 750
+            },
+            "TPEx": {
+              "members": 34976,
+              "missing": 2054
+            }
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "margin_flow_20": 1916
+          },
+          "markets": {
+            "TWSE": {
+              "members": 79626,
+              "missing": 494
+            },
+            "TPEx": {
+              "members": 25261,
+              "missing": 1422
+            }
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "margin_flow_20": 1563
+          },
+          "markets": {
+            "TWSE": {
+              "members": 71093,
+              "missing": 359
+            },
+            "TPEx": {
+              "members": 23100,
+              "missing": 1204
+            }
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "margin_flow_20": 1684
+          },
+          "markets": {
+            "TWSE": {
+              "members": 85897,
+              "missing": 884
+            },
+            "TPEx": {
+              "members": 30103,
+              "missing": 800
+            }
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "margin_flow_20": 1661
+          },
+          "markets": {
+            "TWSE": {
+              "members": 82359,
+              "missing": 640
+            },
+            "TPEx": {
+              "members": 27071,
+              "missing": 1021
+            }
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "margin_flow_20": 1567
+          },
+          "markets": {
+            "TWSE": {
+              "members": 77198,
+              "missing": 759
+            },
+            "TPEx": {
+              "members": 23434,
+              "missing": 808
+            }
+          }
+        }
+      }
+    },
+    "Y2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2746,
+      "taiex_excess": {
+        "days": 2746,
+        "mean": -0.00010097626514083998,
+        "annual": -0.025446018815491675,
+        "t": -1.3239485700313838
+      },
+      "excess": {
+        "days": 2746,
+        "mean": -8.545736583114692e-05,
+        "annual": -0.02153525618944902,
+        "t": -0.6732405449779111
+      },
+      "absolute_mean": 0.0003255584647246356,
+      "prerequisites": {
+        "days": 2746,
+        "min_days": 500,
+        "delisted": 129,
+        "ok": true
+      },
+      "coverage": {
+        "2008": {
+          "days": 31,
+          "members": 12052,
+          "missing": {
+            "turnover_cv_240": 237
+          }
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "turnover_cv_240": 3712
+          }
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "turnover_cv_240": 4155
+          }
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "turnover_cv_240": 3491
+          }
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "turnover_cv_240": 4002
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "turnover_cv_240": 2454
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "turnover_cv_240": 2430
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "turnover_cv_240": 1706
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "turnover_cv_240": 1565
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "turnover_cv_240": 1268
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "turnover_cv_240": 1204
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "turnover_cv_240": 1540
+          }
+        }
+      }
+    },
+    "Y3": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2725,
+      "taiex_excess": {
+        "days": 2725,
+        "mean": -0.00013496797029704236,
+        "annual": -0.03401192851485468,
+        "t": -0.865137624593505
+      },
+      "excess": {
+        "days": 2725,
+        "mean": -0.0001347168612243632,
+        "annual": -0.03394864902853953,
+        "t": -1.5301963037977007
+      },
+      "absolute_mean": 0.0002588664051371663,
+      "prerequisites": {
+        "days": 2725,
+        "min_days": 500,
+        "delisted": 129,
+        "ok": true
+      },
+      "coverage": {
+        "2008": {
+          "days": 10,
+          "members": 4007,
+          "missing": {
+            "delay_52w": 171
+          },
+          "no_index_days": 0
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "delay_52w": 9018
+          },
+          "no_index_days": 0
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "delay_52w": 11532
+          },
+          "no_index_days": 0
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "delay_52w": 7316
+          },
+          "no_index_days": 0
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "delay_52w": 5435
+          },
+          "no_index_days": 0
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "delay_52w": 5521
+          },
+          "no_index_days": 0
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "delay_52w": 6331
+          },
+          "no_index_days": 0
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "delay_52w": 4986
+          },
+          "no_index_days": 0
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "delay_52w": 5114
+          },
+          "no_index_days": 0
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "delay_52w": 7504
+          },
+          "no_index_days": 0
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "delay_52w": 5719
+          },
+          "no_index_days": 0
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "delay_52w": 6835
+          },
+          "no_index_days": 0
+        }
+      }
+    },
+    "Y4": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1694,
+      "taiex_excess": {
+        "days": 1694,
+        "mean": -0.00043717017044346833,
+        "annual": -0.11016688295175402,
+        "t": -2.030155761233418
+      },
+      "excess": {
+        "days": 1694,
+        "mean": -6.929507034902686e-05,
+        "annual": -0.01746235772795477,
+        "t": -0.5038727336512995
+      },
+      "absolute_mean": -0.00015554226534274514,
+      "prerequisites": {
+        "days": 1694,
+        "min_days": 500,
+        "delisted": 87,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 224,
+          "members": 104456,
+          "missing": {
+            "turnover_60": 519,
+            "ind_rev_20": 3913
+          },
+          "subset": 33600,
+          "subset_missing": {
+            "ind_rev_20": 850
+          },
+          "reasons": {
+            "momentum": 32,
+            "no_group": 660,
+            "few_peers": 3221,
+            "several_groups": 0
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "turnover_60": 527,
+            "ind_rev_20": 4195
+          },
+          "subset": 37200,
+          "subset_missing": {
+            "ind_rev_20": 1190
+          },
+          "reasons": {
+            "momentum": 23,
+            "no_group": 585,
+            "few_peers": 3587,
+            "several_groups": 0
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "turnover_60": 481,
+            "ind_rev_20": 4891
+          },
+          "subset": 36600,
+          "subset_missing": {
+            "ind_rev_20": 1599
+          },
+          "reasons": {
+            "momentum": 24,
+            "no_group": 460,
+            "few_peers": 4407,
+            "several_groups": 0
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "turnover_60": 270,
+            "ind_rev_20": 4651
+          },
+          "subset": 36600,
+          "subset_missing": {
+            "ind_rev_20": 1471
+          },
+          "reasons": {
+            "momentum": 13,
+            "no_group": 419,
+            "few_peers": 4219,
+            "several_groups": 0
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "turnover_60": 234,
+            "ind_rev_20": 4936
+          },
+          "subset": 36900,
+          "subset_missing": {
+            "ind_rev_20": 1451
+          },
+          "reasons": {
+            "momentum": 12,
+            "no_group": 493,
+            "few_peers": 4431,
+            "several_groups": 0
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "turnover_60": 338,
+            "ind_rev_20": 5986
+          },
+          "subset": 37050,
+          "subset_missing": {
+            "ind_rev_20": 1698
+          },
+          "reasons": {
+            "momentum": 23,
+            "no_group": 294,
+            "few_peers": 5669,
+            "several_groups": 0
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "turnover_60": 193,
+            "ind_rev_20": 5798
+          },
+          "subset": 36150,
+          "subset_missing": {
+            "ind_rev_20": 1582
+          },
+          "reasons": {
+            "momentum": 10,
+            "no_group": 292,
+            "few_peers": 5496,
+            "several_groups": 0
+          }
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 590.6855574759829,
+  "peak_memory_gb": 1.93359375
+}
