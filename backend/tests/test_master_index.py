@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 from test_coordinator_scripts import (  # noqa: F401  (h, close, dispatch are fixtures)
     BASH,
+    CBM_PROJECT,
     OPS,
     Harness,
     _dispatch,
@@ -38,7 +39,7 @@ _spec = importlib.util.spec_from_file_location(
 cj = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cj)
 
-PROJECT = "C-Users-YiCheng-Desktop-taiwan-stock-research"
+PROJECT = CBM_PROJECT
 INDEXED = "2026-11-14T08:51:43Z"
 INDEXED_EPOCH = 1794646303  # INDEXED in epoch seconds
 

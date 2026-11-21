@@ -172,10 +172,13 @@ if [ "$orca_branch" != "$branch" ]; then
 fi
 
 # The task's compose project (docs/WORKFLOW.md 本機檢查, #339): a docker compose run
-# without -p uses task-<issue>, not the directory name. The prefix is POSIX shell syntax, so the
-# terminal's shell is pinned to Git Bash (#339 review S3); Orca refuses the create on a host
-# that cannot give it, and nothing is sent.
-out="$(orca terminal create --worktree "id:$repo_id::$path" --title "#$issue $slug" --shell git-bash \
+# without -p uses task-<issue>, not the directory name. The prefix is POSIX shell syntax, so on
+# Windows the terminal's shell is pinned to Git Bash (#339 review S3); Orca refuses the create
+# on a host that cannot give it, and nothing is sent. macOS has no --shell: Orca refuses it
+# there and spawns the login shell (zsh or bash), where the prefix is the same syntax.
+shell_args=()
+is_windows && shell_args=(--shell git-bash)
+out="$(orca terminal create --worktree "id:$repo_id::$path" --title "#$issue $slug" ${shell_args[@]+"${shell_args[@]}"} \
   --command "COMPOSE_PROJECT_NAME=task-$issue CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model $model --effort $effort --settings '$settings'" --json)" \
   || report 1 "orca terminal create 失敗"
 handle="$(printf '%s' "$out" | cj get result.terminal.handle)" || report 1 "orca terminal create 沒有回傳 handle"

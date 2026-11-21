@@ -245,8 +245,18 @@ scratchpad_cleanup() {
   [ "$set_board" = 1 ] || { steps+=("scratchpad_skipped:no_board"); return 0; }
   # Without it this session's own directory cannot be told apart (a shell outside Claude).
   [[ "${CLAUDE_CODE_SESSION_ID:-}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:no_own_session_id"); return 0; }
-  temp="$(native "${TEMP:-}")" || { steps+=("scratchpad_skipped:no_temp"); return 0; }
-  claude="${temp%/}/claude"
+  # Claude Code keeps scratchpads under $TEMP/claude on Windows and under
+  # /private/tmp/claude-<uid> on macOS, where TEMP is not set (STOCK_CLAUDE_TMP_ROOT replaces
+  # that one, for the tests).
+  if [ -n "${TEMP:-}" ]; then
+    temp="$(native "$TEMP")" || { steps+=("scratchpad_skipped:no_temp"); return 0; }
+    claude="${temp%/}/claude"
+  elif [ "$(uname -s)" = Darwin ]; then
+    claude="${STOCK_CLAUDE_TMP_ROOT:-/private/tmp/claude-$(id -u)}"
+    [ -d "$claude" ] || { steps+=("scratchpad_skipped:no_temp"); return 0; }
+  else
+    steps+=("scratchpad_skipped:no_temp"); return 0
+  fi
   task_session_ids || { steps+=("scratchpad_skipped:comments_unreadable"); return 0; }
   sids=("${task_sids[@]+"${task_sids[@]}"}")
   [ ${#sids[@]} -gt 0 ] || steps+=("scratchpad_skipped:no_session_id")

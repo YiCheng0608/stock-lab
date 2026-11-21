@@ -33,7 +33,17 @@ case "${1:-}" in
 esac
 port="${WAKE_LISTENER_PORT:-47338}"
 # The env file of the release checkout, which compose gives the scheduler (docs/ops/MONITOR.md).
-token_file="${WAKE_LISTENER_TOKEN_FILE:-C:/Users/YiCheng/stock-lab-release/.env}"
+# The release checkout as deploy.sh finds it: STOCK_RELEASE_DIR, then ~/stock-lab-release.
+token_file="${WAKE_LISTENER_TOKEN_FILE:-${STOCK_RELEASE_DIR:-$HOME/stock-lab-release}/.env}"
+# Who holds the port and how to stop the listener: PowerShell on Windows (a Git Bash pid is
+# not the Windows one), lsof and kill elsewhere.
+if is_windows; then
+  who_cmd="Get-NetTCPConnection -LocalPort $port"
+  stop_cmd="Stop-Process -Id (Get-NetTCPConnection -LocalPort $port -State Listen).OwningProcess"
+else
+  who_cmd="lsof -nP -iTCP:$port -sTCP:LISTEN"
+  stop_cmd="kill \$(lsof -t -nP -iTCP:$port -sTCP:LISTEN)"
+fi
 logs="$data_dir/logs"
 
 # state: up (the listener answers /health), down (nothing listens) or taken (something
@@ -55,7 +65,7 @@ case "$now" in
     exit 0
     ;;
   taken)
-    echo "wake listener：127.0.0.1:$port 被別的程序占用，listener 無法啟動；查占用者：Get-NetTCPConnection -LocalPort $port" >&2
+    echo "wake listener：127.0.0.1:$port 被別的程序占用，listener 無法啟動；查占用者：$who_cmd" >&2
     exit 2
     ;;
 esac
@@ -70,11 +80,11 @@ out_file="$logs/wake-listener.out"
 orca_args=()
 [ -n "${WAKE_LISTENER_ORCA:-}" ] && orca_args=(--orca "$WAKE_LISTENER_ORCA")
 nohup "$python" -X utf8 "$script_dir/wake_listener.py" --token-file "$token_file" \
-  --data-dir "$data_dir" --port "$port" "${orca_args[@]}" </dev/null >>"$out_file" 2>&1 &
+  --data-dir "$data_dir" --port "$port" ${orca_args[@]+"${orca_args[@]}"} </dev/null >>"$out_file" 2>&1 &
 pid=$!  # this shell's pid of it, which on Windows is not the one Stop-Process takes
 for _ in $(seq 1 40); do
   if [ "$(state)" = up ]; then
-    echo "wake listener：已啟動（127.0.0.1:$port，日誌 $logs/wake-listener.log；停止：Stop-Process -Id (Get-NetTCPConnection -LocalPort $port -State Listen).OwningProcess）"
+    echo "wake listener：已啟動（127.0.0.1:$port，日誌 $logs/wake-listener.log；停止：$stop_cmd）"
     exit 0
   fi
   kill -0 "$pid" 2>/dev/null || break

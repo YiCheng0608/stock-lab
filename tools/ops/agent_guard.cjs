@@ -1253,7 +1253,8 @@ const MEMORY_REASON = '記憶只由統籌與使用者改；把會過期的記憶
 
 function samePathKey(file) {
   const forward = normalizeTarget(file).replace(/\\/g, '/').replace(/\/+$/, '');
-  return process.platform === 'win32' ? forward.toLowerCase() : forward;
+  // NTFS and APFS (macOS's default) compare names without case; Linux file systems do not.
+  return process.platform === 'win32' || process.platform === 'darwin' ? forward.toLowerCase() : forward;
 }
 
 function within(file, dir) {

@@ -1,7 +1,7 @@
 <!-- owns: 本機路徑、取正式 DB 唯讀副本的標準命令、session 起始 context 的專案設定 -->
 # 本機路徑
 
-這台主機上的實際路徑只寫在本文；其他文件與 skill 以名稱（例如「正式資料目錄」「發佈 checkout」）引用這裡。
+主機上的路徑只寫在本文；其他文件與 skill 以名稱（例如「正式資料目錄」「發佈 checkout」）引用這裡。路徑一律寫成相對於家目錄（`~`，Git Bash 與 macOS 都一樣展開）或相對於 checkout，不綁某一台機器；兩種主機（Windows＋Git Bash、macOS Intel，[macOS 主機](platform/macos.md)）做法不同的才分欄。正式環境在哪一台主機見 [macOS 主機](platform/macos.md#正式環境所在主機)。
 
 ## 正式位置（使用者決定）
 
@@ -11,19 +11,19 @@
 | --- | --- |
 | 正式資料目錄 | Docker volume `stock-lab_stock-data`（compose project `stock-lab`；容器內 `/data/`：`stock.db`、`raw/`、`logs/`、`locks/`）。主機沒有對應的檔案路徑，讀寫都經容器 |
 | 正式 DB | 上述 volume 的 `/data/stock.db`（寫入中另有 `-wal`、`-shm`）。不在主機開檔；要驗收、比對或備份，照[取正式 DB 的唯讀副本](#取正式-db-的唯讀副本) |
-| 主機的 `stock-lab-data/`（Docker 切換前的資料目錄） | `C:/Users/YiCheng/stock-lab-data/`：舊 `stock.db` 與 `raw/` 已於 2026-11-05 刪除（使用者決定，[#459](https://github.com/YiCheng0608/stock-lab/issues/459#issuecomment-6635662254)），現在只剩統籌的協作目錄 `logs/` 與切換前 job 留下的空鎖檔 `locks/`。這裡沒有任何 DB，不要放備份或副本 |
-| 統籌的資料目錄的 `logs/`（正式 scheduler 的 `STOCK_COORDINATION_DIR`，[統籌事件 monitor](MONITOR.md)） | `C:/Users/YiCheng/stock-lab-data/logs` |
-| 發佈 checkout | `C:/Users/YiCheng/stock-lab-release/` |
-| 發佈 checkout 的 venv | `C:/Users/YiCheng/stock-lab-release/.venv`（套件在 `.venv/Lib/site-packages`） |
-| 正式 DB 的手動備份（使用者 2026-11-05 決定，[#459](https://github.com/YiCheng0608/stock-lab/issues/459#issuecomment-6635662254)；含 migration 的部署前備份見 [RELEASE](../RELEASE.md#含-migration-的版本)，[#1 6635665869](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6635665869)） | `C:/Users/YiCheng/stock-lab-backups/<用途>-<YYYYMMDD>/stock.db`，例如 `pre-v1.2.0-20261104`（含 migration 的部署前備份固定用 `pre-<tag>-<YYYYMMDD>`）。一律放在這裡，不放進 `stock-lab-data/`；取法同下節，`D` 換成備份目錄 |
+| 主機的 `stock-lab-data/`（Docker 切換前的資料目錄） | `~/stock-lab-data/`：Windows 主機上的舊 `stock.db` 與 `raw/` 已於 2026-11-05 刪除（使用者決定，[#459](https://github.com/YiCheng0608/stock-lab/issues/459#issuecomment-6635662254)），現在只剩統籌的協作目錄 `logs/` 與切換前 job 留下的空鎖檔 `locks/`。這裡沒有任何 DB，不要放備份或副本 |
+| 統籌的資料目錄的 `logs/`（正式 scheduler 的 `STOCK_COORDINATION_DIR`，[統籌事件 monitor](MONITOR.md)） | `~/stock-lab-data/logs`（腳本的預設：`$STOCK_DATA_DIR/logs`，再來是 `$HOME/stock-lab-data/logs`） |
+| 發佈 checkout | `~/stock-lab-release/`（`deploy.sh` 的預設：`STOCK_RELEASE_DIR`，再來是這裡） |
+| 發佈 checkout 的 venv | `~/stock-lab-release/.venv`（Windows 套件在 `.venv/Lib/site-packages`，macOS 在 `.venv/lib/python3.12/site-packages`）；正式排程不用它 |
+| 正式 DB 的手動備份（使用者 2026-11-05 決定，[#459](https://github.com/YiCheng0608/stock-lab/issues/459#issuecomment-6635662254)；含 migration 的部署前備份見 [RELEASE](../RELEASE.md#含-migration-的版本)，[#1 6635665869](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6635665869)） | `~/stock-lab-backups/<用途>-<YYYYMMDD>/stock.db`，例如 `pre-v1.2.0-20261104`（含 migration 的部署前備份固定用 `pre-<tag>-<YYYYMMDD>`）。一律放在這裡，不放進 `stock-lab-data/`；取法同下節，`D` 換成備份目錄 |
 
 ## 取正式 DB 的唯讀副本
 
-正式 DB 只在 volume 裡。驗收、驗證與備份都從 volume 取副本，不讀主機路徑：#452 曾照舊路徑取到 Docker 切換前的檔案，`ai` 欄位全是 null，之後才發現。在 Git Bash、任務 worktree 根目錄執行：
+正式 DB 只在 volume 裡。驗收、驗證與備份都從 volume 取副本，不讀主機路徑：#452 曾照舊路徑取到 Docker 切換前的檔案，`ai` 欄位全是 null，之後才發現。在 bash（Windows 是 Git Bash）、任務 worktree 根目錄執行：
 
 ```bash
-# 換值：D＝副本目錄。驗收與驗證放「工具」表的 worktree 外暫存目錄底下（例如 C:/Users/YiCheng/t<issue>/db）；備份放「正式位置」表的備份目錄
-D=C:/Users/YiCheng/t<issue>/db; mkdir -p "$D"
+# 換值：D＝副本目錄。驗收與驗證放「工具」表的 worktree 外暫存目錄底下（例如 ~/t<issue>/db）；備份放「正式位置」表的備份目錄
+D=~/t<issue>/db; mkdir -p "$D"
 IMG="$(docker inspect -f '{{.Config.Image}}' stock-lab-api-1)"   # 正在跑的 image，例如 stock-lab-backend:v1.2.0；不寫死版本
 MSYS_NO_PATHCONV=1 docker run --rm --network none \
   -v stock-lab_stock-data:/data:ro -v "$D":/out \
@@ -58,12 +58,16 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
 
 ## 工具
 
-| 名稱 | 路徑 |
-| --- | --- |
-| 容器外的 Python（PATH 上的 python 是 Store stub） | `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe` |
-| codebase-memory 同引擎 CLI（`close_task.sh`／`dispatch.sh` 預設用它，`STOCK_CBM_CLI` 可覆寫；[程式索引](../WORKFLOW.md#程式索引)） | `C:/Users/YiCheng/.local/bin/codebase-memory-mcp.cmd` |
-| master 索引的 project | `C-Users-YiCheng-Desktop-taiwan-stock-research`（root 是管理 checkout） |
-| worktree 外暫存目錄 | `C:/Users/YiCheng/t<issue>` |
+| 名稱 | Windows（Git Bash） | macOS Intel |
+| --- | --- | --- |
+| 容器外的 Python（3.12 以上；`tools/ops` 的 `find_python` 依序找 `STOCK_PYTHON`、checkout 的 `.venv`、`python3.12`、`python3`、`python`，不到 3.12 的跳過） | `~/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`（PATH 上的 python 是 Store stub） | MacPorts 的 `python3.12`（`/opt/local/bin`）；系統的 `/usr/bin/python3` 是 3.9，不能用 |
+| bash（4.1 以上，`coordinator_lib.sh` 檢查） | Git Bash 內建 | MacPorts 的 `bash`；`/opt/local/bin` 要排在 PATH 的 `/bin` 前面 |
+| `timeout` | Git Bash 內建 | MacPorts `coreutils` 的 `gtimeout`（`coordinator_lib.sh` 自動改用它） |
+| Orca CLI | `orca`（PATH），沒有時 `%LOCALAPPDATA%/Programs/orca/resources/bin/orca.exe` | `orca`（PATH），沒有時 `/Applications/Orca.app/Contents/Resources/bin/orca` |
+| codebase-memory 同引擎 CLI（`close_task.sh`／`dispatch.sh` 預設用它，`STOCK_CBM_CLI` 可覆寫；[程式索引](../WORKFLOW.md#程式索引)） | `~/.local/bin/codebase-memory-mcp.cmd` | `~/.local/bin/codebase-memory-mcp` |
+| master 索引的 project（`STOCK_CBM_PROJECT` 可覆寫） | 由管理 checkout 的路徑推得：去掉 `:`、`/` 換成 `-`，例如 `C:/Users/<使用者>/Desktop/taiwan-stock-research` → `C-Users-<使用者>-Desktop-taiwan-stock-research` | 同左，例如 `/Users/<使用者>/stock-lab` → `Users-<使用者>-stock-lab` |
+| worktree 外暫存目錄 | `~/t<issue>` | `~/t<issue>` |
+| Claude Code 的 scratchpad（`close_task.sh` 結案時清） | `$TEMP/claude/<專案>/<session id>` | `/private/tmp/claude-<uid>/<專案>/<session id>` |
 
 ## session 起始 context 的專案設定
 

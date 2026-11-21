@@ -5,9 +5,9 @@
 
 ## 工作目錄、環境與啟停
 
-服務、測試與排程都在容器裡執行（#331）：api、web、scheduler 由 compose 啟動（[Docker compose](#docker-compose)），資料在 named volume `stock-data`，排程是 scheduler 容器的 `worker.cli serve`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），本機檢查也在容器內跑（[工作手冊](../WORKFLOW.md#本機檢查)）。主機只需要 Docker Desktop（WSL 2 backend）與 Git Bash；Docker Desktop 沒開時的判讀見 [Docker Desktop 沒開](#docker-desktop-沒開)。正式排程已在 Docker 切換（#342）時切到容器；Windows 工作排程器停用、不再當回退（[Windows 工作排程器](platform/windows.md)）。
+服務、測試與排程都在容器裡執行（#331）：api、web、scheduler 由 compose 啟動（[Docker compose](#docker-compose)），資料在 named volume `stock-data`，排程是 scheduler 容器的 `worker.cli serve`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），本機檢查也在容器內跑（[工作手冊](../WORKFLOW.md#本機檢查)）。主機有兩種，都要能用（使用者 2026-11-21 決定，[#1 7058347984](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7058347984)）：Windows 只需要 Docker Desktop（WSL 2 backend）與 Git Bash，Docker Desktop 沒開時的判讀見 [Docker Desktop 沒開](#docker-desktop-沒開)；macOS Intel 用 OrbStack 與 MacPorts 的 bash、coreutils、python312、gh，需求、差異與 OrbStack 沒開的判讀見 [macOS 主機](platform/macos.md)。正式環境在哪一台見 [macOS 主機「正式環境所在主機」](platform/macos.md#正式環境所在主機)。正式排程已在 Docker 切換（#342）時切到容器；Windows 工作排程器停用、不再當回退（[Windows 工作排程器](platform/windows.md)）。
 
-容器外（選用）：後端命令也能在主機的 venv 從專案根目錄執行，用在單次的 API 或 worker 命令；`worker.cli job`、`serve` 與 `python -m worker.job lock` 只在 Linux 執行，在 Windows 以 exit 69 拒絕，所以排程與看門狗的鎖不能在主機跑。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑，不指向正式 `data/stock.db`。
+容器外（選用）：後端命令也能在主機的 venv 從專案根目錄執行，用在單次的 API 或 worker 命令；`worker.cli job`、`serve` 與 `python -m worker.job lock` 只在 Linux 執行，在 Windows 與 macOS 以 exit 69 拒絕，所以排程與看門狗的鎖不能在主機跑。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑，不指向正式 `data/stock.db`。
 
 ```powershell
 python -m venv .venv
@@ -18,6 +18,21 @@ $env:STOCK_DATA_DIR = (Join-Path $PWD '.local/data')
 $env:STOCK_DB_PATH = (Join-Path $env:STOCK_DATA_DIR 'stock.db')
 $env:STOCK_RAW_DIR = (Join-Path $env:STOCK_DATA_DIR 'raw')
 $env:PYTHONPATH = (Join-Path $PWD 'backend')
+
+python -m worker.cli init-db   # 明確初始化／升級指定 DB 後再啟動 API
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+macOS（bash 或 zsh）同樣的步驟：
+
+```bash
+python3.12 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r backend/requirements.txt
+
+export STOCK_DATA_DIR="$PWD/.local/data"
+export STOCK_DB_PATH="$STOCK_DATA_DIR/stock.db" STOCK_RAW_DIR="$STOCK_DATA_DIR/raw"
+export PYTHONPATH="$PWD/backend"
 
 python -m worker.cli init-db   # 明確初始化／升級指定 DB 後再啟動 API
 python -m uvicorn app.main:app --reload --port 8000
@@ -87,6 +102,8 @@ python -m uvicorn app.main:app --reload --port 8000
 - 匿名 volume 蓋住 checkout 的 `.venv` 與 `frontend/node_modules`（Windows 版），容器用 image 內的依賴。依賴改了、image 重新 build 之後要 `up --renew-anon-volumes`，否則沿用舊的匿名 volume。
 - WSL 2 的記憶體上限在 `%UserProfile%\.wslconfig`（`[wsl2]` 下 `memory=6GB`）。它要高於同時執行的容器上限總和：正式拓撲約 3.3 GB，dev 加 scheduler 約 4 GB。scheduler 的 2 GB 依實測：在容器內對正式 DB 副本（2.4 GB）以 `--force` 重跑一次 daily，rss 峰值約 0.95 GB（cgroup `failcnt` 0）；同一份副本由 0017 migrate 到 0020 時，`docker stats` 讀到 1.8 GiB（含 page cache）（2026-10-29，#335）。改完執行 `wsl --shutdown`，Docker Desktop 重開後生效。
 
+**macOS 側**（[macOS 主機](platform/macos.md)）：腳本照樣固定 LF；OrbStack 的 bind mount 保留執行權限位元，也有檔案事件，上面兩項做法照用沒有影響。記憶體上限是 `orbctl config set memory_mib 6144`，跟 WSL 2 的 6 GB 同樣理由。
+
 ### Docker Desktop 沒開
 
 容器都跑在 Docker Desktop 的 WSL 2 VM 裡（`docker context ls` 的 `desktop-linux`，端點 `npipe:////./pipe/dockerDesktopLinuxEngine`）。重開機後還沒登入、Docker Desktop 被結束，或沒設成登入時啟動（Settings → General 的 Start Docker Desktop when you sign in），容器就都沒有在跑。
@@ -103,7 +120,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 ### 安全升級與復原順序
 
-1. **備份**：解析實際 DB 絕對路徑（正式 DB 在 volume `stock-lab_stock-data` 的 `/data/stock.db`），用 SQLite backup API 在專案外建副本；有 WAL 或未確認 writer 時不裸複製主檔。正式 DB 的手動備份統一放 `C:/Users/YiCheng/stock-lab-backups/<用途>-<YYYYMMDD>/stock.db`（例如 `pre-v1.2.0-20261104`），不放進主機的 `stock-lab-data/`；命令是[取正式 DB 的唯讀副本](LOCAL.md#取正式-db-的唯讀副本)，`D` 換成備份目錄。
+1. **備份**：解析實際 DB 絕對路徑（正式 DB 在 volume `stock-lab_stock-data` 的 `/data/stock.db`），用 SQLite backup API 在專案外建副本；有 WAL 或未確認 writer 時不裸複製主檔。正式 DB 的手動備份統一放 `~/stock-lab-backups/<用途>-<YYYYMMDD>/stock.db`（例如 `pre-v1.2.0-20261104`），不放進主機的 `stock-lab-data/`；命令是[取正式 DB 的唯讀副本](LOCAL.md#取正式-db-的唯讀副本)，`D` 換成備份目錄。
 2. **init-db**：對目標 DB 執行 `python -m worker.cli init-db`。遷移步驟只接受已知的 SQLite schema，在破壞性 DDL 前拒絕未知的 schema、constraint、index、trigger、view 或 marker 矛盾。
 3. **驗證**：確認 revision 為 current head，並跑 `PRAGMA integrity_check` 與 `PRAGMA foreign_key_check`。
 4. **失敗**：migration 只能前進，失敗時保留 DB 與錯誤，從備份還原到新路徑再診斷；不手動刪暫存表、補 marker、關 FK 或反覆重試。

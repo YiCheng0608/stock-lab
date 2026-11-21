@@ -38,5 +38,5 @@ if [ -f "$file" ]; then
   count="${count:-0}"
 fi
 printf '%s\n' "$((count + 1))" > "$file"
-printf '%s trigger=%s %s\n' "$(date -u -d "@${COMPACT_HOOK_NOW:-$(date -u +%s)}" +%Y-%m-%dT%H:%M:%SZ)" "$trigger" "$agent" >> "$dir/$session_id.log"
+printf '%s trigger=%s %s\n' "$(t="${COMPACT_HOOK_NOW:-$(date -u +%s)}"; date -u -d "@$t" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$t" +%Y-%m-%dT%H:%M:%SZ)" "$trigger" "$agent" >> "$dir/$session_id.log"
 exit 0

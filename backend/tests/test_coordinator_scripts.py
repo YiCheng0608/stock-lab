@@ -92,6 +92,10 @@ def _unused_port() -> int:
 NO_LISTENER_PORT = _unused_port()
 SHA = "a" * 40
 MERGE_SHA = "b" * 40
+# The codebase-memory project the fake CLI answers for (STOCK_CBM_PROJECT in Harness.run).
+CBM_PROJECT = "C-Users-me-Desktop-stock-lab"
+# dispatch.sh pins the engineer terminal to Git Bash on Windows only (macOS refuses --shell).
+ORCA_SHELL = "--shell git-bash " if os.name == "nt" else ""
 # A long-lived integration branch the tests name themselves (#332, #428): close_task.sh in
 # the sandbox gets it through Harness.integration_branches, so no test depends on the
 # repository's own list (empty since feat/docker reached master, #331).
@@ -400,7 +404,7 @@ def tracked():
             if p not in missing and not unsupported(p):
                 out.append(p)
     return sorted(out)
-project = "C-Users-YiCheng-Desktop-taiwan-stock-research"
+project = "C-Users-me-Desktop-stock-lab"
 if tool == "index_status":
     if os.path.exists(at("cbm_no_project")) or os.path.exists(at("cbm_deleted")):
         answer(error="project not found or not indexed")
@@ -566,6 +570,8 @@ class Harness:
             SANDBOX=self.root.as_posix(),
             HOME=self.home.as_posix(),
             TEMP=self.temp.as_posix(),
+            # Where close_task.sh looks on macOS when TEMP is unset: never the real one.
+            STOCK_CLAUDE_TMP_ROOT=(self.temp / "no-claude-tmp").as_posix(),
             TMP=self.temp.as_posix(),
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_MEMORY_DIR=self.memory.as_posix(),
@@ -579,6 +585,9 @@ class Harness:
             WAKE_LISTENER_ORCA=(self.bin / "orca").as_posix(),
             # The codebase-memory CLI (#704): the fake, over the sandbox repository.
             STOCK_CBM_CLI=(self.bin / "cbm").as_posix(),
+            # The default is named after the management checkout's path (cbm_default_project);
+            # the fake answers for this one name.
+            STOCK_CBM_PROJECT=CBM_PROJECT,
             FAKE_REPO=self.repo.as_posix(),
             FAKE_MERGE_SHA=MERGE_SHA,
         )
@@ -730,7 +739,7 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     assert line["task_file"] == dispatch.task.as_posix()
     terminal = next(c for c in orca if c.startswith("terminal create"))
     assert terminal.endswith(
-        "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282"
+        f"{ORCA_SHELL}--command COMPOSE_PROJECT_NAME=task-282"
         " CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude"
         " --model claude-opus-5-5 --effort medium"
         f" --settings '{_settings(dispatch.root.as_posix())}' --json"
@@ -779,9 +788,11 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
         "task-282|1|--model claude-opus-5-5 --effort medium"
         f" --settings {_settings(dispatch.task.parent.as_posix())}"
     )
-    # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
+    # The prefix is POSIX syntax: on Windows the terminal's shell is Git Bash whatever Orca's
+    # default; elsewhere Orca takes no --shell and spawns the login shell.
     (create,) = [c for c in dispatch.calls("orca") if c.startswith("terminal create")]
-    assert " --shell git-bash " in create
+    assert f" {ORCA_SHELL}--command " in create
+    assert ("--shell" in create) == (os.name == "nt")
 
 
 def test_dispatch_sends_one_line_with_the_path_and_none_of_the_task_text(
@@ -1956,6 +1967,53 @@ def test_lib_functions_without_find_python_say_what_is_missing(
         assert found.stdout.strip() in ("1", '"x"')
 
 
+_LIB = 'script_dir="$1"; shift; . "$script_dir/coordinator_lib.sh"; '
+
+
+@pytest.mark.parametrize(
+    ("checkout", "project"),
+    [
+        ("C:/Users/me/Desktop/taiwan-stock-research", "C-Users-me-Desktop-taiwan-stock-research"),
+        ("/Users/me/stock-lab", "Users-me-stock-lab"),
+        ("/home/runner/work/stock-lab", "home-runner-work-stock-lab"),
+    ],
+    ids=["windows", "macos", "linux"],
+)
+def test_the_master_index_project_is_named_after_the_checkout_path(
+    h: Harness, checkout: str, project: str
+) -> None:
+    """#937: the default project follows the host's management checkout, as the engine names
+    it, instead of one machine's path written into the lib."""
+    result = h.run_bash(_LIB + 'cbm_project_name "$1"', h.ops.as_posix(), checkout)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == project
+
+
+def test_epoch_helpers_round_trip(h: Harness) -> None:
+    """#937: GNU date (Git Bash, Linux) or BSD date (macOS) give the same text."""
+    result = h.run_bash(
+        _LIB + 'epoch_fmt 1795240800; epoch_fmt 1795240800 "%Y-%m-%d %H:%M"; '
+        "iso_epoch 2026-11-21T06:00:00Z",
+        h.ops.as_posix(),
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split("\n")[:3] == [
+        "2026-11-21T06:00:00Z",
+        "2026-11-21 06:00",
+        "1795240800",
+    ]
+
+
+def test_find_python_skips_a_python_older_than_3_12(h: Harness) -> None:
+    """#937: macOS's /usr/bin/python3 is 3.9; an explicit one that old is refused by name."""
+    old = h.root / "old-python"
+    old.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    old.chmod(0o755)
+    result = h.run_bash(_LIB + "find_python", h.ops.as_posix(), STOCK_PYTHON=old.as_posix())
+    assert result.returncode == 2
+    assert "3.12" in result.stderr
+
+
 def _guard(h: Harness, path: str, *mode: str) -> str:
     """guard_dir from the sandbox's coordinator_lib.sh: it only prints, never deletes."""
     result = h.run_bash(
@@ -3037,7 +3095,7 @@ def test_close_task_skips_the_scratchpads_it_cannot_find(
 
 FAILING_RM = r"""#!/usr/bin/env bash
 case "$*" in *"$FAIL_RM"*) echo "rm: cannot remove: Device or resource busy" >&2; exit 1 ;; esac
-exec /usr/bin/rm "$@"
+exec /bin/rm "$@"
 """
 
 

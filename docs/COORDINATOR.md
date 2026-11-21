@@ -47,7 +47,7 @@
 
 ## 記憶
 
-Claude Code 的 project memory（`MEMORY.md` 與它列的記憶檔，每個統籌與工程師 session 開場都載入）在 repo 外，worktree 與管理 checkout 共用同一份。實際位置是 `C:/Users/YiCheng/.claude/projects/<slug>/memory/`，`<slug>` 是管理 checkout 的路徑、英數以外的字元換成 `-`（現在是 `C--Users-YiCheng-Desktop-taiwan-stock-research`）。Orca 開的 session 看到的是 `$CLAUDE_CONFIG_DIR/projects/<slug>/memory/`，那是指向實際位置的 symlink。CI 讀不到它，所以由本機檢查維持（#705）。
+Claude Code 的 project memory（`MEMORY.md` 與它列的記憶檔，每個統籌與工程師 session 開場都載入）在 repo 外，worktree 與管理 checkout 共用同一份。實際位置是 `~/.claude/projects/<slug>/memory/`，`<slug>` 是管理 checkout 的路徑、英數以外的字元換成 `-`（例如 Windows 的 `C:/Users/<使用者>/Desktop/taiwan-stock-research` 是 `C--Users-<使用者>-Desktop-taiwan-stock-research`，macOS 的 `/Users/<使用者>/stock-lab` 是 `-Users-<使用者>-stock-lab`）。Orca 開的 session 看到的是 `$CLAUDE_CONFIG_DIR/projects/<slug>/memory/`，那是指向實際位置的 symlink。CI 讀不到它，所以由本機檢查維持（#705）。
 
 - **用實際位置改**：統籌改記憶的 Edit／Write 一律寫實際位置，不要寫 session 開場提示給的 `$CLAUDE_CONFIG_DIR` 底下的 symlink 路徑。經 symlink 寫入會跳確認框（「outside working directory via a symlink」），加 `--add-dir` 也一樣；確認框有時停 100 秒以上，統籌就卡在那裡，佇列和喚醒都停住。寫實際位置不跳框，啟動與 resume 命令不必改（實測 [6880462190](https://github.com/YiCheng0608/stock-lab/issues/705#issuecomment-6880462190)）。
 - **誰改**：只有統籌與使用者改記憶（含新增）。工程師 session 不寫記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。checkout 在 `task/*` branch 的 session 以 Edit／Write／NotebookEdit 寫記憶目錄時，實際位置或 symlink 路徑都會被 [`agent_guard.cjs`](../tools/ops/agent_guard.cjs) 擋下（Bash／PowerShell／Monitor 命令提到記憶目錄也擋，#873，見 [GUARDRAILS](GUARDRAILS.md)）。工程師把任務讓哪幾則記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查）寫在 PR 本文「欄位」區的「會過期的記憶」（[PR 模板](templates/pull-request.md)；沒有就寫「無」，空著時 CI `pr` 規則 f 會紅）。

@@ -82,8 +82,9 @@ if [ -z "$orca_exe" ]; then
   if command -v orca >/dev/null 2>&1; then
     orca_exe=orca
   else
-    # The scheduler's PATH has no orca.
+    # The scheduler's PATH has no orca. Orca's install directory: Windows, then macOS.
     orca_exe="${LOCALAPPDATA:-}/Programs/orca/resources/bin/orca.exe"
+    [ -x "$orca_exe" ] || [ ! -x /Applications/Orca.app/Contents/Resources/bin/orca ] || orca_exe=/Applications/Orca.app/Contents/Resources/bin/orca
   fi
 fi
 
@@ -106,7 +107,7 @@ mode=wake
 [ "$record_only" = 1 ] && mode=record-only
 eq() { "$python" -X utf8 "$script_dir/event_queue.py" "$@"; }
 clock() { if [ "$once" = 1 ] && [ -n "${MONITOR_NOW:-}" ]; then echo "$MONITOR_NOW"; else date -u +%s; fi; }
-iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
+iso() { epoch_fmt "$1"; }
 log() { # log EVENT TEXT
   local line
   line="$(iso "$(clock)") $1 mode=$mode $2"
@@ -191,7 +192,7 @@ run_waker() { # run_waker TERMINAL TEXT: the waker's exit code (124 when it hung
   # Its orca calls end within the call timeout each, two at most: a wait, then a send
   # (idle) or a show (not idle, to tell a permission or trust menu, #720).
   WAKE_WAIT_MS="$wake_wait_ms" MONITOR_CALL_TIMEOUT="$call_timeout" STOCK_PYTHON="$python" \
-    timeout -k 10 $((2 * call_timeout + 30)) "${runner[@]}" "$waker" "$@" >/dev/null 2>&1
+    timeout -k 10 $((2 * call_timeout + 30)) ${runner[@]+"${runner[@]}"} "$waker" "$@" >/dev/null 2>&1
 }
 
 poll() {
@@ -248,7 +249,7 @@ poll() {
   # 4. task worktrees (Orca, no gh)
   if [ "$orca_exe" = none ]; then
     notes="$notes worktrees=skipped"
-  elif call "${orca_runner[@]}" "$orca_exe" worktree list --json >"$work/worktrees.json" 2>/dev/null; then
+  elif call ${orca_runner[@]+"${orca_runner[@]}"} "$orca_exe" worktree list --json >"$work/worktrees.json" 2>/dev/null; then
     args+=(--worktrees "$work/worktrees.json")
   else
     notes="$notes worktrees=failed"
