@@ -343,7 +343,18 @@ INDEX = wave("index")
 N_SESSIONS = 270  # T is the last; the points go down to session 9
 
 
-def y3(stock, index=INDEX, skip=(), suspended=(), index_missing=(), n=N_SESSIONS):
+def y3(
+    stock,
+    index=INDEX,
+    skip=(),
+    suspended=(),
+    index_missing=(),
+    n=N_SESSIONS,
+    market=None,
+):
+    """``market``: replaces T's market part (``DelayMarket``) before the stock's
+    value is computed."""
+
     sessions = weekdays(date(2014, 1, 1), n)
     kept = [s for s in range(n) if s not in skip]
     item = make_item(
@@ -356,6 +367,8 @@ def y3(stock, index=INDEX, skip=(), suspended=(), index_missing=(), n=N_SESSIONS
         day: index(s) for s, day in enumerate(sessions) if s not in index_missing
     }
     ctx = context_for([item], sessions=sessions, index=index_close)
+    if market is not None:
+        ctx.delay_market[n - 1] = market(tool.delay_market(ctx, n - 1))
     return tool.delay_52w(ctx, item, item.position[sessions[-1]])
 
 
@@ -454,6 +467,24 @@ def test_delay_52w_is_missing_when_r_squared_is_not_positive():
     assert y3(lambda s: 10.0) is None  # every r is 0: no variance
 
 
+def test_delay_52w_is_missing_when_r_varies_but_r_squared_unrestricted_is_0():
+    """The R²(unrestricted) ≤ 0 branch with a varying r (PR #913 review): the
+    centred market columns all 0 (q = C'r = 0), the inverse kept, so the sum of
+    squares of r is > 0 but nothing is explained."""
+
+    stock = wave("stock")
+    assert y3(stock) is not None  # the same stock on the real market part
+    flat = lambda part: tool.DelayMarket(  # noqa: E731
+        part.points,
+        tuple((0.0,) * tool.DELAY_WEEKS for _ in part.columns),
+        part.inverse,
+        part.own,
+    )
+    r = weekly(stock)[: tool.DELAY_WEEKS]
+    assert statistics.pvariance(r) > 0
+    assert y3(stock, market=flat) is None
+
+
 # --- Y4 -------------------------------------------------------------------------
 
 SEMI = im.group_id(im.GROUP_LABELS["TWSE"]["24"])
@@ -543,6 +574,37 @@ def test_y4_takes_the_150_by_turnover_and_averages_over_the_whole_population():
     assert ranked.rows[0][1]["ind_rev_20"] == pytest.approx(0.001 - mean)
     assert ranked.rows[0][1]["peers"] == 154
     assert ranked.subset_missing["ind_rev_20"] == 1
+
+
+def test_a_stock_in_two_groups_takes_the_smaller_group_id_and_counts_in_both():
+    """Not in the registration (PR #913 review): the ``group_id`` strings (a
+    hash, not the industry code) compared, the smaller one taken; its momentum
+    is in both groups' means, as C1 does not deduplicate."""
+
+    momenta = {1: 0.50, 2: 0.10, 3: 0.20, 4: 0.30, 5: 0.40}
+    momenta |= {6: 0.05, 7: 0.15, 8: 0.25, 9: 0.35}
+    ctx, sessions = y4_context(momenta, {date(2015, 1, 5): {}})
+    rows = [member(i, "24") for i in (1, 2, 3, 4, 5)]
+    rows += [member(i, "28") for i in (1, 6, 7, 8, 9)]
+    ctx.groups = ms.build_context(ctx.market, {date(2015, 1, 5): rows})
+    day = sessions[-1]
+    members = [(item, item.position[day]) for item in ctx.panel.series.values()]
+    out = tool.industry_day(ctx, day, members)
+    assert SEMI != PARTS and not SEMI.isdigit()  # hash strings, not "24"／"28"
+    smaller, larger = sorted((SEMI, PARTS))
+    assert (out[1].group, out[1].groups) == (smaller, 2)
+    both = {SEMI: (1, 2, 3, 4, 5), PARTS: (1, 6, 7, 8, 9)}
+    for group, ids in both.items():
+        mean = statistics.fmean(momenta[i] for i in ids)  # stock 1 in each
+        for i in ids[1:]:
+            assert (out[i].group, out[i].peers, out[i].groups) == (group, 5, 1)
+            assert out[i].mean == pytest.approx(mean)
+    assert out[1].mean == pytest.approx(
+        statistics.fmean(momenta[i] for i in both[smaller])
+    )
+    assert out[1].value == pytest.approx(0.50 - out[1].mean)
+    ranked = tool.rank(ctx, {**REGISTERED["Y4"], "subset": None}, day, members)
+    assert ranked.reasons["several_groups"] == 1
 
 
 def test_y4_takes_the_latest_snapshot_up_to_t_and_the_last_one_after():

@@ -678,8 +678,8 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 - **算法**：照[第七輪：Y1～Y4](#第七輪y1y4)與[第七輪實作釋義](#第七輪實作釋義)。
   - Y1：`round7_research.margin_flow_20`，(margin_balance[at] − margin_balance[at − 20]) × 1,000 ÷ `_mean_volume`（T 之前 20 根，不含 T）；at < 20、任一根沒有籌碼列或 `margin_balance` 是 null、均量缺值或 ≤ 0 就缺值；兩根都是 0 時是 0。
   - Y2：`round7_research.turnover_cv_240`，at − 239 … at 共 240 根未還原的 `market_bars.turnover`，樣本標準差（ddof＝1）÷ 平均；不足 240 根、任一根 `turnover_status` 不是 `available`、任一根停牌、平均 ≤ 0 就缺值。
-  - Y3：`round7_research.delay_52w`，取樣點是 `Panel.sessions` 的 T − 5j（j＝0…52）；兩個迴歸都有截距，用去平均的大盤欄算 R²（`delay_market` 每個 T 只算一次大盤部分，各檔共用）。任一取樣點沒有日線、停牌、收盤缺值或 ≤ 0，任一點加權指數缺值，或 R²(不受限) ≤ 0 就缺值；個股 48 週報酬全部相同（R² 沒有定義）與大盤設計矩陣奇異也記缺值。
-  - Y4：先取母體中 `turnover_60` 前 150 名（缺值不進、同金額用雜湊），再依 `ind_rev_20` 小者先；缺值的檔照樣占名額、排最後，不遞補。產業平均是 `round7_research.industry_day`：T 日整個母體中同族群、`momentum_20` 有值的檔（含這一檔）的等權平均，有值的 < 5 就缺值。族群用 `mainstream_research.group_members`（`snapshot_date ≤ T` 的最新一份、`instrument_on`、`group_of`，含 `REMAP_2023`）；一檔在 T 日屬於多個族群時取族群代號最小的，檔次在 `--coverage-only` 另列。
+  - Y3：`round7_research.delay_52w`，取樣點是 `Panel.sessions` 的 T − 5j（j＝0…52）；兩個迴歸都有截距，用去平均的大盤欄算 R²（`delay_market` 每個 T 只算一次大盤部分，各檔共用）。任一取樣點沒有日線、停牌、收盤缺值或 ≤ 0，任一點加權指數缺值，或 R²(不受限) ≤ 0 就缺值；個股 48 週報酬的離均差平方和是 0（R² 沒有定義），或大盤設計矩陣在消去時樞軸絕對值 < 1e-300，也記缺值；近似奇異（例如每週固定同一個非 0 漲幅）不另攔，真實資料碰不到。
+  - Y4：先取母體中 `turnover_60` 前 150 名（缺值不進、同金額用雜湊），再依 `ind_rev_20` 小者先；缺值的檔照樣占名額、排最後，不遞補。產業平均是 `round7_research.industry_day`：T 日整個母體中同族群、`momentum_20` 有值的檔（含這一檔）的等權平均，有值的 < 5 就缺值。族群用 `mainstream_research.group_members`（`snapshot_date ≤ T` 的最新一份、`instrument_on`、`group_of`，含 `REMAP_2023`）；一檔在 T 日屬於多個族群時，用 `group_id` 字串最小的那個族群（`group_id` 是雜湊字串，不是產業代號；同 C1 第 5 點族群鍵的比法）；它的 20 日報酬照樣算進每個所屬族群的平均，同 C1 不去重；檔次在 `--coverage-only` 另列。
   - 排序是 `round5_research.order_key`：大者先或小者先，缺值都排最後，同值用 `sha256("<T>:<instrument_id>")`。
   - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.144（2 ≤ t < 3.144 判「前瞻觀察」），寫死、不在執行時重算，算進 `definitions_sha256`。
 - **探索**：`python tools/research/round7_research.py --db /research/stock.db --segment exploration --hypotheses <Y1,Y2,Y3,Y4 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，成員表也只讀那天以前的快照；從頭讀（同 `explore_research`）。
@@ -687,7 +687,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 - **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以。
   - 各假設用自己的訊號日，依年列日數、母體檔次與各特徵的缺值比例（分母是母體檔次）。
   - Y1 第 6 點：依年、依市場（上市、上櫃）列 `margin_flow_20` 的缺值比例，分母是該市場的母體檔次。
-  - Y3 另列取樣點早於副本或加權指數缺值的日數；Y4 另列子集合檔次、子集合內 `ind_rev_20` 的缺值比例，與母體中三種缺值原因（20 日報酬缺值、T 日沒有族群、同族群有值 < 5，依序判、不重複）和屬於多個族群的檔次。
+  - Y3 另列「加權指數缺值的日數」，數的是大盤部分記缺值的訊號日：取樣點早於副本、任一點加權指數缺值，或大盤設計矩陣奇異（同上，樞軸絕對值 < 1e-300）；Y4 另列子集合檔次、子集合內 `ind_rev_20` 的缺值比例，與母體中三種缺值原因（20 日報酬缺值、T 日沒有族群、同族群有值 < 5，依序判、不重複）和屬於多個族群的檔次。
   - 耗時：總耗時、載入耗時、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和各特徵的計算時間（Y3 是 `delay_52w`）。
 - **耗時與記憶體**（#912 AC-4 [7054790955](https://github.com/YiCheng0608/stock-lab/issues/912#issuecomment-7054790955)，研究 DB 到 2019-12-31 的 499 萬根）：`--coverage-only` 297 秒（載入 142 秒）、峰值 1.58 GB，其中 `delay_52w` 56 秒；估一次探索段（Y1～Y4）約 8～11 分鐘、峰值約 2 GB。驗證段與已用段各往前讀 730 天，比探索段小，同一時間只留一份。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
 - **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round7_research"`、`"round": 7`。代號不重疊，各工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
