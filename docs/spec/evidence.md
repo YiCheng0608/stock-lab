@@ -699,6 +699,37 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #912 | 第一版；沒有人用它對回補資料跑過 |
 
+**第八輪的假設**（[第八輪：Z1～Z4](#第八輪z1z4)）：`tools/research/round8_research.py`（[#918](https://github.com/YiCheng0608/stock-lab/issues/918)）。Z1～Z4 寫在 `round8_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`round5_research`～`round7_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標，也沒有 `--members`（Z1～Z4 不用成員表）。引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、大者先／小者先排序（`round5_research.order_key`）、`explore_judge`、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；`explore_research` 第 2 版、`round5_research`～`round7_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round8_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **算法**：照[第八輪：Z1～Z4](#第八輪z1z4)與[第八輪實作釋義](#第八輪實作釋義)。
+  - Z1：`round8_research.abvol_5_60`，`Series.volume`（股）at − 4 … at 的 5 根平均 ÷ at − 64 … at − 5 的 60 根平均；at < 64、65 根中任一根停牌、分母 ≤ 0 就缺值（分子是 0 時值是 0，不是缺值）。
+  - Z2：`round8_research.skew_240`，at − 240 … at 的 241 根還原收盤算 240 個日報酬，母體動差（n＝240）；at < 240、241 根中任一根收盤缺值或 ≤ 0、任一根停牌就缺值。退化的判準：算出的二階動差 m2＝1/n Σ(rᵢ − r̄)² 剛好是 0.0（浮點值相等）；接近 0 但不是 0 不另攔。
+  - Z3：`round8_research.beta_240`，取樣日是 `Panel.sessions` 的 T − 241 … T（242 個全市場交易日）；這一檔在這 242 天都要有日線（程式比的是這一檔到 T 為止的最後 242 根日線，最早那一根要正好落在 T − 241），任一天停牌、還原收盤缺值或 ≤ 0，或任一天加權指數收盤缺值或 ≤ 0，就缺值。迴歸 rⱼ＝a＋b₀·mⱼ＋b₁·mⱼ₋₁ 用 j＝2 … 241 的 240 天（r₁ 不用，但第 1 個取樣日的收盤照樣要有），大盤兩欄去平均後解 2×2 的正規方程（`market_weights`，每個 T 只算一次，各檔共用），`beta_240`＝b₀＋b₁；`dimson` 另回 (b₀, b₁)，測試和另一套含截距的 OLS 寫法比。大盤部分退化的數值判準：大盤兩欄去平均後的平方和 S₀₀＝Σ(mⱼ − m̄)²、S₁₁＝Σ(mⱼ₋₁ − m̄₋₁)² 任一個不是 > 0，或 det＝S₀₀·S₁₁ − S₀₁² 不是 > 0（S₀₁ 是兩欄去平均後的交叉積和；完全共線時 det 是 0）；近似共線（det > 0 但很小）不另攔。個股報酬全部相同不是退化，b₀、b₁ 在浮點誤差內是 0。
+  - Z4：`round8_research.overnight_20`，Σ ln(open[i] ÷ close[i − 1])（i＝at − 19 … at，`Series.open`、`Series.close`，同一根的開盤與收盤乘同一個還原係數）；at < 20、21 根中任一根停牌、20 個開盤或 20 個收盤任一個缺值或 ≤ 0 就缺值（at − 20 的開盤與 at 的收盤不讀）。除息當天沒有其他價格變動時那一項是 0，由合成副本的除息日 fixture 鎖住（`test_z4_on_the_ex_dividend_day_is_0_on_the_adjusted_prices`）。
+  - 排序是 `round5_research.order_key`：Z1 大者先，Z2～Z4 小者先，缺值都排最後，同值用 `sha256("<T>:<instrument_id>")`。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.180（2 ≤ t < 3.180 判「前瞻觀察」），寫死、不在執行時重算，算進 `definitions_sha256`。
+- **探索**：`python tools/research/round8_research.py --db /research/stock.db --segment exploration --hypotheses <Z1,Z2,Z3,Z4 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列；從頭讀（同 `explore_research`）。
+- **驗證**：`python tools/research/round8_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `918`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27（往前 730 天當暖機，Z3 的 242 個交易日與 Z2 的 241 根都在裡面），判「通過」的另跑已用段，寫在 `<代號>/used/`；「前瞻觀察」不跑。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以。
+  - 各假設用自己的訊號日，依年列日數、母體檔次與各特徵的缺值比例；缺值比例的分母是母體檔次（每個訊號日的母體加總）。
+  - Z3 另列「大盤部分缺值的訊號日」。Z3 的「大盤部分缺值的訊號日」：242 個取樣日中最早的一天早於副本、任一天加權指數收盤缺值或 ≤ 0，或大盤欄退化（大盤兩欄去平均後的平方和 S₀₀＝Σ(mⱼ − m̄)²、S₁₁＝Σ(mⱼ₋₁ − m̄₋₁)² 任一個不是 > 0，或 det＝S₀₀·S₁₁ − S₀₁² 不是 > 0（S₀₁ 是兩欄去平均後的交叉積和；完全共線時 det 是 0）；近似共線（det > 0 但很小）不另攔）；這些訊號日母體中每一檔的 `beta_240` 都缺值。
+  - 耗時：總耗時、載入耗時、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和各特徵的計算時間；Z2、Z3 共用每檔的日報酬，第一次用到時建，建的時間算在先跑的 Z2。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round8_research"`、`"round": 8`。代號不重疊，各工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：`explore.md`（第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 4 個、累計 34 個、探索段與驗證段的門檻與 Z1～Z3 的限制）、`explore.json`（另有 `tool`、`design`（`918`）、`validation_min_t`、`definitions_sha256`）、`<代號>/summary.md`、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名與排序鍵的值）、`trades.csv`、`ledger-entries.json`。
+- 文件與程式用同一套說法：Z2、Z3 的退化判準與 `coverage.md` 的說明句是 `round8_research` 的 `SKEW_DEGENERATE`、`MARKET_DEGENERATE`、`NO_MARKET_NOTE`、`MISSING_SHARE_NOTE`，本段逐字照抄，`backend/tests/test_round8_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round8_research` 的版本**：`round8_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（Z1～Z4 的定義、特徵與排序的規則、退化判準、分段、兩段的門檻與成本）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #918 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
