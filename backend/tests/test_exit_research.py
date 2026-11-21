@@ -316,8 +316,8 @@ def test_price_limits_round_to_the_tick():
 
 
 def test_research_rounding_keeps_the_ladder_before_2027_07_05():
-    # #925: the tool passes no exchange or date, so the product's dated TWSE
-    # ladder does not reach it; 1012 x 1.1 = 1113.2 -> 1110 (tick 5), as on
+    # #925: the tool gives tick_ceil／tick_floor no exchange or session, so the
+    # dated TWSE ladder does not reach it; 1012 x 1.1 = 1113.2 -> 1110 (tick 5), as on
     # every listed session before 2027-07-05.  After that date it is #927's.
     from app.strategies import levels
 
