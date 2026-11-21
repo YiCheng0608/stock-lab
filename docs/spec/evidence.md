@@ -729,7 +729,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
   - B1、B3：`<代號>/summary.md`（開頭列退化的判準與限制）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名；B1 有 `short_margin_ratio`，B3 有未還原收盤 `close` 與漲停價 `limit_up`）、`trades.csv`。
   - B2：`<代號>/summary.md`（開頭列退化的判準與限制；「只列出」表同 `trade_research`，放棄分兩類，出場原因不列停損與目標，另列兩個交易所名單缺列的天數與每年的訊號數）、`tables.json`（另有 `listed`）、`trades.csv`（每個訊號一列，含放棄的；有券資比、融券與融資餘額）、`days.csv`。
   - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
-- **耗時與記憶體**：見本單 AC-4（待補）。
+- **耗時與記憶體**（#926 AC-4 [7056726691](https://github.com/YiCheng0608/stock-lab/issues/926#issuecomment-7056726691)，研究 DB 到 2019-12-31 的 499 萬根）：`--coverage-only` 224 秒（載入 185 秒，其中名單 4 秒）、峰值 1.48 GB，其中 `short_margin_ratio` 4 秒、`x_start` 1 秒、`limit_up_close` 9 秒；估一次探索段（B1～B3）約 6～9 分鐘、峰值約 2 GB。驗證段與已用段各往前讀 730 天，比探索段小，同一時間只留一份。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
 
 **`round9_research` 的版本**：`round9_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（B1～B3 的定義、特徵、B2 的出場、分段、兩段的門檻、有成交的訊號日下限、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
 
