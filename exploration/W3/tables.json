@@ -1,0 +1,225 @@
+{
+  "tool": "round6_research",
+  "version": 1,
+  "design": "903",
+  "definitions_sha256": "b8e1eb89a20b9ea97db4d6ba38a1461d5ff5bf05b26eb9619c353db7020ac51e",
+  "label": "`expected_ex_28`（一年前的接下來 4 週內有除息是 1，否則 0）大者先",
+  "direction": "股利時點",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "expected_ex_28",
+        "high"
+      ]
+    ],
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "date",
+      "2010-01-04"
+    ]
+  },
+  "hypothesis": "W3",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2010-01-04",
+    "first_session": "2010-01-05",
+    "last_session": "2019-12-31",
+    "days": 2464,
+    "signal_days": 2464
+  },
+  "prerequisites": {
+    "days": 2464,
+    "min_days": 500,
+    "delisted": 122,
+    "ok": true
+  },
+  "coverage": {
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 6296,
+      "null_cash": 0,
+      "picked": 5020,
+      "picked_ones": 1711
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 6623,
+      "null_cash": 0,
+      "picked": 4940,
+      "picked_ones": 1733
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 5207,
+      "null_cash": 0,
+      "picked": 5000,
+      "picked_ones": 1786
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 6214,
+      "null_cash": 0,
+      "picked": 4920,
+      "picked_ones": 1606
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 7596,
+      "null_cash": 0,
+      "picked": 4960,
+      "picked_ones": 1706
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 5916,
+      "null_cash": 0,
+      "picked": 4880,
+      "picked_ones": 1627
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 5814,
+      "null_cash": 0,
+      "picked": 4880,
+      "picked_ones": 1457
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 6751,
+      "null_cash": 0,
+      "picked": 4920,
+      "picked_ones": 1731
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 6606,
+      "null_cash": 0,
+      "picked": 4940,
+      "picked_ones": 1606
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "expected_ex_28": 0
+      },
+      "ones": 6046,
+      "null_cash": 0,
+      "picked": 4820,
+      "picked_ones": 1705
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2464,
+      "mean": 5.215627586486206e-05,
+      "annual": 0.01314338151794524,
+      "t": 1.5578553842536809
+    },
+    "taiex": {
+      "days": 2464,
+      "mean": -0.000362157583704899,
+      "annual": -0.09126371109363456,
+      "t": -3.107428575919283
+    }
+  },
+  "absolute": {
+    "days": 2464,
+    "mean": -0.0001663149353244716
+  },
+  "curves": {
+    "W3": {
+      "days": 2464,
+      "total": -0.4245186138846364,
+      "annual": -0.05494356276171186,
+      "volatility": 0.1701900349846713,
+      "max_drawdown": -0.557829093348245,
+      "invested": 0.9483934801284752,
+      "turnover": 11.869148225554781
+    },
+    "population": {
+      "days": 2464,
+      "total": -0.49149604076461995,
+      "annual": -0.06682752347215337,
+      "volatility": 0.1673077212281789,
+      "max_drawdown": -0.5856722865318338,
+      "invested": 0.9482557878857747,
+      "turnover": 11.796516538045204
+    },
+    "taiex": {
+      "days": 2464,
+      "total": 0.4616665752907332,
+      "annual": 0.0395837608503371,
+      "volatility": 0.14489542348846474,
+      "max_drawdown": -0.27467729501878047,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 49255,
+    "won": 22232,
+    "rate": 0.4513653436199371,
+    "unsold": 418
+  },
+  "counts": {
+    "W3": {
+      "bought": 49255,
+      "sale_held": 80,
+      "not_tradable": 14,
+      "limit_down": 10,
+      "limit_up": 11,
+      "unsold": 418
+    },
+    "population": {
+      "bought": 1143896,
+      "not_tradable": 301,
+      "sale_held": 2343,
+      "limit_down": 249,
+      "limit_up": 245,
+      "unsold": 9061
+    }
+  },
+  "min_t": 2.0
+}

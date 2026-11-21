@@ -1,0 +1,200 @@
+{
+  "tool": "round6_research",
+  "version": 1,
+  "design": "903",
+  "definitions_sha256": "b8e1eb89a20b9ea97db4d6ba38a1461d5ff5bf05b26eb9619c353db7020ac51e",
+  "label": "`amihud_60`（近 60 日「|日報酬| ÷ 當日成交金額」的平均）大者先",
+  "direction": "非流動性",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "amihud_60",
+        "high"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      61
+    ]
+  },
+  "hypothesis": "W1",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-03-06",
+    "first_session": "2008-03-07",
+    "last_session": "2019-12-31",
+    "days": 2925,
+    "signal_days": 2925
+  },
+  "prerequisites": {
+    "days": 2925,
+    "min_days": 500,
+    "delisted": 147,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 210,
+      "members": 93291,
+      "missing": {
+        "amihud_60": 345
+      }
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "amihud_60": 732
+      }
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "amihud_60": 970
+      }
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "amihud_60": 714
+      }
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "amihud_60": 641
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "amihud_60": 638
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "amihud_60": 535
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "amihud_60": 492
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "amihud_60": 274
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "amihud_60": 239
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "amihud_60": 340
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "amihud_60": 198
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2925,
+      "mean": 2.8672553701766065e-06,
+      "annual": 0.0007225483532845049,
+      "t": 0.01926776882986486
+    },
+    "taiex": {
+      "days": 2925,
+      "mean": -3.9658097757700324e-05,
+      "annual": -0.00999384063494048,
+      "t": -0.19824799846350538
+    }
+  },
+  "absolute": {
+    "days": 2925,
+    "mean": 0.00013373345394047955
+  },
+  "curves": {
+    "W1": {
+      "days": 2925,
+      "total": 0.12920612458272962,
+      "annual": 0.0105239623446034,
+      "volatility": 0.21747180215414433,
+      "max_drawdown": -0.6406048488136111,
+      "invested": 0.9670862760711594,
+      "turnover": 3.641484236439596
+    },
+    "population": {
+      "days": 2925,
+      "total": 0.1594522830072731,
+      "annual": 0.012827845319925979,
+      "volatility": 0.20049783799229895,
+      "max_drawdown": -0.6260610459618153,
+      "invested": 0.9729512617213315,
+      "turnover": 3.939729517354273
+    },
+    "taiex": {
+      "days": 2925,
+      "total": 0.3855686343351794,
+      "annual": 0.028494090481304024,
+      "volatility": 0.17644599538290737,
+      "max_drawdown": -0.5599954815388594,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 58339,
+    "won": 24096,
+    "rate": 0.413034162395653,
+    "unsold": 1815
+  },
+  "counts": {
+    "W1": {
+      "bought": 58339,
+      "not_tradable": 83,
+      "sale_held": 973,
+      "limit_down": 92,
+      "limit_up": 78,
+      "unsold": 1815
+    },
+    "population": {
+      "bought": 1384014,
+      "not_tradable": 363,
+      "sale_held": 5741,
+      "limit_down": 256,
+      "limit_up": 245,
+      "unsold": 29194
+    }
+  },
+  "min_t": 2.0
+}

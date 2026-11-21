@@ -1,0 +1,455 @@
+{
+  "tool": "round6_research",
+  "version": 1,
+  "design": "903",
+  "registration_commit": "6f6142d4",
+  "segment": "exploration",
+  "round": 6,
+  "round_size": 4,
+  "cumulative": 26,
+  "validation_min_t": 3.102,
+  "definitions_sha256": "b8e1eb89a20b9ea97db4d6ba38a1461d5ff5bf05b26eb9619c353db7020ac51e",
+  "tool_commit": "ac9ee9fc0214aedde574c583db702800af0ce9cd",
+  "command": "python tools/research/round6_research.py --db /research/stock.db --segment exploration --hypotheses W1,W2,W3,W4 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T23:00:00.813683+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "W1",
+    "W2",
+    "W3",
+    "W4"
+  ],
+  "hypotheses": {
+    "W1": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2925,
+      "taiex_excess": {
+        "days": 2925,
+        "mean": -3.9658097757700324e-05,
+        "annual": -0.00999384063494048,
+        "t": -0.19824799846350538
+      },
+      "excess": {
+        "days": 2925,
+        "mean": 2.8672553701766065e-06,
+        "annual": 0.0007225483532845049,
+        "t": 0.01926776882986486
+      },
+      "absolute_mean": 0.00013373345394047955,
+      "prerequisites": {
+        "days": 2925,
+        "min_days": 500,
+        "delisted": 147,
+        "ok": true
+      },
+      "coverage": {
+        "2008": {
+          "days": 210,
+          "members": 93291,
+          "missing": {
+            "amihud_60": 345
+          }
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "amihud_60": 732
+          }
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "amihud_60": 970
+          }
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "amihud_60": 714
+          }
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "amihud_60": 641
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "amihud_60": 638
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "amihud_60": 535
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "amihud_60": 492
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "amihud_60": 274
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "amihud_60": 239
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "amihud_60": 340
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "amihud_60": 198
+          }
+        }
+      }
+    },
+    "W2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2265,
+      "taiex_excess": {
+        "days": 2265,
+        "mean": -0.0001200611748328273,
+        "annual": -0.030255416057872478,
+        "t": -0.5416129565597663
+      },
+      "excess": {
+        "days": 2265,
+        "mean": -5.746277865476762e-07,
+        "annual": -0.00014480620221001442,
+        "t": -0.0035972274761041077
+      },
+      "absolute_mean": 9.166750761542113e-05,
+      "prerequisites": {
+        "days": 2265,
+        "min_days": 500,
+        "delisted": 112,
+        "ok": true
+      },
+      "coverage": {
+        "2010": {
+          "days": 52,
+          "members": 27744,
+          "missing": {
+            "reversal_720_240": 2436
+          }
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "reversal_720_240": 10001
+          }
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "reversal_720_240": 10605
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "reversal_720_240": 12099
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "reversal_720_240": 10309
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "reversal_720_240": 6105
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "reversal_720_240": 6173
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "reversal_720_240": 5965
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "reversal_720_240": 4701
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "reversal_720_240": 4301
+          }
+        }
+      }
+    },
+    "W3": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2464,
+      "taiex_excess": {
+        "days": 2464,
+        "mean": -0.000362157583704899,
+        "annual": -0.09126371109363456,
+        "t": -3.107428575919283
+      },
+      "excess": {
+        "days": 2464,
+        "mean": 5.215627586486206e-05,
+        "annual": 0.01314338151794524,
+        "t": 1.5578553842536809
+      },
+      "absolute_mean": -0.0001663149353244716,
+      "prerequisites": {
+        "days": 2464,
+        "min_days": 500,
+        "delisted": 122,
+        "ok": true
+      },
+      "coverage": {
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 6296,
+          "null_cash": 0,
+          "picked": 5020,
+          "picked_ones": 1711
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 6623,
+          "null_cash": 0,
+          "picked": 4940,
+          "picked_ones": 1733
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 5207,
+          "null_cash": 0,
+          "picked": 5000,
+          "picked_ones": 1786
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 6214,
+          "null_cash": 0,
+          "picked": 4920,
+          "picked_ones": 1606
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 7596,
+          "null_cash": 0,
+          "picked": 4960,
+          "picked_ones": 1706
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 5916,
+          "null_cash": 0,
+          "picked": 4880,
+          "picked_ones": 1627
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 5814,
+          "null_cash": 0,
+          "picked": 4880,
+          "picked_ones": 1457
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 6751,
+          "null_cash": 0,
+          "picked": 4920,
+          "picked_ones": 1731
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 6606,
+          "null_cash": 0,
+          "picked": 4940,
+          "picked_ones": 1606
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "expected_ex_28": 0
+          },
+          "ones": 6046,
+          "null_cash": 0,
+          "picked": 4820,
+          "picked_ones": 1705
+        }
+      }
+    },
+    "W4": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1737,
+      "taiex_excess": {
+        "days": 1737,
+        "mean": -0.00012582247603673427,
+        "annual": -0.03170726396125704,
+        "t": -0.45493488236948953
+      },
+      "excess": {
+        "days": 1737,
+        "mean": 0.00022821953513522036,
+        "annual": 0.05751132285407553,
+        "t": 1.0420609740983444
+      },
+      "absolute_mean": 0.00016846242646074413,
+      "prerequisites": {
+        "days": 1737,
+        "min_days": 500,
+        "delisted": 92,
+        "ok": true
+      },
+      "coverage": {
+        "2012": {
+          "days": 21,
+          "members": 7876,
+          "missing": {
+            "season_5y": 1635
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "season_5y": 27061
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "season_5y": 31485
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "season_5y": 22617
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "season_5y": 18700
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "season_5y": 19000
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "season_5y": 16726
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "season_5y": 13733
+          }
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 436.8526755190105,
+  "peak_memory_gb": 1.8282623291015625
+}

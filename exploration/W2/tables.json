@@ -1,0 +1,186 @@
+{
+  "tool": "round6_research",
+  "version": 1,
+  "design": "903",
+  "definitions_sha256": "b8e1eb89a20b9ea97db4d6ba38a1461d5ff5bf05b26eb9619c353db7020ac51e",
+  "label": "`reversal_720_240`（T 往前第 720 根到第 240 根的報酬）小者先",
+  "direction": "長期反轉",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "reversal_720_240",
+        "low"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      721
+    ]
+  },
+  "hypothesis": "W2",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2010-10-21",
+    "first_session": "2010-10-22",
+    "last_session": "2019-12-31",
+    "days": 2265,
+    "signal_days": 2265
+  },
+  "prerequisites": {
+    "days": 2265,
+    "min_days": 500,
+    "delisted": 112,
+    "ok": true
+  },
+  "coverage": {
+    "2010": {
+      "days": 52,
+      "members": 27744,
+      "missing": {
+        "reversal_720_240": 2436
+      }
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "reversal_720_240": 10001
+      }
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "reversal_720_240": 10605
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "reversal_720_240": 12099
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "reversal_720_240": 10309
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "reversal_720_240": 6105
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "reversal_720_240": 6173
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "reversal_720_240": 5965
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "reversal_720_240": 4701
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "reversal_720_240": 4301
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2265,
+      "mean": -5.746277865476762e-07,
+      "annual": -0.00014480620221001442,
+      "t": -0.0035972274761041077
+    },
+    "taiex": {
+      "days": 2265,
+      "mean": -0.0001200611748328273,
+      "annual": -0.030255416057872478,
+      "t": -0.5416129565597663
+    }
+  },
+  "absolute": {
+    "days": 2265,
+    "mean": 9.166750761542113e-05
+  },
+  "curves": {
+    "W2": {
+      "days": 2265,
+      "total": -0.011285122254179214,
+      "annual": -0.0012619047464829114,
+      "volatility": 0.22171795328223173,
+      "max_drawdown": -0.5237676656609871,
+      "invested": 0.9668881386171262,
+      "turnover": 3.9343808568855914
+    },
+    "population": {
+      "days": 2265,
+      "total": 0.08478581849705535,
+      "annual": 0.009095599916625341,
+      "volatility": 0.1678592903745641,
+      "max_drawdown": -0.40503383869348786,
+      "invested": 0.9696540795000518,
+      "turnover": 4.045416857503752
+    },
+    "taiex": {
+      "days": 2265,
+      "total": 0.4754397551170002,
+      "annual": 0.04422458308853994,
+      "volatility": 0.14177594324513515,
+      "max_drawdown": -0.27467729501878047,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 45250,
+    "won": 18786,
+    "rate": 0.41516022099447514,
+    "unsold": 1400
+  },
+  "counts": {
+    "W2": {
+      "bought": 45250,
+      "not_tradable": 21,
+      "sale_held": 349,
+      "limit_down": 26,
+      "limit_up": 29,
+      "unsold": 1400
+    },
+    "population": {
+      "bought": 1013743,
+      "not_tradable": 268,
+      "sale_held": 3486,
+      "limit_down": 251,
+      "limit_up": 245,
+      "unsold": 27665
+    }
+  },
+  "min_t": 2.0
+}

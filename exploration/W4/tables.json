@@ -1,0 +1,171 @@
+{
+  "tool": "round6_research",
+  "version": 1,
+  "design": "903",
+  "definitions_sha256": "b8e1eb89a20b9ea97db4d6ba38a1461d5ff5bf05b26eb9619c353db7020ac51e",
+  "label": "`season_5y`（過去 1～5 年同一段 4 週的報酬平均）大者先",
+  "direction": "季節性",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "season_5y",
+        "high"
+      ]
+    ],
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "date",
+      "2012-12-03"
+    ]
+  },
+  "hypothesis": "W4",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2012-12-03",
+    "first_session": "2012-12-04",
+    "last_session": "2019-12-31",
+    "days": 1737,
+    "signal_days": 1737
+  },
+  "prerequisites": {
+    "days": 1737,
+    "min_days": 500,
+    "delisted": 92,
+    "ok": true
+  },
+  "coverage": {
+    "2012": {
+      "days": 21,
+      "members": 7876,
+      "missing": {
+        "season_5y": 1635
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "season_5y": 27061
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "season_5y": 31485
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "season_5y": 22617
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "season_5y": 18700
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "season_5y": 19000
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "season_5y": 16726
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "season_5y": 13733
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1737,
+      "mean": 0.00022821953513522036,
+      "annual": 0.05751132285407553,
+      "t": 1.0420609740983444
+    },
+    "taiex": {
+      "days": 1737,
+      "mean": -0.00012582247603673427,
+      "annual": -0.03170726396125704,
+      "t": -0.45493488236948953
+    }
+  },
+  "absolute": {
+    "days": 1737,
+    "mean": 0.00016846242646074413
+  },
+  "curves": {
+    "W4": {
+      "days": 1737,
+      "total": 0.1415387064354119,
+      "annual": 0.01939056875758305,
+      "volatility": 0.22302211732672672,
+      "max_drawdown": -0.4394228697015976,
+      "invested": 0.9447373780269521,
+      "turnover": 11.727072842818192
+    },
+    "population": {
+      "days": 1737,
+      "total": -0.1663906574906835,
+      "annual": -0.0260572471955397,
+      "volatility": 0.14999478551436435,
+      "max_drawdown": -0.4173684850188224,
+      "invested": 0.94530840462196,
+      "turnover": 12.129411869177911
+    },
+    "taiex": {
+      "days": 1737,
+      "total": 0.5785897464575254,
+      "annual": 0.06847522070448564,
+      "volatility": 0.1256593613830811,
+      "max_drawdown": -0.2569687319514862,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 34707,
+    "won": 15706,
+    "rate": 0.4525311896735529,
+    "unsold": 431
+  },
+  "counts": {
+    "W4": {
+      "bought": 34707,
+      "sale_held": 123,
+      "not_tradable": 16,
+      "limit_up": 17,
+      "limit_down": 20,
+      "unsold": 431
+    },
+    "population": {
+      "bought": 776787,
+      "not_tradable": 236,
+      "sale_held": 1586,
+      "limit_down": 246,
+      "limit_up": 244,
+      "unsold": 8753
+    }
+  },
+  "min_t": 2.0
+}
