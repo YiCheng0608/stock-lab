@@ -91,7 +91,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 **進場**：每條出場規則都共用同一個進場，所以可以逐筆配對比較。
 - 成交與不進場照 `tracking_v2`（[tracking](tracking.md#口徑版本)），視窗是訊號日後 20 根。
 - 一字鎖漲停（當根最低 ≥ 漲停價）買不到，下一根再判斷。
-- 漲跌停價：前一根收盤換到當根的價格基準後 ±10%，照升降單位取整。漲停往下取、跌停往上取，同 [strategy_levels](strategy_levels.md)。ETF 不判斷漲跌停。
+- 漲跌停價：前一根收盤換到當根的價格基準後，乘上當根交易日的漲跌幅（2015-05-29 以前 ±7%，2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），照升降單位取整。漲停往下取、跌停往上取，同 [strategy_levels](strategy_levels.md)。ETF 不判斷漲跌停。
 
 **出場慣例**：所有規則都一樣，現行 E0 也套用。
 - 停損與目標：開盤已越過價位就用開盤價，否則用價位，賣出扣 5 bps。
@@ -344,7 +344,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 **價格與日子**
 - 價格用 `evidence_lib.Series` 的還原價（除權息計入報酬）；進場區、停損、目標都在同一個價格基準上比較，不取升降單位。
 - 「第 k 個交易日」都以**全市場交易日**（`Panel.sessions`）計，不以個股自己的日線計。個股在某個交易日停牌或沒有日線，叫「不可成交的日子」。
-- 漲跌停價照[出場規則研究](#出場規則研究)：`exit_research.price_limits`，以前一根收盤換到當根的價格基準，±10% 後取升降單位。當根最低 ≥ 漲停價是**漲停鎖死**（買不進），當根最高 ≤ 跌停價是**跌停鎖死**（賣不出）。ETF 不判斷，但本節的母體沒有 ETF。
+- 漲跌停價照[出場規則研究](#出場規則研究)：`exit_research.price_limits`，以前一根收盤換到當根的價格基準，乘上當根交易日的漲跌幅（2015-05-29 以前 ±7%，2015-06-01 起 ±10%）後取升降單位。當根最低 ≥ 漲停價是**漲停鎖死**（買不進），當根最高 ≤ 跌停價是**跌停鎖死**（賣不出）。ETF 不判斷，但本節的母體沒有 ETF。
 
 **訊號與占用**
 - 訊號日 T 是收盤後；訊號的產生方式由各假設登記（選股、大盤濾網、每天幾筆）。
@@ -699,7 +699,41 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #912 | 第一版；沒有人用它對回補資料跑過 |
 
+**第八輪的假設**（[第八輪：Z1～Z4](#第八輪z1z4)）：`tools/research/round8_research.py`（[#918](https://github.com/YiCheng0608/stock-lab/issues/918)）。Z1～Z4 寫在 `round8_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`round5_research`～`round7_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標，也沒有 `--members`（Z1～Z4 不用成員表）。引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、大者先／小者先排序（`round5_research.order_key`）、`explore_judge`、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；`explore_research` 第 2 版、`round5_research`～`round7_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round8_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **算法**：照[第八輪：Z1～Z4](#第八輪z1z4)與[第八輪實作釋義](#第八輪實作釋義)。
+  - Z1：`round8_research.abvol_5_60`，`Series.volume`（股）at − 4 … at 的 5 根平均 ÷ at − 64 … at − 5 的 60 根平均；at < 64、65 根中任一根停牌、分母 ≤ 0 就缺值（分子是 0 時值是 0，不是缺值）。
+  - Z2：`round8_research.skew_240`，at − 240 … at 的 241 根還原收盤算 240 個日報酬，母體動差（n＝240）；at < 240、241 根中任一根收盤缺值或 ≤ 0、任一根停牌就缺值。退化的判準：算出的二階動差 m2＝1/n Σ(rᵢ − r̄)² 剛好是 0.0（浮點值相等）；接近 0 但不是 0 不另攔。
+  - Z3：`round8_research.beta_240`，取樣日是 `Panel.sessions` 的 T − 241 … T（242 個全市場交易日）；這一檔在這 242 天都要有日線（程式比的是這一檔到 T 為止的最後 242 根日線，最早那一根要正好落在 T − 241），任一天停牌、還原收盤缺值或 ≤ 0，或任一天加權指數收盤缺值或 ≤ 0，就缺值。迴歸 rⱼ＝a＋b₀·mⱼ＋b₁·mⱼ₋₁ 用 j＝2 … 241 的 240 天（r₁ 不用，但第 1 個取樣日的收盤照樣要有），大盤兩欄去平均後解 2×2 的正規方程（`market_weights`，每個 T 只算一次，各檔共用），`beta_240`＝b₀＋b₁；`dimson` 另回 (b₀, b₁)，測試和另一套含截距的 OLS 寫法比。大盤部分退化的數值判準：大盤兩欄去平均後的平方和 S₀₀＝Σ(mⱼ − m̄)²、S₁₁＝Σ(mⱼ₋₁ − m̄₋₁)² 任一個不是 > 0，或 det＝S₀₀·S₁₁ − S₀₁² 不是 > 0（S₀₁ 是兩欄去平均後的交叉積和；完全共線時 det 是 0）；近似共線（det > 0 但很小）不另攔。S₀₀、S₁₁ 接近 0 但不是 0（例如加權指數每天固定同一個非 0 漲幅）也不另攔，真實資料碰不到。個股報酬全部相同不是退化，b₀、b₁ 在浮點誤差內是 0。
+  - Z4：`round8_research.overnight_20`，Σ ln(open[i] ÷ close[i − 1])（i＝at − 19 … at，`Series.open`、`Series.close`，同一根的開盤與收盤乘同一個還原係數）；at < 20、21 根中任一根停牌、20 個開盤或 20 個收盤任一個缺值或 ≤ 0 就缺值（at − 20 的開盤與 at 的收盤不讀）。除息當天沒有其他價格變動時那一項是 0，由合成副本的除息日 fixture 鎖住（`test_z4_on_the_ex_dividend_day_is_0_on_the_adjusted_prices`）。
+  - 排序是 `round5_research.order_key`：Z1 大者先，Z2～Z4 小者先，缺值都排最後，同值用 `sha256("<T>:<instrument_id>")`。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.180（2 ≤ t < 3.180 判「前瞻觀察」），寫死、不在執行時重算，算進 `definitions_sha256`。
+- **探索**：`python tools/research/round8_research.py --db /research/stock.db --segment exploration --hypotheses <Z1,Z2,Z3,Z4 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列；從頭讀（同 `explore_research`）。
+- **驗證**：`python tools/research/round8_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `918`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27（往前 730 天當暖機，Z3 的 242 個交易日與 Z2 的 241 根都在裡面），判「通過」的另跑已用段，寫在 `<代號>/used/`；「前瞻觀察」不跑。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以。
+  - 各假設用自己的訊號日，依年列日數、母體檔次與各特徵的缺值比例；缺值比例的分母是母體檔次（每個訊號日的母體加總）。
+  - Z3 另列「大盤部分缺值的訊號日」。Z3 的「大盤部分缺值的訊號日」：242 個取樣日中最早的一天早於副本、任一天加權指數收盤缺值或 ≤ 0，或大盤欄退化（大盤兩欄去平均後的平方和 S₀₀＝Σ(mⱼ − m̄)²、S₁₁＝Σ(mⱼ₋₁ − m̄₋₁)² 任一個不是 > 0，或 det＝S₀₀·S₁₁ − S₀₁² 不是 > 0（S₀₁ 是兩欄去平均後的交叉積和；完全共線時 det 是 0）；近似共線（det > 0 但很小）不另攔）；這些訊號日母體中每一檔的 `beta_240` 都缺值。
+  - 耗時：總耗時、載入耗時、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和各特徵的計算時間；Z2、Z3 共用每檔的日報酬，第一次用到時建，建的時間算在先跑的 Z2。
+- **耗時與記憶體**（#918 AC-4，研究 DB 到 2019-12-31 的 499 萬根）：`--coverage-only` 289 秒（載入 150 秒）、峰值 1.52 GB；特徵計算 `abvol_5_60` 3 秒、`skew_240` 49 秒（含建日報酬）、`beta_240` 17 秒、`overnight_20` 7 秒。依第七輪 coverage 297 秒對探索段 591 秒（#916）換算，估一次探索段（Z1～Z4）約 8～12 分鐘、峰值約 2 GB。驗證段與已用段各往前讀 730 天，比探索段小，同一時間只留一份。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round8_research"`、`"round": 8`。代號不重疊，各工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：`explore.md`（第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 4 個、累計 34 個、探索段與驗證段的門檻與 Z1～Z3 的限制）、`explore.json`（另有 `tool`、`design`（`918`）、`validation_min_t`、`definitions_sha256`）、`<代號>/summary.md`、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名與排序鍵的值）、`trades.csv`、`ledger-entries.json`。
+- 文件與程式用同一套說法：Z2、Z3 的退化判準與 `coverage.md` 的說明句是 `round8_research` 的 `SKEW_DEGENERATE`、`MARKET_DEGENERATE`、`NO_MARKET_NOTE`、`MISSING_SHARE_NOTE`，本段逐字照抄，`backend/tests/test_round8_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round8_research` 的版本**：`round8_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（Z1～Z4 的定義、特徵與排序的規則、退化判準、分段、兩段的門檻與成本）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #918 | 第一版；沒有人用它對回補資料跑過 |
+
 **第九輪的假設**（[第九輪：B1～B3](#第九輪b1b3)）：`tools/research/round9_research.py`（[#926](https://github.com/YiCheng0608/stock-lab/issues/926)）。B1～B3 寫在 `round9_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round8_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（沒有 `--members`：三個都不用成員表）。B1、B3 的引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`explore_judge`、「大者先」排序（`round5_research.order_key`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；B2 的逐筆成交、結算與統計 import 自 `trade_research`（`TradeBars`、`_trade_row`、`settle`、`baseline`、`stats`、`State` 的占用），漲跌停價經 `portfolio_research.Market.limits` 用 `exit_research.price_limits`。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round8_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
 
 ```bash
 # 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
@@ -715,6 +749,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
   - B2 的成交與出場：`round9_research.enter_next_open`，T+1 開盤成交、期限 1 日；T+1 停牌、沒有日線（`TradeBars` 的不可成交）記放棄 `not_tradable`，漲停鎖死記放棄 `limit_up`，兩類分開列。出場是 `trade_research.settle`，停損給一個沒有任何一根碰得到的值（−∞）、目標給 None，所以只剩持有到期（成交日算第 1 天，第 5 個交易日收盤）、跌停與停牌順延、下市、轉板與段末結算；`trades.csv` 沒有停損與目標欄。超額、t（`overlap=20`）與判定同[逐筆評估](#逐筆評估)，另加「有成交的訊號日 < 60」記無法判定。
   - B3：`round9_research.limit_up_close`，T 或前一根停牌、收盤缺值或 ≤ 0，或算不出漲停價時不符合；收盤 ≥ 漲停價 − 1e-9 就成立。漲停價是 `portfolio_research.Market.limits` 的上限：前一根收盤換到 T 的未還原基準（除權息日用還原係數換），經 `exit_research.price_limits` 依日期乘 (1 ＋ 漲跌幅)、`tick_floor` 往下取升降單位；1e-9 是 `exit_research.EPS`，同引擎判斷鎖死的容差。符合的不排序，依 `sha256("<T>:<instrument_id>")` 取前 20 名；不足 20 檔時只買那幾檔，每檔仍是子帳戶現金的 1／20，餘額留現金。
   - 升降單位：#922 已查過，2005-03-01 起到現在沒有改過，下一次是 2027-07-05（[#922 提問 7056180205](https://github.com/YiCheng0608/stock-lab/issues/922#issuecomment-7056180205)、#925），B3 的期間都用現行的 `tick_floor`。
+  - 漲跌幅依日期：`exit_research.daily_limit`（2015-05-29 以前 ±7%、2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），表算進 `definitions_sha256`。B3 從 2015-06-01 起，兩段都是 ±10%；B2 的 T+1 漲停鎖死與出場的跌停鎖死也依當根的日期（2008～2015-05 是 ±7%）。
   - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.205（2 ≤ t < 3.205 判「前瞻觀察」），寫死、不在執行時重算，算進 `definitions_sha256`。B2 用逐筆的訊號日序列代入同一個判定。
 - **探索**：`python tools/research/round9_research.py --db /research/stock.db --segment exploration --hypotheses <B1,B2,B3 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）；`margin_lists` 也只讀到那天。
 - **驗證**：`python tools/research/round9_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `926`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27（往前 730 天當暖機），判「通過」的另跑已用段，寫在 `<代號>/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
@@ -749,6 +784,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 - **X7 的金額與順延**：一個帳戶；每檔＝事件日 T+1 開盤時帳戶現金 ÷ 20，不足 20 檔留現金。T′ 跌停一字鎖、停牌或沒有日線時，順延到下一根可賣的開盤（同 `simulate`，順延的賣出在那根開盤先成交）：那根就是 T′+1 時，回收的錢算進當天的買進；更晚才賣掉的，錢留現金到下一個事件日才用。T′ 在段外的部位以段末收盤計。驗證段第一個事件日是 2020-01-10（淨值從 2020-01-13 起）。「最新已知月份是上個月」＝`announcement_date ≤ T` 的最新 `revenue_month` 是 T 的前一個月。母體用同一個帳戶規則、同一組事件日。
 - **X8 的順延與「選過」**：清單日期不是交易日（週末、休市日）時，T＝之後第一個交易日。「選過」＝進入當日名單（在母體內、經 20 檔上限後），不論有沒有買到；「前 20 個交易日」＝T 之前的 20 個交易日（不含 T）。先去掉 20 日內選過的，再以雜湊取前 20 名；同一檔同一天多則只算一檔。選股紀錄從假設起日（或讀到的第一個交易日）連續算，不因分段重設。調倉用 `simulate`（K＝20），沒有公告的日子該子帳戶留現金，所以 X8 的平均投入比例遠低於母體。
 - **勝率**（只列出）：該段買進的每一筆，賣出所得 ÷ 成本 − 1 > 0 的比例；期末未賣以最後收盤（不扣賣出成本）計，另列筆數。
+- **漲跌幅依日期**（[#922](https://github.com/YiCheng0608/stock-lab/issues/922) 合併後的工具）：判斷漲停鎖死、跌停鎖死時，漲跌幅依那一根的交易日來定，2015-05-29（含）以前 ±7%，2015-06-01（含）起 ±10%。上市與上櫃同一天放寬（[證交所](https://www.twse.com.tw/staticFiles/product/publication/twse60/html/181/)、[櫃買中心](https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/fluctuation-limit.html)）。分界日寫在 `exit_research.LIMIT_WIDENED_ON`；組合引擎（`portfolio_research.Market.limits`）、逐筆評估與出場規則研究，都經 `exit_research.price_limits(..., on=<交易日>)` 取漲跌停價。漲停照 `tick_floor`、跌停照 `tick_ceil` 取整，這點不變。2015-06-01 以後的判定和修正前相同，各工具的 `VERSION` 與 `definitions_sha256` 也都不變。
 
 ### 假設登記表
 
@@ -793,6 +829,21 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 
 各輪登記時的狀態都是「登記」，寫在各輪那一段，不改。之後的狀態寫在這張表，只往下加列，不改前面的列。t 是對母體超額的 t，也就是判定用的那一個；工具的紀錄是 `tools/research/explore_ledger.json`。
 
+**限制：前七輪探索段在 2015-05-29 以前用 ±10% 判漲跌停**（[#922](https://github.com/YiCheng0608/stock-lab/issues/922)，發現於 [#920 提問 7056000242](https://github.com/YiCheng0608/stock-lab/issues/920#issuecomment-7056000242)，統籌決定 [7056123326](https://github.com/YiCheng0608/stock-lab/issues/920#issuecomment-7056123326)）
+
+- **哪些受影響**：下表前七輪（X1～X8、S1～S3、R1～R2、M1、M2、C1～C4、V1～V3、W1～W4、Y1～Y4）的探索段，都在 #922 修正之前跑。2015-05-29 以前的部分是用 ±10% 判漲跌停，當時實際是 ±7%（[實作釋義](#實作釋義)「漲跌幅依日期」）。
+- **偏差**：當時一字鎖死在 +7% 的股票，被判成買得到、以開盤價成交；鎖死在 −7% 的賣出，被判成當根賣得掉。
+- **不受影響的**：驗證段（2020-01-02 起）與已用段都在 2015-06-01 以後，不受影響，X2（H2）的驗證段判定也一樣。
+- **不重跑**：照「每一段只跑一次」，上表的探索段結果不重跑、不改。
+- **規模**：研究 DB 唯讀計數，資料到 2026-11-13（[#922 回報 7056268991](https://github.com/YiCheng0608/stock-lab/issues/922#issuecomment-7056268991)）。範圍是 2004-02-11～2015-05-29，上市櫃 `stock`／`ipo` 的 3,160,922 根日線。前一根收盤用原始價。
+  - 兩種判法判定不同的根數：漲停鎖死 15,094 根（0.48%），跌停鎖死 11,128 根（0.35%），全部是「±7% 鎖死、±10% 沒有」。
+  - 各年的漲停／跌停根數：2004 年 343／1,110、2005 年 614／822、2006 年 997／605、2007 年 858／710、2008 年 1,927／2,863、2009 年 3,761／1,194、2010 年 1,585／732、2011 年 1,060／936、2012 年 1,191／780、2013 年 1,314／645、2014 年 1,094／559、2015 年（到 05-29）350／172。
+- **升降單位**（[#922 提問 7056180205](https://github.com/YiCheng0608/stock-lab/issues/922#issuecomment-7056180205)，決定 [7056380993](https://github.com/YiCheng0608/stock-lab/issues/922#issuecomment-7056380993)）：
+  - 上市股票的升降單位在 2005-03-01 改過（證交所[調整股價升降單位](https://www.twse.com.tw/downloads/zh/trading/introduce/introduce004.pdf)）。研究工具的漲跌停價，2005-02-28 以前也照 2005-03-01 起的表取整，修正前後都是如此。
+  - 舊表每一段的單位，都是新表單位的整數倍，所以照新表取出的漲停價 ≥ 真實漲停價、跌停價 ≤ 真實跌停價。方向和上面相同：只會把鎖死的根判成買得到或賣得掉。
+  - 規模：同一份唯讀計數，漲跌幅 ±7%、2004-02-11～2005-02-28 共 176,048 根（只有上市）。「舊表判成鎖死、新表沒判成」的根數，漲停是 2004 年 137 根、2005-01～02 24 根，跌停是 2004 年 450 根、2005-01～02 10 根；反方向是 0（[#922 回報 7056390811](https://github.com/YiCheng0608/stock-lab/issues/922#issuecomment-7056390811)）。
+  - 上櫃日線 2007 年起才有，不受影響。
+
 | 代號 | 輪 | 狀態 | 日期 | 對母體 t（探索／驗證） | 報告 |
 | --- | --- | --- | --- | --- | --- |
 | X1 | 1 | 沒有通過（探索段） | 2026-11-20 | 0.76 | [#864 7041131687](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687) |
@@ -829,6 +880,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 
 - X6 有一個已知缺口：TWSE 週六補班日，官方三大法人表只列當天有法人進出的證券，沒列的照登記規則缺值排最後。估計影響約 0.3% 的選股檔次（[#864 7043539560](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043539560)、[決定 7043686420](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043686420)）。
 - S1～S3、X3、X4、X7、H1 用到月營收或 EPS。研究 DB 多數下市公司沒有月營收，偏差有利於假設，處理照 [#867 決定 7032683717](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032683717)。
+- X8 用了重大訊息（`events` 的 `material_information`，MOPS `t05st02`）。這張表只有現存公司：下市公司 2014 年起 0 則（[#920 提問 7056000242](https://github.com/YiCheng0608/stock-lab/issues/920#issuecomment-7056000242) 的「另外發現」第 2 點）。X8 的探索段用的也是這張表，所以下市公司不會被選進來，偏差方向對 X8 有利。
 
 ### 第一輪：X1～X8
 

@@ -79,7 +79,13 @@ MIN_DAYS = 60
 MIN_T = 2.0
 # The R of risk_levels: target_1 = entry + 1.6R, invalid = entry - R.
 R_SPAN = 2.6
+# The daily price limit of stocks and IPOs by the bar's trading date (#922):
+# ±7% to 2015-05-29, ±10% from 2015-06-01, the day TWSE and TPEx widened it.
+# TWSE: https://www.twse.com.tw/staticFiles/product/publication/twse60/html/181/
+# TPEx: https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/fluctuation-limit.html
 LIMIT = Fraction(1, 10)
+LIMIT_BEFORE_WIDENING = Fraction(7, 100)
+LIMIT_WIDENED_ON = date(2015, 6, 1)
 NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
 RAW_DIR_NAME = ".raw-unused"
 EPS = 1e-9
@@ -580,15 +586,25 @@ def suspension_gap(
     return False
 
 
-def price_limits(reference: float | None, instrument_type: str, levels_module):
-    """(limit down, limit up) around ``reference`` on its own basis; None for an ETF."""
+def daily_limit(trading_date: date) -> Fraction:
+    """The daily price limit on ``trading_date`` (``LIMIT_WIDENED_ON``)."""
+
+    return LIMIT if trading_date >= LIMIT_WIDENED_ON else LIMIT_BEFORE_WIDENING
+
+
+def price_limits(
+    reference: float | None, instrument_type: str, levels_module, *, on: date
+):
+    """(limit down, limit up) of the bar on ``on`` around ``reference`` on its
+    own basis; None for an ETF."""
 
     if instrument_type == "etf" or not reference or reference <= 0:
         return None
     base = Fraction(str(round(reference, 6)))
+    limit = daily_limit(on)
     return (
-        levels_module.tick_ceil(float(base * (1 - LIMIT)), instrument_type),
-        levels_module.tick_floor(float(base * (1 + LIMIT)), instrument_type),
+        levels_module.tick_ceil(float(base * (1 - limit)), instrument_type),
+        levels_module.tick_floor(float(base * (1 + limit)), instrument_type),
     )
 
 
@@ -646,7 +662,7 @@ def prepare(copy: Copy, signal: Signal, factor_of, actions, modules) -> Prepared
         limits = None
         if previous_close and not missing_price:
             limits = price_limits(
-                previous_close * factor / previous_factor, kind, levels_module
+                previous_close * factor / previous_factor, kind, levels_module, on=day
             )
         start = bisect.bisect_right(copy.sessions, previous_date)
         stop = bisect.bisect_left(copy.sessions, day)

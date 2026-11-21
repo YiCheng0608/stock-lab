@@ -234,7 +234,11 @@ def definitions() -> dict[str, Any]:
                 "value": "raw close of at >= portfolio_research.Market.limits(at)[1] "
                 "- EPS (exit_research.price_limits by the date, tick_floor)",
                 "eps": LIMIT_EPS,
-                "limit": str(er.LIMIT),
+                "limit": [
+                    str(er.LIMIT_BEFORE_WIDENING),
+                    str(er.LIMIT_WIDENED_ON),
+                    str(er.LIMIT),
+                ],  # exit_research.daily_limit by the bar's date (#922)
                 "missing": "at or at-1 suspended; a close of at or at-1 missing or "
                 "<= 0; no limit (an ETF, no reference)",
                 "pick": "not ranked; the first 20 by sha256(<T>:<instrument_id>)",

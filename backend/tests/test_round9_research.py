@@ -71,7 +71,10 @@ NAMES = ("B1", "B2", "B3")
 def test_the_hypotheses_are_the_registration():
     h = tool.HYPOTHESES
     assert list(h) == list(NAMES)
-    for name in ("mainstream_research", "round4_research", "round5_research"):
+    for name in (
+        "mainstream_research",
+        *(f"round{n}_research" for n in range(4, 9)),
+    ):
         other = sys.modules.get(name) or _tool(name)
         assert not set(h) & set(other.HYPOTHESES), name
     for other in (ex, tr):
@@ -127,6 +130,8 @@ def test_the_definitions_hash_holds_the_threshold_and_the_rules(monkeypatch):
         (tool, "MIN_DAYS", 50),
         (tool, "LIMIT_EPS", 0.0),
         (tool, "MARKET_WIDE_SHARE", 0.9),
+        (er, "LIMIT_BEFORE_WIDENING", Fraction(1, 10)),
+        (er, "LIMIT_WIDENED_ON", date(2015, 6, 2)),
     ):
         with monkeypatch.context() as m:
             m.setattr(module, name, value)
@@ -182,6 +187,11 @@ FROZEN = {
     "round7_research": (
         1,
         "180c21a4307b5cfd16db0b246478f5da3406a9779b0956dfc13cb32dc0cd47d7",
+    ),
+    # merged with #921 (master 172e21ee, with #922), measured there
+    "round8_research": (
+        1,
+        "cd00cd2d201893370ec706168af5a30cb8e1e684c47ba30fc91356447876d757",
     ),
 }
 
@@ -424,6 +434,19 @@ def test_limit_up_close_is_the_close_at_the_limit_rounded_down_to_the_tick():
     assert tool.limit_up_close(market, item, 1) is True
     market, item = b3([60.0, 65.9])
     assert tool.limit_up_close(market, item, 1) is False
+
+
+def test_the_limit_up_price_goes_by_ts_date():
+    """#922: ±7% to 2015-05-29, ±10% from 2015-06-01 (B3 starts on the
+    latter; B2's T+1 lock in 2008～2015-05 uses the former)."""
+
+    before = make_item([100.0, 107.0], days=[date(2015, 5, 28), date(2015, 5, 29)])
+    market = market_for([before])
+    assert tool.limit_up_price(market, before, 1) == (107.0, 107.0)
+    widened = make_item([100.0, 107.0], days=[date(2015, 5, 29), date(2015, 6, 1)])
+    market = market_for([widened])
+    assert tool.limit_up_price(market, widened, 1) == (107.0, 110.0)
+    assert tool.limit_up_close(market, widened, 1) is False
 
 
 def test_limit_up_close_puts_the_previous_close_on_ts_basis_on_an_ex_date():
