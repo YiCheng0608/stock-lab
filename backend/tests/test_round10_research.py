@@ -344,6 +344,27 @@ def test_stock_div_ex_is_t_with_a_ratio_of_at_least_0_05():
     assert tool.stock_div_ex(ctx, item[1], 3) is False
 
 
+def test_the_coverage_lists_the_rows_with_all_three_fields_null_apart():
+    sessions = weekdays(date(2016, 3, 7), 5)
+
+    def row(cash, ratio, split=None):
+        return SimpleNamespace(
+            action_date=sessions[1],
+            cash_dividend=cash,
+            stock_dividend_ratio=ratio,
+            split_ratio=split,
+        )
+
+    holders = {
+        1: SimpleNamespace(actions=[row(None, None)]),  # all three null
+        2: SimpleNamespace(actions=[row(1.5, None)]),  # cash only: ratio null too
+        3: SimpleNamespace(actions=[row(None, 0.05)]),
+    }
+    assert tool.blank_actions(sessions, holders) == {(1, 1)}
+    div = tool.stock_dividends(sessions, holders)
+    assert div == {1: {1: None}, 2: {1: None}, 3: {1: 0.05}}
+
+
 # --- F2: vol_720, mom_240_20, the composite order, the overlap ----------------------
 
 
@@ -936,6 +957,7 @@ def build(path_: Path) -> Path:
                 "action_date": days[t],
                 "action_type": kind,
                 "stock_dividend_ratio": ratio,
+                "cash_dividend": None,
                 "source": "test",
             }
             for i, t, ratio, kind in ACTIONS
@@ -947,6 +969,18 @@ def build(path_: Path) -> Path:
                 "action_date": saturday,
                 "action_type": "stock_dividend",
                 "stock_dividend_ratio": SATURDAY[1],
+                "cash_dividend": None,
+                "source": "test",
+            }
+        )
+        # a cash dividend only: its ratio is null too (listed apart from S7's row)
+        actions.append(
+            {
+                "instrument_id": 1,
+                "action_date": days[90],
+                "action_type": "cash_dividend",
+                "cash_dividend": 1.0,
+                "stock_dividend_ratio": None,
                 "source": "test",
             }
         )
@@ -1461,7 +1495,8 @@ def test_coverage_only_computes_no_return(copied, tmp_path):
     f1 = hyp["F1"]["coverage"]["years"]["2016"]
     # no occupancy: S3 on 130 counts; 3, 3, 9, 13, 15, 17, 19, 25, 11 and TPEx 6
     assert (f1["days"], f1["signals"], f1["signal_days"]) == (days, 10, 10)
-    assert f1["markets"]["TPEx"]["signals"] == 1 and f1["null_ratio"] == 1
+    assert f1["markets"]["TPEx"]["signals"] == 1 and f1["null_ratio"] == 2
+    assert f1["blank_rows"] == 1  # S7; S1 on 90 has a cash dividend only
     f2 = hyp["F2"]["coverage"]["2016"]
     assert (
         f2["days"] == days and f2["missing"]["vol_720"] == f2["members"]

@@ -427,6 +427,9 @@ class Context:
     stock_div: dict[int, dict[int, float | None]] = field(default_factory=dict)
     lists: MarginRuns = field(default_factory=MarginRuns)
     life_start: dict[int, date] = field(default_factory=dict)
+    # (instrument, session index) with a row whose three fields are all null
+    # (the coverage lists them apart from the cash-only rows)
+    blank: set[tuple[int, int]] = field(default_factory=set)
     seconds: Counter = field(default_factory=Counter)
     load_seconds: dict[str, float] = field(default_factory=dict)
     # per instrument: prefix sums of the returns and their squares, and of the
@@ -464,6 +467,22 @@ def stock_dividends(
     return out
 
 
+def blank_actions(
+    sessions: list[date], holders: dict[int, Any]
+) -> set[tuple[int, int]]:
+    """(instrument, T) of the rows with all three fields null
+    (``round5_research.row_cash`` is None): listed by the coverage apart from
+    the cash-only rows, whose ratio is null too.  Neither qualifies."""
+
+    out = set()
+    for instrument_id, holder in holders.items():
+        for action in holder.actions:
+            s = bisect_left(sessions, action.action_date)
+            if s < len(sessions) and r5.row_cash(action) is None:
+                out.add((instrument_id, s))
+    return out
+
+
 def load(db: Path, start: date, end: date, raw_dir: Path) -> Context:
     """The panel, the trade context, the actions and the margin lists to
     ``end``; nothing after ``end`` is read but the date of a delisted or
@@ -488,6 +507,7 @@ def load(db: Path, start: date, end: date, raw_dir: Path) -> Context:
         },
     )
     stock_div = stock_dividends(base.market.panel.sessions, holders)
+    blank = blank_actions(base.market.panel.sessions, holders)
     del holders
     actions_seconds = time.monotonic() - t0
     t0 = time.monotonic()
@@ -500,6 +520,7 @@ def load(db: Path, start: date, end: date, raw_dir: Path) -> Context:
         stock_div,
         lists,
         life_start,
+        blank,
         load_seconds={
             "panel": panel_seconds,
             "actions": actions_seconds,
@@ -1203,6 +1224,10 @@ def event_coverage(ctx: Context, name: str) -> dict[str, Any]:
                 1 for item, _at in members if stock_div_ex(ctx, item, s) is None
             )
             year["null_ratio"] = year.get("null_ratio", 0) + nulls
+            blank = sum(
+                1 for item, _at in members if (item.instrument_id, s) in ctx.blank
+            )
+            year["blank_rows"] = year.get("blank_rows", 0) + blank
         year["signal_days"] += bool(signals)
         for item, _at, _extra in signals:
             exchange = panel.symbols.get(item.instrument_id, ("", "", ""))[0]
@@ -1253,6 +1278,7 @@ def event_coverage(ctx: Context, name: str) -> dict[str, Any]:
         }
         if name == "F1":
             body["null_ratio"] = row.get("null_ratio", 0)
+            body["blank_rows"] = row.get("blank_rows", 0)
         else:
             body["entries"] = entries.get(key, {})
         out["years"][key] = body
@@ -1364,15 +1390,17 @@ def portfolio_coverage_lines(name: str, coverage: dict[str, Any]) -> list[str]:
 def event_coverage_lines(name: str, coverage: dict[str, Any]) -> list[str]:
     if name == "F1":
         lines = [
-            "| 年 | 訊號日 | 有訊號的日數 | 訊號數 | 上市 | 上櫃 | 母體中配股率 null（不符合） |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| 年 | 訊號日 | 有訊號的日數 | 訊號數 | 上市 | 上櫃 "
+            "| 母體中 T 日的列配股率都是 null（不符合） | 其中有三欄都是 null 的列 |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         for year, row in coverage.get("years", {}).items():
             m = row["markets"]
             lines.append(
                 f"| {year} | {row['days']:,} | {row['signal_days']:,} | {row['signals']:,} "
                 f"| {m.get('TWSE', {}).get('signals', 0):,} "
-                f"| {m.get('TPEx', {}).get('signals', 0):,} | {row.get('null_ratio', 0):,} |"
+                f"| {m.get('TPEx', {}).get('signals', 0):,} | {row.get('null_ratio', 0):,} "
+                f"| {row.get('blank_rows', 0):,} |"
             )
         return lines
     head = ["年", "訊號日"]
@@ -1829,7 +1857,8 @@ def seconds_lines(body: dict[str, Any]) -> list[str]:
 
 COVERAGE_NOTES = (
     "- 缺值比例的分母是母體檔次（每個訊號日的母體加總）；每個訊號日都數，不扣占用（沒有模擬成交）",
-    f"- F1：`stock_div_ex`：{DEGENERATE['F1']}。訊號數是母體中 `stock_div_ex` 成立的檔次",
+    f"- F1：`stock_div_ex`：{DEGENERATE['F1']}。訊號數是母體中 `stock_div_ex` 成立的檔次；只有現金股利的列，配股率也是 null，"
+    "同樣不符合，三欄都是 null 的列另列一欄",
     f"- F2：{DEGENERATE['F2']}。`x2_order` 是同一個 T 算 X2（H2）名單的時間，"
     "重疊比例只在探索段列出",
     f"- F3：{DEGENERATE['F3']}。兩個條件以分數比較，剛好 −0.22、−0.10 符合",
