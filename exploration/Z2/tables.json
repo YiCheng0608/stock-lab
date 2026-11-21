@@ -1,0 +1,205 @@
+{
+  "tool": "round8_research",
+  "version": 1,
+  "design": "918",
+  "definitions_sha256": "cd00cd2d201893370ec706168af5a30cb8e1e684c47ba30fc91356447876d757",
+  "label": "`skew_240`（近 240 個日報酬的偏態）小者先",
+  "direction": "彩券偏好",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "skew_240",
+        "low"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      241
+    ]
+  },
+  "hypothesis": "Z2",
+  "segment": "exploration",
+  "verdict": "探索通過",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-11-20",
+    "first_session": "2008-11-21",
+    "last_session": "2019-12-31",
+    "days": 2745,
+    "signal_days": 2745
+  },
+  "prerequisites": {
+    "days": 2745,
+    "min_days": 500,
+    "delisted": 129,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 30,
+      "members": 11668,
+      "missing": {
+        "skew_240": 231
+      }
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "skew_240": 3734
+      }
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "skew_240": 4169
+      }
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "skew_240": 3506
+      }
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "skew_240": 4026
+      }
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "skew_240": 2465
+      }
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "skew_240": 2438
+      }
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "skew_240": 1712
+      }
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "skew_240": 1575
+      }
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "skew_240": 1275
+      }
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "skew_240": 1206
+      }
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "skew_240": 1550
+      }
+    }
+  },
+  "seconds": {
+    "plan": 73.43164161700406,
+    "skew_240": 53.153615389514016,
+    "simulate": 92.5459577809961
+  },
+  "excess": {
+    "population": {
+      "days": 2745,
+      "mean": 0.00022216219570977565,
+      "annual": 0.05598487331886346,
+      "t": 2.132111760321504
+    },
+    "taiex": {
+      "days": 2745,
+      "mean": 0.00018343063892047452,
+      "annual": 0.04622452100795958,
+      "t": 1.4585599551496617
+    }
+  },
+  "absolute": {
+    "days": 2745,
+    "mean": 0.000626631201738899
+  },
+  "curves": {
+    "Z2": {
+      "days": 2745,
+      "total": 3.792053790681889,
+      "annual": 0.15471317713768906,
+      "volatility": 0.16782982596765839,
+      "max_drawdown": -0.31276807516608085,
+      "invested": 0.9711104223474366,
+      "turnover": 3.991443844516117
+    },
+    "population": {
+      "days": 2745,
+      "total": 1.5480032691047185,
+      "annual": 0.08965869841906726,
+      "volatility": 0.17857617199187417,
+      "max_drawdown": -0.39451810781095253,
+      "invested": 0.9710331008779016,
+      "turnover": 3.9542817852264753
+    },
+    "taiex": {
+      "days": 2745,
+      "total": 1.93333626736888,
+      "annual": 0.1038380244240753,
+      "volatility": 0.16034518971366313,
+      "max_drawdown": -0.2746772950187808,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 54820,
+    "won": 30531,
+    "rate": 0.5569317767238234,
+    "unsold": 1368
+  },
+  "counts": {
+    "Z2": {
+      "bought": 54820,
+      "not_tradable": 13,
+      "limit_up": 67,
+      "limit_down": 49,
+      "sale_held": 224,
+      "unsold": 1368
+    },
+    "population": {
+      "bought": 1300554,
+      "not_tradable": 346,
+      "limit_up": 2099,
+      "limit_down": 1066,
+      "sale_held": 5118,
+      "unsold": 28806
+    }
+  },
+  "min_t": 2.0
+}

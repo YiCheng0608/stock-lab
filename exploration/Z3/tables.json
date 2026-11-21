@@ -1,0 +1,217 @@
+{
+  "tool": "round8_research",
+  "version": 1,
+  "design": "918",
+  "definitions_sha256": "cd00cd2d201893370ec706168af5a30cb8e1e684c47ba30fc91356447876d757",
+  "label": "`beta_240`（近 240 日對加權指數的 Dimson beta，含 1 個落後項）小者先",
+  "direction": "低風險",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "beta_240",
+        "low"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      242
+    ]
+  },
+  "hypothesis": "Z3",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-11-21",
+    "first_session": "2008-11-24",
+    "last_session": "2019-12-31",
+    "days": 2744,
+    "signal_days": 2744
+  },
+  "prerequisites": {
+    "days": 2744,
+    "min_days": 500,
+    "delisted": 129,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 29,
+      "members": 11282,
+      "missing": {
+        "beta_240": 455
+      },
+      "no_market_days": 0
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "beta_240": 9103
+      },
+      "no_market_days": 0
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "beta_240": 11224
+      },
+      "no_market_days": 0
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "beta_240": 6872
+      },
+      "no_market_days": 0
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "beta_240": 5018
+      },
+      "no_market_days": 0
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "beta_240": 5703
+      },
+      "no_market_days": 0
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "beta_240": 6513
+      },
+      "no_market_days": 0
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "beta_240": 4794
+      },
+      "no_market_days": 0
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "beta_240": 6025
+      },
+      "no_market_days": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "beta_240": 10177
+      },
+      "no_market_days": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "beta_240": 8376
+      },
+      "no_market_days": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "beta_240": 8423
+      },
+      "no_market_days": 0
+    }
+  },
+  "seconds": {
+    "plan": 33.9724662899971,
+    "beta_240": 17.91700694290921,
+    "simulate": 89.72572691401001
+  },
+  "excess": {
+    "population": {
+      "days": 2744,
+      "mean": -0.0001032146543799456,
+      "annual": -0.026010092903746288,
+      "t": -0.8743580459549616
+    },
+    "taiex": {
+      "days": 2744,
+      "mean": -0.0001364382677097118,
+      "annual": -0.03438244346284738,
+      "t": -1.0660922667795842
+    }
+  },
+  "absolute": {
+    "days": 2744,
+    "mean": 0.0002996911927489561
+  },
+  "curves": {
+    "Z3": {
+      "days": 2744,
+      "total": 1.1011907011601987,
+      "annual": 0.07056779772796684,
+      "volatility": 0.12080770188375377,
+      "max_drawdown": -0.3044069541486444,
+      "invested": 0.9706664268457623,
+      "turnover": 3.664710024871282
+    },
+    "population": {
+      "days": 2744,
+      "total": 1.5365988172159666,
+      "annual": 0.08924396900355203,
+      "volatility": 0.17850300608156236,
+      "max_drawdown": -0.3944847989938539,
+      "invested": 0.9710014730643118,
+      "turnover": 3.954609168856503
+    },
+    "taiex": {
+      "days": 2744,
+      "total": 1.8762532665244125,
+      "annual": 0.10188731873721579,
+      "volatility": 0.16026650641276227,
+      "max_drawdown": -0.27467729501878146,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 54729,
+    "won": 27480,
+    "rate": 0.5021103985090172,
+    "unsold": 1578
+  },
+  "counts": {
+    "Z3": {
+      "bought": 54729,
+      "limit_up": 116,
+      "limit_down": 91,
+      "not_tradable": 35,
+      "sale_held": 487,
+      "unsold": 1578
+    },
+    "population": {
+      "bought": 1300169,
+      "limit_up": 2099,
+      "not_tradable": 345,
+      "limit_down": 1065,
+      "sale_held": 5116,
+      "unsold": 28804
+    }
+  },
+  "min_t": 2.0
+}
