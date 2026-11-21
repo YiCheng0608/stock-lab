@@ -1,0 +1,261 @@
+{
+  "id": "35418",
+  "canonical_key": "news:yahoo_tw:4bf80818ec57ecb0c4697e610f1af276c79832df1d5cc1a9a13fb07942147d74",
+  "dedupe_cluster_id": "news-title:716782d0eb0abd93207d9586f43a8460",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.stock.yahoo.com/news/%E7%A7%91%E6%8A%80%E8%82%A1%E7%84%A1%E7%9B%A1%E9%BB%91%E5%A4%9C-%E7%BE%8E%E8%82%A1%E8%B2%BB%E5%8D%8A9000%E9%BB%9E%E7%80%95%E8%87%A8%E5%A4%B1%E5%AE%88-%E5%8F%B0%E7%A9%8D%E9%9B%BBadr%E9%87%8D%E6%91%944-anthropic-%E5%BA%A6%E7%8B%82%E6%8C%AB9-145200315.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "科技股無盡黑夜！美股費半9000點瀕臨失守、台積電ADR重摔4％　Anthropic一度狂挫9％",
+  "summary": "[FTNN新聞網]記者吳峻光／綜合報導台股本週狂瀉7641點創下史上最慘紀錄，美股科技股週五開盤繼續承壓，Anthropic掛牌上市第2天開盤狂挫近10％，至截稿前報87....",
+  "description": "[FTNN新聞網]記者吳峻光／綜合報導台股本週狂瀉7641點創下史上最慘紀錄，美股科技股週五開盤繼續承壓，Anthropic掛牌上市第2天開盤狂挫近10％，至截稿前報87....",
+  "summary_preview": "[FTNN新聞網]記者吳峻光／綜合報導台股本週狂瀉7641點創下史上最慘紀錄，美股科技股週五開盤繼續承壓，Anthropic掛牌上市第2天開盤狂挫近10％，至截稿前報87....",
+  "language": "zh-Hant",
+  "published_at": "2026-11-20T14:52:00+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-20T14:52:00+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-20T14:52:00+00:00",
+        "utc": "2026-11-20T14:52:00+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-20T16:00:10.938158+00:00",
+        "utc": "2026-11-20T16:00:10.938158+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-21T00:00:34.620219+00:00",
+    "legacy": {
+      "published_at": "2026-11-20T14:52:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-20T14:52:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-20T16:00:10.938158+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-21T00:00:34.620219+00:00",
+  "collected_at": "2026-11-20T16:00:10.938158+00:00",
+  "symbols": [
+    "TWSE:2330"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v3",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "bf7135e79c234b8fdd2dcef80bddd9a314e11caecbc65c3679412706c505858e",
+  "detail_url": "/news/35418",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台股本週狂瀉7641點創史上最慘紀錄；美股費半9000點瀕臨失守、台積電ADR重摔4％，Anthropic一度挫9％。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "listing": "listed",
+        "exchange_corrected": false,
+        "reason": "新聞提到台積電ADR重摔4％",
+        "confidence": "high",
+        "verified": false,
+        "source_check": "mentioned"
+      }
+    ],
+    "hidden_symbol_candidates": [],
+    "candidate_check_version": "ai-candidate-source/v2",
+    "theme_candidates": [],
+    "impact_direction": "negative",
+    "impact_scope": "market",
+    "impact_rationale": "台股週跌幅創紀錄，美股科技股續受壓。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v4",
+    "input_hash": "f9508f5cea928dd3f554380f344eba405a1f1af4127799b32b05982bac3af781",
+    "generated_at": "2026-11-20T16:00:53.853233+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 12964,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-11-20T16:00:10.938158"
+  }
+}

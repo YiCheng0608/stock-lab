@@ -1,0 +1,3 @@
+stock-lab-api-1	stock-lab-backend:v1.2.75	Up 3 minutes (healthy)
+stock-lab-scheduler-1	stock-lab-backend:v1.2.75	Up 3 minutes
+stock-lab-web-1	stock-lab-web:v1.2.75	Up 3 minutes (healthy)
