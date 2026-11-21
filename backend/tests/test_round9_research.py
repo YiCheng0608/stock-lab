@@ -132,6 +132,9 @@ def test_the_definitions_hash_holds_the_threshold_and_the_rules(monkeypatch):
         (tool, "MARKET_WIDE_SHARE", 0.9),
         (er, "LIMIT_BEFORE_WIDENING", Fraction(1, 10)),
         (er, "LIMIT_WIDENED_ON", date(2015, 6, 2)),
+        (er, "LIMIT", Fraction(1, 20)),
+        (tool, "MARKETS", {"TWSE": "上市"}),
+        (tool, "NO_STOP", -1e9),
     ):
         with monkeypatch.context() as m:
             m.setattr(module, name, value)
@@ -1331,16 +1334,32 @@ def unwritable(problems: list[str], db: Path) -> bool:
     )
 
 
-def test_the_ledger_check_runs_through_the_exploration_gate(copied, monkeypatch):
-    """Whatever the platform: the exploration's refusals include
-    ``ledger_write_problem`` (#899), before anything is read."""
+def test_an_unwritable_ledger_refuses_the_exploration_before_anything_is_read(
+    copied, tmp_path, monkeypatch, capsys
+):
+    """On any platform: the gate's ledger check is the one #899 added."""
 
-    monkeypatch.setattr(
-        ex, "ledger_write_problem", lambda db: "the ledger is not writable"
-    )
+    problem = "x/explore-ledger.json is not writable"
+    monkeypatch.setattr(ex, "ledger_write_problem", lambda db: problem)
     opened = no_reads(monkeypatch)
-    assert explore(copied, copied.parent / "out", hypotheses="B1") == 2
-    assert opened == [] and not (copied.parent / "out").exists()
+    capsys.readouterr()
+    assert explore(copied, tmp_path / "out", hypotheses="B1") == 2
+    assert refused(capsys) == [problem]
+    assert opened == [] and not (tmp_path / "out").exists()
+
+
+def test_an_unwritable_ledger_refuses_the_validation_before_anything_is_read(
+    explored, tmp_path, monkeypatch, capsys
+):
+    db, out = explored
+    report = passed_report(out, tmp_path, "B1")
+    problem = "x/explore-ledger.json is not writable"
+    monkeypatch.setattr(ex, "ledger_write_problem", lambda db: problem)
+    opened = no_reads(monkeypatch)
+    capsys.readouterr()
+    assert validate(db, tmp_path / "v", report) == 2
+    assert refused(capsys) == [problem]
+    assert opened == [] and not (tmp_path / "v").exists()
 
 
 @READ_ONLY

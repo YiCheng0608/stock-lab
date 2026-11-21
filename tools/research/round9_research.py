@@ -244,10 +244,12 @@ def definitions() -> dict[str, Any]:
                 "pick": "not ranked; the first 20 by sha256(<T>:<instrument_id>)",
             },
         },
+        "markets": sorted(MARKETS),  # B2: the exchanges whose lists make signals
         "b2_exit": {
             "entry": "T+1 open, one session; not tradable or locked at limit up "
             "abandons",
-            "stop": "none (settle with -inf)",
+            "stop": "none (settle with NO_STOP)",
+            "no_stop": str(NO_STOP),
             "target": "none",
             "hold": "the 5th market session counting the fill as the 1st; "
             "trade_research.settle's delays, delisting and segment end",

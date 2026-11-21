@@ -701,7 +701,6 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 
 **第八輪的假設**（[第八輪：Z1～Z4](#第八輪z1z4)）：`tools/research/round8_research.py`（[#918](https://github.com/YiCheng0608/stock-lab/issues/918)）。Z1～Z4 寫在 `round8_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`round5_research`～`round7_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標，也沒有 `--members`（Z1～Z4 不用成員表）。引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、大者先／小者先排序（`round5_research.order_key`）、`explore_judge`、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；`explore_research` 第 2 版、`round5_research`～`round7_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同：
 
-
 ```bash
 # 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
 MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
@@ -733,7 +732,6 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | 1 | #918 | 第一版；沒有人用它對回補資料跑過 |
 
 **第九輪的假設**（[第九輪：B1～B3](#第九輪b1b3)）：`tools/research/round9_research.py`（[#926](https://github.com/YiCheng0608/stock-lab/issues/926)）。B1～B3 寫在 `round9_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round8_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（沒有 `--members`：三個都不用成員表）。B1、B3 的引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`explore_judge`、「大者先」排序（`round5_research.order_key`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；B2 的逐筆成交、結算與統計 import 自 `trade_research`（`TradeBars`、`_trade_row`、`settle`、`baseline`、`stats`、`State` 的占用），漲跌停價經 `portfolio_research.Market.limits` 用 `exit_research.price_limits`。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round8_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同：
-
 
 ```bash
 # 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
