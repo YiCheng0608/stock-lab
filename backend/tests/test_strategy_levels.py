@@ -19,10 +19,12 @@ from app.models import (
     CorporateAction,
     Instrument,
     MarketBar,
+    RawPayload,
     Signal,
     StrategyLevel,
     StrategyVersion,
     TechnicalFeature,
+    TradingCalendarDay,
 )
 from app.strategies import REGISTRY, SUPERSEDED, Condition, NextSessionInputs
 from app.strategies import levels
@@ -40,7 +42,17 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 def test_the_levels_version_and_tick_ladder_are_pinned():
     # Changing either is a formula change: it needs a new STRATEGY_LEVELS_VERSION.
-    assert STRATEGY_LEVELS_VERSION == "strategy_levels_v1"
+    assert STRATEGY_LEVELS_VERSION == "strategy_levels_v2"
+    # TWSE Operating Rules art. 62, amended 2026-11-18, in force 2027-07-05 (#925).
+    assert levels.TWSE_STOCK_LADDER_FROM == date(2027, 7, 5)
+    assert levels.TWSE_STOCK_LADDER_2027 == (
+        ("10", "0.01"),
+        ("50", "0.05"),
+        ("100", "0.1"),
+        ("500", "0.5"),
+        (None, "1"),
+    )
+    # The ladder before that date, and of TPEx and ETFs (#927): unchanged.
     assert levels.TICK_LADDERS == {
         "stock": (
             ("10", "0.01"),
@@ -98,6 +110,139 @@ def test_tick_ceil_takes_the_next_legal_price(kind, value, strict, expected):
 )
 def test_tick_floor_takes_the_legal_price_at_or_below(kind, value, expected):
     assert levels.tick_floor(value, kind) == expected
+
+
+# ---- the ladder follows the next session's date and exchange (#925) ----
+
+FRIDAY = date(2027, 7, 2)  # the last session of the old TWSE ladder
+MONDAY = date(2027, 7, 5)  # TWSE_STOCK_LADDER_FROM
+
+
+@pytest.mark.parametrize(
+    "kind, exchange, session, expected",
+    [
+        # Listed stock of 1,000 and above: 5 through 07-02, 1 from 07-05.
+        ("stock", "TWSE", FRIDAY, (1015.0, 1010.0)),
+        ("stock", "TWSE", MONDAY, (1013.0, 1012.0)),
+        ("ipo", "TWSE", MONDAY, (1013.0, 1012.0)),
+        # TPEx (#927), no exchange, no date: the old ladder on both days.
+        ("stock", "TPEx", FRIDAY, (1015.0, 1010.0)),
+        ("stock", "TPEx", MONDAY, (1015.0, 1010.0)),
+        ("stock", None, MONDAY, (1015.0, 1010.0)),
+        ("stock", "TWSE", None, (1015.0, 1010.0)),
+        # ETF: 0.05 above 50 on both days.
+        ("etf", "TWSE", FRIDAY, (1012.35, 1012.3)),
+        ("etf", "TWSE", MONDAY, (1012.35, 1012.3)),
+    ],
+)
+def test_the_tick_of_1000_and_above_follows_the_session(
+    kind, exchange, session, expected
+):
+    where = {"exchange": exchange, "session": session}
+    assert (
+        levels.tick_ceil(1012.3, kind, strict=True, **where),
+        levels.tick_floor(1012.3, kind, **where),
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    "value, strict, friday, monday",
+    [
+        # Strictly above 1000 itself: 1005 (tick 5) or 1001 (tick 1).
+        (1000.0, True, 1005.0, 1001.0),
+        (1000.0, False, 1000.0, 1000.0),
+        # Not strict, between ticks above 1,000 (a limit down near close 1,123).
+        (1010.7, False, 1015.0, 1011.0),
+        (999.4, True, 1000.0, 1000.0),
+    ],
+)
+def test_the_1000_edge_on_both_ladders(value, strict, friday, monday):
+    on = {"exchange": "TWSE", "strict": strict}
+    assert levels.tick_ceil(value, "stock", session=FRIDAY, **on) == friday
+    assert levels.tick_ceil(value, "stock", session=MONDAY, **on) == monday
+
+
+def test_a_limit_down_above_1000_rounds_up_on_the_session_ladder():
+    # 1123 x 0.9 = 1010.7 -> 1015 (tick 5) or 1011; 1123 x 1.1 = 1235.3 -> 1235.
+    friday = ladder_inputs("TWSE", FRIDAY, close=1123.0, high=1123.0)
+    monday = ladder_inputs("TWSE", MONDAY, close=1123.0, high=1123.0)
+    assert levels.price_limits(friday) == (1015.0, 1235.0)
+    assert levels.price_limits(monday) == (1011.0, 1235.0)
+
+
+@pytest.mark.parametrize("session", [FRIDAY, MONDAY])
+def test_below_1000_the_tick_is_the_same_on_both_days(session):
+    for value, ceil, floor in [(812.4, 813.0, 812.0), (499.7, 500.0, 499.5)]:
+        assert (
+            levels.tick_ceil(value, "stock", exchange="TWSE", session=session) == ceil
+        )
+        assert (
+            levels.tick_floor(value, "stock", exchange="TWSE", session=session) == floor
+        )
+
+
+def ladder_inputs(
+    exchange, session, *, close, high, kind="stock", **extra
+) -> NextSessionInputs:
+    return next_inputs(
+        instrument_type=kind,
+        etf_category="broad_market" if kind == "etf" else None,
+        exchange=exchange,
+        next_session_date=session,
+        close=close,
+        highs=(close,) * 19 + (high,),
+        **extra,
+    )
+
+
+@pytest.mark.parametrize(
+    "exchange, session, trigger, limits",
+    [
+        # close 1012: 1012 x 0.9 = 910.8 -> 911 (tick 1 below 1,000 on both
+        # ladders); 1012 x 1.1 = 1113.2 -> 1110 (tick 5) or 1113 (tick 1).
+        # High 1012.3: strictly above it is 1015 (tick 5) or 1013 (tick 1).
+        ("TWSE", FRIDAY, 1015.0, (911.0, 1110.0)),
+        ("TWSE", MONDAY, 1013.0, (911.0, 1113.0)),
+        ("TPEx", FRIDAY, 1015.0, (911.0, 1110.0)),
+        ("TPEx", MONDAY, 1015.0, (911.0, 1110.0)),
+    ],
+)
+def test_a_1000_stock_trigger_and_limits_follow_the_next_session(
+    exchange, session, trigger, limits
+):
+    inputs = ladder_inputs(exchange, session, close=1012.0, high=1012.3)
+    assert levels.price_limits(inputs) == limits
+    result = BREAKOUT.observation_levels(inputs)
+    assert result.trigger_price == trigger
+    assert result.reachable_next_session is True
+
+
+@pytest.mark.parametrize("session", [FRIDAY, MONDAY])
+def test_a_500_to_1000_stock_and_an_etf_are_the_same_on_both_days(session):
+    # 800 x 0.9 = 720, 800 x 1.1 = 880; strictly above 812.4 is 813 (tick 1).
+    stock = ladder_inputs("TWSE", session, close=800.0, high=812.4)
+    assert levels.price_limits(stock) == (720.0, 880.0)
+    assert BREAKOUT.observation_levels(stock).trigger_price == 813.0
+    # ETF: strictly above 1012.3 is 1012.35 (tick 0.05); no limits judged.
+    etf = ladder_inputs("TWSE", session, close=1012.0, high=1012.3, kind="etf")
+    assert levels.price_limits(etf) is None
+    assert BREAKOUT.observation_levels(etf).trigger_price == 1012.35
+
+
+def test_a_1000_pullback_zone_follows_the_next_session():
+    # S19 = 19 x 1012 = 19228, S59 = 40 x 900 + 19228 = 55228.  Lower bound
+    # max(S59 / 59 = 936.07, 0.97 x S19 / 19.03 = 980.09) -> 981 (tick 1 on
+    # both); upper 1.02 x S19 / 18.98 = 1033.33 -> 1030 (tick 5) or 1033.
+    closes = (900.0,) * 40 + (1012.0,) * 19
+    zone = {}
+    for session in (FRIDAY, MONDAY):
+        inputs = ladder_inputs(
+            "TWSE", session, close=1012.0, high=1012.3, closes=closes
+        )
+        result = PULLBACK.observation_levels(inputs)
+        assert result.availability == "levels"
+        zone[session] = (result.zone_low, result.zone_high)
+    assert zone == {FRIDAY: (981.0, 1030.0), MONDAY: (981.0, 1033.0)}
 
 
 # ---- pure formulas ----
@@ -675,6 +820,10 @@ for _key in ("breakout_v2", "pullback_v2", "breakout_v3", "pullback_v3", "pullba
     PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][_key] = PINNED_CONDITION_DEFAULTS[
         "strategy_levels_v1"
     ][_key.rsplit("_", 1)[0] + "_v1"]
+# strategy_levels_v2 (#925) changes only the tick ladder: the same defaults.
+PINNED_CONDITION_DEFAULTS["strategy_levels_v2"] = PINNED_CONDITION_DEFAULTS[
+    "strategy_levels_v1"
+]
 
 
 def test_the_condition_defaults_are_pinned_to_the_levels_version():
@@ -955,3 +1104,165 @@ def test_levels_are_computed_at_the_clock(db, frozen_utcnow):
     compute_strategy_levels(db, T)
     assert row.trigger_price != 1.0 and row.computed_at == later
     assert stale.computed_at == first
+
+
+# ---- the worker step picks the ladder of the next session (#925) ----
+
+
+def seed_listed_1000(db, exchange: str, signal_date: date) -> dict[str, Signal]:
+    """A 1,000 stock's 20 weekday bars through ``signal_date``: close 1012, top high 1012.3."""
+
+    instrument = Instrument(
+        market="TW",
+        exchange=exchange,
+        symbol="9999",
+        name="fixture",
+        instrument_type="stock",
+        status="active",
+    )
+    db.add(instrument)
+    db.flush()
+    days = [signal_date]
+    while len(days) < 20:
+        previous = days[-1] - timedelta(days=1)
+        while previous.weekday() >= 5:
+            previous -= timedelta(days=1)
+        days.append(previous)
+    for day in reversed(days):
+        db.add(
+            MarketBar(
+                instrument_id=instrument.id,
+                trading_date=day,
+                open=1012.0,
+                high=1012.3 if day == signal_date else 1012.0,
+                low=1012.0,
+                close=1012.0,
+                adj_close=1012.0,
+                volume=1000,
+                turnover=1012000.0,
+                source="fixture",
+                is_suspended=False,
+            )
+        )
+    versions = pipeline._ensure_strategies(db)
+    evidence = {
+        BREAKOUT.kind: {"state": "rejected", "reasons": ["volume_ratio_below_1_20"]},
+        PULLBACK.kind: {"state": "data_incomplete", "reasons": ["ma60_missing"]},
+        "inputs": {
+            "prior_20_highs": [1012.0] * 20,
+            "prior_20_volumes": [1000] * 20,
+            "group_excess_return_20d": 0.01,
+            "institutional_flow_to_turnover_ratio_5d": 0.0,
+            "margin_balance_change_ratio_5d": 0.0,
+            "bar_count_60d": 120,
+            "ma20": 1012.0,
+            "ma60": None,
+        },
+    }
+    signals = {}
+    for key, strategy in REGISTRY.items():
+        version = versions[key]
+        signal = Signal(
+            signal_key=(
+                f"analysis-{exchange}-9999-{signal_date.isoformat()}-{key}-{version.version}"
+            ),
+            signal_date=signal_date,
+            instrument_id=instrument.id,
+            strategy_version_id=version.id,
+            status="observation",
+            entry_type=strategy.entry_type,
+            rationale="fixture",
+            rule_evidence_json=evidence,
+        )
+        db.add(signal)
+        signals[strategy.entry_type] = signal
+    db.flush()
+    return signals
+
+
+def level_of_version(db, signal, version: str) -> StrategyLevel | None:
+    return db.scalar(
+        select(StrategyLevel).where(
+            StrategyLevel.signal_id == signal.id,
+            StrategyLevel.levels_version == version,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "exchange, signal_date, next_date, trigger",
+    [
+        # 07-01 -> 07-02: the old ladder; strictly above 1012.3 is 1015.
+        ("TWSE", date(2027, 7, 1), FRIDAY, 1015.0),
+        # 07-02 (Fri) -> 07-05: TWSE moves by 1 from 1,000, so 1013.
+        ("TWSE", FRIDAY, MONDAY, 1013.0),
+        # TPEx keeps the old ladder (#927).
+        ("TPEx", FRIDAY, MONDAY, 1015.0),
+    ],
+)
+def test_the_worker_rounds_on_the_next_session_ladder(
+    db, exchange, signal_date, next_date, trigger
+):
+    signals = seed_listed_1000(db, exchange, signal_date)
+    compute_strategy_levels(db, signal_date)
+    row = level_of_version(db, signals["breakout"], STRATEGY_LEVELS_VERSION)
+    assert row.next_session_date == next_date
+    assert row.availability == "levels"
+    assert row.trigger_price == trigger
+    assert row.reachable_next_session is True
+
+
+def test_a_row_of_the_old_levels_version_stays_as_it_is(db):
+    signals = seed_listed_1000(db, "TWSE", FRIDAY)
+    stamp = datetime(2027, 7, 2, 22, 0)
+    old = StrategyLevel(
+        signal_id=signals["breakout"].id,
+        levels_version="strategy_levels_v1",
+        availability="levels",
+        next_session_date=MONDAY,
+        trigger_price=1015.0,
+        min_volume=1200,
+        conditions_json=[],
+        missing_inputs_json=[],
+        price_basis="score_date_raw_basis",
+        computed_at=stamp,
+    )
+    db.add(old)
+    db.flush()
+    result = compute_strategy_levels(db, FRIDAY, now=stamp + timedelta(hours=1))
+    assert result["levels_version"] == "strategy_levels_v2"
+    db.refresh(old)
+    assert (old.trigger_price, old.computed_at) == (1015.0, stamp)
+    new = level_of_version(db, signals["breakout"], "strategy_levels_v2")
+    assert new.trigger_price == 1013.0
+
+
+def test_the_official_calendar_picks_the_ladder_after_a_holiday(db):
+    # Fixture choice: the stored 2027 schedule closes 07-02, so the session
+    # after Thursday 07-01 is Monday 07-05 by the calendar (not the weekday
+    # fallback), and the trigger takes the new TWSE tick: 1013.
+    raw = RawPayload(
+        source="twse",
+        endpoint="fixture-holiday-schedule",
+        sha256="20270702".ljust(64, "0"),
+        data_as_of="2027-07-02",
+    )
+    db.add(raw)
+    db.flush()
+    db.add(
+        TradingCalendarDay(
+            exchange="TWSE",
+            calendar_date=FRIDAY,
+            year=2027,
+            kind="closed",
+            name="fixture",
+            description="",
+            source="twse_holiday_schedule",
+            collected_at=datetime(2027, 1, 1),
+            raw_payload_id=raw.id,
+        )
+    )
+    signals = seed_listed_1000(db, "TWSE", date(2027, 7, 1))
+    compute_strategy_levels(db, date(2027, 7, 1))
+    row = level_of_version(db, signals["breakout"], STRATEGY_LEVELS_VERSION)
+    assert (row.next_session_date, row.trigger_price) == (MONDAY, 1013.0)

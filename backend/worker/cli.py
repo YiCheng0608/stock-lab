@@ -318,7 +318,7 @@ def main() -> None:
     )
     levels_parser = subparsers.add_parser(
         "strategy-levels",
-        help="計算訊號的條件價位 strategy_levels_v1（daily 的 strategy_levels 步驟；同日重跑冪等）",
+        help="計算訊號的條件價位 STRATEGY_LEVELS_VERSION（daily 的 strategy_levels 步驟；同日重跑冪等）",
     )
     levels_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"

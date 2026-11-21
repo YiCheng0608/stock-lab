@@ -254,10 +254,11 @@ class PullbackV1(Strategy):
         zone = CONFIG["support_zone"]
         low_ratio = zone["minimum_close_to_ma20_ratio"]
         high_ratio = zone["maximum_close_to_ma20_ratio"]
-        trend_low = levels.tick_ceil((s59 - 3 * s19) / 2, kind, strict=True)
-        ma60_low = levels.tick_ceil(s59 / 59, kind)
-        zone_low = levels.tick_ceil(low_ratio * s19 / (20 - low_ratio), kind)
-        zone_high = levels.tick_floor(high_ratio * s19 / (20 - high_ratio), kind)
+        on = levels.ladder_of(inputs)
+        trend_low = levels.tick_ceil((s59 - 3 * s19) / 2, kind, strict=True, **on)
+        ma60_low = levels.tick_ceil(s59 / 59, kind, **on)
+        zone_low = levels.tick_ceil(low_ratio * s19 / (20 - low_ratio), kind, **on)
+        zone_high = levels.tick_floor(high_ratio * s19 / (20 - high_ratio), kind, **on)
         low = max(trend_low, ma60_low, zone_low)
         volume = CONFIG["volume"]
         min_volume = levels.volume_at_least(

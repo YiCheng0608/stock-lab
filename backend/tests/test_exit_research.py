@@ -315,6 +315,26 @@ def test_price_limits_round_to_the_tick():
     )
 
 
+def test_research_rounding_keeps_the_ladder_before_2027_07_05():
+    # #925: the tool gives tick_ceil／tick_floor no exchange or session, so the
+    # dated TWSE ladder does not reach it; 1012 x 1.1 = 1113.2 -> 1110 (tick 5), as on
+    # every listed session before 2027-07-05.  After that date it is #927's.
+    from app.strategies import levels
+
+    assert tool.price_limits(1012.0, "stock", levels, on=date(2027, 7, 2)) == (
+        911.0,
+        1110.0,
+    )
+    for value in (9.996, 49.97, 99.93, 499.7, 999.4, 1012.3, 2503.0):
+        before = {"exchange": "TWSE", "session": date(2027, 7, 2)}
+        assert levels.tick_ceil(value, "stock") == levels.tick_ceil(
+            value, "stock", **before
+        )
+        assert levels.tick_floor(value, "stock") == levels.tick_floor(
+            value, "stock", **before
+        )
+
+
 # --- the statistics and the verdict ------------------------------------------
 
 
