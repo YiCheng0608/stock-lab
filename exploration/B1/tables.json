@@ -1,0 +1,200 @@
+{
+  "tool": "round9_research",
+  "version": 1,
+  "design": "926",
+  "definitions_sha256": "1a79970f76ed6e92884000623ab38e61eae3f201ff10a457d5dead96b5858680",
+  "label": "`short_margin_ratio`（T 日融券餘額 ÷ T 日融資餘額，券資比）大者先",
+  "direction": "散戶融券",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "keys": [
+      [
+        "short_margin_ratio",
+        "high"
+      ]
+    ],
+    "condition": null,
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2007-12-03",
+      20
+    ]
+  },
+  "hypothesis": "B1",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-12-28",
+    "first_session": "2007-12-31",
+    "last_session": "2019-12-31",
+    "days": 2966,
+    "signal_days": 2966
+  },
+  "prerequisites": {
+    "days": 2966,
+    "min_days": 500,
+    "delisted": 152,
+    "ok": true
+  },
+  "coverage": {
+    "2007": {
+      "days": 2,
+      "members": 851,
+      "missing": 38,
+      "zero": 15
+    },
+    "2008": {
+      "days": 249,
+      "members": 109905,
+      "missing": 5330,
+      "zero": 5765
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": 7320,
+      "zero": 8033
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": 8954,
+      "zero": 10496
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": 5030,
+      "zero": 5071
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": 4431,
+      "zero": 4482
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": 5875,
+      "zero": 6362
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": 7193,
+      "zero": 6753
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": 4894,
+      "zero": 3922
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": 3942,
+      "zero": 3824
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": 5880,
+      "zero": 5723
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": 4358,
+      "zero": 5807
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": 3394,
+      "zero": 5890
+    }
+  },
+  "seconds": {
+    "plan": 16.81538312599878,
+    "short_margin_ratio": 4.203345407586312
+  },
+  "excess": {
+    "population": {
+      "days": 2966,
+      "mean": -0.0004051744467010618,
+      "annual": -0.10210396056866756,
+      "t": -3.9689373521206788
+    },
+    "taiex": {
+      "days": 2966,
+      "mean": -0.0007349061315093116,
+      "annual": -0.18519634514034652,
+      "t": -5.153655556394169
+    }
+  },
+  "absolute": {
+    "days": 2966,
+    "mean": -0.000550446158467667
+  },
+  "curves": {
+    "B1": {
+      "days": 2966,
+      "total": -0.8484929705259509,
+      "annual": -0.14814204798648023,
+      "volatility": 0.20721794839614016,
+      "max_drawdown": -0.8826568419276268,
+      "invested": 0.9527839231216882,
+      "turnover": 10.417315209975108
+    },
+    "population": {
+      "days": 2966,
+      "total": -0.4827799098691866,
+      "annual": -0.05447497720575922,
+      "volatility": 0.1963562420447794,
+      "max_drawdown": -0.6327567521898934,
+      "invested": 0.9490368614934879,
+      "turnover": 11.362054245409103
+    },
+    "taiex": {
+      "days": 2966,
+      "total": 0.42874972460238747,
+      "annual": 0.03077891598871796,
+      "volatility": 0.17960853784180816,
+      "max_drawdown": -0.5599954815388595,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 59160,
+    "won": 25556,
+    "rate": 0.4319810682893847,
+    "unsold": 491
+  },
+  "counts": {
+    "B1": {
+      "bought": 59160,
+      "limit_up": 150,
+      "not_tradable": 10,
+      "limit_down": 282,
+      "sale_held": 102,
+      "unsold": 491
+    },
+    "population": {
+      "bought": 1399272,
+      "not_tradable": 371,
+      "limit_up": 2444,
+      "sale_held": 3193,
+      "limit_down": 1921,
+      "unsold": 9492
+    }
+  },
+  "min_t": 2.0
+}

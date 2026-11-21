@@ -1,0 +1,168 @@
+{
+  "tool": "round9_research",
+  "version": 1,
+  "design": "926",
+  "definitions_sha256": "1a79970f76ed6e92884000623ab38e61eae3f201ff10a457d5dead96b5858680",
+  "label": "名單上第一次出現停止融券註記 `X`（`x_start`）、券資比 ≥ 0.3，全部符合的訊號；T+1 開盤成交（期限 1 日）、沒有停損與目標、持有 5 日",
+  "direction": "事件：停止融券前的強制回補",
+  "parameters": {
+    "engine": "trade",
+    "kind": "event",
+    "market_filter": false,
+    "min_ratio": 0.3,
+    "entry_days": 1,
+    "stop": null,
+    "target": null,
+    "hold": 5,
+    "start": [
+      "session",
+      "2007-12-03",
+      20
+    ]
+  },
+  "hypothesis": "B2",
+  "engine": "trade",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-12-28",
+    "first_session": "2007-12-31",
+    "last_session": "2019-12-31",
+    "days": 2966,
+    "signal_days": 2966
+  },
+  "prerequisites": {
+    "days": 2966,
+    "min_days": 500,
+    "delisted": 152,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 105,
+    "mean": -0.061582986142155446,
+    "t": -0.8833472509360628
+  },
+  "excess": {
+    "days": 105,
+    "mean": -0.055597205660371914,
+    "t": -0.7990796295595941
+  },
+  "absolute": {
+    "days": 105,
+    "mean": -0.05872415709250289
+  },
+  "signals": 109,
+  "signal_days": 105,
+  "trade_days": 105,
+  "trades": 109,
+  "net_mean": -0.05504440015384206,
+  "net_median": -0.014088634306035443,
+  "win_rate": 0.28440366972477066,
+  "zero": 0,
+  "won_mean": 0.0513565069463475,
+  "lost_mean": -0.09733194015519944,
+  "won": 31,
+  "lost": 78,
+  "exit_share": {
+    "stop": 0.0,
+    "target": 0.0,
+    "time": 0.9724770642201835,
+    "segment_end": 0.009174311926605505,
+    "delisted": 0.01834862385321101,
+    "transferred": 0.0
+  },
+  "exits": {
+    "stop": 0,
+    "target": 0,
+    "time": 106,
+    "segment_end": 1,
+    "delisted": 2,
+    "transferred": 0
+  },
+  "both_touched": 0,
+  "gapped": 0,
+  "limit_delayed": 7,
+  "suspension_delayed": 0,
+  "holding_mean": 5.504587155963303,
+  "abandoned": 0,
+  "abandon_rate": 0.0,
+  "abandon_reasons": {},
+  "entry_limit_blocked": 0,
+  "below_lower": 0,
+  "filter_blocked_days": 0,
+  "filter_missing_days": 0,
+  "population_unbought": 17,
+  "listed": {
+    "missing_list_days": {
+      "TWSE": 0,
+      "TPEx": 2
+    },
+    "years": {
+      "2008": {
+        "TPEx:signals": 3,
+        "TWSE:signals": 2
+      },
+      "2009": {
+        "TPEx:signals": 2,
+        "TWSE:signals": 12
+      },
+      "2010": {
+        "TPEx:signals": 3,
+        "TWSE:signals": 8
+      },
+      "2011": {
+        "TWSE:signals": 5
+      },
+      "2012": {
+        "TWSE:signals": 19,
+        "TPEx:signals": 1
+      },
+      "2013": {
+        "TWSE:signals": 9,
+        "TPEx:signals": 4
+      },
+      "2014": {
+        "TWSE:signals": 10
+      },
+      "2015": {
+        "TPEx:signals": 1,
+        "TWSE:signals": 6
+      },
+      "2016": {
+        "TWSE:signals": 3,
+        "TPEx:signals": 5
+      },
+      "2017": {
+        "TWSE:signals": 7
+      },
+      "2018": {
+        "TPEx:signals": 2,
+        "TWSE:signals": 3
+      },
+      "2019": {
+        "TWSE:signals": 3,
+        "TPEx:signals": 1
+      }
+    },
+    "market_wide": [
+      {
+        "date": "2008-09-30",
+        "exchange": "TWSE",
+        "new_x": 637,
+        "list_members": 692
+      },
+      {
+        "date": "2008-09-30",
+        "exchange": "TPEx",
+        "new_x": 395,
+        "list_members": 412
+      }
+    ]
+  },
+  "seconds": {
+    "run": 8.46200348000275,
+    "x_start": 0.9523767898790538
+  },
+  "min_t": 2.0
+}

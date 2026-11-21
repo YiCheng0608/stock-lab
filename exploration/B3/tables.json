@@ -1,0 +1,156 @@
+{
+  "tool": "round9_research",
+  "version": 1,
+  "design": "926",
+  "definitions_sha256": "1a79970f76ed6e92884000623ab38e61eae3f201ff10a457d5dead96b5858680",
+  "label": "T 日收盤等於漲停價（`limit_up_close`），不排序、依雜湊取前 20 名",
+  "direction": "價格限制",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "keys": [],
+    "condition": "limit_up_close",
+    "top": 20,
+    "hold": 5,
+    "start": [
+      "date",
+      "2015-06-01"
+    ]
+  },
+  "hypothesis": "B3",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2015-06-01",
+    "first_session": "2015-06-02",
+    "last_session": "2019-12-31",
+    "days": 1127,
+    "signal_days": 1127
+  },
+  "prerequisites": {
+    "days": 1127,
+    "min_days": 500,
+    "delisted": 69,
+    "ok": true
+  },
+  "coverage": {
+    "2015": {
+      "days": 149,
+      "members": 62290,
+      "missing": 0,
+      "hits": 840,
+      "over_top_days": 0,
+      "max_hits": 20
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": 0,
+      "hits": 810,
+      "over_top_days": 0,
+      "max_hits": 16
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": 0,
+      "hits": 1471,
+      "over_top_days": 1,
+      "max_hits": 21
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": 0,
+      "hits": 1649,
+      "over_top_days": 6,
+      "max_hits": 30
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": 0,
+      "hits": 803,
+      "over_top_days": 0,
+      "max_hits": 12
+    }
+  },
+  "seconds": {
+    "plan": 13.071616689994698,
+    "limit_up_close": 8.391800515499199
+  },
+  "excess": {
+    "population": {
+      "days": 1127,
+      "mean": 0.0010113100344521463,
+      "annual": 0.25485012868194085,
+      "t": 4.140749603295762
+    },
+    "taiex": {
+      "days": 1127,
+      "mean": -0.0006870143954992538,
+      "annual": -0.17312762766581197,
+      "t": -2.7548938237238425
+    }
+  },
+  "absolute": {
+    "days": 1127,
+    "mean": -0.00045675780532420827
+  },
+  "curves": {
+    "B3": {
+      "days": 1127,
+      "total": -0.41168220162510805,
+      "annual": -0.11185337875130841,
+      "volatility": 0.08346531187937835,
+      "max_drawdown": -0.41616276826192755,
+      "invested": 0.2193620810049095,
+      "turnover": 11.545257834448037
+    },
+    "population": {
+      "days": 1127,
+      "total": -0.8194182424022034,
+      "annual": -0.3179904879718869,
+      "volatility": 0.15716621462239977,
+      "max_drawdown": -0.8201821071382694,
+      "invested": 0.8075106462833194,
+      "turnover": 47.98164781658643
+    },
+    "taiex": {
+      "days": 1127,
+      "total": 0.24636675396776764,
+      "annual": 0.050477249072027774,
+      "volatility": 0.13223818714860774,
+      "max_drawdown": -0.2301497347203163,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 5379,
+    "won": 2058,
+    "rate": 0.3825989960959286,
+    "unsold": 15
+  },
+  "counts": {
+    "B3": {
+      "bought": 5379,
+      "limit_up": 152,
+      "limit_down": 15,
+      "sale_held": 11,
+      "not_tradable": 5,
+      "unsold": 15
+    },
+    "population": {
+      "bought": 482115,
+      "not_tradable": 187,
+      "limit_down": 268,
+      "limit_up": 243,
+      "sale_held": 506,
+      "unsold": 1866
+    }
+  },
+  "min_t": 2.0
+}
