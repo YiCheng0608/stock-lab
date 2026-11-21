@@ -127,8 +127,10 @@ if [ "$1" = compose ]; then
         "$COMPOSE_PROJECT_NAME" "$STOCK_RELEASE_TAG" "$STOCK_GIT_HEAD" "${WEB_PORT-}" \
         "${API_PORT-}" "${STOCK_ENV_FILE-}" "${STOCK_MONITOR-}" "${STOCK_COORDINATION_DIR-}" >>"$log"
       [ -f "$d/build_fails" ] && exit 1
-      printf '%s\n' "$COMPOSE_PROJECT_NAME-backend:$STOCK_RELEASE_TAG" \
-        "$COMPOSE_PROJECT_NAME-web:$STOCK_RELEASE_TAG" >>"$d/images"
+      # Newest first, as `docker images` lists them (#941).
+      { printf '%s\n' "$COMPOSE_PROJECT_NAME-backend:$STOCK_RELEASE_TAG" \
+          "$COMPOSE_PROJECT_NAME-web:$STOCK_RELEASE_TAG"; cat "$d/images" 2>/dev/null; } >"$d/images.new"
+      mv "$d/images.new" "$d/images"
       exit 0 ;;
     run)
       [ -f "$d/run_fails" ] && exit 1
@@ -165,8 +167,27 @@ if [ "$1" = compose ]; then
   exit 0
 fi
 case "$1" in
-  ps) cat "$d/containers" 2>/dev/null; exit 0 ;;
+  # #941: `ps -a --format {{.Image}}` lists the images containers use: what runs, and the
+  # lines of used (stopped containers).
+  ps)
+    case "$*" in
+      *"{{.Image}}"*)
+        t="$(running)"
+        [ -z "$t" ] || printf '%s\n' "stock-lab-backend:$t" "stock-lab-web:$t"
+        cat "$d/used" 2>/dev/null ;;
+      *) cat "$d/containers" 2>/dev/null ;;
+    esac
+    exit 0 ;;
   inspect) echo "stock-lab-backend:$(running)"; exit 0 ;;
+  # #941: `images --format` lists the images file as "REPOSITORY TAG" (newest first: the
+  # file's order); rmi REF drops the line, and fails for one in rmi_fails or not there.
+  images)
+    sed 's/\(.*\):\([^:]*\)$/\1 \2/' "$d/images" 2>/dev/null; exit 0 ;;
+  rmi)
+    grep -qxF "$2" "$d/rmi_fails" 2>/dev/null && { echo "conflict: $2" >&2; exit 1; }
+    grep -qxF "$2" "$d/images" || exit 1
+    grep -vxF "$2" "$d/images" >"$d/images.tmp"; mv "$d/images.tmp" "$d/images"
+    exit 0 ;;
   volume)
     # volume inspect: the project's data volume exists unless no_volume does.
     [ "$2" = inspect ] && [ ! -f "$d/no_volume" ] && exit 0
@@ -348,7 +369,17 @@ class Harness:
 
     def mutations(self) -> list[str]:
         """docker calls that change an image, a container or a volume."""
-        changing = ("build", "run", "up", "down", "create", "rm", "tag", "volume")
+        changing = (
+            "build",
+            "run",
+            "up",
+            "down",
+            "create",
+            "rm",
+            "rmi",
+            "tag",
+            "volume",
+        )
         return [
             call
             for call in self.calls("docker")
@@ -388,6 +419,8 @@ class Harness:
             FAKE_BACKEND=(ROOT / "backend").as_posix(),
             # A task session's project (tools/ops/dispatch.sh): never the one deployed.
             COMPOSE_PROJECT_NAME="task-340",
+            # The host sweep (#941) has its own test, with a stand-in sweep.sh.
+            STOCK_SWEEP="off",
         )
         env.update(extra_env or {})
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of
@@ -474,6 +507,9 @@ def test_a_green_tag_is_built_tagged_started_and_recorded(harness):
         "locks": "held",
         "maintenance": "none",
         "commented": True,
+        # #941: the deployed tag and the one before it stay; the sweep is off in the tests.
+        "release_images": ["release_image_kept:v1", "release_image_kept:v0"],
+        "sweep": None,
     }
     assert any(f"--commit {sha}" in c for c in harness.calls("gh"))
     assert_no_pull(harness)
@@ -675,6 +711,9 @@ def test_a_failed_comment_exits_4_after_deploying(harness):
         "HEAD": harness.sha["v1"],
         "image": f"{PROJECT}-backend:v1",
         "commented": False,
+        # #941: the image cleanup ran before the comment; the sweep is off in the tests.
+        "release_images": ["release_image_kept:v1", "release_image_kept:v0"],
+        "sweep": None,
     }
 
 
@@ -895,7 +934,7 @@ def assert_refused_after_build(h: Harness, before: tuple, result, text: str) -> 
     assert h.state()[:3] == (head, status, tags)
     after = h.docker_state()
     built = f"{PROJECT}-backend:v1\n{PROJECT}-web:v1\n"
-    assert after["images"] == docker["images"] + built
+    assert after["images"] == built + docker["images"]
     assert {k: v for k, v in after.items() if k != "images"} == {
         k: v for k, v in docker.items() if k != "images"
     }
@@ -1223,7 +1262,10 @@ def test_with_only_a_one_off_scheduler_the_api_holds_the_locks_and_nothing_was_r
     assert result.result["previous_image"] is None
     (lock,) = [c for c in harness.calls("docker") if c.startswith("exec -i ")]
     assert lock.startswith("exec -i feedface0001 "), lock
-    assert not [c for c in harness.calls("docker") if c.startswith("inspect ")]
+    # The one-off scheduler's image is never read as the previous one; the api's is read
+    # only for the release image cleanup's rollback tag (#941).
+    inspects = [c for c in harness.calls("docker") if c.startswith("inspect ")]
+    assert inspects == ["inspect -f {{.Config.Image}} feedface0001"]
 
 
 def test_a_one_off_scheduler_alone_still_holds_the_locks(harness):
@@ -1286,3 +1328,151 @@ def test_a_maintenance_mode_that_cannot_be_turned_off_is_recorded_and_the_deploy
     assert result.code == 0, result.out
     assert harness.record["maintenance"] == "failed"
     assert result.result["maintenance"] == "failed"
+
+
+# The release images and the host sweep after a deploy (#941) ---------------------------
+
+# Newest first, as `docker images` lists them; v0 runs (Harness), the build adds v1 on top.
+OLD_RELEASES = [
+    f"{PROJECT}-backend:v0",
+    f"{PROJECT}-web:v0",
+    f"{PROJECT}-backend:v-old2",
+    f"{PROJECT}-web:v-old2",
+    f"{PROJECT}-backend:v-old1",
+    f"{PROJECT}-web:v-old1",
+]
+# Never the deploy's to delete: a task's tags, another project's and base images, and one
+# a stopped container uses.
+OTHERS = [
+    f"{PROJECT}-backend:t340",
+    f"{PROJECT}-web:task-340-a",
+    "t340-other-backend:v-old1",
+    "myproj-app:v-old1",
+    "python:3.12-slim",
+    f"{PROJECT}-web:v-used",
+]
+
+
+def _images(h: Harness) -> list[str]:
+    return h.docker_state()["images"].splitlines()
+
+
+def test_a_deploy_keeps_only_the_deployed_and_the_previous_release_images(harness):
+    """AC-2 (#941): after a deploy that checks out, <project>-backend/-web keep the tag
+    deployed and the one the scheduler ran before; every other release tag goes as
+    repository:tag, never with -f; task tags, other repositories and an image a container
+    uses stay."""
+    harness.images(*OLD_RELEASES, *OTHERS)
+    (harness.docker / "used").write_text(f"{PROJECT}-web:v-used\n", encoding="utf-8")
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert _images(harness) == [
+        f"{PROJECT}-backend:v1",
+        f"{PROJECT}-web:v1",
+        f"{PROJECT}-backend:v0",
+        f"{PROJECT}-web:v0",
+        *OTHERS,
+    ]
+    removed = [f"release_image_removed:{ref}" for ref in OLD_RELEASES[2:]]
+    assert result.result["release_images"] == [
+        *removed,
+        f"release_image_kept:in_use:{PROJECT}-web:v-used",
+        "release_image_kept:v1",
+        "release_image_kept:v0",
+    ]
+    rmi = [c for c in harness.calls("docker") if c.startswith("rmi")]
+    assert rmi == [f"rmi {ref}" for ref in OLD_RELEASES[2:]]
+    # After the locks are released: the new containers checked out first.
+    calls = harness.calls("docker")
+    assert calls.index("lock released") < calls.index(rmi[0])
+
+
+@pytest.mark.parametrize("case", ["nothing-ran", "same-tag"])
+def test_without_another_previous_tag_the_newest_other_release_stays(harness, case):
+    """AC-2 (#941): when what ran before is unknown (no scheduler or api running) or is the
+    tag deployed again, the newest other release tag is the one kept for a rollback."""
+    if case == "nothing-ran":
+        harness.containers()
+        (harness.docker / "running").write_text("", encoding="utf-8")
+        harness.images(*OLD_RELEASES)
+        keep = "v0"
+    else:
+        assert harness.deploy("v1", "--no-comment").code == 0
+        harness.images(f"{PROJECT}-backend:v1", f"{PROJECT}-web:v1", *OLD_RELEASES[2:])
+        keep = "v-old2"
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    left = {ref.split(":")[1] for ref in _images(harness)}
+    assert left == {"v1", keep}, _images(harness)
+    assert result.result["release_images"][-2:] == [
+        "release_image_kept:v1",
+        f"release_image_kept:{keep}",
+    ]
+
+
+@pytest.mark.parametrize("step", ["refused", "build", "up", "readback"])
+def test_a_refused_or_failed_deploy_deletes_no_image_and_does_not_sweep(harness, step):
+    """AC-2 (#941): CI not green, or the build, up or the new scheduler's check failing:
+    no rmi, every older release image is still there, and no host sweep."""
+    harness.images(*OLD_RELEASES)
+    log = _stand_in_sweep(harness)
+    if step == "refused":
+        harness.ci("failure")
+    else:
+        (harness.docker / f"{step}_fails").touch()
+    if step == "readback":
+        (harness.docker / "readback_fails").touch()
+    result = harness.deploy("v1", "--no-comment", extra_env={"STOCK_SWEEP": "on"})
+    assert result.code == (1 if step == "refused" else 3), result.out
+    assert not [c for c in harness.calls("docker") if c.startswith("rmi")]
+    assert set(OLD_RELEASES) <= set(_images(harness))
+    assert not log.exists()
+
+
+def test_an_image_that_cannot_be_deleted_is_a_step_and_the_deploy_stands(harness):
+    harness.images(*OLD_RELEASES)
+    (harness.docker / "rmi_fails").write_text(
+        f"{PROJECT}-web:v-old1\n", encoding="utf-8"
+    )
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert (
+        f"release_image_failed:{PROJECT}-web:v-old1" in result.result["release_images"]
+    )
+    assert f"{PROJECT}-web:v-old1" in _images(harness)
+
+
+def _stand_in_sweep(h: Harness, body: str | None = None) -> Path:
+    """sweep.sh in the sandbox: logs its arguments, prints BODY (default one step)."""
+    log = h.fake / "sweep_calls.log"
+    body = body or 'echo \'{"steps": ["sweep_removed:dir:/x/t1"], "error": null}\''
+    (h.script.parent / "sweep.sh").write_text(
+        f'printf \'%s\\n\' "$*" >>"{log.as_posix()}"\n{body}\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    return log
+
+
+def test_a_deploy_runs_the_host_sweep_and_reports_it(harness):
+    """#941: a deploy that checks out runs sweep.sh (with the deploy's Python) and puts its
+    JSON line in its own as "sweep"; one that prints no JSON is an error there, and the
+    deploy still stands."""
+    log = _stand_in_sweep(harness)
+    result = harness.deploy("v1", "--no-comment", extra_env={"STOCK_SWEEP": "on"})
+    assert result.code == 0, result.out
+    assert result.result["sweep"] == {
+        "steps": ["sweep_removed:dir:/x/t1"],
+        "error": None,
+    }
+    assert log.read_text(encoding="utf-8").split() == [
+        "--python",
+        Path(sys.executable).as_posix(),
+    ]
+    _stand_in_sweep(harness, "echo boom; exit 5")
+    result = harness.deploy("v1", "--no-comment", extra_env={"STOCK_SWEEP": "on"})
+    assert result.code == 0, result.out
+    assert result.result["sweep"] == {
+        "steps": [],
+        "error": "sweep.sh 沒有印出 JSON（exit 5）",
+    }
