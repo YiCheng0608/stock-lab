@@ -198,7 +198,9 @@ class BreakoutV1(Strategy):
         ]
         if missing:
             return ObservationLevels("data_incomplete", tuple(missing))
-        trigger = levels.tick_ceil(max(highs), inputs.instrument_type, strict=True)
+        trigger = levels.tick_ceil(
+            max(highs), inputs.instrument_type, strict=True, **levels.ladder_of(inputs)
+        )
         min_volume = levels.volume_at_least(
             CONFIG["volume"]["minimum_signal_to_average_ratio"], average
         )

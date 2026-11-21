@@ -4,14 +4,15 @@ Pure calculation.  Each strategy solves its own conditions for the next
 session's close and volume (``Strategy.observation_levels``); this module
 holds what they share: the tick ladder, the daily price limit, the reasons a
 strategy gives no levels, and the confirmation conditions that cannot be
-solved for a price.  The formulas and TICK_LADDERS are pinned by tests under
-STRATEGY_LEVELS_VERSION.
+solved for a price.  The formulas, TICK_LADDERS and the dated TWSE ladder are
+pinned by tests under STRATEGY_LEVELS_VERSION.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Sequence
+from datetime import date
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from fractions import Fraction
 from typing import Any
@@ -47,6 +48,20 @@ TICK_LADDERS: dict[str, tuple[tuple[str | None, str], ...]] = {
     ),
     "etf": (("50", "0.01"), (None, "0.05")),
 }
+# TWSE Operating Rules art. 62 as amended 2026-11-18, in force from 2027-07-05
+# (#925): a listed stock of 500 and above moves by 1, so the 5 tick of 1,000
+# and above is gone.
+# https://twse-regulation.twse.com.tw/TW/law/DOC01_print.aspx?FLCODE=FL007304&FLNO=62
+# TPEx has not announced its date (#927): TPEx stocks keep TICK_LADDERS.  ETFs
+# are not in art. 62(1) and keep theirs.
+TWSE_STOCK_LADDER_FROM = date(2027, 7, 5)
+TWSE_STOCK_LADDER_2027: tuple[tuple[str | None, str], ...] = (
+    ("10", "0.01"),
+    ("50", "0.05"),
+    ("100", "0.1"),
+    ("500", "0.5"),
+    (None, "1"),
+)
 # Stocks and IPOs move at most this much from the previous close.  ETF limits
 # differ by product (a bond ETF's LimitUp can be 9999.95), so they are not
 # judged: reachable_next_session is null.
@@ -55,8 +70,16 @@ DAILY_PRICE_LIMIT = Fraction(1, 10)
 ETF_EXCLUDED_PREFIX = "etf_category_excluded_from_actionable_signals:"
 
 
-def _ladder(instrument_type: str) -> tuple[tuple[str | None, str], ...]:
-    return TICK_LADDERS["etf" if instrument_type == "etf" else "stock"]
+def _ladder(
+    instrument_type: str, exchange: str | None, session: date | None
+) -> tuple[tuple[str | None, str], ...]:
+    """The ladder of ``session``; without an exchange and a date, TICK_LADDERS."""
+
+    if instrument_type == "etf":
+        return TICK_LADDERS["etf"]
+    if exchange == "TWSE" and session is not None and session >= TWSE_STOCK_LADDER_FROM:
+        return TWSE_STOCK_LADDER_2027
+    return TICK_LADDERS["stock"]
 
 
 def _price(value: float) -> Decimal:
@@ -65,18 +88,32 @@ def _price(value: float) -> Decimal:
     return Decimal(str(round(value, 6)))
 
 
-def _band(price: Decimal, instrument_type: str) -> tuple[Decimal | None, Decimal]:
-    for upper, tick in _ladder(instrument_type):
+def _band(
+    price: Decimal, ladder: tuple[tuple[str | None, str], ...]
+) -> tuple[Decimal | None, Decimal]:
+    for upper, tick in ladder:
         if upper is None or price < Decimal(upper):
             return (Decimal(upper) if upper is not None else None), Decimal(tick)
     raise AssertionError("the last band is open-ended")
 
 
-def tick_ceil(value: float, instrument_type: str, *, strict: bool = False) -> float:
-    """The lowest legal price at or above ``value`` (above it when ``strict``)."""
+def tick_ceil(
+    value: float,
+    instrument_type: str,
+    *,
+    strict: bool = False,
+    exchange: str | None = None,
+    session: date | None = None,
+) -> float:
+    """The lowest legal price at or above ``value`` (above it when ``strict``).
+
+    ``exchange`` and ``session`` (the trading date the price is for) pick the
+    dated ladder; without them it is TICK_LADDERS, the ladder in force before
+    TWSE_STOCK_LADDER_FROM.
+    """
 
     price = _price(value)
-    upper, tick = _band(price, instrument_type)
+    upper, tick = _band(price, _ladder(instrument_type, exchange, session))
     candidate = (price / tick).to_integral_value(ROUND_CEILING) * tick
     if strict and candidate == price:
         candidate += tick
@@ -86,11 +123,17 @@ def tick_ceil(value: float, instrument_type: str, *, strict: bool = False) -> fl
     return float(candidate)
 
 
-def tick_floor(value: float, instrument_type: str) -> float:
-    """The highest legal price at or below ``value``."""
+def tick_floor(
+    value: float,
+    instrument_type: str,
+    *,
+    exchange: str | None = None,
+    session: date | None = None,
+) -> float:
+    """The highest legal price at or below ``value`` (keywords as tick_ceil)."""
 
     price = _price(value)
-    _upper, tick = _band(price, instrument_type)
+    _upper, tick = _band(price, _ladder(instrument_type, exchange, session))
     return float((price / tick).to_integral_value(ROUND_FLOOR) * tick)
 
 
@@ -100,10 +143,21 @@ def price_limits(inputs: NextSessionInputs) -> tuple[float, float] | None:
     if inputs.instrument_type == "etf" or not inputs.close:
         return None
     reference = Fraction(str(round(inputs.close, 6)))
+    kind = inputs.instrument_type
     return (
-        tick_ceil(float(reference * (1 - DAILY_PRICE_LIMIT)), inputs.instrument_type),
-        tick_floor(float(reference * (1 + DAILY_PRICE_LIMIT)), inputs.instrument_type),
+        tick_ceil(
+            float(reference * (1 - DAILY_PRICE_LIMIT)), kind, **ladder_of(inputs)
+        ),
+        tick_floor(
+            float(reference * (1 + DAILY_PRICE_LIMIT)), kind, **ladder_of(inputs)
+        ),
     )
+
+
+def ladder_of(inputs: NextSessionInputs) -> dict[str, Any]:
+    """The tick_ceil／tick_floor keywords that pick the next session's ladder."""
+
+    return {"exchange": inputs.exchange, "session": inputs.next_session_date}
 
 
 def positive_window(values: Sequence[float] | None, window: int) -> list[float] | None:
