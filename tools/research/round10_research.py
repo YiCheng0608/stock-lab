@@ -97,8 +97,11 @@ ROUND_SIZE = 4
 CUMULATIVE = 41
 MIN_DAYS = tr.MIN_DAYS  # F1, F4: signal dates with a fill, per segment
 OVERLAP = tr.OVERLAP
-LOAD_FROM = ex.LOAD_FROM  # the exploration reads the copy from its start
-WARMUP_CALENDAR_DAYS = ex.WARMUP_CALENDAR_DAYS
+# Every segment reads the copy from its start (as round6_research): F2's
+# vol_720 needs 721 bars, more than the 730 calendar days of warm-up
+# explore_research gives a later segment (PR #939 review 7059380651).
+LOAD_FROM = ex.LOAD_FROM
+LOAD_RULE = "every segment from LOAD_FROM"
 MIN_LOTS = lib.DEFAULT_MIN_LOTS
 RAW_DIR_NAME = ex.RAW_DIR_NAME
 POPULATION = pr.POPULATION
@@ -210,8 +213,8 @@ DEGENERATE = {
     "F2": "`vol_720` 在 at − 720 … at 共 721 根中任一根停牌、收盤缺值或 ≤ 0，"
     "或不足 721 根時缺值，缺值不進低波動半；"
     "`cash_yield_12m` 或 `mom_240_20` 缺值時那一項名次是低波動半的檔數",
-    "F3": "at 或 at − 5 沒有籌碼列、`margin_balance` 是 null，或 m[at − 5] ≤ 0 時 "
-    "`margin_drop_5` 缺值；60 根中任一根收盤缺值或 ≤ 0 時 `drawdown_60` 缺值；"
+    "F3": "at < 5、at 或 at − 5 沒有籌碼列、`margin_balance` 是 null，或 m[at − 5] ≤ 0 時 "
+    "`margin_drop_5` 缺值；不足 60 根，或 60 根中任一根收盤缺值或 ≤ 0 時 `drawdown_60` 缺值；"
     "任一個缺值，條件不符合",
     "F4": "T 或前一個交易日，這一檔交易所在 `margin_lists` 沒有那天的列時，"
     "那天這個交易所不產生訊號，天數另列",
@@ -283,8 +286,12 @@ def definitions() -> dict[str, Any]:
                 "missing": "no chip row or a null margin_balance on at or at-lag; "
                 "m[at-lag] <= 0",
             },
-            "conditions": "each <= its threshold as fractions (exactly the "
-            "threshold qualifies); a missing value does not qualify",
+            "conditions": {
+                "rule": "each <= its threshold; within near of it compared as "
+                "the fractions of the two floats (exactly the threshold "
+                "qualifies); a missing value does not qualify",
+                "near": NEAR,
+            },
             "margin_first": {
                 "value": "on T's list of the instrument's exchange; its first run on "
                 "that exchange's lists since its first bar starts on T, not on the "
@@ -322,7 +329,7 @@ def definitions() -> dict[str, Any]:
         "costs": [pr.SLIPPAGE, pr.FEE, pr.TAX, tr.SLIPPAGE, tr.COST_BPS],
         "min_lots": MIN_LOTS,
         "load_from": LOAD_FROM,
-        "warmup": WARMUP_CALENDAR_DAYS,
+        "load": LOAD_RULE,
     }
 
 
@@ -671,8 +678,9 @@ def f3_qualifies(
 
 def first_entry(ctx: Context, item: lib.Series) -> date | None:
     """The first list day of the instrument's first run on its exchange's
-    lists since its first bar, or None (never on one, already on the list on
-    its first bar or on the exchange's first list)."""
+    lists since its first bar, or None (never on one, on the list before its
+    first bar, or on the exchange's first list).  A run starting on the first
+    bar counts, with 0 bars before it (no signal: fewer than ``MIN_BARS``)."""
 
     instrument_id = item.instrument_id
     if instrument_id in ctx.entries:
@@ -1860,10 +1868,11 @@ COVERAGE_NOTES = (
     f"- F1：`stock_div_ex`：{DEGENERATE['F1']}。訊號數是母體中 `stock_div_ex` 成立的檔次；只有現金股利的列，配股率也是 null，"
     "同樣不符合，三欄都是 null 的列另列一欄",
     f"- F2：{DEGENERATE['F2']}。`x2_order` 是同一個 T 算 X2（H2）名單的時間，"
-    "重疊比例只在探索段列出",
+    "`--coverage-only` 不算重疊比例，各段的 `summary.md` 才列",
     f"- F3：{DEGENERATE['F3']}。兩個條件以分數比較，剛好 −0.22、−0.10 符合",
     f"- F4：{DEGENERATE['F4']}。「第一次入名單」是這一檔從第一根日線起，"
-    "在同一交易所名單上的第一天（名單第一天就在的不算）；"
+    "在同一交易所名單上的第一天（第一根日線以前就在名單上的、交易所名單第一天就在的不算；"
+    "第一根日線那天就在的算，前面 0 根，因不足 20 根不產生訊號）；"
     "「入名單前的日線根數」是那天以前這個 instrument 的日線根數（研究工具讀到的，排除清單的不算），"
     "不限母體；訊號數只數母體、另要 ≥ 20 根",
     "- 各假設用自己的訊號日（起日寫在各段標題）",
@@ -1964,16 +1973,6 @@ def _finish(out: Path, report: dict[str, Any], started: float) -> str:
     return sha256
 
 
-def load_from(segment: str) -> date:
-    """The first day read: the copy's start for the exploration (as
-    ``explore_research``), the warm-up before a later segment."""
-
-    first_day = SEGMENTS[segment][0]
-    if first_day is None:
-        return LOAD_FROM
-    return first_day - timedelta(days=WARMUP_CALENDAR_DAYS)
-
-
 def run_coverage(
     db: Path,
     out: Path,
@@ -1985,7 +1984,7 @@ def run_coverage(
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     end = SEGMENTS[EXPLORATION][1]
-    ctx = load(db, load_from(EXPLORATION), end, out / RAW_DIR_NAME)
+    ctx = load(db, LOAD_FROM, end, out / RAW_DIR_NAME)
     loaded = time.monotonic() - started
     header = _header(db, EXPLORATION, command, end)
     hypotheses = {}
@@ -2036,7 +2035,7 @@ def run_exploration(
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     end = SEGMENTS[EXPLORATION][1]
-    ctx = load(db, load_from(EXPLORATION), end, out / RAW_DIR_NAME)
+    ctx = load(db, LOAD_FROM, end, out / RAW_DIR_NAME)
     header = _header(db, EXPLORATION, command, end)
     header["_panel"] = ctx.panel
     report = {**header, "min_t": MIN_T, "selected": list(names), "hypotheses": {}}
@@ -2114,7 +2113,7 @@ def run_validation(
         )
     ex.write_ledger(ledger, entries)  # before any validation data is read
     end = SEGMENTS[VALIDATION][1]
-    ctx = load(db, load_from(VALIDATION), end, out / RAW_DIR_NAME)
+    ctx = load(db, LOAD_FROM, end, out / RAW_DIR_NAME)
     header = _header(db, VALIDATION, command, end)
     header["_panel"] = ctx.panel
     min_t = VALIDATION_MIN_T
@@ -2145,7 +2144,7 @@ def run_validation(
         report.pop("_panel", None)
         del ctx, result
         gc.collect()
-        used_ctx = load(db, load_from(USED), SEGMENTS[USED][1], out / RAW_DIR_NAME)
+        used_ctx = load(db, LOAD_FROM, SEGMENTS[USED][1], out / RAW_DIR_NAME)
         used_header = {**header, "_panel": used_ctx.panel}
         report["used"] = {}
         for name in passed:

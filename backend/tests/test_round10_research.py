@@ -187,6 +187,27 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "HYPOTHESES", _swap("F1", "hold", 59)),
         (tool, "HYPOTHESES", _swap("F4", "hold", 21)),
         (tool, "HYPOTHESES", _swap("F2", "top", 19)),
+        (tool, "HYPOTHESES", _swap("F3", "top", 19)),
+        (tool, "HYPOTHESES", _swap("F1", "start", ("session", date(2007, 12, 3), 21))),
+        (tool, "HYPOTHESES", _swap("F2", "start", ("session", date(2007, 12, 3), 720))),
+        (tool, "HYPOTHESES", _swap("F3", "start", ("session", date(2007, 12, 3), 61))),
+        (tool, "HYPOTHESES", _swap("F4", "start", ("session", date(2007, 12, 4), 20))),
+        (tool, "NEAR", 0.0),
+        (tool, "LOAD_RULE", "the warm-up before a later segment"),
+        (tool, "LOAD_FROM", date(2004, 1, 1)),
+        (tool, "MIN_T", 1.96),
+        (
+            tool,
+            "SEGMENTS",
+            {**tool.SEGMENTS, "validation": (date(2020, 1, 3), date(2024, 9, 27))},
+        ),
+        (tool, "MIN_SEGMENT_DAYS", {"exploration": 400, "validation": 250}),
+        (tool, "OVERLAP", 10),
+        (pr, "SLIPPAGE", 0.001),
+        (pr, "FEE", 0.001),
+        (pr, "TAX", 0.0015),
+        (tr, "SLIPPAGE", 0.001),
+        (tr, "COST_BPS", 60.0),
     ):
         with monkeypatch.context() as m:
             m.setattr(module, name, value)
@@ -1462,10 +1483,10 @@ def test_a_passed_validation_lets_its_panel_go_before_the_used_segment(
     report = passed_report(out, tmp_path, "F3")
     assert validate(db, tmp_path / "validation", report) == 0
     days = trading_days()
-    warmup = timedelta(days=tool.WARMUP_CALENDAR_DAYS)
+    # every segment from the copy's start (PR #939 review 7059380651)
     assert [(start, end) for start, end, _r, _a in loads] == [
-        (days[250] - warmup, days[339]),
-        (days[340] - warmup, days[399]),
+        (tool.LOAD_FROM, days[339]),
+        (tool.LOAD_FROM, days[399]),
     ]
     assert loads[1][3] == [False]  # the validation's panel was gone
     validation = read_json(tmp_path / "validation" / "explore.json")
@@ -1476,6 +1497,59 @@ def test_a_passed_validation_lets_its_panel_go_before_the_used_segment(
     assert "## 已用段" in (tmp_path / "validation" / "explore.md").read_text(
         encoding="utf-8"
     )
+
+
+def test_f2_has_a_list_from_the_validations_first_signal_date(
+    copied, tmp_path, monkeypatch
+):
+    """PR #939 review 7059380651 必修 1: a later segment reads the copy from
+    its start, so vol_720's window is there on the segment's first signal
+    date (with 730 calendar days of warm-up the 721 bars were not, and F2 kept
+    cash for its first ~230 signal dates).  The window is shortened to fit the
+    fixture's 400 sessions; the old warm-up is shortened alike, so a tool
+    that still read a warm-up only would find no list here."""
+
+    monkeypatch.setattr(tool, "VOL_WINDOW", 200)
+    monkeypatch.setattr(tool, "WARMUP_CALENDAR_DAYS", 30, raising=False)
+    out = tmp_path / "exploration"
+    assert explore(copied, out, hypotheses="F2") == 0
+    report = passed_report_of(out, tmp_path, "F2")
+    assert validate(copied, tmp_path / "validation", report) == 0
+    days = trading_days()
+    first = days[249].isoformat()  # the session before 250, the first buy on 250
+    lines = (
+        (tmp_path / "validation" / "F2" / "picks.csv")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    assert lines[0] == (
+        "signal_date,rank,exchange,symbol,vol_720,cash_yield_12m,mom_240_20,"
+        "r1,r2,score,tie"
+    )
+    rows = [line.split(",") for line in lines[1:] if line.startswith(first)]
+    assert rows and all(row[4] for row in rows)  # vol_720 has a value
+    scores = [float(row[9]) for row in rows]
+    assert scores == sorted(scores)  # the mean rank, small first
+    tables = read_json(tmp_path / "validation" / "F2" / "tables.json")
+    assert tables["counts"]["F2"]["bought"] > 0
+    # the overlap with X2's real list (explore_research 第 2 版), every signal date
+    assert tables["overlap"]["days"] == 90
+    assert 0.0 <= tables["overlap"]["mean"] <= 1.0
+    validation = read_json(tmp_path / "validation" / "explore.json")
+    assert validation["hypotheses"]["F2"]["overlap_x2"]["days"] == 90
+
+
+def passed_report_of(out: Path, tmp_path: Path, *names: str) -> Path:
+    """``passed_report`` for a run of only some hypotheses."""
+
+    data = read_json(out / "explore.json")
+    for name in data["hypotheses"]:
+        data["hypotheses"][name]["verdict"] = (
+            ex.EXPLORATION_PASSED if name in names else ex.EXPLORATION_FAILED
+        )
+    report = tmp_path / "passed.json"
+    report.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return report
 
 
 def test_coverage_only_computes_no_return(copied, tmp_path):
