@@ -305,9 +305,14 @@ def test_a_session_locked_at_limit_down_moves_the_exit_to_the_next_open():
 def test_price_limits_round_to_the_tick():
     from app.strategies import levels
 
-    assert tool.price_limits(100.0, "stock", levels) == (90.0, 110.0)
-    assert tool.price_limits(10.05, "stock", levels) == (9.05, 11.05)
-    assert tool.price_limits(50.0, "etf", levels) is None
+    assert tool.price_limits(100.0, "stock", levels, on=DAY0) == (90.0, 110.0)
+    assert tool.price_limits(10.05, "stock", levels, on=DAY0) == (9.05, 11.05)
+    assert tool.price_limits(50.0, "etf", levels, on=DAY0) is None
+    # ±7% before 2015-06-01 (#922; worked cases in test_price_limit_dates.py)
+    assert tool.price_limits(100.0, "stock", levels, on=date(2015, 5, 29)) == (
+        93.0,
+        107.0,
+    )
 
 
 # --- the statistics and the verdict ------------------------------------------
