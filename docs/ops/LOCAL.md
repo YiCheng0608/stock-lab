@@ -66,8 +66,22 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
 | Orca CLI | `orca`（PATH），沒有時 `%LOCALAPPDATA%/Programs/orca/resources/bin/orca.exe` | `orca`（PATH），沒有時 `/Applications/Orca.app/Contents/Resources/bin/orca` |
 | codebase-memory 同引擎 CLI（`close_task.sh`／`dispatch.sh` 預設用它，`STOCK_CBM_CLI` 可覆寫；[程式索引](../WORKFLOW.md#程式索引)） | `~/.local/bin/codebase-memory-mcp.cmd` | `~/.local/bin/codebase-memory-mcp` |
 | master 索引的 project（`STOCK_CBM_PROJECT` 可覆寫） | 由管理 checkout 的路徑推得：去掉 `:`、`/` 換成 `-`，例如 `C:/Users/<使用者>/Desktop/taiwan-stock-research` → `C-Users-<使用者>-Desktop-taiwan-stock-research` | 同左，例如 `/Users/<使用者>/stock-lab` → `Users-<使用者>-stock-lab` |
-| worktree 外暫存目錄 | `~/t<issue>` | `~/t<issue>` |
-| Claude Code 的 scratchpad（`close_task.sh` 結案時清） | `$TEMP/claude/<專案>/<session id>` | `/private/tmp/claude-<uid>/<專案>/<session id>` |
+| worktree 外暫存目錄（Issue 關閉且沒有 worktree 後由[主機清理](#主機清理)刪） | `~/t<issue>` | `~/t<issue>` |
+| Claude Code 的 scratchpad（`close_task.sh` 結案時清該任務的；[主機清理](#主機清理)清 7 天沒動的） | `$TEMP/claude/<專案>/<session id>` | `/private/tmp/claude-<uid>/<專案>/<session id>` |
+
+## 主機清理
+
+[`tools/ops/sweep.sh`](../../tools/ops/sweep.sh)（#941）清任務與 session 留在主機、沒有別人會刪的東西：`close_task.sh` 結案後（加 `--no-prune`，結案自己已 prune）與 `deploy.sh` 部署成功後自動跑，也能在 master 管理 checkout 單獨跑 `bash tools/ops/sweep.sh`。輸出一行 JSON，每一項是一個 step；失敗只記 step，exit 0。
+
+| 清什麼 | 條件 |
+| --- | --- |
+| `~/t<n>`（名稱就是 `t` 加數字） | Issue（或 PR）`n` 讀回已關，且沒有 `task/<n>-*` worktree；經 `guard_dir`／`remove_tree`，裡面有 `.git`、是資料目錄或路徑經過連結就拒絕 |
+| 名稱是 `t<n>`／`task-<n>` 的 Docker 資源 | 同上；規則同結案的 `docker_cleanup`（已停止的容器、image 以 `repository:tag`、volume、network；有在跑的就全部留著） |
+| Claude Code 的 scratchpad（上表的位置） | 7 天內沒有任何檔案或目錄變動；本 session 的不刪，沒有 `CLAUDE_CODE_SESSION_ID`（不在 Claude Code 裡跑）就整段不刪 |
+| `$TEMP/trivy-*`（Windows 的 docker scout 留下的） | 1 天內沒有變動 |
+| 懸空 image、build cache | 除了正式 project（`stock-lab`）以外沒有容器在跑，且沒有其他 Docker 任務進行（結案的 prune 同一條件） |
+
+Issue 狀態或 worktree 清單讀不到時，該項一律留著。不碰的東西與完整規則見 [GUARDRAILS](../GUARDRAILS.md) 的「主機清理」列。
 
 ## session 起始 context 的專案設定
 

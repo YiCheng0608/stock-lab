@@ -38,7 +38,9 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離（歷
 | 版本 | tag 早於 #340（tag 的 `docker-compose.yml` 沒有 `STOCK_RELEASE_TAG`）：那一版的 image 不帶 tag，部署後無法核對跑的版本。早於 #314 的 tag 也屬於這種 |
 | DB revision（#456） | build 之後、換任何容器之前，新 backend image 的臨時容器（`docker run --rm --network none`，volume 以 `:ro` 唯讀掛載，[`db_revision.py`](../tools/ops/db_revision.py) 經 stdin 傳入）以 `mode=ro` 讀 volume 裡 DB 的 `alembic_version`，與該 image 的 alembic head（`app/migration_revisions.py` 最後一個）比對，不相同就拒絕。**落後**（DB 的 revision 在 tag 的 chain 裡但較舊）：訊息寫出兩個 revision，stderr 印出開維護模式（scheduler 是 #468 以前的 image 時改為停 scheduler）、備份、換 tag 與 `init-db` 的命令，照[含 migration 的版本](#含-migration-的版本)做完再以同一個 tag 重跑。**超前**（DB 的 revision 不在 tag 的 chain 裡，例如部署回舊 tag）：照[版本回退](#版本回退)。沒有 `<project>_stock-data` volume（先查，`docker run -v` 會建出空的）、volume 裡沒有 `stock.db`、`alembic_version` 不是恰好一列也拒絕。輸出的 JSON 多 `db_revision`、`head` 兩欄。腳本不跑 `init-db`、不寫 DB。這一項拒絕時剛 build 的 image 留著（之後的 build 走快取），發佈 checkout 退回部署前的 HEAD（原本在 branch 上就回到該 branch），fetch 新建的 tag ref 刪掉 |
 
-全部通過後依序：fetch 該 tag（本機已有同名但指向別處的 tag 時 fetch 失敗，拒絕）→ `git checkout <tag>`（detached HEAD）並讀回 HEAD → `docker compose build`（`STOCK_RELEASE_TAG=<tag>`、`STOCK_GIT_HEAD=<該 commit>`，image 內的 `STOCK_IMAGE_TAG`／`STOCK_GIT_HEAD` 就是這兩個）→ 以新 image 唯讀比對 DB revision（上表最後一列）→ 在新 image 的臨時容器把部署記錄寫進 volume → `docker compose up -d --no-build --wait` → 讀回三個服務跑的都是該 tag 的 image、新 scheduler 自己的版本核對（`watchdog_helper.py deploy-image`）是 ok → 在新 scheduler 跑 `maintenance off --only-manual`，關掉手動開的維護模式，結果補寫進部署記錄的 `maintenance`（#468）→ 釋放鎖 → 在 #1 留言。
+全部通過後依序：fetch 該 tag（本機已有同名但指向別處的 tag 時 fetch 失敗，拒絕）→ `git checkout <tag>`（detached HEAD）並讀回 HEAD → `docker compose build`（`STOCK_RELEASE_TAG=<tag>`、`STOCK_GIT_HEAD=<該 commit>`，image 內的 `STOCK_IMAGE_TAG`／`STOCK_GIT_HEAD` 就是這兩個）→ 以新 image 唯讀比對 DB revision（上表最後一列）→ 在新 image 的臨時容器把部署記錄寫進 volume → `docker compose up -d --no-build --wait` → 讀回三個服務跑的都是該 tag 的 image、新 scheduler 自己的版本核對（`watchdog_helper.py deploy-image`）是 ok → 在新 scheduler 跑 `maintenance off --only-manual`，關掉手動開的維護模式，結果補寫進部署記錄的 `maintenance`（#468）→ 釋放鎖 → 刪舊版 image（下段）→ 主機清理（[`sweep.sh`](../tools/ops/sweep.sh)，[本機路徑「主機清理」](ops/LOCAL.md#主機清理)）→ 在 #1 留言。
+
+**舊版 image**（#941）：部署核對通過後，`<project>-backend`／`<project>-web` 只留這次部署的 tag 與上一版（回退用：部署前 scheduler 跑的 tag，沒有 scheduler 時看 api；不知道或跟這次同一個 tag 時，留其餘 tag 裡最新 build 的那個），其餘 tag 以 `repository:tag` 刪除、不加 `-f`；任何容器（含已停止的）在用的、名稱是任務的 tag（`t<issue>`、`task-<issue>`，由結案與主機清理處理）、其他 repository 與 base image 都不動。結果在輸出 JSON 的 `release_images`（`release_image_removed`／`release_image_kept`／`release_image_failed`），主機清理的 JSON 在 `sweep`；刪不掉或清理失敗只記在這兩欄，部署照樣成立（exit 0）。拒絕或失敗（exit 1、3）的部署不刪 image、不跑主機清理。
 
 **部署記錄**在 volume 的 `/data/logs/deploy.json`（`<project>_stock-data`），每次部署覆寫，歷史在 #1 留言；寫的時候舊 scheduler 的看門狗鎖仍被持有，看門狗不會讀到一半：
 
@@ -146,7 +148,7 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 
 ## 版本回退
 
-以 `deploy.sh <前一個 tag>` 部署回去，檢查與記錄相同；該 tag 的 image 還在時 build 走快取。資料庫 migration 不會跟著退：升級含 migration 的版本前照 [安全升級與復原順序](ops/SETUP.md#安全升級與復原順序) 先備份，回退時一併處理。DB 升到新 revision 之後，前一個 tag 的 api 會被 readiness 拒絕（它只接受自己的 head），daily 也無法執行（例如 0024 之後退回 `v1.2.0`）。所以要回退到 migration 之前的版本，只能先停 scheduler，用[含 migration 的版本](#含-migration-的版本)第 2 步的備份換回 volume 裡的 `stock.db`，再部署舊 tag；備份之後寫入的資料會遺失，要回補。
+以 `deploy.sh <前一個 tag>` 部署回去，檢查與記錄相同；上一版的 image 部署後會留著（[部署](#部署)的「舊版 image」），build 走快取；更早的版本 image 已刪，要重新 build。資料庫 migration 不會跟著退：升級含 migration 的版本前照 [安全升級與復原順序](ops/SETUP.md#安全升級與復原順序) 先備份，回退時一併處理。DB 升到新 revision 之後，前一個 tag 的 api 會被 readiness 拒絕（它只接受自己的 head），daily 也無法執行（例如 0024 之後退回 `v1.2.0`）。所以要回退到 migration 之前的版本，只能先停 scheduler，用[含 migration 的版本](#含-migration-的版本)第 2 步的備份換回 volume 裡的 `stock.db`，再部署舊 tag；備份之後寫入的資料會遺失，要回補。
 
 ## V1 發佈隔離（歷史）
 

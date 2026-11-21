@@ -36,7 +36,10 @@
 # back that each service runs its
 # tagged image and that the new scheduler's own check (watchdog_helper.py deploy-image) is
 # ok, turn off a maintenance mode turned on by hand (#468; a backfill's own is left alone;
-# deploy.json gets "maintenance"), release the locks and comment on #1. Whether a deploy is authorised is not checked
+# deploy.json gets "maintenance"), release the locks, delete the release images but the one
+# deployed and the one before it (#941: <project>-backend/-web only; "release_images" in the
+# JSON), run the host sweep (sweep.sh: "sweep" in the JSON) and comment on #1. A refused or
+# failed deploy deletes no image and does not sweep. Whether a deploy is authorised is not checked
 # here: deploying is the user's decision (docs/COORDINATOR.md 無人值守運作).
 #
 # Usage: deploy.sh <tag> [options]
@@ -222,6 +225,14 @@ if [ -n "$scheduler" ]; then
     || die "讀不到 scheduler 容器 ${scheduler:0:12} 的 image" 2
   previous="${previous//$'\r'/}"
 fi
+# The version that ran before, the one image cleanup keeps for a rollback (#941): the
+# scheduler's, else the api's; unknown when neither runs or it cannot be read.
+prior="$previous"
+api="$(service api False)"
+if [ -z "$prior" ] && [ -n "$api" ]; then
+  prior="$(dk inspect -f '{{.Config.Image}}' "$api" 2>/dev/null)" || prior=""
+  prior="${prior//$'\r'/}"
+fi
 
 # --- holding the locks: the checkout and the images -----------------------------------
 clean
@@ -379,6 +390,61 @@ if [ "$locks" = held ]; then
   wait "$lock_pid" 2>/dev/null
 fi
 
+# --- after the deploy checks out: the release images and the host sweep (#941) ------------
+# Only <project>-backend and <project>-web: the tag just deployed and the one before it stay
+# (prior's tag; when that is unknown or the same, the newest other one, as `docker images` lists
+# the newest first), and so does any image a container uses (stopped ones included) and any tag
+# named for a task (t<n>, task-<n>: close_task.sh and sweep.sh take those). Every other tag goes
+# as repository:tag, never by id or with -f. Each outcome is a step; none fails the deploy.
+release_steps=()
+release_images() {
+  local listing used repo t keep=" $tag " prior_tag="" ref
+  case "$prior" in "$project-backend:"*) prior_tag="${prior#"$project-backend:"}" ;; esac
+  [ -z "$prior_tag" ] || [ "$prior_tag" = "$tag" ] || keep+="$prior_tag "
+  listing="$(dk images --format '{{.Repository}} {{.Tag}}')" \
+    || { release_steps+=("release_images_skipped:images_unreadable"); return 0; }
+  used="$(dk ps -a --no-trunc --format '{{.Image}}')" \
+    || { release_steps+=("release_images_skipped:containers_unreadable"); return 0; }
+  listing="${listing//$'\r'/}" used="${used//$'\r'/}"
+  task_tag() { [[ "$1" =~ ^(t|task-)[0-9]+([-_.]|$) ]] || [ "$1" = '<none>' ]; }
+  if [ "$keep" = " $tag " ]; then
+    while read -r repo t; do
+      [ "$repo" = "$project-backend" ] && [ "$t" != "$tag" ] && ! task_tag "$t" || continue
+      keep+="$t "
+      break
+    done <<<"$listing"
+  fi
+  while read -r repo t; do
+    [ "$repo" = "$project-backend" ] || [ "$repo" = "$project-web" ] || continue
+    ! task_tag "$t" || continue
+    [[ "$keep" == *" $t "* ]] && continue
+    ref="$repo:$t"
+    if printf '%s\n' "$used" | grep -qxF "$ref"; then
+      release_steps+=("release_image_kept:in_use:$ref")
+    elif dk rmi "$ref" >/dev/null; then
+      release_steps+=("release_image_removed:$ref")
+    else
+      release_steps+=("release_image_failed:$ref")
+    fi
+  done <<<"$listing"
+  for t in $keep; do release_steps+=("release_image_kept:$t"); done
+}
+release_images
+# The host sweep runs as its own process: its JSON line goes into ours as "sweep", one that
+# fails or prints no JSON is {"error": ...}. STOCK_SWEEP=off turns it off (the tests).
+sweep='null'
+if [ "${STOCK_SWEEP:-on}" != off ]; then
+  rc=0
+  out="$(bash "$script_dir/sweep.sh" --python "$python" </dev/null)" || rc=$?
+  sweep="$(printf '%s\n' "$out" | tail -n 1 | "$python" -X utf8 -c '
+import json, sys
+print(json.dumps(json.loads(sys.stdin.read()), ensure_ascii=False))' 2>/dev/null)" \
+    || sweep="{\"steps\": [], \"error\": $(json_str "sweep.sh 沒有印出 JSON（exit $rc）")}"
+fi
+release_json=""
+for s in "${release_steps[@]+"${release_steps[@]}"}"; do release_json="$release_json${release_json:+, }$(json_str "$s")"; done
+cleanup_json="\"release_images\": [$release_json], \"sweep\": $sweep"
+
 commented=false
 if [ "$comment" = 1 ]; then
   body="$(mktemp)"
@@ -399,13 +465,13 @@ EOF
   # comment.sh adds the coordinator mark: the event monitor queues it without waking the
   # coordinator, who ran this deploy (#711).
   if ! bash "$script_dir/comment.sh" 1 --body-file "$body" --python "$python" >/dev/null; then
-    printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "commented": false}\n' \
-      "$(json_str "$tag")" "$sha" "$(json_str "$backend")"
+    printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "commented": false, %s}\n' \
+      "$(json_str "$tag")" "$sha" "$(json_str "$backend")" "$cleanup_json"
     die "已部署 $tag（$sha），但 #1 留言失敗；請手動補記" 4
   fi
   commented=true
 fi
-printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "web_image": %s, "previous_image": %s, "locks": "%s", "maintenance": "%s", "commented": %s}\n' \
+printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "web_image": %s, "previous_image": %s, "locks": "%s", "maintenance": "%s", "commented": %s, %s}\n' \
   "$(json_str "$tag")" "$sha" "$(json_str "$backend")" "$(json_str "$web")" \
-  "$([ -n "$previous" ] && json_str "$previous" || echo null)" "$locks" "$maintenance" "$commented"
+  "$([ -n "$previous" ] && json_str "$previous" || echo null)" "$locks" "$maintenance" "$commented" "$cleanup_json"
 exit 0
