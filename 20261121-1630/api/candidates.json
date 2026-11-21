@@ -1,0 +1,168 @@
+{
+  "status": "success",
+  "trading_date": "2026-11-20",
+  "score_version": "candidate_score_v7",
+  "computed_at": "2026-11-20T13:39:20.071809+00:00",
+  "evaluated_signals": 4678,
+  "pool_count": 0,
+  "candidate_count": 0,
+  "zero_reason": "all_excluded",
+  "zero_reason_text": "成立的訊號都因 ETF、價位不合法、成交量低於門檻或評分資料不足被排除",
+  "exclusions": {
+    "instrument_type_excluded:etf": 1
+  },
+  "data_as_of": "2026-11-20",
+  "news_coverage": null,
+  "methodology": {
+    "score_version": "candidate_score_v7",
+    "purpose": "評分只用於排序，不代表勝率或預期報酬，不改變策略判定",
+    "weights": {
+      "technical": 0.35,
+      "chips": 0.3,
+      "group": 0.2,
+      "news_sentiment": 0.15
+    },
+    "minimum_weight_coverage": 0.65,
+    "components": {
+      "technical": {
+        "label": "技術",
+        "weight": 0.35,
+        "inference": false
+      },
+      "chips": {
+        "label": "籌碼",
+        "weight": 0.3,
+        "inference": false
+      },
+      "group": {
+        "label": "族群",
+        "weight": 0.2,
+        "inference": false
+      },
+      "news_sentiment": {
+        "label": "新聞情緒",
+        "weight": 0.15,
+        "inference": true
+      }
+    },
+    "null_explanations": {
+      "signal_evidence_missing": "訊號依據缺少前 20 日高點、量或均線，無法計算",
+      "technical_inputs_missing": "技術子項皆無資料",
+      "chip_or_volume_sessions_incomplete": "近 20 個交易日的籌碼或成交量不完整，或當日無交易",
+      "chip_inputs_missing": "籌碼子項皆無資料",
+      "news_collection_missing": "近 3 日沒有成功的新聞收集，新聞分項無資料",
+      "instrument_not_in_universe": "標的不在當日普通股母體內",
+      "no_qualified_group": "當日沒有已排名且資料完整的所屬產業或題材"
+    }
+  },
+  "overnight_us": {
+    "reference_date": "2026-11-21",
+    "expected_date": "2026-11-20",
+    "indexes": [
+      {
+        "exchange": "US",
+        "symbol": "SPX",
+        "name": "S&P 500",
+        "series_id": "^GSPC",
+        "status": "available",
+        "trading_date": "2026-11-20",
+        "expected_date": "2026-11-20",
+        "freshness": "latest",
+        "close": 6910.39,
+        "change": -265.44,
+        "change_pct": -0.036991,
+        "change_pct_method": "derived",
+        "previous_trading_date": "2026-11-19",
+        "source": {
+          "label": "FinMind USStockPrice ^GSPC",
+          "copyright": "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
+          "collected_at": "2026-11-20T23:30:02.546400+00:00",
+          "data_as_of": "2026-11-20",
+          "raw_payload_id": 13006
+        }
+      },
+      {
+        "exchange": "US",
+        "symbol": "IXIC",
+        "name": "NASDAQ 綜合指數",
+        "series_id": "^IXIC",
+        "status": "available",
+        "trading_date": "2026-11-20",
+        "expected_date": "2026-11-20",
+        "freshness": "latest",
+        "close": 22617.73,
+        "change": -1261.47,
+        "change_pct": -0.052827,
+        "change_pct_method": "derived",
+        "previous_trading_date": "2026-11-19",
+        "source": {
+          "label": "FinMind USStockPrice ^IXIC",
+          "copyright": "Copyright © 2016, NASDAQ OMX Group, Inc.",
+          "collected_at": "2026-11-20T23:30:04.497503+00:00",
+          "data_as_of": "2026-11-20",
+          "raw_payload_id": 13007
+        }
+      },
+      {
+        "exchange": "US",
+        "symbol": "DJI",
+        "name": "道瓊工業指數",
+        "series_id": "^DJI",
+        "status": "available",
+        "trading_date": "2026-11-20",
+        "expected_date": "2026-11-20",
+        "freshness": "latest",
+        "close": 48147.33,
+        "change": -949.73,
+        "change_pct": -0.019344,
+        "change_pct_method": "derived",
+        "previous_trading_date": "2026-11-19",
+        "source": {
+          "label": "FinMind USStockPrice ^DJI",
+          "copyright": "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
+          "collected_at": "2026-11-20T23:30:06.454677+00:00",
+          "data_as_of": "2026-11-20",
+          "raw_payload_id": 13008
+        }
+      },
+      {
+        "exchange": "US",
+        "symbol": "SOX",
+        "name": "費城半導體指數",
+        "series_id": "^SOX",
+        "status": "available",
+        "trading_date": "2026-11-20",
+        "expected_date": "2026-11-20",
+        "freshness": "latest",
+        "close": 8408.59,
+        "change": -1011.13,
+        "change_pct": -0.107342,
+        "change_pct_method": "derived",
+        "previous_trading_date": "2026-11-19",
+        "source": {
+          "label": "FinMind USStockPrice ^SOX",
+          "copyright": "Copyright © 2025, NASDAQ, Inc.",
+          "collected_at": "2026-11-20T23:30:08.468205+00:00",
+          "data_as_of": "2026-11-20",
+          "raw_payload_id": 13009
+        }
+      }
+    ],
+    "group_links": {
+      "SOX": [
+        "official-industry-1858340d045a575f",
+        "theme-cowos",
+        "theme-memory",
+        "theme-semiconductor-equipment"
+      ]
+    }
+  },
+  "preopen_check": {
+    "status": "not_checked",
+    "definition": "名單產生之後才收到的新聞",
+    "checked_at": null,
+    "window_start": null,
+    "instruments_with_news": 0
+  },
+  "items": []
+}

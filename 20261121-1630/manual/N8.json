@@ -1,0 +1,225 @@
+{
+  "rule": "/news?category=domestic&limit=100（依 next_cursor 往後最多 5 頁）中台北發布日 = D（2026-11-20）且有 AI 判讀的前 5 則，API 順序",
+  "items": [
+    {
+      "id": "35411",
+      "title": "美媒：SpaceX旗下Cursor擬逐步停用中國AI模型",
+      "source": {
+        "name": "中央社",
+        "url": "https://www.cna.com.tw/news/aopl/202611200353.aspx",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-20T15:26:33+00:00",
+      "summary": "（中央社華盛頓20日綜合外電報導）美國財經媒體CNBC今天報導，SpaceX旗下人工智慧（AI）程式編碼平台Cursor正考慮逐步停止使用中國開發的開放權重AI模型，理由是「地緣政治風險」。",
+      "description": "（中央社華盛頓20日綜合外電報導）美國財經媒體CNBC今天報導，SpaceX旗下人工智慧（AI）程式編碼平台Cursor正考慮逐步停止使用中國開發的開放權重AI模型，理由是「地緣政治風險」。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "CNBC報導，SpaceX旗下AI程式編碼平台Cursor考慮逐步停用中國開發的開放權重AI模型，理由是地緣政治風險。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "unknown",
+        "impact_scope": "theme",
+        "impact_rationale": "未提及台灣公司，無法判斷影響。",
+        "unsupported": true,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "bf02ab225c847d71ded5a481de4f765c746cd7171bdd163c9721d64a575e2cbf",
+        "generated_at": "2026-11-20T16:00:53.853233+00:00"
+      }
+    },
+    {
+      "id": "35417",
+      "title": "台積電差點失守！賣壓衝擊台股　陸行之：老天爺發2000元以下「神山牌週年慶禮物」",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/%E5%8F%B0%E7%A9%8D%E9%9B%BB%E5%B7%AE%E9%BB%9E%E5%A4%B1%E5%AE%88-%E8%B3%A3%E5%A3%93%E8%A1%9D%E6%93%8A%E5%8F%B0%E8%82%A1-%E9%99%B8%E8%A1%8C%E4%B9%8B-%E8%80%81%E5%A4%A9%E7%88%BA%E7%99%BC2000%E5%85%83%E4%BB%A5%E4%B8%8B-%E7%A5%9E%E5%B1%B1%E7%89%8C%E9%80%B1%E5%B9%B4%E6%85%B6%E7%A6%AE%E7%89%A9-150940896.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-20T15:09:40+00:00",
+      "summary": "台股20日遭遇沉重賣壓，盤中一度大跌2263點，連權值王台積電都差點失守2000元大關，不過知名半導體分析師陸行之幽默表示「老天爺又開始發2000元以下的神山牌週年慶禮物了」。",
+      "description": "台股20日遭遇沉重賣壓，盤中一度大跌2263點，連權值王台積電都差點失守2000元大關，不過知名半導體分析師陸行之幽默表示「老天爺又開始發2000元以下的神山牌週年慶禮物了」。",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股20日盤中一度大跌2263點，台積電差點失守2000元；陸行之幽默表示老天爺又開始發2000元以下的神山牌週年慶禮物。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "新聞指台積電差點失守2000元大關",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          }
+        ],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "negative",
+        "impact_scope": "market",
+        "impact_rationale": "台股沉重賣壓、盤中重挫，權值股承壓。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "686f37104758734b4ca455236f1b34e9ae6c6b5595cb6a0bb3fd76d4793ad230",
+        "generated_at": "2026-11-20T16:00:53.853233+00:00"
+      }
+    },
+    {
+      "id": "35412",
+      "title": "Anthropic上市次日 股價早盤重挫逾9%",
+      "source": {
+        "name": "中央社",
+        "url": "https://www.cna.com.tw/news/afe/202611200350.aspx",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-20T14:58:26+00:00",
+      "summary": "（中央社紐約20日綜合外電報導）人工智慧（AI）公司Anthropic宣布，該公司透過昨天創紀錄的首次公開發行（IPO）取得約916億美元資金。但Anthropic股價今天美股早盤下跌9.5%。",
+      "description": "（中央社紐約20日綜合外電報導）人工智慧（AI）公司Anthropic宣布，該公司透過昨天創紀錄的首次公開發行（IPO）取得約916億美元資金。但Anthropic股價今天美股早盤下跌9.5%。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "Anthropic透過昨天創紀錄的IPO取得約916億美元資金，但股價今天美股早盤下跌9.5%。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "negative",
+        "impact_scope": "theme",
+        "impact_rationale": "AI龍頭上市次日股價重挫，對AI題材情緒偏負面。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "83c05bd13cd61877754fd2c93cbb5bdbfdfa3c87b512fd69f64dcdaa80d30824",
+        "generated_at": "2026-11-20T16:00:53.853233+00:00"
+      }
+    },
+    {
+      "id": "35419",
+      "title": "台股重挫散戶進場抄台積電、0050！曬超甜成交價嗨喊：遲來雙11折扣優惠",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/%E5%8F%B0%E8%82%A1%E9%87%8D%E6%8C%AB%E6%95%A3%E6%88%B6%E9%80%B2%E5%A0%B4%E6%8A%84%E5%8F%B0%E7%A9%8D%E9%9B%BB-0050-%E6%9B%AC%E8%B6%85%E7%94%9C%E6%88%90%E4%BA%A4%E5%83%B9%E5%97%A8%E5%96%8A-%E9%81%B2%E4%BE%86%E9%9B%9911%E6%8A%98%E6%89%A3%E5%84%AA%E6%83%A0-145200806.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-20T14:52:00+00:00",
+      "summary": "台股近期遭遇重挫，引發市場骨牌效應，但吸引大批散戶趁低檔進場撿便宜。社群平台上紛紛湧現網友曬出成交紀錄，有人以1980至1985元成功買進台積電，熱門ETF 0050也出現84元左右的成交價。面對台積",
+      "description": "台股近期遭遇重挫，引發市場骨牌效應，但吸引大批散戶趁低檔進場撿便宜。社群平台上紛紛湧現網友曬出成交紀錄，有人以1980至1985元成功買進台積電，熱門ETF 0050也出現84元左右的成交價。面對台積",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股近期重挫，散戶趁低進場；網友曬出以1980至1985元買進台積電，0050成交價約84元。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "新聞提到散戶以1980至1985元買進台積電",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "0050",
+            "name": "元大台灣50",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "新聞提到0050出現84元左右成交價",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          }
+        ],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "mixed",
+        "impact_scope": "market",
+        "impact_rationale": "台股重挫但有散戶低檔進場，多空並存。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "705860add461f5b3a2c2d8584efc4e6f7b5c83311fccdd750e57c2831003c7ca",
+        "generated_at": "2026-11-20T16:00:53.853233+00:00"
+      }
+    },
+    {
+      "id": "35418",
+      "title": "科技股無盡黑夜！美股費半9000點瀕臨失守、台積電ADR重摔4％　Anthropic一度狂挫9％",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.stock.yahoo.com/news/%E7%A7%91%E6%8A%80%E8%82%A1%E7%84%A1%E7%9B%A1%E9%BB%91%E5%A4%9C-%E7%BE%8E%E8%82%A1%E8%B2%BB%E5%8D%8A9000%E9%BB%9E%E7%80%95%E8%87%A8%E5%A4%B1%E5%AE%88-%E5%8F%B0%E7%A9%8D%E9%9B%BBadr%E9%87%8D%E6%91%944-anthropic-%E5%BA%A6%E7%8B%82%E6%8C%AB9-145200315.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-20T14:52:00+00:00",
+      "summary": "[FTNN新聞網]記者吳峻光／綜合報導台股本週狂瀉7641點創下史上最慘紀錄，美股科技股週五開盤繼續承壓，Anthropic掛牌上市第2天開盤狂挫近10％，至截稿前報87....",
+      "description": "[FTNN新聞網]記者吳峻光／綜合報導台股本週狂瀉7641點創下史上最慘紀錄，美股科技股週五開盤繼續承壓，Anthropic掛牌上市第2天開盤狂挫近10％，至截稿前報87....",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股本週狂瀉7641點創史上最慘紀錄；美股費半9000點瀕臨失守、台積電ADR重摔4％，Anthropic一度挫9％。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "新聞提到台積電ADR重摔4％",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          }
+        ],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "negative",
+        "impact_scope": "market",
+        "impact_rationale": "台股週跌幅創紀錄，美股科技股續受壓。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v4",
+        "input_hash": "f9508f5cea928dd3f554380f344eba405a1f1af4127799b32b05982bac3af781",
+        "generated_at": "2026-11-20T16:00:53.853233+00:00"
+      }
+    }
+  ]
+}

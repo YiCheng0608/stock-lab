@@ -1,0 +1,30 @@
+{
+  "jobs": 1,
+  "hits": 1,
+  "screenshot_hits": 1,
+  "api_hits": 0,
+  "retaken": [
+    "theme-detail"
+  ],
+  "recovered": [
+    "theme-detail"
+  ],
+  "replaced_problems": {},
+  "rechecked": {},
+  "urls": [
+    {
+      "path": "news?theme_id=official-industry-08bca509e5c168ba&limit=10",
+      "status": 504,
+      "count": 1
+    }
+  ],
+  "checks": [],
+  "events": [
+    {
+      "source": "截圖",
+      "where": "theme-detail-1280",
+      "status": 504,
+      "path": "news?theme_id=official-industry-08bca509e5c168ba&limit=10"
+    }
+  ]
+}
