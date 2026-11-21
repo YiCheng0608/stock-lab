@@ -12,7 +12,15 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
-需略過 lifecycle scripts 時用 `pnpm install --frozen-lockfile --ignore-scripts`；依 `pnpm-lock.yaml`，不要混用 npm。API 預設為 `http://127.0.0.1:8000/api`；需要覆寫時在啟動前設定 `$env:VITE_API_BASE`，位址須符合[跨站請求防護](../docs/ops/SETUP.md#產品-api-的跨站請求防護)的 Host 規則。`pnpm run test:ci` 執行 `src` 下全部測試，`pnpm run build` 執行 TypeScript 檢查與 production build。後端啟動及資料路徑查[環境、啟停與資料庫](../docs/ops/SETUP.md)。
+macOS（bash 或 zsh）：
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm run dev
+```
+
+需略過 lifecycle scripts 時用 `pnpm install --frozen-lockfile --ignore-scripts`；依 `pnpm-lock.yaml`，不要混用 npm。API 預設為 `http://127.0.0.1:8000/api`；需要覆寫時在啟動前設定 `VITE_API_BASE`（PowerShell 是 `$env:VITE_API_BASE = '…'`，bash／zsh 是 `export VITE_API_BASE=…`），位址須符合[跨站請求防護](../docs/ops/SETUP.md#產品-api-的跨站請求防護)的 Host 規則。`pnpm run test:ci` 執行 `src` 下全部測試，`pnpm run build` 執行 TypeScript 檢查與 production build。後端啟動及資料路徑查[環境、啟停與資料庫](../docs/ops/SETUP.md)。
 
 ## Docker image
 
