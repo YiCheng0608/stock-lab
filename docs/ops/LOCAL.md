@@ -23,7 +23,7 @@
 
 ```bash
 # 換值：D＝副本目錄。驗收與驗證放「工具」表的 worktree 外暫存目錄底下（例如 ~/t<issue>/db）；備份放「正式位置」表的備份目錄
-D=~/t<issue>/db; mkdir -p "$D"
+D="$(cd ~ && { pwd -W 2>/dev/null || pwd; })/t<issue>/db"; mkdir -p "$D"   # Git Bash 的 pwd -W 給 C:/… 寫法，docker -v 才認得；macOS 用 pwd
 IMG="$(docker inspect -f '{{.Config.Image}}' stock-lab-api-1)"   # 正在跑的 image，例如 stock-lab-backend:v1.2.0；不寫死版本
 MSYS_NO_PATHCONV=1 docker run --rm --network none \
   -v stock-lab_stock-data:/data:ro -v "$D":/out \

@@ -38,5 +38,5 @@
 - 開工後在 Issue 留一則 `回報：開工`：session、branch、HEAD、任務檔路徑，以及本檔的 Issue 連結與 AC 數（<N>）。
 - 之後的提問與回報照 docs/WORKFLOW.md「留言類型」寫在 Issue／PR 留言（第一行是 `提問：`／`回報：`），不送到統籌 terminal。
 - 背景工作被系統停掉、或任何要等統籌才能繼續的情況，以 `提問：` 留在 Issue，不在 terminal 等。
-- PR 本文照抄 `docs/templates/pull-request.md`，要有 `Closes #<issue>`；worktree 外暫存目錄寫 `~/t<issue>` 展開後的絕對路徑。
-- pytest 的 `--basetemp` 用 `~/t<issue>/b1` 這類路徑，不要放在 `task/` 底下。
+- PR 本文照抄 `docs/templates/pull-request.md`，要有 `Closes #<issue>`；worktree 外暫存目錄寫 `~/t<issue>` 展開後的絕對路徑（Windows 寫成 `C:/…`，`cd ~ && pwd -W`）。
+- pytest 的 `--basetemp` 用 `~/t<issue>/b1` 這類路徑（Windows 同樣寫成 `C:/…`），不要放在 `task/` 底下。

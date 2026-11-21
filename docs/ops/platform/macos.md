@@ -55,14 +55,14 @@
    - `docker compose -p stock-lab exec scheduler python -m worker.cli maintenance status`
    - 記下正在跑的 tag：`docker inspect -f '{{.Config.Image}}' stock-lab-api-1`。
 2. **舊主機取快照**：
-   - DB 用 `copy_db.py` 取一致副本（[取正式 DB 的唯讀副本](../LOCAL.md#取正式-db-的唯讀副本)）。
-   - volume 的其他內容（`raw/`、`logs/`、`locks/` 裡的維護標記）用唯讀掛載打包，例如 `docker run --rm --network none -v stock-lab_stock-data:/data:ro -v "$B":/out <image> tar -C /data --exclude=./stock.db --exclude=./stock.db-wal --exclude=./stock.db-shm -czf /out/stock-data.tgz .`（`$B` 是備份目錄，[LOCAL](../LOCAL.md#正式位置使用者決定)；Windows 要加 `MSYS_NO_PATHCONV=1`）。研究 volume 同樣做。
+   - DB 用 `copy_db.py` 取一致副本（[取正式 DB 的唯讀副本](../LOCAL.md#取正式-db-的唯讀副本)）。`copy_db.py` 的輸出一律叫 `stock.db`，所以正式與研究 DB 的副本放不同目錄（例如 `$B/prod`、`$B/research`）。
+   - volume 的其他內容（`raw/`、`logs/`、`locks/` 裡的維護標記）用唯讀掛載打包，例如 `docker run --rm --network none -v stock-lab_stock-data:/data:ro -v "$B":/out <image> tar -C /data --exclude=./stock.db --exclude=./stock.db-wal --exclude=./stock.db-shm -czf /out/stock-data.tgz .`（`$B` 是備份目錄，[LOCAL](../LOCAL.md#正式位置使用者決定)；Windows 要加 `MSYS_NO_PATHCONV=1`）。研究 volume（`stock-lab-research`）同樣做，輸出另取檔名。
    - 統籌的協作目錄 `~/stock-lab-data/logs`（心跳、事件佇列）一起帶走。
 3. **搬檔**：由使用者自己搬（雲端硬碟、外接碟）。`.env` 不搬也不經 agent，由使用者在新主機自己建（[容器內的 claude 與 gh 認證](../SETUP.md#容器內的-claude-與-gh-認證env)）。
 4. **新主機還原 volume**：先建帶 compose 標籤的 volume，compose 才會把它當成自己的：
    - `docker volume create --label com.docker.compose.project=stock-lab --label com.docker.compose.volume=stock-data stock-lab_stock-data`
-   - 解開 `stock-data.tgz` 到 volume，再把 DB 副本放成 `/data/stock.db`，例如 `docker run --rm --network none -v stock-lab_stock-data:/data -v "$B":/in:ro <image> sh -c 'tar -C /data -xzf /in/stock-data.tgz && cp /in/stock.db /data/stock.db'`。
-   - 研究 volume 同樣做（volume 名稱與標籤照 [RESEARCH_DB](../RESEARCH_DB.md)）。
+   - 解開 `stock-data.tgz` 到 volume，再把 DB 副本放成 `/data/stock.db`。新建的 volume 是 root 擁有，所以以 root 寫入，最後 chown 給容器使用者 1000（同 [建研究 DB](../RESEARCH_DB.md#建研究-db)）：`docker run --rm --network none -u 0 -v stock-lab_stock-data:/data -v "$B":/in:ro <image> sh -c 'tar -C /data -xzf /in/stock-data.tgz && cp /in/prod/stock.db /data/stock.db && chown -R 1000:1000 /data'`。
+   - 研究 volume 不屬於 compose project，直接 `docker volume create stock-lab-research`，其餘同上（DB 用 `$B/research/stock.db`）。
    - 還原完對 volume 裡的 DB 跑一次 `copy_db.py`（輸出的 `quick_check` 要是 `ok`），並核對 `alembic_version` 與 `source_latest_trading_date` 跟舊主機的一樣。
 5. **新主機部署**：
    - `git clone git@github.com:YiCheng0608/stock-lab.git ~/stock-lab-release`，`.env` 由使用者建，`STOCK_COORDINATION_DIR` 填這台的 `~/stock-lab-data/logs`，要寫成絕對路徑。

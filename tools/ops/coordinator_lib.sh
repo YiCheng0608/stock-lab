@@ -16,7 +16,7 @@ unset MSYS_NO_PATHCONV
 if [ -z "${BASH_VERSINFO:-}" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ] ||
   { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 1 ]; }; then
   printf '%s: 要 bash 4.1 以上，這個是 %s（%s）；macOS 先裝 MacPorts 的 bash，並讓 /opt/local/bin 排在 PATH 的 /bin 前面（docs/ops/platform/macos.md）\n' \
-    "$(basename "$0")" "${BASH_VERSION:-?}" "$BASH" >&2
+    "$(basename "$0")" "${BASH_VERSION:-?}" "${BASH:-sh}" >&2
   exit 2
 fi
 
@@ -413,6 +413,12 @@ cbm_out="" cbm_error="" cbm_report="" cbm_steps=()
 cbm_call() {
   local tool="$1" raw rc=0
   cbm_out="" cbm_error=""
+  # An empty name (the checkout's path not read) would index a second, unnamed project
+  # instead of failing: index_status's "not found" passes cbm_root_check (#937 review).
+  if [ -z "$cbm_project" ]; then
+    cbm_error="推不出 codebase-memory 的 project 名稱（管理 checkout 的路徑讀不到）；用 STOCK_CBM_PROJECT 指定"
+    return 1
+  fi
   if [ ! -f "$cbm_cli" ] && ! command -v -- "$cbm_cli" >/dev/null 2>&1; then
     cbm_error="找不到 codebase-memory CLI：$cbm_cli（STOCK_CBM_CLI）"
     return 1

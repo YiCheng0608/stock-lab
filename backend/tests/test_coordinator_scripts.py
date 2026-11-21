@@ -1992,6 +1992,17 @@ def test_the_master_index_project_is_named_after_the_checkout_path(
     assert result.stdout == project
 
 
+def test_cbm_calls_refuse_an_empty_project_name(h: Harness) -> None:
+    """#937 review: a project name that could not be derived fails every CLI call by name,
+    rather than letting index_repository build a second, unnamed project."""
+    result = h.run_bash(
+        _LIB + 'cbm_project=""; cbm_call index_status "{}"; echo "rc=$? $cbm_error"',
+        h.ops.as_posix(),
+    )
+    assert "rc=1 " in result.stdout and "STOCK_CBM_PROJECT" in result.stdout
+    assert not (h.fake / "cbm_calls.log").exists()
+
+
 def test_epoch_helpers_round_trip(h: Harness) -> None:
     """#937: GNU date (Git Bash, Linux) or BSD date (macOS) give the same text."""
     result = h.run_bash(
@@ -2998,6 +3009,38 @@ def test_close_task_removes_the_scratchpads_its_start_reports_name(
         *(top / S_OLD for top in scratch.lookalikes),
     ):
         assert (kept / "scratchpad" / "note.txt").is_file(), kept
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="a fake Darwin uname turns Git Bash's paths off"
+)
+def test_close_task_finds_the_scratchpads_under_the_macos_root(
+    scratch: Harness,
+) -> None:
+    """#937: on macOS Claude Code keeps scratchpads under /private/tmp/claude-<uid> and TEMP
+    is not set; close_task.sh looks there (STOCK_CLAUDE_TMP_ROOT in its place here, with a
+    uname that answers Darwin) and removes the same directories as under $TEMP/claude."""
+    uname = scratch.bin / "uname"
+    uname.write_text("#!/bin/sh\necho Darwin\n", encoding="utf-8")
+    uname.chmod(0o755)
+    result = scratch.run_bash(
+        'unset TEMP; exec bash "$@"',
+        (scratch.ops / "close_task.sh").as_posix(),
+        "282",
+        "--extra-dir",
+        scratch.extra.as_posix(),
+        CLAUDE_CODE_SESSION_ID=S_SELF,
+        STOCK_CLAUDE_TMP_ROOT=scratch.claude.as_posix(),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    steps = _scratch_steps(_json_line(result))
+    assert f"scratchpad_removed:{(scratch.hashed / S_ENG).as_posix()}" in steps
+    assert (
+        f"scratchpad_skipped:own_session:{(scratch.hashed / S_SELF).as_posix()}"
+        in steps
+    )
+    assert not (scratch.hashed / S_ENG).exists()
+    assert (scratch.hashed / S_SELF / "scratchpad" / "note.txt").is_file()
 
 
 def test_close_task_only_unlinks_links_in_and_at_a_scratchpad(scratch: Harness) -> None:
