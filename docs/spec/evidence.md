@@ -666,6 +666,39 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #903 | 第一版；沒有人用它對回補資料跑過 |
 
+**第七輪的假設**（[第七輪：Y1～Y4](#第七輪y1y4)）：`tools/research/round7_research.py`（[#912](https://github.com/YiCheng0608/stock-lab/issues/912)）。Y1～Y4 寫在 `round7_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`round5_research` 或 `round6_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標。引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`turnover_60`、子集合的寫法、「小者先」排序（`round5_research.order_key`）、`feature_evidence._momentum`／`_mean_volume`、`explore_judge`、公開檢查與紀錄檔都 import 自現有工具；成員表與它的拒絕條件同 `mainstream_research`（`--members` 只換位置）。`explore_research` 第 2 版、`round5_research`、`round6_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進、成員表不是 #779 那一份）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）。成員表預設讀 DB 旁的
+# research/industry_members/industry_members_v1.json（同 mainstream_research）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round7_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **算法**：照[第七輪：Y1～Y4](#第七輪y1y4)與[第七輪實作釋義](#第七輪實作釋義)。
+  - Y1：`round7_research.margin_flow_20`，(margin_balance[at] − margin_balance[at − 20]) × 1,000 ÷ `_mean_volume`（T 之前 20 根，不含 T）；at < 20、任一根沒有籌碼列或 `margin_balance` 是 null、均量缺值或 ≤ 0 就缺值；兩根都是 0 時是 0。
+  - Y2：`round7_research.turnover_cv_240`，at − 239 … at 共 240 根未還原的 `market_bars.turnover`，樣本標準差（ddof＝1）÷ 平均；不足 240 根、任一根 `turnover_status` 不是 `available`、任一根停牌、平均 ≤ 0 就缺值。
+  - Y3：`round7_research.delay_52w`，取樣點是 `Panel.sessions` 的 T − 5j（j＝0…52）；兩個迴歸都有截距，用去平均的大盤欄算 R²（`delay_market` 每個 T 只算一次大盤部分，各檔共用）。任一取樣點沒有日線、停牌、收盤缺值或 ≤ 0，任一點加權指數缺值，或 R²(不受限) ≤ 0 就缺值；個股 48 週報酬的離均差平方和是 0（R² 沒有定義），或大盤設計矩陣在消去時樞軸絕對值 < 1e-300，也記缺值；近似奇異（例如每週固定同一個非 0 漲幅）不另攔，真實資料碰不到。
+  - Y4：先取母體中 `turnover_60` 前 150 名（缺值不進、同金額用雜湊），再依 `ind_rev_20` 小者先；缺值的檔照樣占名額、排最後，不遞補。產業平均是 `round7_research.industry_day`：T 日整個母體中同族群、`momentum_20` 有值的檔（含這一檔）的等權平均，有值的 < 5 就缺值。族群用 `mainstream_research.group_members`（`snapshot_date ≤ T` 的最新一份、`instrument_on`、`group_of`，含 `REMAP_2023`）；一檔在 T 日屬於多個族群時，用 `group_id` 字串最小的那個族群（`group_id` 是雜湊字串，不是產業代號；同 C1 第 5 點族群鍵的比法）；它的 20 日報酬照樣算進每個所屬族群的平均，同 C1 不去重；檔次在 `--coverage-only` 另列。
+  - 排序是 `round5_research.order_key`：大者先或小者先，缺值都排最後，同值用 `sha256("<T>:<instrument_id>")`。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.144（2 ≤ t < 3.144 判「前瞻觀察」），寫死、不在執行時重算，算進 `definitions_sha256`。
+- **探索**：`python tools/research/round7_research.py --db /research/stock.db --segment exploration --hypotheses <Y1,Y2,Y3,Y4 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，成員表也只讀那天以前的快照；從頭讀（同 `explore_research`）。
+- **驗證**：`python tools/research/round7_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `912`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27（往前 730 天當暖機，Y3 的 261 個交易日與 Y2 的 240 根都在裡面），判「通過」的另跑已用段，寫在 `<代號>/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。成員表只到 2024-09，驗證段最後一天用 2024-08 那一份，已用段一律用最後一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以。
+  - 各假設用自己的訊號日，依年列日數、母體檔次與各特徵的缺值比例（分母是母體檔次）。
+  - Y1 第 6 點：依年、依市場（上市、上櫃）列 `margin_flow_20` 的缺值比例，分母是該市場的母體檔次。
+  - Y3 另列「加權指數缺值的日數」，數的是大盤部分記缺值的訊號日：取樣點早於副本、任一點加權指數缺值，或大盤設計矩陣奇異（同上，樞軸絕對值 < 1e-300）；Y4 另列子集合檔次、子集合內 `ind_rev_20` 的缺值比例，與母體中三種缺值原因（20 日報酬缺值、T 日沒有族群、同族群有值 < 5，依序判、不重複）和屬於多個族群的檔次。
+  - 耗時：總耗時、載入耗時、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和各特徵的計算時間（Y3 是 `delay_52w`）。
+- **耗時與記憶體**（#912 AC-4 [7054790955](https://github.com/YiCheng0608/stock-lab/issues/912#issuecomment-7054790955)，研究 DB 到 2019-12-31 的 499 萬根）：`--coverage-only` 297 秒（載入 142 秒）、峰值 1.58 GB，其中 `delay_52w` 56 秒；估一次探索段（Y1～Y4）約 8～11 分鐘、峰值約 2 GB。驗證段與已用段各往前讀 730 天，比探索段小，同一時間只留一份。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round7_research"`、`"round": 7`。代號不重疊，各工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：`explore.md`（第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 4 個、累計 30 個、探索段與驗證段的門檻、Y1、Y3、Y4 的限制與族群來源）、`explore.json`（另有 `tool`、`design`（`912`）、`validation_min_t`、`definitions_sha256`、`members_sha256`）、`<代號>/summary.md`（Y1 另有依市場的缺值比例）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名與用到的特徵值；Y4 有 `turnover_60`、`ind_rev_20`、`momentum_20`、產業平均 `industry_20` 與有值的同族群檔數 `peers`）、`trades.csv`、`ledger-entries.json`。
+
+**`round7_research` 的版本**：`round7_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（Y1～Y4 的定義、特徵與排序的規則、成員表與對照表、分段、兩段的門檻與成本）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #912 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
