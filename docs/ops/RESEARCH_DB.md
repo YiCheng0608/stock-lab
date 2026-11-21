@@ -425,7 +425,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 **誰讀這份清單**：`research_report.benchmark_universe` 與 `benchmark_bars` 是 `stock`／`ipo` 日線的同一個查詢，兩個都跳過清單裡的列。用到它們的工具都不會讀到這些列：
 - `evidence_lib.load_panel`：`feature_evidence`、`candidate_scorecard`。
-- `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`、經 `trade_research.load` 讀的 `round4_research`，以及經 `explore_research.load_context` 讀的 `round5_research`、`round6_research`、`round7_research`、`round8_research`。
+- `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`、經 `trade_research.load` 讀的 `round4_research`，以及經 `explore_research.load_context` 讀的 `round5_research`、`round6_research`、`round7_research`、`round8_research`、`round9_research`（#926；B2 的下市、轉板股最後一根日線同 `trade_research.load`，也用 `last_kept_bars` 扣掉清單）。
 - `research_report` 的基準一。
 - 另外直接數 `market_bars` 的三處，也用 `research_report.excluded_bar_counts`／`last_kept_bars` 扣掉清單裡的列：`trade_research` 的 `bar_count`（起日前的日線數）與下市、轉板股的最後一根日線，以及 `explore_research.delisted_count`。研究 DB 上有 13 檔上櫃股的日線全在 2007-04-23～11-30，工具讀不到它們。
 
