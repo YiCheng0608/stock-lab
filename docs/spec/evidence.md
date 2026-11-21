@@ -805,7 +805,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
   - F2、F3：`<代號>/summary.md`（開頭列退化的判準與限制；F2 另有「和 H2 的重疊」一節）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名；F2 有 `vol_720`、`cash_yield_12m`、`mom_240_20`、`r1`、`r2`、`score`，F3 有 `drawdown_60`、`margin_drop_5`）、`trades.csv`。
   - F1、F4：`<代號>/summary.md`（開頭列退化的判準與限制；「只列出」表同 `trade_research`，放棄分兩類，出場原因不列停損與目標，F4 另列兩個交易所名單缺列的天數；每年的訊號數與有訊號的日數）、`tables.json`（另有 `listed`）、`trades.csv`（每個訊號一列，含放棄的；F1 有 `stock_dividend_ratio`，F4 有 `bars_before`）、`days.csv`。
   - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
-- **耗時與記憶體**（#936 AC-4，研究 DB 到 2019-12-31）：COVERAGE_TIMING
+- **耗時與記憶體**（#936 AC-4，研究 DB 到 2019-12-31 的 499 萬根）：`--coverage-only` 293 秒（載入 183 秒，其中 panel 173 秒、除權息 1 秒、名單 8 秒）、峰值 1.55 GB，其中 `vol_720` 6 秒、`cash_yield_12m` 5 秒、`mom_240_20` 1 秒、F2 的合成排序 7 秒、X2 的名單 24 秒、`drawdown_60`＋`margin_drop_5` 11 秒、`stock_div_ex` 1 秒、`margin_first` 2 秒；估一次探索段（F1～F4）約 8～14 分鐘、峰值約 2～2.5 GB（載入約 3 分鐘，加上 F2、F3 各兩次組合模擬與 F1、F4 的逐筆成交）。驗證段與已用段各往前讀 730 天，比探索段小，同一時間只留一份。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
 - 文件與程式用同一套說法：F1～F4 的退化判準與 `coverage.md` 的說明句是 `round10_research` 的 `DEGENERATE`、`OVERLAP_NOTE`、`COVERAGE_NOTES`，本段逐字照抄，`backend/tests/test_round10_research.py` 比對本段，改了一邊沒改另一邊就紅。
 
 **`round10_research` 的版本**：`round10_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（F1～F4 的定義、特徵的窗口與閾值、F2 的取一半與名次合成、排序方向、F4 的交易所集合與日線下限、F1、F4 的出場、分段、兩段的門檻、有成交的訊號日下限、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
