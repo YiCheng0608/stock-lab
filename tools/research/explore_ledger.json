@@ -461,6 +461,21 @@
       "tool_commit": "172e21ee2ad760b15bd801412bff1160a76cfe85",
       "definitions_sha256": "cd00cd2d201893370ec706168af5a30cb8e1e684c47ba30fc91356447876d757",
       "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "Z2",
+      "tool": "round8_research",
+      "round": 8,
+      "segment": "validation",
+      "version": 1,
+      "status": "finished",
+      "started_at": "2026-11-21T04:23:40+00:00",
+      "report_sha256": "f2a8c8df49f560f6352afb3114ee013b692e65e01ca9e9b0f7c3982822a93622",
+      "url": "https://github.com/YiCheng0608/stock-lab/blob/pr-assets/928/exploration/explore.json",
+      "tool_commit": "91f97245deec713c78ac4178aadc01217a405664",
+      "definitions_sha256": "cd00cd2d201893370ec706168af5a30cb8e1e684c47ba30fc91356447876d757",
+      "finished_at": "2026-11-21T04:26:29+00:00",
+      "verdict": "驗證段反轉"
     }
   ]
 }
