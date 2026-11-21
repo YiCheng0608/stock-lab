@@ -425,7 +425,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 **誰讀這份清單**：`research_report.benchmark_universe` 與 `benchmark_bars` 是 `stock`／`ipo` 日線的同一個查詢，兩個都跳過清單裡的列。用到它們的工具都不會讀到這些列：
 - `evidence_lib.load_panel`：`feature_evidence`、`candidate_scorecard`。
-- `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`、經 `trade_research.load` 讀的 `round4_research`，以及經 `explore_research.load_context` 讀的 `round5_research`、`round7_research`。
+- `portfolio_research.load_market`：`explore_research`、`mainstream_research`、`trade_research`、`portfolio_research`、經 `trade_research.load` 讀的 `round4_research`，以及經 `explore_research.load_context` 讀的 `round5_research`、`round6_research`、`round7_research`。
 - `research_report` 的基準一。
 - 另外直接數 `market_bars` 的三處，也用 `research_report.excluded_bar_counts`／`last_kept_bars` 扣掉清單裡的列：`trade_research` 的 `bar_count`（起日前的日線數）與下市、轉板股的最後一根日線，以及 `explore_research.delisted_count`。研究 DB 上有 13 檔上櫃股的日線全在 2007-04-23～11-30，工具讀不到它們。
 
@@ -595,18 +595,22 @@ MSYS_NO_PATHCONV=1 docker run -d --name t<issue>-gen --network none --memory 1g 
 | `explore_research` | 驗證段＋已用段 | 370 萬＋201 萬 | 992 秒，2.99 GB | 864 秒，1.87 GB |
 | `trade_research` | 探索段（2012-12-01～2019-12-31） | 407 萬 | 436 秒，2.61 GB | 399 秒，1.34 GB |
 | `trade_research` | 驗證段＋已用段 | 370 萬＋201 萬 | 659 秒，3.15 GB | 588 秒，1.95 GB |
+| `round6_research` | 探索段（1990～2019-12-31，W1～W4） | 880 萬 | — | 753 秒，3.14 GB |
+| `round6_research` | 驗證段＋已用段（兩段都從 1990 讀） | 1,136 萬＋1,234 萬 | 載入已用段時 OOM（`9384d7f1`，驗證段已到 3.38 GB） | 1,037 秒，3.85 GB |
+
+`round6_research` 那兩列是 PR #905 review 在 2026-11-21 量的（同一份合成全量 DB 重產，容器 `--memory 4g --memory-swap 4g --oom-score-adj 1000`，沒有和回補同時跑）；「改前」是驗證段的資料沒放掉就載入已用段的 `9384d7f1`，「改後」是放掉之後（[第 2 步的工具](../spec/evidence.md#第-2-步的工具)本工具那段）。
 
 改前的規模縮放（`explore_research` 探索段）：5 年（310 萬根）609 秒、1.86 GB；10 年（590 萬根）1,149 秒、3.51 GB。
 
 **改了什麼**（[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 決定 [6886660983](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6886660983)）：`portfolio_research.load_market` 不再先把全部日線建成 `Bar` 物件。它用 `research_report.benchmark_bars` 逐檔讀，這和 `benchmark_universe` 是同一條 SQL，只是在游標上依 id 分組；每檔建好 `Series` 與 `raw` 就丟掉那一檔的 `Bar`。`raw` 改成 `array`（停牌是 0／1），同一天的 bar 共用一個 `date` 物件。輸出逐位元組相同（`backend/tests/test_research_load_identical.py`），`VERSION` 與 `definitions_sha256` 不變。
 
-**推估回補後的真實規模**：上市櫃每天約 1,150 檔（2004）到 1,700 檔（2019），`explore_research` 探索段約 550～600 萬根。照上表依 bar 數換算，約 2.1 GB、約 15 分鐘。其他各段都比它小。
+**推估回補後的真實規模**：上市櫃每天約 1,150 檔（2004）到 1,700 檔（2019），`explore_research` 探索段約 550～600 萬根。照上表依 bar 數換算，約 2.1 GB、約 15 分鐘。`round6_research` 三段都從 1990 讀：研究 DB（2026-11-21）到 2019-12-31、2024-09-27、2026-11-13 的 `stock`／`ipo` 日線約 499 萬、701 萬、799 萬根（已扣排除清單），照上表換算探索段約 1.8 GB、驗證段＋已用段約 2.5 GB（峰值在已用段），比 `explore_research` 探索段大；其他各段都比 `explore_research` 探索段小。
 
 **建議的跑法**：
 
-- **都可以和回補同時跑**：起跑前在容器裡看 `grep MemAvailable /proc/meminfo` ≥ 5 GiB（看實際用量，不用各容器上限加總）。合成上界最大是 3.27 GB，真實規模約 2.1 GB。
+- **都可以和回補同時跑**：起跑前在容器裡看 `grep MemAvailable /proc/meminfo` ≥ 5 GiB（看實際用量，不用各容器上限加總）。合成上界最大是 3.85 GB（`round6_research` 驗證段＋已用段），真實規模最大約 2.5 GB。
 - **探索段與 `--coverage-only`**：`--memory 4g --memory-swap 4g --oom-score-adj 1000`。這兩種中途被殺不留紀錄檔，可以直接重跑，所以 VM 真的不夠時讓核心先殺它，不殺回補或正式容器。
-- **驗證段**：`--memory 4g --memory-swap 4g`，**不加** `--oom-score-adj 1000`。驗證段讀資料前就寫「開始」紀錄，開始後被殺也算跑過一次、不能重跑（[第 2 步的工具](../spec/evidence.md#第-2-步的工具)）。不加時，VM 不夠時核心先殺用量最大的程序：驗證段約 1.9 GB（合成上界），回補約 2.4 GiB，被殺的會是可以從 manifest 接續的回補。跑的期間不 build image、不部署（build 後的 SBOM 掃描約 5 GB）。真的因為技術原因被殺時，照[第 2 步的工具](../spec/evidence.md#第-2-步的工具)驗證段的規則，在 Issue 留言，由統籌處理那一筆紀錄。
+- **驗證段**：`--memory 4g --memory-swap 4g`，**不加** `--oom-score-adj 1000`。驗證段讀資料前就寫「開始」紀錄，開始後被殺也算跑過一次、不能重跑（[第 2 步的工具](../spec/evidence.md#第-2-步的工具)）。不加時，VM 不夠時核心先殺用量最大的程序：驗證段約 1.9 GB（合成上界），回補約 2.4 GiB，被殺的會是可以從 manifest 接續的回補。`round6_research` 的驗證段例外：真實規模約 2.5 GB，比回補大，同時跑時被殺的可能是它。跑的期間不 build image、不部署（build 後的 SBOM 掃描約 5 GB）。真的因為技術原因被殺時，照[第 2 步的工具](../spec/evidence.md#第-2-步的工具)驗證段的規則，在 Issue 留言，由統籌處理那一筆紀錄。
 - 單次都不到 25 分鐘，不碰台北 21:00～23:30。工具本身在 21:30～23:30 拒絕起跑，但不會中途停，所以 21:00 以後不要開始。
 - **可用記憶體的檢查**：`backtest_research.free_memory_gb`（研究工具、`exit_research`、`audit.py` 共用）在 Linux 讀 `/proc/meminfo` 的 `MemAvailable`。#752 之前讀的是 `MemFree`，剛寫完大檔時 page cache 占滿，`MemFree` 只剩 0.6 GB（`MemAvailable` 6.9 GB），工具會誤拒。
 

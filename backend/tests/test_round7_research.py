@@ -50,6 +50,7 @@ ex = _tool("explore_research")
 im = _tool("industry_members")
 ms = _tool("mainstream_research")
 r5 = _tool("round5_research")
+r6 = _tool("round6_research")
 tool = _tool("round7_research")
 REGISTERED = {name: dict(spec) for name, spec in tool.HYPOTHESES.items()}
 NAMES = ("Y1", "Y2", "Y3", "Y4")
@@ -61,7 +62,8 @@ NAMES = ("Y1", "Y2", "Y3", "Y4")
 def test_the_hypotheses_are_the_registration():
     h = tool.HYPOTHESES
     assert list(h) == list(NAMES)
-    assert not set(h) & set(ex.HYPOTHESES) and not set(h) & set(r5.HYPOTHESES)
+    for other in (ex, r5, r6):
+        assert not set(h) & set(other.HYPOTHESES)
     rows = {
         name: (spec["subset"], spec["keys"], spec["top"], spec["hold"], spec["start"])
         for name, spec in h.items()
@@ -158,6 +160,11 @@ FROZEN = {
     "round5_research": (
         1,
         "a3409f1b9dd24a8e32c04148f5d1e36a5e8282e96df975bd0b36a21101993d75",
+    ),
+    # merged with #905 (master ac9ee9fc), measured there before this tool
+    "round6_research": (
+        1,
+        "b8e1eb89a20b9ea97db4d6ba38a1461d5ff5bf05b26eb9619c353db7020ac51e",
     ),
 }
 
