@@ -10,6 +10,33 @@ export LANG=C.UTF-8 LC_ALL=C.UTF-8
 # must put MSYS_NO_PATHCONV=1 back on each later `docker -v` themselves.
 unset MSYS_NO_PATHCONV
 
+# Two hosts are supported, Windows with Git Bash and macOS (docs/ops/platform/macos.md); the
+# scripts need bash 4.1 or later (mapfile, coproc, {fd} redirections). Git Bash ships bash 5;
+# macOS ships 3.2 as /bin/bash, so MacPorts bash must come first on PATH there.
+if [ -z "${BASH_VERSINFO:-}" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ] ||
+  { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 1 ]; }; then
+  printf '%s: 要 bash 4.1 以上，這個是 %s（%s）；macOS 先裝 MacPorts 的 bash，並讓 /opt/local/bin 排在 PATH 的 /bin 前面（docs/ops/platform/macos.md）\n' \
+    "$(basename "$0")" "${BASH_VERSION:-?}" "${BASH:-sh}" >&2
+  exit 2
+fi
+
+# timeout: GNU coreutils' (Git Bash, Linux); MacPorts coreutils installs it as gtimeout
+# unless its gnubin directory is on PATH. Exit codes are the same (124, 137 after -k, 127).
+if ! command -v timeout >/dev/null 2>&1 && command -v gtimeout >/dev/null 2>&1; then
+  timeout() { gtimeout "$@"; }
+fi
+
+# epoch_fmt N [FORMAT]: N seconds since the epoch in UTC, FORMAT (default
+# 2026-01-02T03:04:05Z); iso_epoch TEXT: the reverse, for that default form only. GNU date
+# (Git Bash, Linux) or BSD date (macOS).
+epoch_fmt() {
+  local f="${2:-%Y-%m-%dT%H:%M:%SZ}"
+  date -u -d "@$1" "+$f" 2>/dev/null || date -u -r "$1" "+$f"
+}
+iso_epoch() {
+  date -u -d "$1" +%s 2>/dev/null || date -u -j -f %Y-%m-%dT%H:%M:%SZ "$1" +%s 2>/dev/null
+}
+
 GH_REPO='YiCheng0608/stock-lab'
 ORCA_REPO_KEY='github.com/YiCheng0608/stock-lab'
 repo_root="$(cd "$script_dir/../.." && pwd)"
@@ -22,20 +49,23 @@ die() {
 }
 
 # find_python: an explicit --python/STOCK_PYTHON must work; otherwise the first that does.
+# "Works" is 3.12 or later, as in CI: coordinator_json.py uses DirEntry.is_junction (3.12).
+python_check='import sys; sys.exit(sys.version_info < (3, 12))'
 find_python() {
   local c
   if [ -n "$python" ]; then
-    "$python" -c 'import sys' >/dev/null 2>&1 || die "Python 無法執行：$python" 2
+    "$python" -c "$python_check" >/dev/null 2>&1 || die "Python 無法執行或不到 3.12：$python" 2
     return 0
   fi
-  for c in "$repo_root/.venv/Scripts/python.exe" "$repo_root/.venv/bin/python" python3 python \
+  # python3.12 before python3: macOS's /usr/bin/python3 is 3.9 (MacPorts installs python3.12).
+  for c in "$repo_root/.venv/Scripts/python.exe" "$repo_root/.venv/bin/python" python3.12 python3 python \
     "$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe"; do
-    if "$c" -c 'import sys' >/dev/null 2>&1; then
+    if "$c" -c "$python_check" >/dev/null 2>&1; then
       python="$c"
       return 0
     fi
   done
-  die "找不到可用的 Python（用 --python 或 STOCK_PYTHON 指定）" 2
+  die "找不到 3.12 以上可用的 Python（用 --python 或 STOCK_PYTHON 指定）" 2
 }
 
 # need_python: what runs "$python" calls this first. A shell that sourced this file and
@@ -342,8 +372,25 @@ docker_cleanup() {
 # (rebuilt and verified after each merge) and checked by dispatch.sh before a dispatch.
 # Only the same-engine CLI is used: a script may run in a shell with no MCP connection.
 # STOCK_CBM_* override the defaults (the tests point STOCK_CBM_CLI at a fake).
-cbm_cli="${STOCK_CBM_CLI:-C:/Users/YiCheng/.local/bin/codebase-memory-mcp.cmd}"
-cbm_project="${STOCK_CBM_PROJECT:-C-Users-YiCheng-Desktop-taiwan-stock-research}"
+# Defaults follow the host, not one machine: the CLI in ~/.local/bin (the installer's .cmd
+# wrapper on Windows), and the project named as the engine names it, from the management
+# checkout's path (the main worktree of this repo): ':' dropped, '/' and '\' to '-', e.g.
+# C:/Users/me/repo → C-Users-me-repo, /Users/me/stock-lab → Users-me-stock-lab.
+cbm_project_name() {
+  local top="${1//:/}"
+  top="${top//\\/-}"
+  top="${top//\//-}"
+  printf '%s' "${top#-}"
+}
+cbm_default_project() {
+  local common top
+  common="$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  top="$(native "${common%/.git}")" || return 1
+  cbm_project_name "$top"
+}
+if is_windows; then cbm_cli_default="$HOME/.local/bin/codebase-memory-mcp.cmd"; else cbm_cli_default="$HOME/.local/bin/codebase-memory-mcp"; fi
+cbm_cli="${STOCK_CBM_CLI:-$cbm_cli_default}"
+cbm_project="${STOCK_CBM_PROJECT:-$(cbm_default_project)}"
 # Seconds per CLI call; a full build of the repo takes about 11.
 cbm_timeout="${STOCK_CBM_TIMEOUT:-300}"
 # dispatch.sh checks the files the newest N merges of the checkout's HEAD changed.
@@ -366,6 +413,12 @@ cbm_out="" cbm_error="" cbm_report="" cbm_steps=()
 cbm_call() {
   local tool="$1" raw rc=0
   cbm_out="" cbm_error=""
+  # An empty name (the checkout's path not read) would index a second, unnamed project
+  # instead of failing: index_status's "not found" passes cbm_root_check (#937 review).
+  if [ -z "$cbm_project" ]; then
+    cbm_error="推不出 codebase-memory 的 project 名稱（管理 checkout 的路徑讀不到）；用 STOCK_CBM_PROJECT 指定"
+    return 1
+  fi
   if [ ! -f "$cbm_cli" ] && ! command -v -- "$cbm_cli" >/dev/null 2>&1; then
     cbm_error="找不到 codebase-memory CLI：$cbm_cli（STOCK_CBM_CLI）"
     return 1

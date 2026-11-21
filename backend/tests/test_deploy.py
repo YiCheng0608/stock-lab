@@ -965,7 +965,9 @@ def test_a_db_behind_prints_the_backup_and_init_db_commands(harness):
     # A shell left with a smoke test's settings runs init-db without them (PR #477 review).
     assert "\n  unset WEB_PORT API_PORT STOCK_ENV_FILE\n" in result.out
     assert (
-        '-v stock-lab_stock-data:/data:ro -v "$B":/out -v "$(pwd -W)/tools/ops/copy_db.py"'
+        '-v stock-lab_stock-data:/data:ro -v "$B":/out'
+        # Git Bash's pwd -W spells the checkout C:/…, which docker -v takes; elsewhere pwd.
+        f' -v "$({"pwd -W" if os.name == "nt" else "pwd"})/tools/ops/copy_db.py"'
         ":/t/copy_db.py:ro stock-lab-backend:v1 python /t/copy_db.py --src /data/stock.db"
         " --dest /out"
     ) in result.out

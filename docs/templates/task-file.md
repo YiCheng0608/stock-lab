@@ -17,7 +17,7 @@
 ## 要做的事
 
 - <逐條寫要改的行為；與 Issue 範圍一致，不加新範圍>
-- 查程式：codebase-memory 用 master 索引（project `C-Users-YiCheng-Desktop-taiwan-stock-research`，從 `origin/master` 派工時 dispatch.sh 已把它更新到你的起點並驗證；`--base` 子單的索引只對得上 master）；不要對自己的 worktree 跑 `index_repository`；自己改過的檔以 worktree 內的實際檔案為準（docs/WORKFLOW.md「程式索引」）。
+- 查程式：codebase-memory 用 master 索引（project 名稱見 docs/ops/LOCAL.md「工具」，從 `origin/master` 派工時 dispatch.sh 已把它更新到你的起點並驗證；`--base` 子單的索引只對得上 master）；不要對自己的 worktree 跑 `index_repository`；自己改過的檔以 worktree 內的實際檔案為準（docs/WORKFLOW.md「程式索引」）。
 - 文件：<同 PR 要更新的文件>
 - UI 任務：更新 `.claude/skills/verify-stock-lab/features/` 對應的檔，或寫明不需更新。
 
@@ -38,5 +38,5 @@
 - 開工後在 Issue 留一則 `回報：開工`：session、branch、HEAD、任務檔路徑，以及本檔的 Issue 連結與 AC 數（<N>）。
 - 之後的提問與回報照 docs/WORKFLOW.md「留言類型」寫在 Issue／PR 留言（第一行是 `提問：`／`回報：`），不送到統籌 terminal。
 - 背景工作被系統停掉、或任何要等統籌才能繼續的情況，以 `提問：` 留在 Issue，不在 terminal 等。
-- PR 本文照抄 `docs/templates/pull-request.md`，要有 `Closes #<issue>`；worktree 外暫存目錄寫 `C:/Users/YiCheng/t<issue>`。
-- pytest 的 `--basetemp` 用 `C:/Users/YiCheng/t<issue>/b1` 這類路徑，不要放在 `task/` 底下。
+- PR 本文照抄 `docs/templates/pull-request.md`，要有 `Closes #<issue>`；worktree 外暫存目錄寫 `~/t<issue>` 展開後的絕對路徑（Windows 寫成 `C:/…`，`cd ~ && pwd -W`）。
+- pytest 的 `--basetemp` 用 `~/t<issue>/b1` 這類路徑（Windows 同樣寫成 `C:/…`），不要放在 `task/` 底下。

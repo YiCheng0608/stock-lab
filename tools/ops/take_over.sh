@@ -110,7 +110,7 @@ closed_check() {
   local hours="${TAKE_OVER_CLOSED_HOURS:-48}" since dir query wt="" br="" rc=0
   local page=0 cursor="" where="" failed="" n search
   local -a after=()
-  since="$(date -u -d "@$((${PATROL_NOW:-$(date -u +%s)} - hours * 3600))" +%Y-%m-%dT%H:%M:%SZ)"
+  since="$(epoch_fmt "$((${PATROL_NOW:-$(date -u +%s)} - hours * 3600))")"
   dir="$(mktemp -d)" || { echo "關閉單核對：未查完（建不了暫存目錄）"; return 0; }
   git -C "$repo_root" worktree list --porcelain >"$dir/worktrees" && wt="$dir/worktrees"
   git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads/ >"$dir/branches" \
@@ -217,7 +217,7 @@ fi
 write_record() {
   local tmp="$record.tmp.$$"
   printf '{"session_id":"%s","old_handle":"%s","listener":"%s","written_at":"%s"}\n' \
-    "$session_id" "$rec_old" "$rec_listener" "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" >"$tmp" \
+    "$session_id" "$rec_old" "$rec_listener" "$(epoch_fmt "$now")" >"$tmp" \
     && mv -f "$tmp" "$record" && [ "$(cj get old_handle <"$record" 2>/dev/null)" = "$rec_old" ] \
     || { rm -f "$tmp"; return 1; }
 }
@@ -292,7 +292,7 @@ for step in "${steps_all[@]:$start}"; do
         || fail comment "讀不了承諾檔"
       {
         printf '回報：統籌 session 更換：%s／%s\n\n' "$handle" "$session_id"
-        printf -- '- %s（台北）接手；' "$(TZ=UTC date -u -d "@$((now + 8 * 3600))" '+%Y-%m-%d %H:%M')"
+        printf -- '- %s（台北）接手；' "$(epoch_fmt "$((now + 8 * 3600))" '%Y-%m-%d %H:%M')"
         if [ -n "$old" ]; then printf '前任 terminal `%s`。\n' "$old"; else printf '前任 terminal 已不存在。\n'; fi
         printf -- '- 由 `tools/ops/take_over.sh` 執行：心跳、wake listener、本留言、本文的現任統籌、關前任 terminal。\n'
         printf -- '- %s\n' "$(printf '%s\n' "$list" | head -n 1)"
@@ -309,7 +309,7 @@ for step in "${steps_all[@]:$start}"; do
       [[ "$comment_url" =~ $url_re ]] || fail row "沒有 #1 留言連結"
       cid="${BASH_REMATCH[1]}"
       checkout="$(native "$repo_root")" || checkout="$repo_root"
-      at="$(date -u -d "@$now" +%Y-%m-%dT%H:%MZ)"
+      at="$(epoch_fmt "$now" %Y-%m-%dT%H:%MZ)"
       row="- terminal \`$handle\`（管理 checkout \`$checkout\`），session \`$session_id\`；$at 接手（[$cid]($comment_url)）。"
       gh api "repos/$GH_REPO/issues/1" >"$work/issue.json" || fail row "讀不了 #1 本文"
       cj coordinator-row "$row" <"$work/issue.json" >"$work/body.json" 2>"$work/row.err" \

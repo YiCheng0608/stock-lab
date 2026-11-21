@@ -51,7 +51,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
    ```text
    orca worktree create --repo id:<repoId> --name task-<issue>-<slug> --no-parent --setup skip [--base-branch origin/<branch>] --json
    git -C <path> branch -m <orca-branch> task/<issue>-<slug>
-   orca terminal create --worktree id:<repoId>::<path> --title "#<issue> <slug>" --shell git-bash --command "COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model <model> --effort <effort> --settings '{\"permissions\":{\"additionalDirectories\":[\"<任務檔目錄>\"]}}'" --json
+   orca terminal create --worktree id:<repoId>::<path> --title "#<issue> <slug>" [--shell git-bash] --command "COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model <model> --effort <effort> --settings '{\"permissions\":{\"additionalDirectories\":[\"<任務檔目錄>\"]}}'" --json
    orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
    orca terminal read --terminal <handle> --screen --json
    orca terminal send --terminal <handle> --text "請用 Read 工具讀取任務檔 <path>（UTF-8），依其內容開工；開工留言回貼任務檔裡的 Issue 連結與 AC 數。" --enter --wait-submit 30 --json
@@ -97,7 +97,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
 
 ## 本機檢查
 
-在容器內跑，用 CI 同一套 image 與依賴（[Docker compose](ops/SETUP.md#docker-compose)；需要 Docker Compose 2.24 以上）。Git Bash、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 以 Git Bash（`--shell git-bash`，前綴是 POSIX 寫法）開 terminal，並用 `COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude …` 啟動，漏了 `-p` 也落在同一個 project。第二個變數關掉 Claude Code 在主機記憶體吃緊時收掉背景 shell 的機制（#595：被收的是主機上的 docker CLI，幾乎不釋放記憶體，容器的記憶體由 WSL VM 的上限管，收掉只讓結果收不回來，通知又叫工程師停下來等人）。這兩個變數只跟著那一次 `claude`：resume 工程師 session 時寫成 `COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --resume <ID> --effort <原 level> --settings '{"permissions":{"additionalDirectories":["<任務檔目錄>"]}}'`（`--settings` 和派工時同一個：照抄 dispatch.sh 回報的 JSON 的 `settings` 欄，它已是只含 ASCII 的字串，不要自己從 `task_file` 拼。它只活在那個 claude 程序裡，不寫進任何設定檔，resume 不會沿用；沒帶時 auto mode 照樣讀得到任務檔，default 模式會跳讀檔框；帶了不跳框，#835 實測 [6934292310](https://github.com/YiCheng0608/stock-lab/issues/835#issuecomment-6934292310)）；Orca 自己 resume 的 session 沒有它們，只靠命令裡的 `-p`。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
+在容器內跑，用 CI 同一套 image 與依賴（[Docker compose](ops/SETUP.md#docker-compose)；需要 Docker Compose 2.24 以上）。bash（Windows 是 Git Bash）、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 在 Windows 以 Git Bash（`--shell git-bash`，前綴是 POSIX 寫法）開 terminal，macOS 用登入 shell（Orca 不收 `--shell`，[macOS 主機](ops/platform/macos.md#跟-windows-不一樣的地方)），並用 `COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude …` 啟動，漏了 `-p` 也落在同一個 project。第二個變數關掉 Claude Code 在主機記憶體吃緊時收掉背景 shell 的機制（#595：被收的是主機上的 docker CLI，幾乎不釋放記憶體，容器的記憶體由 WSL VM 的上限管，收掉只讓結果收不回來，通知又叫工程師停下來等人）。這兩個變數只跟著那一次 `claude`：resume 工程師 session 時寫成 `COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --resume <ID> --effort <原 level> --settings '{"permissions":{"additionalDirectories":["<任務檔目錄>"]}}'`（`--settings` 和派工時同一個：照抄 dispatch.sh 回報的 JSON 的 `settings` 欄，它已是只含 ASCII 的字串，不要自己從 `task_file` 拼。它只活在那個 claude 程序裡，不寫進任何設定檔，resume 不會沿用；沒帶時 auto mode 照樣讀得到任務檔，default 模式會跳讀檔框；帶了不跳框，#835 實測 [6934292310](https://github.com/YiCheng0608/stock-lab/issues/835#issuecomment-6934292310)）；Orca 自己 resume 的 session 沒有它們，只靠命令裡的 `-p`。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
 
 測試與 `checks.py` 讀 git，而 image 不含 `.git`；worktree 的 `.git` 是指向 Windows 路徑的檔案，容器裡讀不到。所以唯讀掛進共用的 git 目錄，再掛一個指向其中 `worktrees/<worktree 名>` 的 `.git` 檔，容器裡的 git 讀到的就是這個 worktree 的 branch、HEAD 與 index。每個新 shell 先跑（`$T` 是 worktree 外暫存目錄，路徑見 [LOCAL](ops/LOCAL.md#工具)，寫進 PR）：
 
@@ -106,7 +106,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
 T=<worktree 外暫存目錄>; mkdir -p "$T"
 printf 'gitdir: /repo.git/worktrees/%s\n' "$(basename "$(git rev-parse --git-dir)")" > "$T/gitfile"
 GIT_RO=(-v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$T/gitfile:/app/.git:ro")
-export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成 Windows 路徑
+export MSYS_NO_PATHCONV=1   # Windows：否則 Git Bash 會把 -v 的容器路徑改寫成 Windows 路徑；macOS 設了也沒有作用
 ```
 
 | 範圍 | 命令 |
@@ -122,7 +122,7 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 
 每個 checkout 設一次 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，`git blame` 會略過 [`.git-blame-ignore-revs`](../.git-blame-ignore-revs) 列出的全檔格式化 commit。
 
-容器外的工具（`tools/ops/*.sh`、在本機跑的 `tools/verify/*.py`）用的 Python 是[容器外的 Python](ops/LOCAL.md#工具)（PATH 上的 python 是 Store stub）。資料路徑見 [LOCAL](ops/LOCAL.md#正式位置使用者決定)。
+容器外的工具（`tools/ops/*.sh`、在本機跑的 `tools/verify/*.py`）用的 Python 是[容器外的 Python](ops/LOCAL.md#工具)（3.12 以上；Windows 的 PATH 上是 Store stub，macOS 的 `/usr/bin/python3` 是 3.9）。資料路徑見 [LOCAL](ops/LOCAL.md#正式位置使用者決定)。
 
 ## Review 與合併
 
@@ -186,7 +186,7 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 
 ## 程式索引
 
-codebase-memory 只有一份索引：master 管理 checkout 的 project `C-Users-YiCheng-Desktop-taiwan-stock-research`（#704）。工程師查程式用這個 project，不對自己的 worktree 跑 `index_repository`；自己改過的檔以 worktree 內的實際檔案為準。MCP 斷線用同引擎 CLI（[LOCAL](ops/LOCAL.md#工具)）`<codebase-memory CLI> cli --json <tool>`。索引只是查找工具，不當驗收證據。
+codebase-memory 只有一份索引：master 管理 checkout 的 project（名稱由管理 checkout 的路徑推得，[LOCAL](ops/LOCAL.md#工具)，#704）。工程師查程式用這個 project，不對自己的 worktree 跑 `index_repository`；自己改過的檔以 worktree 內的實際檔案為準。MCP 斷線用同引擎 CLI（[LOCAL](ops/LOCAL.md#工具)）`<codebase-memory CLI> cli --json <tool>`。索引只是查找工具，不當驗收證據。
 
 索引由腳本維持，不靠人記得：
 

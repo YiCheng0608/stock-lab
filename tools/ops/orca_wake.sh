@@ -29,8 +29,9 @@ if [ -z "$orca_exe" ]; then
   if command -v orca >/dev/null 2>&1; then
     orca_exe=orca
   else
-    # The scheduler's PATH has no orca.
+    # The scheduler's PATH has no orca. Orca's install directory: Windows, then macOS.
     orca_exe="${LOCALAPPDATA:-}/Programs/orca/resources/bin/orca.exe"
+    [ -x "$orca_exe" ] || [ ! -x /Applications/Orca.app/Contents/Resources/bin/orca ] || orca_exe=/Applications/Orca.app/Contents/Resources/bin/orca
   fi
 fi
 call() { timeout -k 10 "${MONITOR_CALL_TIMEOUT:-120}" "$@"; }

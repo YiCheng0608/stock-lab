@@ -425,9 +425,14 @@ def main(argv: list[str]) -> int:
     if args.orca is None:
         if os.environ.get("STOCK_WAKE_TEST"):
             raise SystemExit("STOCK_WAKE_TEST：測試要以 --orca 指定假的 orca")
-        args.orca = shutil.which("orca") or str(
+        # Orca's install directory when PATH has none: Windows, then macOS.
+        installed = [
             Path(os.environ.get("LOCALAPPDATA", ""))
-            / "Programs/orca/resources/bin/orca.exe"
+            / "Programs/orca/resources/bin/orca.exe",
+            Path("/Applications/Orca.app/Contents/Resources/bin/orca"),
+        ]
+        args.orca = shutil.which("orca") or str(
+            next((p for p in installed if p.is_file()), installed[0])
         )
     if args.terminals:
         # A command name (orca) as the program to run: orca.cmd on Windows.
