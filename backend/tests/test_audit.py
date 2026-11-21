@@ -710,6 +710,94 @@ def test_actions_fields_find_the_4549_ratio_stored_as_a_rights_value(fx):
     assert audit_checks.actions_fields(fx.context()).result == "pass"
 
 
+# #891: before 2009 the official reference counted 員工紅利轉增資 as free
+# shares.  TWT49U prices and the TWT49UDetail employee bonus as stored.
+EARLY_3514 = {
+    "除權息前收盤價": "340.00",
+    "除權息參考價": "260.36",
+    "減除股利參考價": "260.36",
+    "detail": {"B. 員工紅利轉增資": "693,450 股"},
+}
+# A cash capital increase as well; its fields reproduce 除權息參考價 within 0.02.
+EARLY_2451 = {
+    "除權息前收盤價": "127.50",
+    "除權息參考價": "122.72",
+    "減除股利參考價": "122.34",
+    "detail": {"B. 員工紅利轉增資": "1,154,700 股"},
+}
+
+
+@pytest.mark.parametrize(
+    "day,ratio,result",
+    [
+        (date(2008, 5, 5), 0.3, "pass"),  # 3514: employee bonus explains 1.18 元
+        (date(2009, 5, 5), 0.3, "fail"),  # from 2009 the reference leaves them out
+        (date(2008, 5, 5), 0.2, "fail"),  # e 0.106 > 0.06
+    ],
+    ids=["3514", "2009", "e-above-0.06"],
+)
+def test_actions_fields_pass_employee_bonus_rows_before_2009(fx, day, ratio, result):
+    stock = fx.instrument("TWSE", "3514")
+    action(fx, stock, day, ratio=ratio, cash=0.0, reference=340.0, details=EARLY_3514)
+    fx.commit()
+    check = audit_checks.actions_fields(fx.context())
+    assert check.result == result
+    if result == "fail":
+        assert set(check.failures) == {"implied_reference"}
+
+
+def test_actions_fields_pass_the_2451_subscription_row(fx):
+    stock = fx.instrument("TWSE", "2451")
+    action(
+        fx,
+        stock,
+        date(2007, 9, 10),
+        ratio=0.0099,
+        cash=3.563023,
+        reference=127.5,
+        details=EARLY_2451,
+    )
+    fx.commit()
+    assert audit_checks.actions_fields(fx.context()).result == "pass"
+
+
+@pytest.mark.parametrize(
+    "day,expected",
+    [
+        ("2007-09-10", 122.72 / 127.50),  # pinned to the official ratio (#891)
+        ("2009-09-10", None),  # from 2009 the 0.02 exception keeps the fields
+    ],
+    ids=["2451", "2009"],
+)
+def test_the_audit_factor_pins_employee_bonus_rows_to_the_official_ratio(day, expected):
+    row = audit_lib.Action(day, 3.563023, 0.0099, None, 127.5, EARLY_2451)
+    fields = audit_lib.field_factor(row, 127.5)
+    factor = audit_lib.action_factor(row, None)
+    assert abs(fields * 127.5 - 122.72) <= audit_lib.REFERENCE_TOLERANCE
+    if expected is None:
+        assert factor == pytest.approx(fields, abs=1e-12)
+    else:
+        assert factor == pytest.approx(expected, abs=1e-12)
+        assert abs(factor - fields) > 1e-5
+
+
+def test_a_row_whose_fields_pass_is_not_an_employee_bonus_row():
+    # TPEx 2007, both references cut to 44.54: e = 49 / 44.54 - 1.1 is a small
+    # positive number, but the fields' 44.5455 is within 0.02, so the product
+    # never looks at employee bonus shares and keeps the field factor.
+    details = {
+        "ClosePriceBeforeExRightsDiviend": "50.00",
+        "ExRightsDiviendQuote": "44.54",
+        "DividendDeductedQuote": "44.54",
+    }
+    row = audit_lib.Action("2007-12-20", 1.0, 0.1, None, 50.0, details)
+    assert 0 < 49 / 44.54 - 1.1 <= audit_lib.EMPLOYEE_BONUS_MAX_RATIO
+    assert audit_lib.employee_bonus_explained(row) is False
+    assert audit_lib.action_factor(row, None) == pytest.approx(
+        audit_lib.field_factor(row, 50.0), abs=1e-12
+    )
+
+
 def twt48u(*rows):
     return [
         {
