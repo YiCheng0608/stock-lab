@@ -1,0 +1,53 @@
+{
+  "tool": "round8_research",
+  "version": 1,
+  "design": "918",
+  "registration_commit": "df0aa8b5",
+  "segment": "validation",
+  "round": 8,
+  "round_size": 4,
+  "cumulative": 34,
+  "validation_min_t": 3.18,
+  "definitions_sha256": "cd00cd2d201893370ec706168af5a30cb8e1e684c47ba30fc91356447876d757",
+  "tool_commit": "91f97245deec713c78ac4178aadc01217a405664",
+  "command": "python tools/research/round8_research.py --db /research/stock.db --segment validation --exploration-report /out/exploration/explore.json --exploration-sha256 f2a8c8df49f560f6352afb3114ee013b692e65e01ca9e9b0f7c3982822a93622 --exploration-url https://github.com/YiCheng0608/stock-lab/blob/pr-assets/928/exploration/explore.json --out /out/validation",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-20T23:00:00.813683+00:00"
+  },
+  "read_until": "2024-09-27",
+  "min_t": 3.18,
+  "exploration": {
+    "sha256": "f2a8c8df49f560f6352afb3114ee013b692e65e01ca9e9b0f7c3982822a93622",
+    "url": "https://github.com/YiCheng0608/stock-lab/blob/pr-assets/928/exploration/explore.json"
+  },
+  "hypotheses": {
+    "Z2": {
+      "verdict": "驗證段反轉",
+      "reason": null,
+      "days": 1153,
+      "taiex_excess": {
+        "days": 1153,
+        "mean": -1.0549560470493768e-05,
+        "annual": -0.0026584892385644295,
+        "t": -0.05050200908250525
+      },
+      "excess": {
+        "days": 1153,
+        "mean": -0.00016096889500081445,
+        "annual": -0.04056416154020524,
+        "t": -0.7452028884075296
+      },
+      "absolute_mean": 0.0006176423722893597,
+      "prerequisites": {
+        "days": 1153,
+        "min_days": 250,
+        "delisted": 60,
+        "ok": true
+      }
+    }
+  },
+  "elapsed_seconds": 169.85071511098067,
+  "peak_memory_gb": 1.115692138671875
+}

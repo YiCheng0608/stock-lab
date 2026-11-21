@@ -1,0 +1,163 @@
+{
+  "tool": "round8_research",
+  "version": 1,
+  "design": "918",
+  "definitions_sha256": "cd00cd2d201893370ec706168af5a30cb8e1e684c47ba30fc91356447876d757",
+  "label": "`skew_240`（近 240 個日報酬的偏態）小者先",
+  "direction": "彩券偏好",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "skew_240",
+        "low"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      241
+    ]
+  },
+  "hypothesis": "Z2",
+  "segment": "validation",
+  "verdict": "驗證段反轉",
+  "reason": null,
+  "window": {
+    "first_signal": "2019-12-31",
+    "first_session": "2020-01-02",
+    "last_session": "2024-09-27",
+    "days": 1153,
+    "signal_days": 1153
+  },
+  "prerequisites": {
+    "days": 1153,
+    "min_days": 250,
+    "delisted": 60,
+    "ok": true
+  },
+  "coverage": {
+    "2019": {
+      "days": 1,
+      "members": 449,
+      "missing": {
+        "skew_240": 6
+      }
+    },
+    "2020": {
+      "days": 245,
+      "members": 138611,
+      "missing": {
+        "skew_240": 1222
+      }
+    },
+    "2021": {
+      "days": 244,
+      "members": 160367,
+      "missing": {
+        "skew_240": 1524
+      }
+    },
+    "2022": {
+      "days": 246,
+      "members": 127925,
+      "missing": {
+        "skew_240": 1189
+      }
+    },
+    "2023": {
+      "days": 239,
+      "members": 138476,
+      "missing": {
+        "skew_240": 1663
+      }
+    },
+    "2024": {
+      "days": 178,
+      "members": 119781,
+      "missing": {
+        "skew_240": 1188
+      }
+    }
+  },
+  "seconds": {
+    "plan": 38.0489259440219,
+    "skew_240": 28.24602921443875,
+    "simulate": 48.38388644802035
+  },
+  "excess": {
+    "population": {
+      "days": 1153,
+      "mean": -0.00016096889500081445,
+      "annual": -0.04056416154020524,
+      "t": -0.7452028884075296
+    },
+    "taiex": {
+      "days": 1153,
+      "mean": -1.0549560470493768e-05,
+      "annual": -0.0026584892385644295,
+      "t": -0.05050200908250525
+    }
+  },
+  "absolute": {
+    "days": 1153,
+    "mean": 0.0006176423722893597
+  },
+  "curves": {
+    "Z2": {
+      "days": 1153,
+      "total": 0.9428601677289465,
+      "annual": 0.15622369155209626,
+      "volatility": 0.14414948908794212,
+      "max_drawdown": -0.22965367941058001,
+      "invested": 0.9579076147988564,
+      "turnover": 4.159912124776648
+    },
+    "population": {
+      "days": 1153,
+      "total": 1.2159748219034459,
+      "annual": 0.18994460221351472,
+      "volatility": 0.21014410963041916,
+      "max_drawdown": -0.3077773329451119,
+      "invested": 0.9562517222239515,
+      "turnover": 4.1415203658988675
+    },
+    "taiex": {
+      "days": 1153,
+      "total": 0.9023525606936238,
+      "annual": 0.1509114747853486,
+      "volatility": 0.1878460967388565,
+      "max_drawdown": -0.3163186488434039,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 23058,
+    "won": 13503,
+    "rate": 0.5856102003642987,
+    "unsold": 1205
+  },
+  "counts": {
+    "Z2": {
+      "bought": 23058,
+      "sale_held": 34,
+      "limit_down": 1,
+      "limit_up": 1,
+      "not_tradable": 1,
+      "unsold": 1205
+    },
+    "population": {
+      "bought": 684714,
+      "not_tradable": 142,
+      "limit_up": 753,
+      "sale_held": 1624,
+      "limit_down": 189,
+      "unsold": 41716
+    }
+  },
+  "min_t": 3.18
+}
