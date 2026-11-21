@@ -52,7 +52,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 
 ## 工程師 terminal 與 resume
 
-- **工程師 terminal 與 resume**（#595）：工程師的 terminal 是 `dispatch.sh` 回報的 handle，也就是 `orca terminal list --json` 裡該 worktree 有 `agentIdentity` 的那個（`paneTitle` 不一定有；monitor 讀確認框也認 `agentIdentity`，#873）。同一個 worktree 另有 Orca 自動建的裸 shell terminal，它停在 `$` 不代表 session 退出；`lastOutputAt` 會被畫面重繪推進，`preview` 尾端是輸入框的建議草稿，都不能當成工作中或閒置的證據。resume 前先確認沒有該任務的 claude 程序（`Get-CimInstance Win32_Process -Filter "Name='claude.exe'"` 的命令列帶 `additionalDirectories` 的 `…/t<issue>/task`（#835 起；之前是 `--add-dir …/t<issue>/task`）或 `--resume <id>`）；有就是 session 還在，回到它的 terminal，不另開，否則同一個 session id 會有兩個程序。確定沒有才在 dispatch 回報的 terminal（不在了就新開一個）照[本機檢查](../WORKFLOW.md#本機檢查)的 resume 命令接回。
+- **工程師 terminal 與 resume**（#595）：工程師的 terminal 是 `dispatch.sh` 回報的 handle，也就是 `orca terminal list --json` 裡該 worktree 有 `agentIdentity` 的那個（`paneTitle` 不一定有；monitor 讀確認框也認 `agentIdentity`，#873）。同一個 worktree 另有 Orca 自動建的裸 shell terminal，它停在 `$` 不代表 session 退出；`lastOutputAt` 會被畫面重繪推進，`preview` 尾端是輸入框的建議草稿，都不能當成工作中或閒置的證據。resume 前先確認沒有該任務的 claude 程序（Windows 是 `Get-CimInstance Win32_Process -Filter "Name='claude.exe'"`，macOS 是 `ps -axo pid,lstart,command | grep '[c]laude'`；看命令列帶 `additionalDirectories` 的 `…/t<issue>/task`（#835 起；之前是 `--add-dir …/t<issue>/task`）或 `--resume <id>`）；有就是 session 還在，回到它的 terminal，不另開，否則同一個 session id 會有兩個程序。確定沒有才在 dispatch 回報的 terminal（不在了就新開一個）照[本機檢查](../WORKFLOW.md#本機檢查)的 resume 命令接回。
 
 ## 執行換手
 
