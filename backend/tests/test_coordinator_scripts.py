@@ -1973,7 +1973,10 @@ _LIB = 'script_dir="$1"; shift; . "$script_dir/coordinator_lib.sh"; '
 @pytest.mark.parametrize(
     ("checkout", "project"),
     [
-        ("C:/Users/me/Desktop/taiwan-stock-research", "C-Users-me-Desktop-taiwan-stock-research"),
+        (
+            "C:/Users/me/Desktop/taiwan-stock-research",
+            "C-Users-me-Desktop-taiwan-stock-research",
+        ),
         ("/Users/me/stock-lab", "Users-me-stock-lab"),
         ("/home/runner/work/stock-lab", "home-runner-work-stock-lab"),
     ],
@@ -2009,7 +2012,9 @@ def test_find_python_skips_a_python_older_than_3_12(h: Harness) -> None:
     old = h.root / "old-python"
     old.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     old.chmod(0o755)
-    result = h.run_bash(_LIB + "find_python", h.ops.as_posix(), STOCK_PYTHON=old.as_posix())
+    result = h.run_bash(
+        _LIB + "find_python", h.ops.as_posix(), STOCK_PYTHON=old.as_posix()
+    )
     assert result.returncode == 2
     assert "3.12" in result.stderr
 
