@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from app.domain import (
@@ -182,6 +183,10 @@ class NextSessionInputs:
     price_basis: str = "score_date_raw_basis"
     margin_financing: str | None = None  # as StrategyInputs
     margin_zero_base: str | None = None  # as StrategyInputs
+    # The instrument's exchange and the next session's date pick the tick
+    # ladder (levels.ladder_of, #925); without them it is TICK_LADDERS.
+    exchange: str | None = None
+    next_session_date: date | None = None
 
 
 @dataclass(frozen=True)

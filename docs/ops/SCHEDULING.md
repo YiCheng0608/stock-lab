@@ -83,7 +83,7 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
 - **存什麼**：只存日資料的部分，也就是每檔標的在套用持股之前的級別，以及候選名次、族群名次、接近度。持股（第 0 級）、自選與名稱在每次請求時即時讀取，所以改持股或自選不必重算。
 - **誰寫**：daily 的 action_tiers 步驟，或 `worker.cli action-tiers --date`。
 - **依據指紋**：寫入時一併存下，讀取時重算一次（副本上約 70 ms），內容是：
-  - 版本常數：`ACTION_TIER_STORE_VERSION`、`action_tier_v1`、`strategy_levels_v1`、candidate score 版本、registry 與分級門檻。
+  - 版本常數：`ACTION_TIER_STORE_VERSION`、`action_tier_v1`、`STRATEGY_LEVELS_VERSION`、candidate score 版本、registry 與分級門檻。
   - 當日訊號：筆數、最大 id，以及各狀態的 id 總和。
   - 當日 strategy_levels：筆數、最大 id、最大 `computed_at`。
   - 當日 candidate run 與它的候選列。

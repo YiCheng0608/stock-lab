@@ -185,7 +185,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
     body = board(client, "1101")
     payload = body["strategy_board"]
     assert payload["as_of"] == T.isoformat()
-    assert payload["levels_version"] == "strategy_levels_v1"
+    assert payload["levels_version"] == "strategy_levels_v2"
     assert payload["candidate"]["rank"] == 1
     assert payload["candidate"]["strategy"] == "breakout_v3"
     assert payload["candidate"]["total_score"] == body["candidate"]["total_score"]

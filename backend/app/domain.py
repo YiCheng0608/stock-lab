@@ -818,9 +818,10 @@ def validate_signal_status_transition(
 # Observation price levels (docs/spec/strategy_levels.md, worker.strategy_levels):
 # from the data known after T's close, the close and volume the next session
 # needs for each strategy to pass.  A change to the formulas or to the tick
-# ladder (app.strategies.levels.TICK_LADDERS) needs a new version; the rows of
-# an older version stay as they are.
-STRATEGY_LEVELS_VERSION = "strategy_levels_v1"
+# ladder (app.strategies.levels.TICK_LADDERS, TWSE_STOCK_LADDER_2027) needs a
+# new version; the rows of an older version stay as they are.  v2 (#925): the
+# ladder follows the next session's date and exchange (TWSE 2027-07-05).
+STRATEGY_LEVELS_VERSION = "strategy_levels_v2"
 STRATEGY_LEVEL_AVAILABILITY = (
     "levels",
     "trend_unreachable",

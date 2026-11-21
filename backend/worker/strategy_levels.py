@@ -193,6 +193,8 @@ def _next_session_inputs(
         price_basis=levels.PRICE_BASIS_NEXT_SESSION
         if converted
         else levels.PRICE_BASIS_SIGNAL_DAY,
+        exchange=instrument.exchange,
+        next_session_date=next_date,
     )
 
 
