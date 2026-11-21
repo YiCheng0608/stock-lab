@@ -1,0 +1,223 @@
+{
+  "tool": "round5_research",
+  "version": 1,
+  "design": "889",
+  "definitions_sha256": "a3409f1b9dd24a8e32c04148f5d1e36a5e8282e96df975bd0b36a21101993d75",
+  "label": "`cash_yield_12m`（近 12 個月現金股利合計 ÷ T 日未還原收盤）大者先",
+  "direction": "股利",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "keys": [
+      [
+        "cash_yield_12m",
+        "high"
+      ]
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "date",
+      "2008-12-01"
+    ]
+  },
+  "hypothesis": "V3",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-12-01",
+    "first_session": "2008-12-02",
+    "last_session": "2019-12-31",
+    "days": 2738,
+    "signal_days": 2738
+  },
+  "prerequisites": {
+    "days": 2738,
+    "min_days": 500,
+    "delisted": 129,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 23,
+      "members": 8971,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "cash_yield_12m": 102
+      },
+      "unknown_rows": 102,
+      "no_close": 0
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "cash_yield_12m": 3
+      },
+      "unknown_rows": 3,
+      "no_close": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "cash_yield_12m": 0
+      },
+      "unknown_rows": 0,
+      "no_close": 0
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2738,
+      "mean": 2.9141365434920494e-05,
+      "annual": 0.007343624089599965,
+      "t": 0.38063438505456504
+    },
+    "taiex": {
+      "days": 2738,
+      "mean": 2.618910122646542e-05,
+      "annual": 0.006599653509069286,
+      "t": 0.2085528043458087
+    }
+  },
+  "absolute": {
+    "days": 2738,
+    "mean": 0.0004335903783061771
+  },
+  "curves": {
+    "V3": {
+      "days": 2738,
+      "total": 1.7728902889606561,
+      "annual": 0.0984154463963236,
+      "volatility": 0.17494785845679717,
+      "max_drawdown": -0.421576373172853,
+      "invested": 0.9722594254153301,
+      "turnover": 4.131325931918931
+    },
+    "population": {
+      "days": 2738,
+      "total": 1.54177274001189,
+      "annual": 0.08965236730574966,
+      "volatility": 0.1785789298802945,
+      "max_drawdown": -0.39467825733132067,
+      "invested": 0.9721235949955498,
+      "turnover": 3.960431589481126
+    },
+    "taiex": {
+      "days": 2738,
+      "total": 1.655156769054749,
+      "annual": 0.09403799289305681,
+      "volatility": 0.1597017614431413,
+      "max_drawdown": -0.27467729501878047,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 54739,
+    "won": 28909,
+    "rate": 0.5281243720199492,
+    "unsold": 1215
+  },
+  "counts": {
+    "V3": {
+      "bought": 54739,
+      "sale_held": 88,
+      "not_tradable": 13,
+      "limit_down": 6,
+      "limit_up": 8,
+      "unsold": 1215
+    },
+    "population": {
+      "bought": 1299712,
+      "not_tradable": 345,
+      "sale_held": 5150,
+      "limit_down": 253,
+      "limit_up": 245,
+      "unsold": 28791
+    }
+  },
+  "min_t": 2.0
+}

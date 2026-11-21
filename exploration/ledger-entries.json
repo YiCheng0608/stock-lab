@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "hypothesis": "V3",
+      "tool": "round5_research",
+      "round": 5,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-20T23:59:56+00:00",
+      "report_sha256": "68fd7c02d74e731250e90fc986c7dc54d381231bf8d0697502e4aa566bbfa9b7",
+      "tool_commit": "9ed0cf5ef119885350d53f05a20148add7006473",
+      "definitions_sha256": "a3409f1b9dd24a8e32c04148f5d1e36a5e8282e96df975bd0b36a21101993d75",
+      "verdict": "沒有通過（探索段）"
+    }
+  ]
+}
