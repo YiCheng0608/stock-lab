@@ -126,6 +126,7 @@ def test_the_definitions_hash_holds_the_threshold_and_the_rules(monkeypatch):
         (tool, "X_NOTE", "O"),
         (tool, "MIN_DAYS", 50),
         (tool, "LIMIT_EPS", 0.0),
+        (tool, "MARKET_WIDE_SHARE", 0.9),
     ):
         with monkeypatch.context() as m:
             m.setattr(module, name, value)
@@ -197,9 +198,11 @@ def test_the_docs_tool_section_says_what_the_code_judges():
 
     text = (ROOT / "docs" / "spec" / "evidence.md").read_text(encoding="utf-8")
     section = text.split("**第九輪的假設**", 1)[1].split("#### 實作釋義", 1)[0]
-    for name in NAMES:
+    for name in (*NAMES, "B2_market_wide"):
         assert tool.DEGENERATE[name] in section, name
         assert any(tool.DEGENERATE[name] in line for line in tool.COVERAGE_NOTES)
+    rule = text.split("#### 第九輪實作釋義", 1)[1].split("## 隔夜美股條件研究", 1)[0]
+    assert "7056755897" in rule and "80%" in rule and "2008-09-30" in rule
     assert f"`VALIDATION_MIN_T`＝{tool.threshold(tool.VALIDATION_MIN_T)}" in section
     assert "tools/research/round9_research.py" in section
 
@@ -348,6 +351,34 @@ def test_x_start_is_missing_without_either_list():
     assert tool.x_start(only_before, "TWSE", "1101", D1, D0) is None
     assert tool.x_start(lists(d0={}, d1={"1101": "X"}), "TPEx", "1101", D1, D0) is None
     assert tool.x_start(lists(d1={"1101": "X"}), "TWSE", "1101", D1, None) is None
+
+
+def wide(new: int, size: int, other: int = 1) -> tool.MarginLists:
+    """TWSE adds X to ``new`` of its ``size`` on D1; TPEx to ``other`` of 100."""
+
+    out = tool.MarginLists()
+    for exchange, count, total in (("TWSE", new, size), ("TPEx", other, 100)):
+        for day in (D0, D1):
+            out.present.add((exchange, day))
+            out.members[(exchange, day)] = total
+        out.x[(exchange, D0)] = frozenset()
+        out.x[(exchange, D1)] = frozenset(f"{exchange}{k}" for k in range(count))
+    return out
+
+
+def test_a_market_wide_day_is_80_percent_of_the_list():
+    """#926 decision 7056755897: ≥ 80% of the day's list adding X."""
+
+    assert tool.MARKET_WIDE_SHARE == 0.8
+    assert tool.market_wide(wide(80, 100), "TWSE", D1, D0) is True
+    assert tool.market_wide(wide(79, 100), "TWSE", D1, D0) is False
+    assert tool.market_wide(wide(4, 5), "TWSE", D1, D0) is True  # exactly 80%
+    lists_ = wide(80, 100)
+    assert tool.market_wide(lists_, "TPEx", D1, D0) is False  # the other exchange
+    # X already on the session before is not new
+    lists_.x[("TWSE", D0)] = lists_.x[("TWSE", D1)]
+    assert tool.market_wide(lists_, "TWSE", D1, D0) is False
+    assert tool.market_wide(wide(80, 100), "TWSE", D1, None) is False
 
 
 def test_the_entry_is_t_plus_1s_open_or_abandoned():
@@ -522,6 +553,12 @@ X_DAYS = {
     6: set(range(160, 166)),  # TPEx: no list on 160
     8: set(range(161, 166)),  # its session before is 160
 }
+# A market-wide day (#926 decision 7056755897): 12 of the 14 TWSE members add X
+# on 185 (≥ 80%), so TWSE makes no signal; TPEx's S8 that day still signals.
+MARKET_WIDE = 185
+for _i in range(1, 24, 2):
+    X_DAYS.setdefault(_i, set()).add(MARKET_WIDE)
+X_DAYS[8] = X_DAYS[8] | {MARKET_WIDE}
 O_DAYS = {21: set(range(170, 176))}  # "O" only: no signal
 TPEX_MISSING = 160
 SUSPENDED = (5, 121)
@@ -818,6 +855,7 @@ def test_b2_trades_by_hand(loaded, monkeypatch):
         (d[140], "S11"),
         (d[150], "S15"),  # exactly 0.3; S13 below, S17 missing
         (d[175], "S23"),
+        (d[185], "S8"),  # TPEx; TWSE's 12 that day are a market-wide measure
         (d[197], "S19"),
     ]  # S3 on 103 is occupied; S6, S8 have no list; S21 is "O" only
     prices = {i: path(i) for i in (3, 11)}
@@ -858,9 +896,17 @@ def test_b2_trades_by_hand(loaded, monkeypatch):
     assert result["abandon_reasons"] == {"limit_up": 1, "not_tradable": 1}
     assert result["entry_limit_blocked"] == 1
     assert result["listed"]["missing_list_days"] == {"TWSE": 0, "TPEx": 2}
-    assert result["listed"]["years"] == {"2016": {"TWSE:signals": 9}}
+    assert result["listed"]["years"] == {"2016": {"TWSE:signals": 9, "TPEx:signals": 1}}
+    assert result["listed"]["market_wide"] == [
+        {
+            "date": d[185].isoformat(),
+            "exchange": "TWSE",
+            "new_x": 12,
+            "list_members": 14,
+        }
+    ]
     assert result["exits"]["stop"] == result["exits"]["target"] == 0
-    assert result["trades"] == 7 and result["signals"] == 9
+    assert result["trades"] == 8 and result["signals"] == 10
 
 
 def test_b2_excess_is_over_the_population_of_t(loaded, monkeypatch):
@@ -989,7 +1035,7 @@ def test_the_exploration_reports_the_round_and_records_the_ledger(explored):
     assert report["read_until"] == trading_days()[199].isoformat()
     assert report["hypotheses"]["B2"]["engine"] == "trade"
     assert report["hypotheses"]["B2"]["reason"] == "too_few_trade_days"
-    assert report["hypotheses"]["B2"]["trades"] == 7
+    assert report["hypotheses"]["B2"]["trades"] == 8
     text = (out / "explore.md").read_text(encoding="utf-8")
     assert "本輪 3 個、累計 37 個" in text and "驗證段 t ≥ 3.205" in text
     entries = ex.read_ledger(db.parent / ex.LEDGER_NAME)
@@ -1192,16 +1238,19 @@ def test_coverage_only_computes_no_return(copied, tmp_path):
     year = b2["years"]["2016"]
     assert year["days"] == days
     twse, tpex = year["markets"]["TWSE"], year["markets"]["TPEx"]
-    # the whole list: 3 three times, 5, 9, 11, 13, 15, 17, 19, 25, 23
-    assert (twse["new_x"], twse["max_new_x"]) == (12, 3)
-    # the population, no occupancy: 3 on 103 counts; 17's ratio missing, 13's low
-    assert (twse["x_start"], twse["ratio_missing"], twse["signals"]) == (12, 1, 10)
-    assert tpex.get("missing_list_days") == 2 and tpex.get("new_x", 0) == 0
-    assert b2["top_days"]["TWSE"][0] == {
-        "date": trading_days()[150].isoformat(),
-        "new_x": 3,
-        "list_members": 14,
-    }
+    # the whole list: 3 three times, 5, 9, 11, 13, 15, 17, 19, 25, 23; 12 on 185
+    assert (twse["new_x"], twse["max_new_x"], twse["market_wide_days"]) == (24, 12, 1)
+    # the population, no occupancy: 3 on 103 counts; 17's ratio missing, 13's low;
+    # 185: 12 x_start; 3, 5, 9, 11, 17, 19 (400) and 23 (500) of 1185 qualify,
+    # excluded (13, 15 are below 0.3 there; 1, 7, 21 at 10 × id)
+    assert (twse["x_start"], twse["ratio_missing"], twse["signals"]) == (24, 1, 10)
+    assert twse["market_wide_signals"] == 7
+    assert tpex.get("missing_list_days") == 2 and tpex["new_x"] == 1
+    assert (tpex["signals"], tpex.get("market_wide_days", 0)) == (1, 0)
+    assert b2["top_days"]["TWSE"][:2] == [
+        {"date": trading_days()[185].isoformat(), "new_x": 12, "list_members": 14},
+        {"date": trading_days()[150].isoformat(), "new_x": 3, "list_members": 14},
+    ]
     assert {"", "X", "O", "OX"} <= set(b2["notes"])
     seconds = hyp["B2"]["seconds"]
     assert set(seconds) == {"plan", "x_start"} and seconds["plan"] >= 0

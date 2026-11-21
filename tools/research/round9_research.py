@@ -66,6 +66,7 @@ from bisect import bisect_left
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable
 
@@ -107,6 +108,9 @@ PORTFOLIO, TRADE = "portfolio", "trade"
 HIGH = r5.HIGH
 MIN_RATIO = 0.3  # B2: short_margin_ratio ≥ 0.3
 X_NOTE = "X"  # 停止融券: a note of margin_lists.members_json containing it
+# #926 decision 7056755897: an exchange whose list adds X to at least 80% of
+# its members on T (a market-wide measure, 2008-09-30) makes no B2 signal.
+MARKET_WIDE_SHARE = 0.8
 # B2's exit has no stop and no target: a stop no bar's low reaches (settle
 # compares ``low <= stop``) and ``target=None`` leave the holding limit, the
 # delays, a delisting and the segment's end.
@@ -185,6 +189,8 @@ DEGENERATE = {
     "或 margin_balance ≤ 0 時缺值，排最後；融券 0、融資 > 0 時是 0",
     "B2": "T 或前一個交易日，這一檔交易所在 `margin_lists` 沒有那天的列時，"
     "那天這個交易所不產生訊號，天數另列；券資比缺值不符合",
+    "B2_market_wide": "某交易所某天整份名單新增 `X` 的檔數 ≥ 該天名單檔數的 80% 時，"
+    "那天那個交易所不產生訊號，日子另列",
     "B3": "T 或前一根停牌、收盤缺值或 ≤ 0，或算不出漲停價時不符合；"
     "收盤 ≥ 漲停價 − 1e-9 就成立",
 }
@@ -221,6 +227,8 @@ def definitions() -> dict[str, Any]:
                 "no signal of that exchange that day, the days listed",
                 "min_ratio": MIN_RATIO,
                 "ratio_missing": "does not qualify",
+                "market_wide": "new X on the whole list (on T with X, not with X the session before) >= MARKET_WIDE_SHARE of T's list: no signal of that exchange that day",
+                "market_wide_share": MARKET_WIDE_SHARE,
             },
             "limit_up_close": {
                 "value": "raw close of at >= portfolio_research.Market.limits(at)[1] "
@@ -423,6 +431,28 @@ def x_start(
     return (
         symbol in lists.x[(exchange, day)] and symbol not in lists.x[(exchange, before)]
     )
+
+
+def new_x(lists: MarginLists, exchange: str, day: date, before: date | None) -> int:
+    """The symbols of the whole list with ``x_start`` on ``day`` (both lists
+    present; 0 otherwise)."""
+
+    if not lists.has(exchange, day) or not lists.has(exchange, before):
+        return 0
+    return len(lists.x[(exchange, day)] - lists.x[(exchange, before)])
+
+
+def market_wide(
+    lists: MarginLists, exchange: str, day: date, before: date | None
+) -> bool:
+    """New ``X`` on at least ``MARKET_WIDE_SHARE`` of ``day``'s list (#926
+    decision 7056755897): a market-wide measure, not the registered event."""
+
+    size = lists.members.get((exchange, day), 0)
+    if not size:
+        return False
+    share = Fraction(str(MARKET_WIDE_SHARE))
+    return new_x(lists, exchange, day, before) >= share * size
 
 
 def limit_up_price(
@@ -724,13 +754,20 @@ class EventState:
     state: tr.State
     missing_days: Counter = field(default_factory=Counter)  # by exchange
     years: dict[str, Counter] = field(default_factory=dict)
+    # (day, exchange, new X, list size) of the market-wide days excluded
+    market_wide: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _signals(
-    ctx: Context, s: int, members: list[tuple[lib.Series, int]], missing: Counter
+    ctx: Context,
+    s: int,
+    members: list[tuple[lib.Series, int]],
+    missing: Counter,
+    excluded: list[dict[str, Any]] | None = None,
 ) -> list[tuple[lib.Series, int, float]]:
     """B2's signals of signal date ``s`` among ``members`` (item, at, ratio);
-    ``missing`` counts the exchanges without the two lists."""
+    ``missing`` counts the exchanges without the two lists, ``excluded``
+    gets the market-wide days."""
 
     panel, lists = ctx.panel, ctx.lists
     day = panel.sessions[s]
@@ -739,6 +776,17 @@ def _signals(
     for exchange in MARKETS:
         open_[exchange] = lists.has(exchange, day) and lists.has(exchange, before)
         missing[exchange] += not open_[exchange]
+        if open_[exchange] and market_wide(lists, exchange, day, before):
+            open_[exchange] = False
+            if excluded is not None:
+                excluded.append(
+                    {
+                        "date": day.isoformat(),
+                        "exchange": exchange,
+                        "new_x": new_x(lists, exchange, day, before),
+                        "list_members": lists.members[(exchange, day)],
+                    }
+                )
     out = []
     started = time.perf_counter()
     for item, at in members:
@@ -765,7 +813,7 @@ def event_day(ctx: Context, run: EventState, s: int, s_last: int) -> None:
     ]
     day = ctx.panel.sessions[s]
     made = 0
-    for item, at, ratio in _signals(ctx, s, members, run.missing_days):
+    for item, at, ratio in _signals(ctx, s, members, run.missing_days, run.market_wide):
         bars = tr.TradeBars(trade, item, s, s_last)
         entry = enter_next_open(bars)
         row = tr._trade_row(
@@ -825,6 +873,7 @@ def run_trades(
             exchange: run.missing_days[exchange] for exchange in MARKETS
         },
         "years": {year: dict(counts) for year, counts in sorted(run.years.items())},
+        "market_wide": run.market_wide,
     }
     result["seconds"] = {
         "run": time.monotonic() - started,
@@ -892,8 +941,9 @@ def event_coverage(ctx: Context, name: str = "B2") -> dict[str, Any]:
             if not (lists.has(exchange, day) and lists.has(exchange, before)):
                 market["missing_list_days"] += 1
                 continue
-            new = len(lists.x[(exchange, day)] - lists.x[(exchange, before)])
+            new = new_x(lists, exchange, day, before)
             market["new_x"] += new
+            market["market_wide_days"] += market_wide(lists, exchange, day, before)
             market["max_new_x"] = max(market["max_new_x"], new)
             days_x[exchange].append(
                 (new, day.isoformat(), lists.members[(exchange, day)])
@@ -913,7 +963,8 @@ def event_coverage(ctx: Context, name: str = "B2") -> dict[str, Any]:
             if ratio is None:
                 market["ratio_missing"] += 1
             elif ratio >= MIN_RATIO:
-                market["signals"] += 1
+                wide = market_wide(lists, exchange, day, before)
+                market["market_wide_signals" if wide else "signals"] += 1
         ctx.seconds["x_start"] += time.perf_counter() - t0
     top_days = {
         exchange: [
@@ -1050,6 +1101,8 @@ def event_coverage_lines(coverage: dict[str, Any]) -> list[str]:
             f"{label}母體中 x_start",
             f"{label}其中券資比缺值",
             f"{label}訊號數（券資比 ≥ 0.3）",
+            f"{label}全市場措施日",
+            f"{label}措施日排除的訊號",
         ]
     lines = [
         "| " + " | ".join(head) + " |",
@@ -1069,6 +1122,8 @@ def event_coverage_lines(coverage: dict[str, Any]) -> list[str]:
                     "x_start",
                     "ratio_missing",
                     "signals",
+                    "market_wide_days",
+                    "market_wide_signals",
                 )
             ]
         lines.append(f"| {year} | " + " | ".join(cells) + " |")
@@ -1113,7 +1168,8 @@ def _head_lines(
         + ("成交日" if spec["engine"] == TRADE else "有淨值的交易日")
         + f" {window.get('first_session', '—')}～{window.get('last_session', '—')}，共 "
         f"{window.get('days', 0)} 個交易日",
-        f"- 退化：{DEGENERATE[name]}",
+        f"- 退化：{DEGENERATE[name]}"
+        + (f"；{DEGENERATE['B2_market_wide']}" if name == "B2" else ""),
         f"- 限制：{LIMITS[name]}",
     ]
     prerequisites = result.get("prerequisites")
@@ -1245,6 +1301,18 @@ def event_markdown(result: dict[str, Any], header: dict[str, Any]) -> str:
             f"| {label}名單缺列的天數（T 或前一個交易日） | "
             f"{listed.get('missing_list_days', {}).get(exchange, 0):,} |"
             for exchange, label in MARKETS.items()
+        ),
+        "",
+        "### 全市場措施日（排除，#926 決定 7056755897）",
+        "",
+        f"{DEGENERATE['B2_market_wide']}。",
+        "",
+        "| 日期 | 交易所 | 名單新增 X | 名單檔數 |",
+        "| --- | --- | ---: | ---: |",
+        *(
+            f"| {row['date']} | {MARKETS[row['exchange']]} | {row['new_x']:,} "
+            f"| {row['list_members']:,} |"
+            for row in listed.get("market_wide", [])
         ),
         "",
         "### 每年的訊號數",
@@ -1472,7 +1540,8 @@ def seconds_lines(body: dict[str, Any]) -> list[str]:
 COVERAGE_NOTES = (
     "- 缺值比例的分母是母體檔次（每個訊號日的母體加總）",
     f"- B1：`short_margin_ratio` 在 {DEGENERATE['B1']}；另列「是 0」的比例",
-    f"- B2：{DEGENERATE['B2']}。每個訊號日都數，不扣占用（沒有模擬成交）。"
+    f"- B2：{DEGENERATE['B2']}；{DEGENERATE['B2_market_wide']}"
+    "（訊號數不含這些日子，另列「措施日排除的訊號」）。每個訊號日都數，不扣占用（沒有模擬成交）。"
     "「名單新增 X」數的是整份名單（不限母體）上 T 有 `X`、前一個交易日沒有 `X` 的檔數；"
     "`x_start`、券資比缺值與訊號數只數母體",
     f"- B3：`limit_up_close` 在 {DEGENERATE['B3']}；漲停價是 "
