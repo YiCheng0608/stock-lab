@@ -420,7 +420,8 @@ class Market:
         """(limit down, limit up) of bar ``at`` on its raw basis; None if unknown.
 
         ``exit_research.price_limits`` around the previous bar's close put on
-        bar ``at``'s raw basis (the adjusted close over the factor of ``at``).
+        bar ``at``'s raw basis (the adjusted close over the factor of ``at``),
+        with the limit of bar ``at``'s trading date (±7% before 2015-06-01).
         """
 
         item = self.panel.series[instrument_id]
@@ -435,7 +436,10 @@ class Market:
         else:
             return None
         return lib._load("exit_research").price_limits(
-            reference, self.kinds.get(instrument_id, "stock"), self.levels
+            reference,
+            self.kinds.get(instrument_id, "stock"),
+            self.levels,
+            on=item.dates[at],
         )
 
     def quote(self, instrument_id: int, s: int) -> Quote | None:
