@@ -38,10 +38,10 @@ job 失敗或被取消時，先看哪一步花了時間，再讀那一步的 log
 CI 失敗想在本機重現，或改了 verify 工具想先跑一次時用。需要後端依賴（下面借 release venv 的套件，不改它；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）與 `frontend/node_modules`（`pnpm --dir frontend install --frozen-lockfile`），用不到正式 DB，任何時段都可以跑。
 
 ```bash
-# 換值（docs/ops/LOCAL.md）：<容器外的 Python>＝「工具」表的「容器外的 Python」；<發佈 checkout 的 venv>＝「正式位置」表的「發佈 checkout 的 venv」
+# 換值（docs/ops/LOCAL.md）：<容器外的 Python>＝「工具」表的「容器外的 Python」；<發佈 checkout 的 venv>＝「正式位置」表「發佈 checkout 的 venv」的套件目錄；<分隔字元>＝Windows `;`、macOS `:`
 WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify/ci"; mkdir -p "$V/logs"
 PY='<容器外的 Python>'
-export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYTHONUTF8=1
+export PYTHONPATH="$WT/backend<分隔字元><發佈 checkout 的 venv 套件目錄>" PYTHONUTF8=1
 "$PY" -B "$WT/tools/verify/verify_plan.py" --base "$(git rev-parse origin/master)"   # 看 CI 會驗哪幾頁
 "$PY" -B "$WT/tools/verify/fixture_db.py" --dest "$V/db" > "$V/logs/fixture.json"   # $V/db 須不存在或為空
 ```
@@ -75,17 +75,17 @@ export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYT
 2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）：
 
    ```bash
-   # 換值（docs/ops/LOCAL.md）：<容器外的 Python>＝「工具」表的「容器外的 Python」；<發佈 checkout 的 venv>＝「正式位置」表的「發佈 checkout 的 venv」
+   # 換值（docs/ops/LOCAL.md）：<容器外的 Python>＝「工具」表的「容器外的 Python」；<發佈 checkout 的 venv>＝「正式位置」表「發佈 checkout 的 venv」的套件目錄；<分隔字元>＝Windows `;`、macOS `:`
    WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify"
    PY='<容器外的 Python>'
-   export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYTHONUTF8=1
+   export PYTHONPATH="$WT/backend<分隔字元><發佈 checkout 的 venv 套件目錄>" PYTHONUTF8=1
    OUT=$(cat "$V/current")   # 第 3 步寫入
-   # 容器：project 名稱與 compose 命令（Git Bash 不改寫 -v 的容器路徑）
+   # 容器：project 名稱與 compose 命令（MSYS_NO_PATHCONV：Git Bash 不改寫 -v 的容器路徑；macOS 沒有作用）
    n="$(git rev-parse --abbrev-ref HEAD)"; n="${n#task/}"; P="task-${n%%-*}-verify"
    dc() { MSYS_NO_PATHCONV=1 docker compose -p "$P" "$@"; }
    ```
 
-   `$PY` 是 release venv 的基底直譯器（同為 3.12.14），借 venv 的套件跑 API；不直接執行 venv 的 `python.exe`，因為它是啟動器，真正監聽的是它的子程序，收尾時關不乾淨。`PYTHONUTF8=1`：Windows 的 stdout 預設是 cp950，`page_checks.py` 印到含 `\xa0` 等字元的新聞標題會在寫完 summary 前中斷。
+   `$PY` 是 release venv 的基底直譯器（同為 3.12.14），借 venv 的套件跑 API；Windows 不直接執行 venv 的 `python.exe`，因為它是啟動器，真正監聽的是它的子程序，收尾時關不乾淨。`PYTHONUTF8=1`：Windows 的 stdout 預設是 cp950，`page_checks.py` 印到含 `\xa0` 等字元的新聞標題會在寫完 summary 前中斷。
 3. **輸出目錄**：`$OUT` 只算一次，之後一律從 `$V/current` 讀（跨分鐘重算會變成另一個目錄）。
 
    ```bash

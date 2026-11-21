@@ -281,15 +281,18 @@ extra=", \"db_revision\": $(json_str "$db_rev"), \"head\": $(json_str "$head")"
 case "$state" in
   same) extra="" ;;
   behind)
+    # The checkout's path for docker -v: Git Bash's pwd -W spells it C:/…; elsewhere pwd.
+    pwd_cmd=pwd
+    is_windows && pwd_cmd="pwd -W"
     cat >&2 <<EOF
 DB 落後 tag $tag：先備份、再用 $tag 的程式跑 init-db，然後以同一個 tag 重跑 deploy.sh。
-在 master 管理 checkout 的 Git Bash 依序執行（B 是備份目錄；完整步驟、時段與驗證見 docs/RELEASE.md「含 migration 的版本」）：
+在 master 管理 checkout 的 bash（Windows 是 Git Bash）依序執行（B 是備份目錄；完整步驟、時段與驗證見 docs/RELEASE.md「含 migration 的版本」）：
   export MSYS_NO_PATHCONV=1
   unset WEB_PORT API_PORT STOCK_ENV_FILE
   docker compose -p $project exec scheduler python -m worker.cli maintenance on --reason "$tag"
   docker compose -p $project exec scheduler python -m worker.cli maintenance status
   # running_jobs 要是 []；scheduler 是 #468 以前的 image 時上兩行改為：docker compose -p $project stop scheduler
-  docker run --rm --network none -v $volume:/data:ro -v "\$B":/out -v "\$(pwd -W)/tools/ops/copy_db.py":/t/copy_db.py:ro $backend python /t/copy_db.py --src /data/stock.db --dest /out
+  docker run --rm --network none -v $volume:/data:ro -v "\$B":/out -v "\$($pwd_cmd)/tools/ops/copy_db.py":/t/copy_db.py:ro $backend python /t/copy_db.py --src /data/stock.db --dest /out
   git -C "$checkout_native" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag"
   git -C "$checkout_native" -c advice.detachedHead=false checkout --quiet "refs/tags/$tag"
   (cd "$checkout_native" && STOCK_RELEASE_TAG=$tag docker compose -p $project run --rm --no-deps api python -m worker.cli init-db)

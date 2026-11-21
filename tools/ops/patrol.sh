@@ -128,7 +128,7 @@ iso_re='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
 find_python
 
 now="${PATROL_NOW:-$(date -u +%s)}"
-iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
+iso() { epoch_fmt "$1"; }
 logs="$data_dir/logs"
 heartbeat="$logs/coordinator-heartbeat.json"
 [ -d "$logs" ] || die "資料目錄沒有 logs/：$logs" 2
@@ -142,7 +142,7 @@ if [ -e "$heartbeat" ]; then
   prev_session="$(cj get session_id <"$heartbeat" 2>/dev/null)" || prev_session=""
   prev_at="$(cj get written_at <"$heartbeat" 2>/dev/null)" || prev_at=""
   prev_epoch=""
-  [[ "$prev_at" =~ $iso_re ]] && prev_epoch="$(date -u -d "$prev_at" +%s 2>/dev/null)"
+  [[ "$prev_at" =~ $iso_re ]] && prev_epoch="$(iso_epoch "$prev_at")"
   case "$prev_session" in '' | *[!A-Za-z0-9_-]*) prev_epoch="" ;; esac
   if [ "$take_over" = 0 ]; then
     [ -n "$prev_epoch" ] || die "心跳檔讀不懂（session_id 或 written_at 缺少或格式不對），視同另一個 session 的心跳，未覆寫；確定接手才加 --take-over：$heartbeat" 3

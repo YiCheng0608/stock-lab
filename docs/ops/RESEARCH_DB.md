@@ -338,7 +338,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
   - 第 4 步讀回：TPEx +14,121、TWSE +17、移除 0，新增的鍵和刪掉的相同，0 價日線 0 根，`status: ok`；`integrity_check` ok（22 分鐘）；`maintenance off`。
   - 同一個副本再跑一次第 2 步：`before 0`，rolled_back，exit 1。
 - **另一份副本的逐日比對**（19:44 取的研究副本，用 `replay819.py repair` 刪除並重建，不是本節的腳本）：用新程式重放這段 1,146 天已存的 TPEx `dailyQuotes` raw，比對剩下的 615,959 根 TPEx 日線：列數、開高低收、成交股數、成交金額與 `turnover_status` 逐列相同。沒有標的因此變成沒有日線。
-- 腳本與輸出：`C:/Users/YiCheng/stock-lab-data/evidence/819/`（`SHA256SUMS`）。
+- 腳本與輸出：Windows 主機的 `~/stock-lab-data/evidence/819/`（`SHA256SUMS`）。
 
 ### 舊日期 collect 不改寫標的類型與狀態（#838）
 

@@ -72,7 +72,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離（歷
 | 1 | 拒絕，容器、volume 與發佈 checkout 都沒變（DB revision 拒絕時多了新 build 的 image）；依訊息處理後再跑 |
 | 3 | checkout 已開始後某一步失敗。寫記錄之前（checkout、build）：容器仍跑前一版，記錄也是前一版的；寫記錄之後（`up`、讀回）：看門狗會回報 scheduler 的 image 與記錄不符。修好原因後以同一個 tag 再跑 |
 | 4 | 已部署、記錄已寫，只有 #1 留言失敗：手動補留言 |
-| 2、64 | 環境或參數錯誤，沒有動作：找不到 docker、Docker Desktop 沒開；拿鎖的容器 120 秒內沒有回應；拿鎖的容器是 #340 之前的 image，它的 `worker.job` 不認得 `--keep-stdin`：先 `docker compose -p <project> stop` 停掉舊容器再部署（#342 切換時若已有舊的 scheduler 或 api 在跑也一樣） |
+| 2、64 | 環境或參數錯誤，沒有動作：找不到 docker、Docker Desktop（macOS 是 OrbStack）沒開；拿鎖的容器 120 秒內沒有回應；拿鎖的容器是 #340 之前的 image，它的 `worker.job` 不認得 `--keep-stdin`：先 `docker compose -p <project> stop` 停掉舊容器再部署（#342 切換時若已有舊的 scheduler 或 api 在跑也一樣） |
 
 ## 含 migration 的版本
 
@@ -81,17 +81,18 @@ tag 的 Alembic head（`backend/app/migration_revisions.py` 的最後一個）�
 - api 的 readiness 只接受 current head，DB 落後時新 api 拒絕啟動。`v1.2.0` 第一次部署就是這樣失敗的：`up` 換掉 scheduler 與 web 之後 api 才起不來。現在 `deploy.sh` 在 build 之後、換任何容器之前比對 DB revision 與 tag 的 head，落後就拒絕（[#456](https://github.com/YiCheng0608/stock-lab/issues/456)，上節表格的「DB revision」），所有容器仍跑前一版。
 - 正式環境跑著的舊 image 不認得新 revision，用它跑 `init-db` 只會停在舊 head。
 
-`deploy.sh` 只擋下、不升級：備份與 `init-db` 仍是人工步驟，在 master 管理 checkout 的 Git Bash 依序執行（`deploy.sh` 拒絕時在 stderr 印出第 1～4 步填好 tag、project 與發佈 checkout 的命令）。時段選排程閒置時：避開台北 21:30～23:30 的 daily（#466），也避開 news 每 2 小時的偶數整點，例如奇數點。
+`deploy.sh` 只擋下、不升級：備份與 `init-db` 仍是人工步驟，在 master 管理 checkout 的 bash（Windows 是 Git Bash）依序執行（`deploy.sh` 拒絕時在 stderr 印出第 1～4 步填好 tag、project 與發佈 checkout 的命令）。時段選排程閒置時：避開台北 21:30～23:30 的 daily（#466），也避開 news 每 2 小時的偶數整點，例如奇數點。
 
 ```bash
 # 換值：TAG＝要部署的 tag；P＝正式 compose project；R＝發佈 checkout；B＝備份目錄（docs/ops/LOCAL.md）
 TAG=v1.3.0 P=stock-lab
-R="$(cd ~/stock-lab-release && pwd -W)"
-B="C:/Users/YiCheng/stock-lab-backups/pre-$TAG-$(date +%Y%m%d)"
-TOOLS="$(pwd -W)/tools/ops"; mkdir -p "$B"
+PWD_CMD=pwd; case "$(uname -s)" in MINGW*|MSYS*) PWD_CMD="pwd -W" ;; esac   # Git Bash 要 C:/… 寫法給 docker -v
+R="$(cd ~/stock-lab-release && $PWD_CMD)"
+B="$(cd ~ && $PWD_CMD)/stock-lab-backups/pre-$TAG-$(date +%Y%m%d)"
+TOOLS="$($PWD_CMD)/tools/ops"; mkdir -p "$B"
 OLD="$(docker inspect -f '{{.Config.Image}}' "$P-api-1")"   # 目前跑的 image，例如 stock-lab-backend:v1.2.0
 unset WEB_PORT API_PORT STOCK_ENV_FILE   # 同 deploy.sh：不沿用 smoke 留下的設定
-export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會改寫 -v 的容器路徑
+export MSYS_NO_PATHCONV=1   # Windows：否則 Git Bash 會改寫 -v 的容器路徑；macOS 沒有作用
 
 # 1. 維護模式：daily 與 news 停下，看門狗與 monitor 照常；api 照常服務舊版頁面。
 #    status 的 running_jobs 要是 []，不是就等那個 job 跑完再查。scheduler 是 #468 以前的
