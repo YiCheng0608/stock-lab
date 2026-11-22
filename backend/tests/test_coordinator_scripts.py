@@ -4022,8 +4022,8 @@ def test_patrol_ends_with_the_handoff_condition_and_exit_10(
     ("context", "limit", "due"),
     [
         (100_000, None, False),
-        (450_000, None, False),
-        (450_001, None, True),
+        (320_000, None, False),
+        (320_001, None, True),
         (793_547, None, True),
         (300_000, "250000", True),
         (500_000, "600000", False),
@@ -4032,7 +4032,7 @@ def test_patrol_ends_with_the_handoff_condition_and_exit_10(
 def test_patrol_hands_off_above_the_context_limit(
     patrol: Harness, context: int, limit: str | None, due: bool
 ) -> None:
-    """AC-1: the context of the session's last call above the limit (450K, or
+    """AC-1: the context of the session's last call above the limit (320K, or
     STOCK_CONTEXT_LIMIT) is a handoff condition beside 2 compactions: the header says
     how far it is, the last line says so and the exit code is 10; at or below, as before."""
     path = _transcript(patrol, [62_094, context - 50_000, context])
@@ -4042,7 +4042,7 @@ def test_patrol_hands_off_above_the_context_limit(
     )
     out = result.stdout
     assert result.returncode == (10 if due else 0), out + result.stderr
-    shown = int(limit or 450_000)
+    shown = int(limit or 320_000)
     header = next(line for line in out.splitlines() if line.startswith("context："))
     assert header.startswith(
         f"context：{context}（門檻 {shown}，{round(100 * context / shown)}%）"
@@ -4059,13 +4059,43 @@ def test_patrol_hands_off_above_the_context_limit(
     assert "其餘依手冊" in out
 
 
+def test_patrol_context_limit_defaults_below_the_autocompact_point(
+    patrol: Harness,
+) -> None:
+    """#958 AC-1: the coordinator opens with --autocompact 400k and compacts at about
+    367K (400K less the 33K buffer), so the default limit is 320,000, below 400,000:
+    the handoff is due before the compaction. STOCK_CONTEXT_LIMIT still overrides it."""
+    _transcript(patrol, [320_001])
+    result = _patrol(patrol)
+    header = next(
+        line for line in result.stdout.splitlines() if line.startswith("context：")
+    )
+    match = re.match(r"context：320001（門檻 (\d+)，", header)
+    assert match, header
+    default = int(match.group(1))
+    assert default == 320_000, header
+    assert default < 400_000
+    assert result.returncode == 10, result.stdout + result.stderr
+    assert "context 320001 超過門檻 320000" in result.stdout.strip().splitlines()[-1]
+    overridden = patrol.run(
+        "patrol.sh",
+        "--session-id",
+        "sess-1",
+        "--terminal",
+        "term_coord",
+        STOCK_CONTEXT_LIMIT="400000",
+    )
+    assert overridden.returncode == 0, overridden.stdout + overridden.stderr
+    assert "context：320001（門檻 400000，80%）" in overridden.stdout
+
+
 def test_patrol_names_both_handoff_conditions(patrol: Harness) -> None:
     _transcript(patrol, [500_000])
     _compacted(patrol, 2)
     result = _patrol(patrol)
     assert result.returncode == 10, result.stdout + result.stderr
     last = result.stdout.strip().splitlines()[-1]
-    assert "已壓縮 2 次（門檻 2 次）、context 500000 超過門檻 450000" in last
+    assert "已壓縮 2 次（門檻 2 次）、context 500000 超過門檻 320000" in last
     assert "自動換手機制換手" in last
 
 
@@ -4086,7 +4116,7 @@ def test_patrol_reads_the_last_call_of_the_newest_transcript(patrol: Harness) ->
         + "\n"
         + '{"type":"assistant","message":{"usage":{"input_tokens":99'
     )
-    newest = _transcript(patrol, [62_094, 400_000], under=config, tail=tail)
+    newest = _transcript(patrol, [62_094, 300_000], under=config, tail=tail)
     old = _transcript(patrol, [700_000], under=config, project="C--old")
     os.utime(old, (1, 1))
     other = _transcript(patrol, [800_000], session="sess-10", under=config)
@@ -4103,13 +4133,13 @@ def test_patrol_reads_the_last_call_of_the_newest_transcript(patrol: Harness) ->
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        f"context：400000（門檻 450000，89%）（{newest.as_posix()}）" in result.stdout
+        f"context：300000（門檻 320000，94%）（{newest.as_posix()}）" in result.stdout
     )
     # --transcript names the file and wins.
     result = _patrol(patrol, "--transcript", home.as_posix())
     assert result.returncode == 10, result.stdout + result.stderr
     assert (
-        f"context：600000（門檻 450000，133%）：已達換手條件（{home.as_posix()}）"
+        f"context：600000（門檻 320000，188%）：已達換手條件（{home.as_posix()}）"
         in (result.stdout)
     )
 
@@ -4152,11 +4182,11 @@ def test_patrol_warns_when_the_transcript_cannot_be_read(
     assert "已達換手條件" in lines[-1]
     _transcript(patrol, [100_000])
     result = _patrol(patrol)
-    assert "context：100000（門檻 450000，22%）" in result.stdout
+    assert "context：100000（門檻 320000，31%）" in result.stdout
     assert not misses.exists()
 
 
-@pytest.mark.parametrize("limit", ["0", "45萬", "450k", "-1"])
+@pytest.mark.parametrize("limit", ["0", "32萬", "320k", "-1"])
 def test_patrol_refuses_a_bad_context_limit(patrol: Harness, limit: str) -> None:
     result = patrol.run(
         "patrol.sh",
