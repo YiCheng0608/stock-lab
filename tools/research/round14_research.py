@@ -238,7 +238,7 @@ DEGENERATE = {
     "同一天多列取最大，d 是那一列的 `action_date`）、窗口 [d − 1,095, d) 內有 `row_cash` > 0 的列、"
     "窗口內有三欄都是 null 的列，或第一根日線晚於 T − 1,095 個日曆日時，不符合；"
     "只看 T 日母體內的檔；事件超過 20 檔時以雜湊取前 20 名，沒有事件的日子那份子帳戶留現金",
-    "K2": "最新一季（`announcement_date` ≤ T、期末最晚的一季）不是事件日對應的那一季，"
+    "K2": "最新一季（`announcement_date` ≤ T、EPS 有值的列中期末最晚的一季）不是事件日對應的那一季，"
     "或兩季中任一季沒有單季值時，不符合；符合的不足 20 檔時餘額留現金",
     "K3": "300 根中任一根停牌、不足 300 根，或窗口內有市場整天沒有法人資料的日子時，不符合；"
     "5 塊中任一塊的合計（外資＋投信，沒有法人進出的根與 null 的欄算 0）≥ 0 時也不符合；"
@@ -1134,6 +1134,12 @@ def coverage_lines(name: str, coverage: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _hold_text(hold: Any) -> str:
+    """K＝n, or K2's hold in words (the value in HYPOTHESES stays as hashed)."""
+
+    return f"K＝{hold}" if isinstance(hold, int) else "持有到下一個事件日"
+
+
 def _head_lines(
     result: dict[str, Any], header: dict[str, Any], spec: dict[str, Any]
 ) -> list[str]:
@@ -1146,7 +1152,7 @@ def _head_lines(
         "",
         f"- 判定：**{verdict}**"
         + (f"（{REASONS[result['reason']]}）" if result["reason"] else ""),
-        f"- 假設：{spec['direction']}；{spec['label']}；N＝{spec['top']}、K＝{spec['hold']}",
+        f"- 假設：{spec['direction']}；{spec['label']}；N＝{spec['top']}、{_hold_text(spec['hold'])}",
         f"- 登記 commit `{REGISTRATION_COMMIT}`；{DECISION}；"
         f"定義雜湊 `{header['definitions_sha256'][:16]}…`",
         f"- 期間：訊號日 {window.get('first_signal', '—')} 起，有淨值的交易日"
@@ -1483,7 +1489,7 @@ def _overview_line(name: str, row: dict[str, Any], judged: bool) -> str:
 
 
 COVERAGE_NOTES = (
-    "- 缺值比例的分母是母體檔次（每個訊號日的母體加總）；每個訊號日都數；不跑模擬，不讀價格與報酬",
+    "- 缺值比例的分母是母體檔次（每個訊號日的母體加總）；每個訊號日都數；不跑模擬、不算報酬",
     f"- K1：{DEGENERATE['K1']}。「條件①成立的檔次」是母體中 T 日有 `cash_dividend` > 0 的列的檔次，"
     "後三欄是其中各條不符合的檔次（可重複）；「只因 null 不符合」是窗口內沒有配現金、上市已滿 3 年，"
     "只因窗口內有三欄都是 null 的列而不符合的檔次。平均投入比例（估計）是每個有淨值的交易日，"

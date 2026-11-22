@@ -316,14 +316,22 @@ def test_the_overlaps_tools_are_the_ledgers(name):
     assert found == {module.definitions_sha256()}
 
 
+# AC-1: portfolio_research.ranking_key's source on master 50528962
+RANKING_KEY_SHA256 = "65054614e007a2baa499baa6253d01e411b9b6f7b24d2acc0d50107d000291e0"
+
+
 def test_the_ranking_key_is_unchanged():
-    values = {"a": 2.0, "b": None}
-    assert pr.ranking_key(values, ("a", "b"), "t") == pr.ranking_key(
-        values, ("a", "b"), "t"
+    import ast
+
+    path = ROOT / "tools" / "research" / "portfolio_research.py"
+    text = path.read_text(encoding="utf-8")
+    node = next(
+        n
+        for n in ast.parse(text).body
+        if isinstance(n, ast.FunctionDef) and n.name == "ranking_key"
     )
-    assert pr.ranking_key({"a": None}, ("a",), "t") > pr.ranking_key(
-        {"a": 1.0}, ("a",), "t"
-    )
+    source = ast.get_source_segment(text, node)
+    assert hashlib.sha256(source.encode("utf-8")).hexdigest() == RANKING_KEY_SHA256
 
 
 def test_the_docs_tool_section_says_what_the_code_judges():
@@ -755,6 +763,67 @@ def test_k2_sells_at_the_next_event_days_close_and_buys_at_its_next_open():
     first, second = locked.positions
     assert (first.sold, first.how) == (4, "delayed")
     assert second.cost == pytest.approx((1.0 - first.cost + first.proceeds) / 20)
+
+
+def test_k2_sells_a_suspended_t_prime_at_the_next_open_and_spends_it_that_day():
+    """「X7 的金額與順延」: T′ suspended (not tradable, or no bar) sells at the
+    first open after it; on T′+1 its proceeds are in that day's buys."""
+
+    prices = {(i, s): (10.0, 10.0 + s) for i in (1, 2, 3) for s in range(1, 8)}
+    planned = SimpleNamespace(picks={1: [1], 4: [2]}, population={1: [1, 3], 4: [2, 3]},
+                              dues={1: 3, 4: 8})  # fmt: skip
+    for suspended in ("not_tradable", "no_bar"):
+        quote = quote_of(prices)
+
+        def on(instrument_id, s, quote=quote, suspended=suspended):
+            if (instrument_id, s) == (1, 3):
+                return None if suspended == "no_bar" else pr.Quote(10.0, 13.0, False)
+            return quote(instrument_id, s)
+
+        mine = tool.engines(SimpleNamespace(quote=on), "K2", planned, 1, 7)[0]
+        first, second = mine.positions
+        assert (first.sold, first.how) == (4, "delayed"), suspended
+        assert first.proceeds == pytest.approx(pr.sale_proceeds(first.units, 10.0))
+        assert second.bought == 4
+        assert second.cost == pytest.approx((1.0 - first.cost + first.proceeds) / 20)
+
+
+def test_k2_lists_each_rebalances_invested_share_at_the_buy_days_close(monkeypatch):
+    """K2 第 7 點: each rebalance's invested share is the positions' value ÷
+    the equity at the close of its buy day (T+1), worked out by hand."""
+
+    sessions = weekdays(date(2016, 3, 28), 9)
+    prices = {(i, s): (10.0, 10.0 + s) for i in (1, 2, 3) for s in range(1, 9)}
+    first, last = 1, 7
+    plan = tool.Plan(
+        picks={1: [1], 4: [2, 3]},
+        population={1: [1, 2, 3], 4: [1, 2, 3]},
+        dues={1: 3, 4: 8},
+        rebalances=[
+            {"signal_date": sessions[0].isoformat(), "x4_overlap": None},
+            {"signal_date": sessions[3].isoformat(), "x4_overlap": None},
+        ],
+    )
+    monkeypatch.setattr(tool, "segment_window", lambda s, seg, spec: (first, last))
+    monkeypatch.setattr(tool, "_prerequisites", lambda *a: True)
+    monkeypatch.setattr(tool, "plan_k2", lambda *a, **k: plan)
+    ctx = SimpleNamespace(
+        panel=SimpleNamespace(sessions=sessions, index_close={}, symbols={}),
+        seconds=__import__("collections").Counter(),
+        quote=quote_of(prices),
+    )
+    result = tool.run_portfolio(ctx, Path("unused"), "K2", "exploration")
+    # buy day 1: 1/20 of 1.0 into S1 at 10 (with costs), its close 11
+    units = pr.buy_units(0.05, 10.0)
+    value = units * 11.0
+    expected_1 = value / (0.95 + value)
+    # sold at session 3's close 13; buy day 4: S2 and S3, each 1/20 of the cash
+    cash = 0.95 + pr.sale_proceeds(units, 13.0)
+    share = cash / 20
+    value = 2 * pr.buy_units(share, 10.0) * 14.0
+    expected_4 = value / (cash - 2 * share + value)
+    got = [event["invested"] for event in result["rebalances"]]
+    assert got == pytest.approx([expected_1, expected_4])
 
 
 def test_k2_has_no_equity_before_its_first_event_day():
@@ -1342,6 +1411,8 @@ def test_the_exploration_reports_the_round_and_records_the_ledger(explored):
         assert tool.DEGENERATE[name] in summary and tool.OVERLAP_NOTE[name] in summary
     k2_md = (out / "K2" / "summary.md").read_text(encoding="utf-8")
     assert "## 每次調倉（K2 第 7 點" in k2_md
+    assert "N＝20、持有到下一個事件日" in k2_md and "next_event" not in k2_md
+    assert "N＝20、K＝240" in (out / "K1" / "summary.md").read_text(encoding="utf-8")
     picks = (out / "K2" / "picks.csv").read_text(encoding="utf-8").splitlines()
     assert picks[0] == "signal_date,rank,exchange,symbol,eps_now,eps_year_before,tie"
     assert {line.split(",")[0] for line in picks[1:]} == {
