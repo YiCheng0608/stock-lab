@@ -26,6 +26,13 @@
 其他工具（git、node、claude）照一般安裝；路徑見 [LOCAL「工具」](../LOCAL.md#工具)。
 
 **筆電要注意**：蓋上螢幕還是會睡（除非接著電源與外接螢幕）。正式環境的 MacBook 要開著螢幕蓋，或接外接螢幕使用。
+- **只有內建螢幕時，螢幕要保持開著**：使用者 2026-11-22 決定不改 `pmset`（[#1 7072447929](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7072447929)）。
+  - 闔上會進 Clamshell Sleep，排程全停；`sleep 0` 與 `caffeinate` 都擋不住。
+  - 2026-11-22 01:45～09:34 就因為闔上，news 漏了 4 輪。
+- **查現況**：`ioreg -r -k AppleClamshellState` 讀感應器。快闔上、還沒全闔，也可能判成闔上。
+- **排程有空窗時**：先查 `pmset -g log | grep -E 'Clamshell|LidOpen'`。是闔上造成的，就照 [SCHEDULING](../SCHEDULING.md) 補跑。
+
+**記憶體門檻看容器，不看主機**：主機 8 GB，OrbStack 的 VM 占 5.86 GiB，主機端的空閒最多約 4.7 GiB。文件寫「空閒記憶體 ≥ 5 GB」的地方（研究工具、[月報的每月流程](../../spec/evidence.md#前瞻驗證-h1)），在這台都改量容器內的可用記憶體：`docker run --rm --network none alpine grep MemAvailable /proc/meminfo`。2026-11-22 量到約 5.0 GiB（#953 決定 [7073872883](https://github.com/YiCheng0608/stock-lab/issues/953#issuecomment-7073872883)）。
 
 ## 跟 Windows 不一樣的地方
 
