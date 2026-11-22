@@ -363,9 +363,10 @@ class Context:
     v3: r5.Context | None = None
     seconds: Counter = field(default_factory=Counter)
     load_seconds: dict[str, float] = field(default_factory=dict)
-    # per instrument: prefix sums of the bars without trading and of the bars
-    # on a market gap
-    inst: dict[int, tuple[Any, Any]] = field(default_factory=dict)
+    # per instrument: prefix sums of the bars without trading, of the bars on
+    # a market gap and of the three columns (a null one 0; shares are whole
+    # numbers, so the sums and their differences are exact)
+    inst: dict[int, tuple[Any, Any, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.gaps is None:
@@ -454,19 +455,25 @@ def _market(ctx: Context, item: lib.Series) -> str:
     return ctx.panel.symbols.get(item.instrument_id, ("", "", ""))[0]
 
 
-def _inst_prefix(ctx: Context, item: lib.Series) -> tuple[Any, Any]:
+def _inst_prefix(ctx: Context, item: lib.Series) -> tuple[Any, Any, Any]:
     parts = ctx.inst.get(item.instrument_id)
     if parts is None:
         gap = ctx.gaps.get(_market(ctx, item))
-        quiet, gaps = array("i", [0]), array("i", [0])
+        quiet, gaps, flows = array("i", [0]), array("i", [0]), array("d", [0.0])
         n_quiet = n_gap = 0
+        total = 0.0
         for k in range(len(item.dates)):
             n_quiet += no_trading(item, k)
             s = item.session[k]
             n_gap += 1 if gap is None or s >= len(gap) else gap[s]
+            for name in INSTITUTIONS:
+                value = _value(item, name, k)
+                if value == value:  # a null column counts 0
+                    total += value
             quiet.append(n_quiet)
             gaps.append(n_gap)
-        parts = (quiet, gaps)
+            flows.append(total)
+        parts = (quiet, gaps, flows)
         ctx.inst[item.instrument_id] = parts
     return parts
 
@@ -486,7 +493,7 @@ def window_of(ctx: Context, item: lib.Series, at: int, size: int) -> Window:
         return Window(None, "short")
     if item.suspended[at + 1] != item.suspended[first]:
         return Window(None, "suspended")
-    _quiet, gaps = _inst_prefix(ctx, item)
+    _quiet, gaps, _flows = _inst_prefix(ctx, item)
     if gaps[at + 1] != gaps[first]:
         return Window(None, "market_gap")
     return Window(first)
@@ -501,7 +508,7 @@ def inst_quiet_60(ctx: Context, item: lib.Series, at: int) -> int | None:
 def quiet_count(ctx: Context, item: lib.Series, at: int, window: Window) -> int | None:
     if window.first is None:
         return None
-    quiet, _gaps = _inst_prefix(ctx, item)
+    quiet, _gaps, _flows = _inst_prefix(ctx, item)
     return quiet[at + 1] - quiet[window.first]
 
 
@@ -512,13 +519,8 @@ def flow_i(ctx: Context, item: lib.Series, at: int) -> float | None:
     window = window_of(ctx, item, at, FLOW_WINDOW)
     if window.first is None:
         return None
-    total = 0.0
-    for k in range(window.first, at + 1):
-        for name in INSTITUTIONS:
-            value = _value(item, name, k)
-            if value == value:
-                total += value
-    return total
+    _quiet, _gaps, flows = _inst_prefix(ctx, item)
+    return flows[at + 1] - flows[window.first]
 
 
 def vol_i(item: lib.Series, at: int) -> float | None:
