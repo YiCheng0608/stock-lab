@@ -1,0 +1,309 @@
+{
+  "year": 2017,
+  "load_seconds": 303.5545281040104,
+  "elapsed_seconds": 314.52501139600645,
+  "sessions": 246,
+  "saturday_sessions": [
+    "2017-02-18",
+    "2017-06-03",
+    "2017-09-30"
+  ],
+  "totals": {
+    "TWSE": {
+      "members": 85897,
+      "missing": 7220
+    },
+    "TPEx": {
+      "members": 30103,
+      "missing": 4999
+    }
+  },
+  "causes": {
+    "TWSE": {
+      "weekday_null": 2829,
+      "short": 10,
+      "no_row": 46,
+      "saturday": 4335
+    },
+    "TPEx": {
+      "weekday_null": 3503,
+      "no_row": 100,
+      "saturday": 1394,
+      "short": 2
+    }
+  },
+  "months": {
+    "TWSE": {
+      "01": {
+        "members": 4206,
+        "missing": 144,
+        "weekday_null": 143,
+        "short": 1
+      },
+      "02": {
+        "members": 6358,
+        "missing": 733,
+        "weekday_null": 291,
+        "short": 2,
+        "no_row": 6,
+        "saturday": 434
+      },
+      "03": {
+        "members": 9045,
+        "missing": 1510,
+        "saturday": 1154,
+        "weekday_null": 356
+      },
+      "04": {
+        "members": 6698,
+        "missing": 256,
+        "weekday_null": 255,
+        "short": 1
+      },
+      "05": {
+        "members": 6346,
+        "missing": 255,
+        "weekday_null": 254,
+        "no_row": 1
+      },
+      "06": {
+        "members": 7218,
+        "missing": 1054,
+        "weekday_null": 166,
+        "saturday": 871,
+        "short": 1,
+        "no_row": 16
+      },
+      "07": {
+        "members": 6819,
+        "missing": 198,
+        "weekday_null": 197,
+        "short": 1
+      },
+      "08": {
+        "members": 8166,
+        "missing": 314,
+        "weekday_null": 314
+      },
+      "09": {
+        "members": 8481,
+        "missing": 430,
+        "weekday_null": 333,
+        "saturday": 97
+      },
+      "10": {
+        "members": 6847,
+        "missing": 1993,
+        "saturday": 1770,
+        "weekday_null": 215,
+        "short": 3,
+        "no_row": 5
+      },
+      "11": {
+        "members": 8060,
+        "missing": 188,
+        "weekday_null": 163,
+        "saturday": 9,
+        "no_row": 15,
+        "short": 1
+      },
+      "12": {
+        "members": 7653,
+        "missing": 145,
+        "weekday_null": 142,
+        "no_row": 3
+      }
+    },
+    "TPEx": {
+      "01": {
+        "members": 1387,
+        "missing": 325,
+        "weekday_null": 319,
+        "no_row": 6
+      },
+      "02": {
+        "members": 2076,
+        "missing": 405,
+        "weekday_null": 255,
+        "saturday": 150
+      },
+      "03": {
+        "members": 2986,
+        "missing": 656,
+        "saturday": 346,
+        "weekday_null": 310
+      },
+      "04": {
+        "members": 2358,
+        "missing": 306,
+        "weekday_null": 306
+      },
+      "05": {
+        "members": 2426,
+        "missing": 334,
+        "weekday_null": 320,
+        "no_row": 12,
+        "short": 2
+      },
+      "06": {
+        "members": 2701,
+        "missing": 802,
+        "weekday_null": 428,
+        "no_row": 9,
+        "saturday": 365
+      },
+      "07": {
+        "members": 2122,
+        "missing": 270,
+        "weekday_null": 253,
+        "no_row": 17
+      },
+      "08": {
+        "members": 2798,
+        "missing": 296,
+        "weekday_null": 276,
+        "no_row": 20
+      },
+      "09": {
+        "members": 3280,
+        "missing": 431,
+        "weekday_null": 385,
+        "no_row": 13,
+        "saturday": 33
+      },
+      "10": {
+        "members": 2384,
+        "missing": 736,
+        "saturday": 498,
+        "weekday_null": 238
+      },
+      "11": {
+        "members": 3066,
+        "missing": 221,
+        "weekday_null": 201,
+        "no_row": 18,
+        "saturday": 2
+      },
+      "12": {
+        "members": 2519,
+        "missing": 217,
+        "weekday_null": 212,
+        "no_row": 5
+      }
+    }
+  },
+  "weekday_null_days_top10": [
+    {
+      "date": "2017-01-04",
+      "exchange": "TPEx",
+      "rows": 654,
+      "nulls": 250
+    },
+    {
+      "date": "2017-01-03",
+      "exchange": "TPEx",
+      "rows": 655,
+      "nulls": 235
+    },
+    {
+      "date": "2017-01-13",
+      "exchange": "TPEx",
+      "rows": 663,
+      "nulls": 233
+    },
+    {
+      "date": "2017-01-11",
+      "exchange": "TPEx",
+      "rows": 660,
+      "nulls": 225
+    },
+    {
+      "date": "2017-01-17",
+      "exchange": "TPEx",
+      "rows": 659,
+      "nulls": 225
+    },
+    {
+      "date": "2017-01-06",
+      "exchange": "TPEx",
+      "rows": 671,
+      "nulls": 223
+    },
+    {
+      "date": "2017-01-10",
+      "exchange": "TPEx",
+      "rows": 661,
+      "nulls": 223
+    },
+    {
+      "date": "2017-01-20",
+      "exchange": "TPEx",
+      "rows": 666,
+      "nulls": 223
+    },
+    {
+      "date": "2017-01-16",
+      "exchange": "TPEx",
+      "rows": 662,
+      "nulls": 222
+    },
+    {
+      "date": "2017-12-25",
+      "exchange": "TPEx",
+      "rows": 681,
+      "nulls": 221
+    }
+  ],
+  "population_windows_by_null_bar_day_top10": [
+    {
+      "date": "2017-09-07",
+      "exchange": "TWSE",
+      "windows": 146
+    },
+    {
+      "date": "2017-09-21",
+      "exchange": "TWSE",
+      "windows": 131
+    },
+    {
+      "date": "2017-02-17",
+      "exchange": "TWSE",
+      "windows": 124
+    },
+    {
+      "date": "2017-08-29",
+      "exchange": "TPEx",
+      "windows": 120
+    },
+    {
+      "date": "2017-08-28",
+      "exchange": "TPEx",
+      "windows": 111
+    },
+    {
+      "date": "2017-02-20",
+      "exchange": "TWSE",
+      "windows": 104
+    },
+    {
+      "date": "2017-01-04",
+      "exchange": "TPEx",
+      "windows": 103
+    },
+    {
+      "date": "2017-01-03",
+      "exchange": "TPEx",
+      "windows": 102
+    },
+    {
+      "date": "2017-01-23",
+      "exchange": "TWSE",
+      "windows": 99
+    },
+    {
+      "date": "2017-08-30",
+      "exchange": "TPEx",
+      "windows": 97
+    }
+  ]
+}
