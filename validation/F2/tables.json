@@ -1,0 +1,223 @@
+{
+  "tool": "round10_research",
+  "version": 1,
+  "design": "936",
+  "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+  "label": "保守公式：`vol_720` 較小的一半裡，`cash_yield_12m` 與 `mom_240_20` 的平均名次小者先",
+  "direction": "多因子合成",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "half": [
+      "vol_720",
+      "low"
+    ],
+    "ranks": [
+      [
+        "cash_yield_12m",
+        "high"
+      ],
+      [
+        "mom_240_20",
+        "high"
+      ]
+    ],
+    "score": "low",
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      721
+    ]
+  },
+  "hypothesis": "F2",
+  "engine": "portfolio",
+  "segment": "validation",
+  "verdict": "前瞻觀察",
+  "reason": null,
+  "window": {
+    "first_signal": "2019-12-31",
+    "first_session": "2020-01-02",
+    "last_session": "2024-09-27",
+    "days": 1153,
+    "signal_days": 1153
+  },
+  "prerequisites": {
+    "days": 1153,
+    "min_days": 250,
+    "delisted": 60,
+    "ok": true
+  },
+  "coverage": {
+    "2019": {
+      "days": 1,
+      "members": 449,
+      "missing": {
+        "vol_720": 20,
+        "cash_yield_12m": 0,
+        "mom_240_20": 6
+      },
+      "half": 215
+    },
+    "2020": {
+      "days": 245,
+      "members": 138611,
+      "missing": {
+        "vol_720": 6033,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1200
+      },
+      "half": 66345
+    },
+    "2021": {
+      "days": 244,
+      "members": 160367,
+      "missing": {
+        "vol_720": 5396,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1524
+      },
+      "half": 77548
+    },
+    "2022": {
+      "days": 246,
+      "members": 127925,
+      "missing": {
+        "vol_720": 3465,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1189
+      },
+      "half": 62289
+    },
+    "2023": {
+      "days": 239,
+      "members": 138476,
+      "missing": {
+        "vol_720": 5414,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1663
+      },
+      "half": 66589
+    },
+    "2024": {
+      "days": 178,
+      "members": 119781,
+      "missing": {
+        "vol_720": 4195,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1188
+      },
+      "half": 57845
+    }
+  },
+  "seconds": {
+    "plan": 56.49044308401062,
+    "vol_720": 8.506250880091102,
+    "cash_yield_12m": 4.725307881526533,
+    "mom_240_20": 1.0425448904425139,
+    "f2_order": 6.253476393874735,
+    "x2_order": 20.632368345963187
+  },
+  "overlap": {
+    "days": 1153,
+    "mean": 0.048438855160450996,
+    "years": {
+      "2019": {
+        "days": 1,
+        "mean": 0.05
+      },
+      "2020": {
+        "days": 245,
+        "mean": 0.05061224489795919
+      },
+      "2021": {
+        "days": 244,
+        "mean": 0.01905737704918033
+      },
+      "2022": {
+        "days": 246,
+        "mean": 0.07032520325203252
+      },
+      "2023": {
+        "days": 239,
+        "mean": 0.07384937238493725
+      },
+      "2024": {
+        "days": 178,
+        "mean": 0.021348314606741574
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1153,
+      "mean": 0.00024180398604159512,
+      "annual": 0.060934604482481974,
+      "t": 1.5102589962326498
+    },
+    "taiex": {
+      "days": 1153,
+      "mean": 0.00039222332057191583,
+      "annual": 0.09884027678412279,
+      "t": 1.6015604591196744
+    }
+  },
+  "absolute": {
+    "days": 1153,
+    "mean": 0.0010204152533317694
+  },
+  "curves": {
+    "F2": {
+      "days": 1153,
+      "total": 1.982865907281293,
+      "annual": 0.2698022136374796,
+      "volatility": 0.19014858886502295,
+      "max_drawdown": -0.22499096061228874,
+      "invested": 0.9576638026729439,
+      "turnover": 4.121769639640627
+    },
+    "population": {
+      "days": 1153,
+      "total": 1.2159748219034459,
+      "annual": 0.18994460221351472,
+      "volatility": 0.21014410963041916,
+      "max_drawdown": -0.3077773329451119,
+      "invested": 0.9562517222239515,
+      "turnover": 4.1415203658988675
+    },
+    "taiex": {
+      "days": 1153,
+      "total": 0.9023525606936238,
+      "annual": 0.1509114747853486,
+      "volatility": 0.1878460967388565,
+      "max_drawdown": -0.3163186488434039,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 23052,
+    "won": 13466,
+    "rate": 0.5841575568280409,
+    "unsold": 1217
+  },
+  "counts": {
+    "F2": {
+      "bought": 23052,
+      "limit_up": 4,
+      "not_tradable": 4,
+      "sale_held": 53,
+      "unsold": 1217
+    },
+    "population": {
+      "bought": 684714,
+      "not_tradable": 142,
+      "limit_up": 753,
+      "sale_held": 1624,
+      "limit_down": 189,
+      "unsold": 41716
+    }
+  },
+  "min_t": 3.234
+}

@@ -1,0 +1,62 @@
+{
+  "tool": "round10_research",
+  "version": 1,
+  "design": "936",
+  "registration_commit": "e495fa70",
+  "segment": "validation",
+  "round": 10,
+  "round_size": 4,
+  "cumulative": 41,
+  "validation_min_t": 3.234,
+  "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+  "engines": {
+    "portfolio_research": "simulate",
+    "trade_research": 1
+  },
+  "tool_commit": "93db10d71dd2656ce062c8d4ea2e09d6f0b5472e",
+  "command": "python tools/research/round10_research.py --db /research/stock.db --segment validation --exploration-report /out/exploration/explore.json --exploration-sha256 4c0c01b31feceee551cc01537df3fde70875149e74ec149218c65ca3b9b21903 --exploration-url https://github.com/YiCheng0608/stock-lab/blob/pr-assets/944/exploration/explore.json --out /out/validation",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2024-09-27",
+  "min_t": 3.234,
+  "exploration": {
+    "sha256": "4c0c01b31feceee551cc01537df3fde70875149e74ec149218c65ca3b9b21903",
+    "url": "https://github.com/YiCheng0608/stock-lab/blob/pr-assets/944/exploration/explore.json"
+  },
+  "hypotheses": {
+    "F2": {
+      "engine": "portfolio",
+      "verdict": "前瞻觀察",
+      "reason": null,
+      "days": 1153,
+      "taiex_excess": {
+        "days": 1153,
+        "mean": 0.00039222332057191583,
+        "annual": 0.09884027678412279,
+        "t": 1.6015604591196744
+      },
+      "excess": {
+        "days": 1153,
+        "mean": 0.00024180398604159512,
+        "annual": 0.060934604482481974,
+        "t": 1.5102589962326498
+      },
+      "absolute_mean": 0.0010204152533317694,
+      "prerequisites": {
+        "days": 1153,
+        "min_days": 250,
+        "delisted": 60,
+        "ok": true
+      },
+      "overlap_x2": {
+        "days": 1153,
+        "mean": 0.048438855160450996
+      }
+    }
+  },
+  "elapsed_seconds": 870.2567229910055,
+  "peak_memory_gb": 2.237293243408203
+}
