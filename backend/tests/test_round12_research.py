@@ -169,7 +169,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "SENT_WINDOW", 59),
         (tool, "SENT_MIN", 0.01),
         (tool, "SENT_MEMBERS", "every instrument"),
-        (tool, "STATE_OF_DAY", "the state of the equity session"),
+        (tool, "STATE_OF_DAY", "the state of the session before (the signal date T)"),
         (tool, "LARGE_CAP", 149),
         (tool, "TRUST_COLUMNS", ("trust_buy", "dealer_buy")),
         (tool, "TRUST_WINDOW", 19),
@@ -477,15 +477,40 @@ def test_switches_skip_the_missing_days():
     assert tool.switches([None, None]) == 0
 
 
-def test_the_excess_by_state_goes_by_the_signal_date():
-    first = 10
-    differences = [0.01, 0.02, -0.01, 0.03]
-    # equity session first + i is bought on the list of signal date first + i − 1
-    states = {9: "high", 10: "high", 11: None, 12: "low"}
-    got = tool.state_excess(differences, states, first)
-    assert got["high"] == pr.excess_metrics([0.01, 0.02])
-    assert got["missing"] == pr.excess_metrics([-0.01])
-    assert got["low"] == pr.excess_metrics([0.03])
+def test_the_excess_by_state_needs_every_list_the_accounts_hold():
+    """PR #963 review 7079570003: equity session e holds the lists of
+    W(e) = max(first − 1, e − hold) .. e − 1; one state over all of them goes
+    there, anything else is mixed."""
+
+    first, hold = 10, 3
+    # signal dates 9 .. 18; a switch to low on 12, a missing one on 16
+    states = {9: "high", 10: "high", 11: "high", 12: "low", 13: "low", 14: "low",
+              15: "low", 16: None, 17: "low", 18: "low"}  # fmt: skip
+    differences = [0.01 * (i + 1) for i in range(10)]  # e = 10 .. 19
+    got = tool.state_excess(differences, states, first, hold)
+    # e 10: W = 9 (the segment's first signal date, not 7 .. 9); e 11: 9 .. 10;
+    # e 12: 9 .. 11, all high
+    assert got["high"] == pr.excess_metrics(differences[0:3])
+    # e 13, 14: the switch is in W; e 15: 12 .. 14, all low; e 16: 13 .. 15
+    assert got["low"] == pr.excess_metrics(differences[5:7])
+    # e 17, 18, 19: 16 (missing) is in W with a state: mixed
+    assert got["mixed"] == pr.excess_metrics([differences[i] for i in (3, 4, 7, 8, 9)])
+    assert got["missing"] == pr.excess_metrics([])
+    gone = {9: None, 10: None, 11: None, 12: "high"}
+    every = tool.state_excess([0.1, 0.2, 0.3], gone, first, hold)
+    assert every["missing"] == pr.excess_metrics([0.1, 0.2, 0.3])  # 9 .. 11
+
+
+def test_the_excess_by_state_after_a_switch_is_mixed_for_19_days():
+    first, hold = 1, 20
+    states = {t: "high" for t in range(0, 40)}
+    states.update({t: "low" for t in range(40, 80)})
+    differences = [1.0] * 79  # e = 1 .. 79
+    got = tool.state_excess(differences, states, first, hold)
+    # e 41 .. 59 hold 40 and some of 21 .. 39: mixed; low from e 60 (W 40 .. 59)
+    assert got["mixed"]["days"] == 19
+    assert got["low"]["days"] == 79 - 59
+    assert got["high"]["days"] == 40
 
 
 def test_the_state_summary_by_hand():
@@ -871,6 +896,7 @@ PRICES = {
     (11, 151): "lock_down",  # T+1 locked at limit down: filled at its open
     (13, 180): "lock_down",  # the 20th session locked: sold at 181's open
     (21, 199): "suspended",  # the bar before T suspended: no signal
+    (1, 240): "suspended",  # the 20th session suspended: sold at 241's open
 }
 # J3: (stock, session of T) -> the kind of the day's rows
 DIVIDENDS = {
@@ -887,6 +913,7 @@ DIVIDENDS = {
     (21, 200): "ok",
     (25, 110): "ok",  # delisted after 120
     (6, 210): "ok",  # TPEx
+    (1, 220): "ok",  # held 221 .. 240, 240 suspended
     (23, 290): "ok",  # the used run ends on 299
 }
 
@@ -1153,6 +1180,7 @@ def test_j3_trades_by_hand(loaded, monkeypatch):
             (d[170], "S15"),  # dated the Saturday before
             (d[180], "S17"),
             (d[210], "S6"),
+            (d[220], "S1"),
             (d[290], "S23"),
         ]
     )  # S19 on 190: a null cash dividend; S21 on 200: the bar before suspended
@@ -1191,17 +1219,25 @@ def test_j3_trades_by_hand(loaded, monkeypatch):
     assert delayed["net"] == pytest.approx(
         net(s13.open[s13.position[d[181]]], s13.open[s13.position[d[161]]]), rel=1e-12
     )
+    halted_exit = trades[(d[220], "S1")]
+    assert (halted_exit["exit_date"], halted_exit["exit_reason"]) == (d[241], "time")
+    assert halted_exit["suspension_delayed"] is True and halted_exit["holding"] == 21
+    s1 = loaded.panel.series[1]
+    assert halted_exit["net"] == pytest.approx(
+        net(s1.open[s1.position[d[241]]], s1.open[s1.position[d[221]]]), rel=1e-12
+    )
+    assert result["suspension_delayed"] == 1
     assert trades[(d[180], "S17")]["stock_div_ex"] is True
     gone = trades[(d[110], "S25")]
     assert (gone["exit_date"], gone["exit_reason"]) == (d[120], "delisted")
     end = trades[(d[290], "S23")]
     assert (end["exit_date"], end["exit_reason"]) == (d[299], "segment_end")
     assert result["abandon_reasons"] == {"limit_up": 1, "not_tradable": 1}
-    assert result["trades"] == 8 and result["signals"] == 10
+    assert result["trades"] == 9 and result["signals"] == 11
     assert result["listed"]["t1_locked_down_fills"] == 1
     assert result["listed"]["f1_both"] == 1
     years = result["listed"]["years"]  # session 260 is 2017's first
-    assert (years["2016"]["signals"], years["2017"]["signals"]) == (9, 1)
+    assert (years["2016"]["signals"], years["2017"]["signals"]) == (10, 1)
     assert years["2016"]["TPEx:signals"] == 1
     assert result["exits"]["stop"] == result["exits"]["target"] == 0
 
@@ -1377,7 +1413,7 @@ def test_the_exploration_reports_the_round_and_records_the_ledger(explored):
     assert (j3["engine"], j3["reason"], j3["trades"]) == (
         "trade",
         "too_few_trade_days",
-        8,
+        9,
     )
     assert (j3["t1_locked_down_fills"], j3["f1_both"]) == (1, 1)
     j1 = report["hypotheses"]["J1"]
@@ -1385,11 +1421,13 @@ def test_the_exploration_reports_the_round_and_records_the_ledger(explored):
     # signal dates 60 .. 298: high to 229, low from 230
     assert (j1["states"]["high"]["days"], j1["states"]["low"]["days"]) == (170, 69)
     assert j1["states"]["switches"] == 1 and j1["states"]["missing"]["days"] == 0
-    assert set(j1["state_excess"]) == {"high", "low", "missing"}
-    assert (
-        j1["state_excess"]["high"]["days"] + j1["state_excess"]["low"]["days"]
-        == (j1["excess"]["days"])
-    )
+    by_state = j1["state_excess"]
+    assert set(by_state) == {"high", "low", "missing", "mixed"}
+    assert sum(row["days"] for row in by_state.values()) == j1["excess"]["days"]
+    # e 61 .. 230 hold high lists only (W from 60, to 229); e 231 .. 249 mix
+    # in the switch on 230; e 250 .. 299 hold 230 .. 298, low only
+    assert (by_state["high"]["days"], by_state["mixed"]["days"]) == (170, 19)
+    assert (by_state["low"]["days"], by_state["missing"]["days"]) == (50, 0)
     assert report["hypotheses"]["J2"]["short"]["short_days"] == 239
     assert report["hypotheses"]["J4"]["overlap_z1"]["days"] > 0
     text = (out / "explore.md").read_text(encoding="utf-8")
@@ -1610,11 +1648,11 @@ def test_coverage_only_computes_no_return(copied, tmp_path):
     # no occupancy: S3 on 110 counts too; S19 (null) and S21 (bar before
     # suspended) cannot be told, S5 is below 3%; S23 on 290 is 2017's
     assert (total(j3, "signals"), total(j3, "signal_days"), total(j3, "f1_both")) == (
+        12,
         11,
-        10,
         1,
     )
-    assert (total(j3, "rows"), total(j3, "unknown"), total(j3, "below")) == (14, 2, 1)
+    assert (total(j3, "rows"), total(j3, "unknown"), total(j3, "below")) == (15, 2, 1)
     assert j3["2016"]["markets"]["TPEx"]["signals"] == 1
     j4 = hyp["J4"]["coverage"]
     assert list(j4) == ["2017"] and j4["2017"]["days"] == 300 - 262

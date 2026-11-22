@@ -115,9 +115,14 @@ HIGH, LOW = r5.HIGH, r5.LOW
 SENT_WINDOW = 60  # J1: margin_balance[at] against margin_balance[at − 60]
 SENT_MIN = 0.0  # J1: margin_sent_60 > 0 is the high state, ≤ 0 the low one
 SENT_MEMBERS = "T's population, both ends valued, the same members in both sums"
-# J1 第 6 點 (listed only): the excess of equity session e goes to the state
-# of its signal date T = e − 1, the latest list bought into the accounts.
-STATE_OF_DAY = "the state of the session before (the signal date T)"
+# J1 第 6 點 (listed only): equity session e holds the lists of the signal
+# dates W(e) = max(first − 1, e − hold) .. e − 1 (one per account); its excess
+# goes to a state when every T in W(e) has it, else to "mixed" (PR #963
+# review 7079570003).  A sale delayed past its due date is not counted.
+STATE_OF_DAY = (
+    "every signal date T in max(first - 1, e - hold) .. e - 1 in the state "
+    "(high, low or missing), else mixed; sales delayed past the due date not counted"
+)
 LARGE_CAP = 150  # J2: turnover_60's top 150 (X6's) are left out
 TRUST_COLUMNS = ("trust_buy",)  # J2: the investment trusts only
 TRUST_WINDOW = 20  # J2: institutional_flow_20's window
@@ -941,16 +946,20 @@ def state_summary(
 
 
 def state_excess(
-    differences: list[float], states: dict[int, str | None], first: int
+    differences: list[float], states: dict[int, str | None], first: int, hold: int
 ) -> dict[str, Any]:
     """J1 第 6 點 (listed only): the daily excess over the population of each
-    equity session ``first + i`` by the state of its signal date
-    ``first + i − 1`` (``STATE_OF_DAY``); a day whose signal date had no
-    state is apart."""
+    equity session e = ``first + i`` by the states of the signal dates whose
+    lists the accounts hold, W(e) = max(first − 1, e − hold) .. e − 1
+    (``STATE_OF_DAY``): all high, all low or all missing goes there, any
+    other mix to "mixed".  A sale delayed past its due date is not in W(e)."""
 
-    groups: dict[str, list[float]] = {"high": [], "low": [], "missing": []}
+    groups: dict[str, list[float]] = {"high": [], "low": [], "missing": [], "mixed": []}
     for i, value in enumerate(differences):
-        groups[states.get(first + i - 1) or "missing"].append(value)
+        e = first + i
+        seen = {states.get(t) for t in range(max(first - 1, e - hold), e)}
+        key = (next(iter(seen)) or "missing") if len(seen) == 1 else "mixed"
+        groups[key].append(value)
     return {key: pr.excess_metrics(values) for key, values in groups.items()}
 
 
@@ -1051,7 +1060,9 @@ def run_portfolio(
         ),
     }
     if name == "J1":
-        result["state_excess"] = state_excess(differences, planned.states, first)
+        result["state_excess"] = state_excess(
+            differences, planned.states, first, spec["hold"]
+        )
     absolute = statistics.fmean(returns) if returns else None
     result["excess"] = excess
     result["absolute"] = {"days": len(returns), "mean": absolute}
@@ -1471,20 +1482,25 @@ def state_lines(result: dict[str, Any]) -> list[str]:
         "high": "情緒高（`vol_60` 小者先）",
         "low": "情緒低（`vol_60` 大者先）",
         "missing": "`margin_sent_60` 缺值（名單為空）",
+        "mixed": "混合（持有的名單跨兩種狀態或含缺值）",
     }
     lines = [
         "## 兩種狀態（J1 第 6 點，只列出、不判定）",
         "",
         f"狀態切換 {states['switches']:,} 次（相鄰兩個有狀態的訊號日不同就算一次，缺值的日子跳過）。"
-        "分狀態的超額：有淨值的交易日 e 歸到它的訊號日 T（e 的前一個交易日）的狀態。",
+        "分狀態的超額：有淨值的交易日 e 持有訊號日 W(e)＝max(段首訊號日, e − 20)…e − 1 的名單，"
+        "W(e) 裡每個訊號日都是同一個狀態（或都缺值）才歸那一類，其餘歸「混合」；"
+        "持有到期後因跌停鎖死、停牌延後賣出的部位不算進 W(e)。",
         "",
         "| 狀態 | 訊號日 | 比例 | 對母體超額的日數 | 日均 | t |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for key, label in labels.items():
         e = excess.get(key) or {}
+        days = f"{states[key]['days']:,}" if key in states else "—"
+        share = _pct(states[key]["share"], 1) if key in states else "—"
         lines.append(
-            f"| {label} | {states[key]['days']:,} | {_pct(states[key]['share'], 1)} "
+            f"| {label} | {days} | {share} "
             f"| {e.get('days', 0):,} | {_pct(e.get('mean'), 3)} | {_t(e.get('t'))} |"
         )
     lines += [
