@@ -701,6 +701,45 @@
       "definitions_sha256": "12f24befd44c279118ade14460c722f968849a00c48a27b4def7690ca3f0954f",
       "finished_at": "2026-11-22T16:39:24+00:00",
       "verdict": "驗證段反轉"
+    },
+    {
+      "hypothesis": "U1",
+      "tool": "round13_research",
+      "round": 13,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-22T19:19:48+00:00",
+      "report_sha256": "9305a1eca4bd69aee22371a307bcf05a60e2d679f6225559d54caa72ee29c9d0",
+      "tool_commit": "c4de1435e9a60dd82abeb136b5483e9ad949ebef",
+      "definitions_sha256": "cb2415931db08b31d37318b164056bd30c35c9ff53b6d01627c54c7bab88bc21",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "U2",
+      "tool": "round13_research",
+      "round": 13,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-22T19:19:48+00:00",
+      "report_sha256": "9305a1eca4bd69aee22371a307bcf05a60e2d679f6225559d54caa72ee29c9d0",
+      "tool_commit": "c4de1435e9a60dd82abeb136b5483e9ad949ebef",
+      "definitions_sha256": "cb2415931db08b31d37318b164056bd30c35c9ff53b6d01627c54c7bab88bc21",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "U3",
+      "tool": "round13_research",
+      "round": 13,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-22T19:19:48+00:00",
+      "report_sha256": "9305a1eca4bd69aee22371a307bcf05a60e2d679f6225559d54caa72ee29c9d0",
+      "tool_commit": "c4de1435e9a60dd82abeb136b5483e9ad949ebef",
+      "definitions_sha256": "cb2415931db08b31d37318b164056bd30c35c9ff53b6d01627c54c7bab88bc21",
+      "verdict": "沒有通過（探索段）"
     }
   ]
 }
