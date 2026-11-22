@@ -1,0 +1,535 @@
+{
+  "tool": "round12_research",
+  "version": 1,
+  "design": "962",
+  "definitions_sha256": "12f24befd44c279118ade14460c722f968849a00c48a27b4def7690ca3f0954f",
+  "label": "`margin_sent_60` > 0 時 `vol_60` 小者先，≤ 0 時 `vol_60` 大者先",
+  "direction": "散戶情緒",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "state": [
+      "margin_sent_60",
+      ">",
+      0.0
+    ],
+    "keys": {
+      "high": [
+        [
+          "vol_60",
+          "low"
+        ]
+      ],
+      "low": [
+        [
+          "vol_60",
+          "high"
+        ]
+      ]
+    },
+    "missing_state": "empty list, cash",
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2007-12-03",
+      61
+    ]
+  },
+  "hypothesis": "J1",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-03-06",
+    "first_session": "2008-03-07",
+    "last_session": "2019-12-31",
+    "days": 2925,
+    "signal_days": 2925
+  },
+  "prerequisites": {
+    "days": 2925,
+    "min_days": 500,
+    "delisted": 147,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 210,
+      "members": 93291,
+      "missing": {
+        "vol_60": 345
+      },
+      "state_low": 148,
+      "margin_members": 91000,
+      "switches": 2,
+      "state_high": 62
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "vol_60": 732
+      },
+      "state_low": 53,
+      "margin_members": 142615,
+      "switches": 7,
+      "state_high": 198
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "vol_60": 970
+      },
+      "state_high": 166,
+      "margin_members": 152384,
+      "switches": 8,
+      "state_low": 85
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "vol_60": 714
+      },
+      "state_high": 54,
+      "margin_members": 113885,
+      "switches": 5,
+      "state_low": 193
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "vol_60": 641
+      },
+      "state_low": 174,
+      "margin_members": 95476,
+      "switches": 10,
+      "state_high": 76
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "vol_60": 638
+      },
+      "state_low": 58,
+      "margin_members": 110506,
+      "switches": 15,
+      "state_high": 188
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "vol_60": 535
+      },
+      "state_high": 163,
+      "margin_members": 126829,
+      "switches": 7,
+      "state_low": 85
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "vol_60": 492
+      },
+      "state_high": 116,
+      "margin_members": 102557,
+      "switches": 5,
+      "state_low": 128
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "vol_60": 274
+      },
+      "state_high": 90,
+      "margin_members": 92265,
+      "switches": 10,
+      "state_low": 154
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "vol_60": 239
+      },
+      "state_high": 235,
+      "margin_members": 114031,
+      "switches": 6,
+      "state_low": 11
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "vol_60": 340
+      },
+      "state_high": 81,
+      "margin_members": 107509,
+      "switches": 7,
+      "state_low": 166
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "vol_60": 198
+      },
+      "state_low": 37,
+      "margin_members": 98727,
+      "switches": 9,
+      "state_high": 204
+    }
+  },
+  "seconds": {
+    "plan": 89.13318300399987,
+    "margin_sent_60": 1.8718393960298272,
+    "vol_60": 35.963124125570175,
+    "v1_order": 35.64529120948282
+  },
+  "overlap": {
+    "days": 2925,
+    "mean": 0.5582905982905982,
+    "years": {
+      "2008": {
+        "days": 210,
+        "mean": 0.29523809523809524
+      },
+      "2009": {
+        "days": 251,
+        "mean": 0.7888446215139442
+      },
+      "2010": {
+        "days": 251,
+        "mean": 0.6613545816733067
+      },
+      "2011": {
+        "days": 247,
+        "mean": 0.21862348178137653
+      },
+      "2012": {
+        "days": 250,
+        "mean": 0.304
+      },
+      "2013": {
+        "days": 246,
+        "mean": 0.7642276422764228
+      },
+      "2014": {
+        "days": 248,
+        "mean": 0.657258064516129
+      },
+      "2015": {
+        "days": 244,
+        "mean": 0.47540983606557374
+      },
+      "2016": {
+        "days": 244,
+        "mean": 0.36885245901639346
+      },
+      "2017": {
+        "days": 246,
+        "mean": 0.9552845528455285
+      },
+      "2018": {
+        "days": 247,
+        "mean": 0.32793522267206476
+      },
+      "2019": {
+        "days": 241,
+        "mean": 0.8464730290456431
+      }
+    }
+  },
+  "states": {
+    "days": 2925,
+    "high": {
+      "days": 1633,
+      "share": 0.5582905982905982
+    },
+    "low": {
+      "days": 1292,
+      "share": 0.4417094017094017
+    },
+    "missing": {
+      "days": 0,
+      "share": 0.0
+    },
+    "switches": 91,
+    "years": {
+      "2008": {
+        "high": {
+          "days": 62,
+          "share": 0.29523809523809524
+        },
+        "low": {
+          "days": 148,
+          "share": 0.7047619047619048
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2009": {
+        "high": {
+          "days": 198,
+          "share": 0.7888446215139442
+        },
+        "low": {
+          "days": 53,
+          "share": 0.21115537848605578
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2010": {
+        "high": {
+          "days": 166,
+          "share": 0.6613545816733067
+        },
+        "low": {
+          "days": 85,
+          "share": 0.3386454183266932
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2011": {
+        "high": {
+          "days": 54,
+          "share": 0.21862348178137653
+        },
+        "low": {
+          "days": 193,
+          "share": 0.7813765182186235
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2012": {
+        "high": {
+          "days": 76,
+          "share": 0.304
+        },
+        "low": {
+          "days": 174,
+          "share": 0.696
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2013": {
+        "high": {
+          "days": 188,
+          "share": 0.7642276422764228
+        },
+        "low": {
+          "days": 58,
+          "share": 0.23577235772357724
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2014": {
+        "high": {
+          "days": 163,
+          "share": 0.657258064516129
+        },
+        "low": {
+          "days": 85,
+          "share": 0.34274193548387094
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2015": {
+        "high": {
+          "days": 116,
+          "share": 0.47540983606557374
+        },
+        "low": {
+          "days": 128,
+          "share": 0.5245901639344263
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2016": {
+        "high": {
+          "days": 90,
+          "share": 0.36885245901639346
+        },
+        "low": {
+          "days": 154,
+          "share": 0.6311475409836066
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2017": {
+        "high": {
+          "days": 235,
+          "share": 0.9552845528455285
+        },
+        "low": {
+          "days": 11,
+          "share": 0.044715447154471545
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2018": {
+        "high": {
+          "days": 81,
+          "share": 0.32793522267206476
+        },
+        "low": {
+          "days": 166,
+          "share": 0.6720647773279352
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      },
+      "2019": {
+        "high": {
+          "days": 204,
+          "share": 0.8464730290456431
+        },
+        "low": {
+          "days": 37,
+          "share": 0.15352697095435686
+        },
+        "missing": {
+          "days": 0,
+          "share": 0.0
+        }
+      }
+    }
+  },
+  "state_excess": {
+    "high": {
+      "days": 1106,
+      "mean": 0.00025735016039973353,
+      "annual": 0.06485224042073284,
+      "t": 1.189089239358899
+    },
+    "low": {
+      "days": 874,
+      "mean": -0.0007646149323017995,
+      "annual": -0.19268296294005346,
+      "t": -3.050920613084774
+    },
+    "missing": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    },
+    "mixed": {
+      "days": 945,
+      "mean": 5.4498568101499944e-05,
+      "annual": 0.013733639161577986,
+      "t": 0.31274702912731817
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2925,
+      "mean": -0.00011355317147820515,
+      "annual": -0.028615399212507695,
+      "t": -0.9112575423838093
+    },
+    "taiex": {
+      "days": 2925,
+      "mean": -0.0004579339432977377,
+      "annual": -0.1153993537110299,
+      "t": -3.0096194872277264
+    }
+  },
+  "absolute": {
+    "days": 2925,
+    "mean": -0.00028454239159955784
+  },
+  "curves": {
+    "J1": {
+      "days": 2925,
+      "total": -0.642162004806085,
+      "annual": -0.08473180481234976,
+      "volatility": 0.1828602366004098,
+      "max_drawdown": -0.7451225067074072,
+      "invested": 0.9519939703504146,
+      "turnover": 9.837684676921576
+    },
+    "population": {
+      "days": 2925,
+      "total": -0.5153138716854029,
+      "annual": -0.06049040437951303,
+      "volatility": 0.19583606441854134,
+      "max_drawdown": -0.6370406278984219,
+      "invested": 0.9486886814486004,
+      "turnover": 11.44147379194912
+    },
+    "taiex": {
+      "days": 2925,
+      "total": 0.3855686343351794,
+      "annual": 0.028494090481304024,
+      "volatility": 0.17644599538290737,
+      "max_drawdown": -0.5599954815388594,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 58233,
+    "won": 27018,
+    "rate": 0.46396373190459017,
+    "unsold": 539
+  },
+  "counts": {
+    "J1": {
+      "bought": 58233,
+      "limit_up": 234,
+      "limit_down": 253,
+      "sale_held": 296,
+      "not_tradable": 33,
+      "unsold": 539
+    },
+    "population": {
+      "bought": 1381856,
+      "not_tradable": 363,
+      "limit_up": 2403,
+      "limit_down": 1905,
+      "sale_held": 3091,
+      "unsold": 9435
+    }
+  },
+  "min_t": 2.0
+}

@@ -1,0 +1,181 @@
+{
+  "tool": "round12_research",
+  "version": 1,
+  "design": "962",
+  "definitions_sha256": "12f24befd44c279118ade14460c722f968849a00c48a27b4def7690ca3f0954f",
+  "label": "T 日是除息交易日、現金殖利率 ≥ 3%（`cash_div_ex`），全部符合的訊號；T+1 開盤成交（期限 1 日）、沒有停損與目標、持有 20 日",
+  "direction": "事件：除息",
+  "parameters": {
+    "engine": "trade",
+    "kind": "event",
+    "event": "cash_div_ex",
+    "market_filter": false,
+    "entry_days": 1,
+    "stop": null,
+    "target": null,
+    "hold": 20,
+    "start": [
+      "session",
+      "2007-12-03",
+      20
+    ]
+  },
+  "hypothesis": "J3",
+  "engine": "trade",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-12-28",
+    "first_session": "2007-12-31",
+    "last_session": "2019-12-31",
+    "days": 2966,
+    "signal_days": 2966
+  },
+  "prerequisites": {
+    "days": 2966,
+    "min_days": 500,
+    "delisted": 152,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 740,
+    "mean": -0.0034933867000440035,
+    "t": -0.3010911187136136
+  },
+  "excess": {
+    "days": 740,
+    "mean": 0.0023566838120827193,
+    "t": 0.2191855427527694
+  },
+  "absolute": {
+    "days": 740,
+    "mean": -0.010444057187775939
+  },
+  "signals": 2734,
+  "signal_days": 740,
+  "trade_days": 740,
+  "trades": 2732,
+  "net_mean": -0.011021426572410727,
+  "net_median": -0.011836205402282175,
+  "win_rate": 0.4337481698389458,
+  "zero": 0,
+  "won_mean": 0.08088404781183864,
+  "lost_mean": -0.08142090113306716,
+  "won": 1185,
+  "lost": 1547,
+  "exit_share": {
+    "stop": 0.0,
+    "target": 0.0,
+    "time": 0.9996339677891655,
+    "segment_end": 0.0,
+    "delisted": 0.00036603221083455345,
+    "transferred": 0.0
+  },
+  "exits": {
+    "stop": 0,
+    "target": 0,
+    "time": 2731,
+    "segment_end": 0,
+    "delisted": 1,
+    "transferred": 0
+  },
+  "both_touched": 0,
+  "gapped": 0,
+  "limit_delayed": 1,
+  "suspension_delayed": 0,
+  "holding_mean": 19.99926793557833,
+  "abandoned": 2,
+  "abandon_rate": 0.000731528895391368,
+  "abandon_reasons": {
+    "limit_up": 2
+  },
+  "entry_limit_blocked": 2,
+  "below_lower": 0,
+  "filter_blocked_days": 0,
+  "filter_missing_days": 0,
+  "population_unbought": 84,
+  "listed": {
+    "years": {
+      "2008": {
+        "TWSE:signals": 204,
+        "signals": 231,
+        "TPEx:signals": 27,
+        "signal_days": 67
+      },
+      "2009": {
+        "TWSE:signals": 156,
+        "signals": 190,
+        "signal_days": 59,
+        "TPEx:signals": 34
+      },
+      "2010": {
+        "TWSE:signals": 195,
+        "signals": 227,
+        "signal_days": 62,
+        "TPEx:signals": 32
+      },
+      "2011": {
+        "TWSE:signals": 231,
+        "signals": 264,
+        "signal_days": 72,
+        "TPEx:signals": 33
+      },
+      "2012": {
+        "TWSE:signals": 155,
+        "signals": 175,
+        "signal_days": 55,
+        "TPEx:signals": 20
+      },
+      "2013": {
+        "TWSE:signals": 169,
+        "signals": 210,
+        "signal_days": 55,
+        "TPEx:signals": 41
+      },
+      "2014": {
+        "TWSE:signals": 196,
+        "signals": 246,
+        "signal_days": 64,
+        "TPEx:signals": 50
+      },
+      "2015": {
+        "TWSE:signals": 186,
+        "signals": 225,
+        "signal_days": 61,
+        "TPEx:signals": 39
+      },
+      "2016": {
+        "TWSE:signals": 198,
+        "signals": 246,
+        "signal_days": 60,
+        "TPEx:signals": 48
+      },
+      "2017": {
+        "TWSE:signals": 200,
+        "signals": 244,
+        "signal_days": 62,
+        "TPEx:signals": 44
+      },
+      "2018": {
+        "TPEx:signals": 45,
+        "signals": 236,
+        "signal_days": 64,
+        "TWSE:signals": 191
+      },
+      "2019": {
+        "TPEx:signals": 42,
+        "signals": 240,
+        "signal_days": 59,
+        "TWSE:signals": 198
+      }
+    },
+    "t1_locked_down_fills": 8,
+    "f1_both": 250
+  },
+  "seconds": {
+    "run": 14.298060626999359,
+    "cash_div_ex": 1.873455522756558
+  },
+  "min_t": 2.0
+}

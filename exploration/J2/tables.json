@@ -1,0 +1,245 @@
+{
+  "tool": "round12_research",
+  "version": 1,
+  "design": "962",
+  "definitions_sha256": "12f24befd44c279118ade14460c722f968849a00c48a27b4def7690ca3f0954f",
+  "label": "`turnover_60` 前 150 名以外、`trust_flow_20` > 0，依 `trust_flow_20` 大者先",
+  "direction": "籌碼：投信",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "exclude": [
+      "turnover_60",
+      150
+    ],
+    "conditions": [
+      [
+        "trust_flow_20",
+        ">",
+        0.0
+      ]
+    ],
+    "keys": [
+      [
+        "trust_flow_20",
+        "high"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      60
+    ]
+  },
+  "hypothesis": "J2",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "探索通過",
+  "reason": null,
+  "window": {
+    "first_signal": "2015-03-04",
+    "first_session": "2015-03-05",
+    "last_session": "2019-12-31",
+    "days": 1187,
+    "signal_days": 1187
+  },
+  "prerequisites": {
+    "days": 1187,
+    "min_days": 500,
+    "delisted": 70,
+    "ok": true
+  },
+  "coverage": {
+    "2015": {
+      "days": 209,
+      "members": 90120,
+      "missing": {
+        "turnover_60": 439,
+        "trust_flow_20": 3708
+      },
+      "positive": 31876,
+      "min_positive": 106,
+      "max_positive": 216,
+      "hits": 18126,
+      "max_hits": 139,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 31350
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "turnover_60": 270,
+        "trust_flow_20": 6944
+      },
+      "positive": 31312,
+      "min_positive": 86,
+      "max_positive": 166,
+      "hits": 15502,
+      "max_hits": 106,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 36600
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "turnover_60": 234,
+        "trust_flow_20": 12219
+      },
+      "positive": 34308,
+      "min_positive": 93,
+      "max_positive": 199,
+      "hits": 18430,
+      "max_hits": 126,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 36900
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "turnover_60": 338,
+        "trust_flow_20": 6007
+      },
+      "positive": 35879,
+      "min_positive": 103,
+      "max_positive": 195,
+      "hits": 18890,
+      "max_hits": 118,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 37050
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "turnover_60": 193,
+        "trust_flow_20": 2945
+      },
+      "positive": 35226,
+      "min_positive": 109,
+      "max_positive": 188,
+      "hits": 18314,
+      "max_hits": 110,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 36150
+    }
+  },
+  "seconds": {
+    "plan": 12.201302445988404,
+    "turnover_60": 2.911138286886853,
+    "trust_flow_20": 1.9403276953962632,
+    "j2_order": 0.6712368596927263
+  },
+  "short": {
+    "short_days": 0,
+    "zero_days": 0,
+    "years": {
+      "2015": {
+        "days": 209,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2016": {
+        "days": 244,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2017": {
+        "days": 246,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2018": {
+        "days": 247,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2019": {
+        "days": 241,
+        "short_days": 0,
+        "zero_days": 0
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1187,
+      "mean": 0.00028574442147105407,
+      "annual": 0.07200759421070563,
+      "t": 2.151252670115231
+    },
+    "taiex": {
+      "days": 1187,
+      "mean": -9.373473304561961e-05,
+      "annual": -0.023621152727496143,
+      "t": -0.41016268077466517
+    }
+  },
+  "absolute": {
+    "days": 1187,
+    "mean": 0.0001264159879901019
+  },
+  "curves": {
+    "J2": {
+      "days": 1187,
+      "total": 0.07865822341581286,
+      "annual": 0.016204796481825934,
+      "volatility": 0.1769826223683717,
+      "max_drawdown": -0.3199630286365599,
+      "invested": 0.9420782805703979,
+      "turnover": 12.436724420014292
+    },
+    "population": {
+      "days": 1187,
+      "total": -0.22232123599303288,
+      "annual": -0.05198130852669014,
+      "volatility": 0.1618772281567109,
+      "max_drawdown": -0.37068064292497327,
+      "invested": 0.9424078875184698,
+      "turnover": 12.214201840955457
+    },
+    "taiex": {
+      "days": 1187,
+      "total": 0.2468797191357457,
+      "annual": 0.04795720099067524,
+      "volatility": 0.13115617156678727,
+      "max_drawdown": -0.25696873195148573,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 23732,
+    "won": 10925,
+    "rate": 0.4603488960053936,
+    "unsold": 386
+  },
+  "counts": {
+    "J2": {
+      "bought": 23732,
+      "sale_held": 37,
+      "not_tradable": 6,
+      "limit_up": 2,
+      "unsold": 386
+    },
+    "population": {
+      "bought": 509911,
+      "limit_up": 275,
+      "limit_down": 282,
+      "not_tradable": 189,
+      "sale_held": 1164,
+      "unsold": 8621
+    }
+  },
+  "min_t": 2.0
+}
