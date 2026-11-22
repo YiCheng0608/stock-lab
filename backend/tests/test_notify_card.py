@@ -12,6 +12,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import time
 import zlib
 from html.parser import HTMLParser
 from pathlib import Path
@@ -468,11 +469,18 @@ def test_a_browser_past_the_time_limit_is_killed_with_its_children(
     assert drawn.seconds < 10
     child = int(pid_file.read_text())
     # The child of the group is gone too (killed, then reaped by its parent's death or
-    # tini; at most a zombie).
-    try:
-        state = Path(f"/proc/{child}/stat").read_text().split()[2]
-    except FileNotFoundError:
-        state = "gone"
+    # tini; at most a zombie). Right after the kill a loaded runner can still show it
+    # as R while it dies (CI 2026-11-17 and 2026-11-22), so poll briefly; a child the
+    # kill missed sleeps (S) and never gets there.
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            state = Path(f"/proc/{child}/stat").read_text().split()[2]
+        except FileNotFoundError:
+            state = "gone"
+        if state in ("gone", "Z") or time.monotonic() > deadline:
+            break
+        time.sleep(0.05)
     assert state in ("gone", "Z")
     assert os.listdir(private_temp) == []
 
