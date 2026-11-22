@@ -1387,6 +1387,21 @@ def test_a_deploy_keeps_only_the_deployed_and_the_previous_release_images(harnes
     assert calls.index("lock released") < calls.index(rmi[0])
 
 
+def test_the_tag_that_ran_before_stays_over_a_newer_one_that_never_ran(harness):
+    """PR #942 review S2: a tag built after the one the scheduler runs (a deploy the DB
+    revision check refused after the build) is the newest other tag; the one that ran
+    before is the rollback, so it stays and the newer one goes."""
+    built = [f"{PROJECT}-backend:v-built", f"{PROJECT}-web:v-built"]
+    harness.images(*built, *OLD_RELEASES)
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    left = {ref.split(":")[1] for ref in _images(harness)}
+    assert left == {"v1", "v0"}, _images(harness)
+    assert [f"release_image_removed:{ref}" for ref in built] == result.result[
+        "release_images"
+    ][:2]
+
+
 @pytest.mark.parametrize("case", ["nothing-ran", "same-tag"])
 def test_without_another_previous_tag_the_newest_other_release_stays(harness, case):
     """AC-2 (#941): when what ran before is unknown (no scheduler or api running) or is the

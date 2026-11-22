@@ -24,7 +24,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離（歷
 
 - **發佈 checkout**（`--checkout`，預設 `STOCK_RELEASE_DIR`、再來是 `~/stock-lab-release`）是 compose 的 project 目錄：tag 在這裡 checkout，build context 與 `docker-compose.yml` 都是該 tag 的；`.env`（[容器內的 claude 與 gh 認證（.env）](ops/SETUP.md#容器內的-claude-與-gh-認證env)，不進 Git、git 忽略它，不算未 commit 的改動）也放在這裡。要從另一個 checkout 執行：checkout tag 會改寫發佈 checkout 的檔案，腳本在發佈 checkout 裡就拒絕。
 - **compose project**（`--project`，預設 `STOCK_COMPOSE_PROJECT`、再來是 `stock-lab`）：image 是 `<project>-backend:<tag>`（api、scheduler）與 `<project>-web:<tag>`，資料在 volume `<project>_stock-data`。`COMPOSE_PROJECT_NAME` 不採用：任務 session 的它是 `task-<issue>`（[本機檢查](WORKFLOW.md#本機檢查)）。
-- `--wait-timeout`：`compose up --wait` 等服務 healthy 的秒數，預設 300。`--no-comment` 不在 #1 留言，只用於臨時 checkout 與 project 的演練（[`tools/compose/deploy_smoke.sh`](../tools/compose/deploy_smoke.sh)，CI `compose` job）。
+- `--wait-timeout`：`compose up --wait` 等服務 healthy 的秒數，預設 300。`--no-comment` 不在 #1 留言，只用於臨時 checkout 與 project 的演練（[`tools/compose/deploy_smoke.sh`](../tools/compose/deploy_smoke.sh)，CI `compose` job）。演練成功後也會跑真的[主機清理](ops/LOCAL.md#主機清理)，在主機上演練時先設 `STOCK_SWEEP=off`。
 - `WEB_PORT`、`API_PORT`、`STOCK_ENV_FILE`（[Docker compose](ops/SETUP.md#docker-compose)）：呼叫端 shell 裡的這三個變數一律丟掉，避免剛跑過 smoke 的 shell 把正式 project 換到別的埠或 env file。compose 改從發佈 checkout 的 `.env`、再來是 compose 檔的預設取得；要指定時用 `--web-port`、`--api-port`、`--env-file`（演練用）。
 
 下列任一情況拒絕並 exit 1，發佈 checkout 的 HEAD、工作樹與 tag，以及 image、容器、volume 都不變（在 fetch 之後才發現的拒絕，會刪掉 fetch 新建的 tag ref；部署前就有的同名 tag 保留；DB revision 一項在 build 之後，只多出新 build 的 image）：
