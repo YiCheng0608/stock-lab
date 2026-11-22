@@ -1,0 +1,459 @@
+{
+  "tool": "round11_research",
+  "version": 1,
+  "design": "953",
+  "registration_commit": "5353b141",
+  "segment": "exploration",
+  "round": 11,
+  "round_size": 4,
+  "cumulative": 45,
+  "validation_min_t": 3.261,
+  "definitions_sha256": "5c326147823f78ca203db3b127b6369a63305e3b62839479bf39f2ac161b67bb",
+  "members_sha256": "2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827",
+  "engines": {
+    "portfolio_research": "simulate",
+    "trade_research": 1
+  },
+  "tool_commit": "998320a6fea0a4a8af8c43acb07c332460c6d0a6",
+  "command": "python tools/research/round11_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2019-12-31",
+  "coverage_only": true,
+  "hypotheses": {
+    "L1": {
+      "window": {
+        "first_signal": "2015-06-01",
+        "first_session": "2015-06-02",
+        "last_session": "2019-12-31",
+        "days": 1127
+      },
+      "seconds": {
+        "plan": 32.84194806798769,
+        "limit_down_close": 26.55161089269677
+      },
+      "coverage": {
+        "years": {
+          "2015": {
+            "days": 149,
+            "signal_days": 95,
+            "signals": 554,
+            "members": 62290,
+            "unknown": 0,
+            "markets": {
+              "TWSE": {
+                "signals": 322
+              },
+              "TPEx": {
+                "signals": 232
+              }
+            }
+          },
+          "2016": {
+            "days": 244,
+            "signal_days": 124,
+            "signals": 279,
+            "members": 94193,
+            "unknown": 0,
+            "markets": {
+              "TWSE": {
+                "signals": 132
+              },
+              "TPEx": {
+                "signals": 147
+              }
+            }
+          },
+          "2017": {
+            "days": 246,
+            "signal_days": 137,
+            "signals": 292,
+            "members": 116000,
+            "unknown": 0,
+            "markets": {
+              "TWSE": {
+                "signals": 122
+              },
+              "TPEx": {
+                "signals": 170
+              }
+            }
+          },
+          "2018": {
+            "days": 247,
+            "signal_days": 172,
+            "signals": 770,
+            "members": 109430,
+            "unknown": 0,
+            "markets": {
+              "TWSE": {
+                "signals": 463
+              },
+              "TPEx": {
+                "signals": 307
+              }
+            }
+          },
+          "2019": {
+            "days": 241,
+            "signal_days": 103,
+            "signals": 163,
+            "members": 100632,
+            "unknown": 0,
+            "markets": {
+              "TWSE": {
+                "signals": 108
+              },
+              "TPEx": {
+                "signals": 55
+              }
+            }
+          }
+        }
+      }
+    },
+    "L2": {
+      "window": {
+        "first_signal": "2014-12-26",
+        "first_session": "2014-12-27",
+        "last_session": "2019-12-31",
+        "days": 1227,
+        "signal_days": 1227
+      },
+      "coverage": {
+        "2014": {
+          "days": 5,
+          "members": 2189,
+          "missing": {
+            "institutional_flow_20": 401,
+            "margin_flow_20": 46
+          },
+          "hits": 375,
+          "hit_days": 5,
+          "over_top_days": 5,
+          "max_hits": 82
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "institutional_flow_20": 6001,
+            "margin_flow_20": 1916
+          },
+          "hits": 28092,
+          "hit_days": 244,
+          "over_top_days": 244,
+          "max_hits": 199
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "institutional_flow_20": 6944,
+            "margin_flow_20": 1563
+          },
+          "hits": 27564,
+          "hit_days": 244,
+          "over_top_days": 244,
+          "max_hits": 178
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "institutional_flow_20": 12219,
+            "margin_flow_20": 1684
+          },
+          "hits": 28103,
+          "hit_days": 246,
+          "over_top_days": 246,
+          "max_hits": 164
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "institutional_flow_20": 6007,
+            "margin_flow_20": 1661
+          },
+          "hits": 29437,
+          "hit_days": 247,
+          "over_top_days": 247,
+          "max_hits": 173
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "institutional_flow_20": 2945,
+            "margin_flow_20": 1567
+          },
+          "hits": 25069,
+          "hit_days": 241,
+          "over_top_days": 241,
+          "max_hits": 161
+        }
+      },
+      "seconds": {
+        "plan": 12.5183681010094,
+        "institutional_flow_20": 3.000541047338629,
+        "margin_flow_20": 1.160934112209361,
+        "l2_order": 1.3878328601276735
+      }
+    },
+    "L3": {
+      "window": {
+        "first_signal": "2007-12-28",
+        "first_session": "2007-12-31",
+        "last_session": "2019-12-31",
+        "days": 2966,
+        "signal_days": 2966
+      },
+      "coverage": {
+        "2007": {
+          "days": 2,
+          "members": 851,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2008": {
+          "days": 249,
+          "members": 109905,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "price_raw": 0
+          }
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "price_raw": 0
+          }
+        }
+      },
+      "seconds": {
+        "plan": 54.47297658499156,
+        "price_raw": 4.931717798797763,
+        "x2_order": 35.94140336716373
+      }
+    },
+    "L4": {
+      "window": {
+        "first_signal": "2013-02-01",
+        "first_session": "2013-02-04",
+        "last_session": "2019-12-31",
+        "days": 1694,
+        "signal_days": 1694
+      },
+      "coverage": {
+        "2013": {
+          "days": 224,
+          "members": 104456,
+          "missing": {
+            "unusable": 4341,
+            "lead_ret_5": 18631,
+            "several_groups": 0,
+            "leader": 13626,
+            "no_group": 664
+          },
+          "usable": 4542,
+          "groups": 6160,
+          "min_usable": 18,
+          "short_days": 0,
+          "filled_leader": 0,
+          "filled_other": 0
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "unusable": 5132,
+            "lead_ret_5": 21045,
+            "several_groups": 0,
+            "leader": 15327,
+            "no_group": 586
+          },
+          "usable": 5109,
+          "groups": 6916,
+          "min_usable": 17,
+          "short_days": 0,
+          "filled_leader": 0,
+          "filled_other": 0
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "unusable": 6373,
+            "lead_ret_5": 20232,
+            "several_groups": 0,
+            "leader": 13398,
+            "no_group": 461
+          },
+          "usable": 4466,
+          "groups": 6844,
+          "min_usable": 16,
+          "short_days": 0,
+          "filled_leader": 0,
+          "filled_other": 0
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "unusable": 6536,
+            "lead_ret_5": 19957,
+            "several_groups": 0,
+            "leader": 13002,
+            "no_group": 419
+          },
+          "usable": 4334,
+          "groups": 6709,
+          "min_usable": 14,
+          "short_days": 0,
+          "filled_leader": 0,
+          "filled_other": 0
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "unusable": 6461,
+            "lead_ret_5": 20937,
+            "several_groups": 0,
+            "leader": 13983,
+            "no_group": 493
+          },
+          "usable": 4661,
+          "groups": 6910,
+          "min_usable": 16,
+          "short_days": 0,
+          "filled_leader": 0,
+          "filled_other": 0
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "unusable": 7175,
+            "lead_ret_5": 20778,
+            "several_groups": 0,
+            "leader": 13308,
+            "no_group": 295
+          },
+          "usable": 4436,
+          "groups": 6963,
+          "min_usable": 16,
+          "short_days": 0,
+          "filled_leader": 0,
+          "filled_other": 0
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "unusable": 8521,
+            "lead_ret_5": 21293,
+            "several_groups": 0,
+            "leader": 12480,
+            "no_group": 292
+          },
+          "usable": 4160,
+          "groups": 6897,
+          "min_usable": 15,
+          "short_days": 0,
+          "filled_leader": 0,
+          "filled_other": 0
+        }
+      },
+      "seconds": {
+        "plan": 26.555570688011358,
+        "ret_5+turnover_60": 9.115225234767422,
+        "l4_order": 19.471982087925426
+      }
+    }
+  },
+  "load_seconds": 394.53120700600266,
+  "load_seconds_parts": {
+    "panel": 385.93053441100346,
+    "trade": 3.701945157998125,
+    "members": 4.898282091002329
+  },
+  "elapsed_seconds": 521.4102196290041,
+  "peak_memory_gb": 1.5742912292480469,
+  "bars": 4989543
+}
