@@ -21,7 +21,7 @@
 ## 不做的
 
 - 不留言、不 push、不改檔、不合併；不跑 `docker build`、任何 `prune`；gh 只讀這個 PR（`gh pr view`／`gh pr diff`）。
-- 預設只讀程式與 PR 本文的證據；只有證據不足、又無法從程式判斷時才跑測試。跑測試只在容器內跑相關測試檔，compose project 用 `t<pr>-review`，結束前 `docker compose -p t<pr>-review down --volumes --rmi all`。
+- 預設只讀程式與 PR 本文的證據；只有證據不足、又無法從程式判斷時才跑測試。跑測試只在容器內跑相關測試檔，compose project 用 `t<pr>-review`（其他名稱的 `run`／`up`／`build` 由 hook 擋下，[GUARDRAILS](../GUARDRAILS.md)），結束前 `docker compose -p t<pr>-review down --volumes --rmi all`。
 - 台北 21:30～23:30（排程 daily 時段）不起容器。
 - 主機可用記憶體不到 5 GB 時不起容器。
 - 因上面兩條沒跑的測試，寫進「哪些沒看」。

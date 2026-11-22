@@ -84,7 +84,7 @@ python -m uvicorn app.main:app --reload --port 8000
 | --- | --- |
 | 開發 | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`：bind mount 整個 checkout，api 以 `uvicorn --reload`、web 以 Vite HMR 即時套用修改（Windows bind mount 不送檔案事件，兩者都以輪詢偵測：`WATCHFILES_FORCE_POLLING`、`CHOKIDAR_USEPOLLING`）。`stock-data` 沒有 `stock.db` 時，api 啟動前寫入 verify 假資料庫（`tools/verify/fixture_db.py`）；已有的 `stock.db` 不動。scheduler 只在加 `--profile scheduler` 時啟動，開發用的 checkout 不會自己跑 daily、news |
 | 正式拓撲 | `docker compose up -d --build`：web 經 nginx 服務 build 好的頁面。api 在空的 `stock-data` 上會拒絕啟動（[資料庫、migration 與 readiness](#資料庫migration-與-readiness)），要先 `docker compose run --rm api python -m worker.cli init-db`，或把 `copy_db.py` 做的副本放進 volume |
-| 後端測試、lint、前端測試與 build | `docker compose -p task-<issue> run --rm …`，命令與容器內 git 的掛法見[工作手冊「本機檢查」](../WORKFLOW.md#本機檢查)（#339） |
+| 後端測試、lint、前端測試與 build | `docker compose -p task-<issue> run --rm …`（agent 的 `build`／`create`／`run`／`scale`／`up`／`watch` 只在測試 project 或寫明 `-p stock-lab` 時放行，上兩列不帶 `-p` 的寫法在管理 checkout 會被擋，[GUARDRAILS](../GUARDRAILS.md)），命令與容器內 git 的掛法見[工作手冊「本機檢查」](../WORKFLOW.md#本機檢查)（#339） |
 | 狀態與停止 | `docker compose ps`（健康狀態）、`docker compose logs <服務>`、`docker compose down`（`--volumes` 會連 `stock-data` 一起刪；agent 的 hook 只放行以 `-p` 寫明測試 project 的 `down -v`，[GUARDRAILS](../GUARDRAILS.md)） |
 
 **變數**（從 shell 或根目錄 `.env` 讀，見 [`.env.example`](../../.env.example)）：

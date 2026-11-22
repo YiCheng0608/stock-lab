@@ -29,6 +29,10 @@ function hook(input, env = process.env) {
 
 const bash = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 
+// The compose project rule reads COMPOSE_PROJECT_NAME of the session (#976), which an engineer's
+// session has (dispatch.sh): every test sets it itself, so the results do not depend on who runs them.
+delete process.env.COMPOSE_PROJECT_NAME;
+
 describe('Bash rules', () => {
   const blocked = {
     'git clean -x': ['git clean -fdx', 'git clean -xfd', 'git clean -dfx', 'git clean -fX', 'git -C ../x clean -f -x'],
@@ -551,7 +555,7 @@ describe('.env rules', () => {
     'docker compose config -q --format json',
     'docker compose --profile dev config --quiet',
     'docker compose ps',
-    'docker compose up -d --build',
+    'docker compose -p t360 up -d --build',
     "docker inspect --format '{{.State.Status}}' t360-api-1",
     'docker inspect -f "{{.Config.Image}} {{json .Mounts}}" t360-api-1',
     "docker container inspect --format='{{.State.Health.Status}}' t360-api-1",
@@ -559,7 +563,7 @@ describe('.env rules', () => {
     "docker inspect -f '{{json .HostConfig}}' t360-api-1",
     'docker network inspect t360_default',
     'docker volume inspect t360_stock-data',
-    'docker compose run --rm api python -m worker.cli status',
+    'docker compose -p t360 run --rm api python -m worker.cli status',
     'docker compose exec api python -m pytest -q',
     'docker run --rm -e STOCK_DATA_DIR=/data --env-file ./fake-env.txt alpine true',
     'git commit -m "allow docker compose config -q, block docker inspect"',
@@ -708,7 +712,7 @@ describe('.env rules', () => {
     'docker compose -pt341_b down -v',
     'docker compose -p deploy-smoke-341 down -v',
     'docker compose -f docker-compose.yml down -v -p task-341',
-    'docker compose up -d -V',
+    'docker compose -p t341 up -d -V',
     'docker compose rm -v -f',
     'docker volume rm t341_stock-data',
     'git commit -m "block compose down -v of the production project"',
@@ -1084,6 +1088,215 @@ describe('.env rules', () => {
     const matcher = new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`);
     for (const tool of [...MATCHED_TOOLS, 'mcp__codebase-memory-mcp__search_code', 'mcp__codebase-memory-mcp__get_code_snippet']) {
       assert.ok(matcher.test(tool), tool);
+    }
+  });
+});
+
+// --- compose project (#976): compose that creates resources runs in a test project ----------
+// PR #895 (`-p t-evaltiming`) and PR #975 (`-p flaky-notify`) left volumes that sweep.sh never
+// removes and docker volume rm refuses.
+describe('compose project rule', () => {
+  let tmp;
+  let management; // a directory named like the management checkout: compose's project would be stock-lab
+  before(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-guard-976-'));
+    management = path.join(tmp, 'stock-lab');
+    fs.mkdirSync(management);
+  });
+  after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  const withEnv = (vars, fn) => {
+    const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      return fn();
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  };
+
+  const CREATE_BLOCKED = [
+    // The two precedents and the management checkout without -p (AC-1).
+    'docker compose -p flaky-notify run --rm api python -B -m pytest -p no:cacheprovider -q backend/tests/test_notify_card.py',
+    'docker compose -p t-evaltiming up -d',
+    'docker compose run --rm api python -m worker.cli status',
+    'docker compose up -d --build',
+    'docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build',
+    'docker compose create',
+    'docker compose build api',
+    'docker compose watch',
+    'docker compose scale api=2',
+    'docker compose -p my-app build',
+    'docker compose -p t976x up -d',
+    'docker compose -p stock-lab-release up -d',
+    'docker compose -p smokey up -d',
+    'docker compose -p= run --rm api true',
+    'docker compose --project-name flaky-notify run --rm api true',
+    'docker compose --project-name=t-evaltiming up',
+    // compose takes the last -p, and none after the subcommand (run's -p is --publish).
+    'docker compose -p task-976 -p flaky-notify up -d',
+    'docker compose run --rm -p 8000:8000 api true',
+    'docker compose -p "$P" build api',
+    'docker-compose -p flaky-notify up',
+    'docker.exe compose up -d',
+    'docker --context default compose -p flaky-notify up -d',
+    'MSYS_NO_PATHCONV=1 docker compose run --rm api true',
+    'cd ../x && docker compose up -d',
+    'bash -c "docker compose -p flaky-notify run --rm api true"',
+    '(docker compose up -d)',
+    'out=$(docker compose -p flaky-notify run --rm api true)',
+  ];
+  // docs/WORKFLOW.md 本機檢查, docs/templates, docs/ops/SETUP.md, docs/RELEASE.md and the
+  // commands that make nothing new (AC-2).
+  const CREATE_ALLOWED = [
+    'docker compose -p task-976 run --rm --build "${GIT_RO[@]}" api python -B -m pytest -p no:cacheprovider -q backend/tests/test_x.py',
+    'docker compose -p task-976 run --rm --build api ruff check --no-cache backend tools',
+    'docker compose -p task-976 run --rm --build api ruff format --check --no-cache backend tools',
+    'docker compose -p task-976 -f docker-compose.yml -f docker-compose.dev.yml run --rm --build web pnpm run test:ci',
+    'docker compose -p task-976 run --rm --build "${GIT_RO[@]}" api python -B tools/ci/checks.py repository --base 4c4a15930a7a0f8ea434d9790c6d4fe9aa5d8514',
+    'docker compose -p t975 run --rm api python -m pytest -q',
+    'docker compose -p t975-review run --rm api true',
+    'docker compose -p task-976-verify up -d',
+    'docker compose -p deploy-smoke-976 up -d',
+    'docker compose -p smoke build',
+    'docker compose -pt976 up -d',
+    'docker compose -p=t976 up -d',
+    'docker compose --project-name=task-976 create',
+    'docker compose --project-name t976 build',
+    'docker compose -p flaky-notify -p t976 up -d',
+    'docker compose -p task-976 run --rm -p 8000:8000 api true',
+    'docker-compose -p t976 up -d',
+    'bash -c "docker compose -p t976 run --rm api true"',
+    '(docker compose -p task-976 up -d)',
+    // Production named outright: docs/ops/SETUP.md (recreate scheduler), docs/RELEASE.md (init-db).
+    'docker compose -p stock-lab up -d --no-build --force-recreate scheduler',
+    'STOCK_RELEASE_TAG=v1.3.0 docker compose -p stock-lab up -d --no-build --force-recreate scheduler',
+    'docker compose -p stock-lab run --rm --no-deps api python -m worker.cli init-db',
+    // Nothing new is created.
+    'docker compose ps',
+    'docker compose logs scheduler',
+    'docker compose down',
+    'docker compose stop',
+    'docker compose start',
+    'docker compose pull',
+    'docker compose exec api python -m pytest -q',
+    'docker compose -p flaky-notify ps',
+    'docker compose -p flaky-notify down',
+    'docker compose -p stock-lab exec scheduler python -m worker.cli maintenance status',
+    'docker compose -p task-976 -f docker-compose.yml -f docker-compose.dev.yml down --volumes --rmi all',
+    'docker exec stock-lab-scheduler-1 python -m worker.cli status',
+    'git commit -m "block docker compose up -d outside a test project"',
+  ];
+
+  for (const shell of ['bash', 'powershell']) {
+    test(`${shell}: compose build／create／run／scale／up／watch outside a test project is blocked (#976)`, () => {
+      for (const command of CREATE_BLOCKED) {
+        assert.match(commandDenial(command, shell, [], management) || '', /#976/, command);
+      }
+    });
+
+    test(`${shell}: compose commands of the docs, of a test or production project, and that create nothing pass (#976)`, () => {
+      for (const command of CREATE_ALLOWED) assert.equal(commandDenial(command, shell, [], management), null, command);
+    });
+  }
+
+  test('the message names the project the hook read and how to write it (#976)', () => {
+    const cases = {
+      'docker compose -p flaky-notify run --rm api true': '「flaky-notify」（-p flaky-notify）',
+      'docker compose -p t-evaltiming up -d': '「t-evaltiming」（-p t-evaltiming）',
+      'docker compose run --rm api true': '目錄名（目前目錄是「stock-lab」）',
+      'docker compose -p "$P" build api': 'hook 讀不出 project 名稱（-p $P）',
+    };
+    for (const [command, read] of Object.entries(cases)) {
+      const reason = commandDenial(command, 'bash', [], management) || '';
+      assert.ok(reason.includes(read), `${command}: ${reason}`);
+      assert.ok(reason.includes('docker compose -p t975 run --rm'), reason);
+      assert.ok(reason.includes('-p task-<issue>'), reason);
+    }
+  });
+
+  test('bash: COMPOSE_PROJECT_NAME as a prefix or an earlier assignment names the project (#976)', () => {
+    const allowed = [
+      'COMPOSE_PROJECT_NAME=task-976 docker compose run --rm api true',
+      'COMPOSE_PROJECT_NAME=t976 MSYS_NO_PATHCONV=1 docker compose up -d',
+      'export COMPOSE_PROJECT_NAME=task-976; docker compose up -d',
+      'export COMPOSE_PROJECT_NAME=task-976 && docker compose build',
+      'P=t976; docker compose -p "$P" up -d',
+      'P=t976 && docker compose -p ${P} up -d',
+      'N=976; docker compose -p "task-$N" up -d',
+      // docs/RELEASE.md 含 migration 的版本, as written there.
+      'TAG=v1.3.0 P=stock-lab\nR=/x\n(cd "$R" && STOCK_RELEASE_TAG="$TAG" STOCK_GIT_HEAD="$(git rev-parse HEAD)" docker compose -p "$P" build api)',
+      'TAG=v1.3.0 P=stock-lab\n(cd "$R" && STOCK_RELEASE_TAG="$TAG" docker compose -p "$P" run --rm --no-deps api python -m worker.cli init-db)',
+      // .claude/skills/verify-stock-lab: the function's body is no compose run of its own.
+      'P=task-976-verify\ndc() { MSYS_NO_PATHCONV=1 docker compose -p "$P" "$@"; }\ndc up -d',
+    ];
+    const blocked = [
+      'COMPOSE_PROJECT_NAME=flaky-notify docker compose run --rm api true',
+      'P=flaky-notify; docker compose -p "$P" up -d',
+      'P="$(pwd)"; docker compose -p "$P" up -d',
+      'docker compose -p "${GIT_RO[@]}" up -d',
+      // Not exported, and the session has none: compose does not see it.
+      'COMPOSE_PROJECT_NAME=t976; docker compose up -d',
+      'export COMPOSE_PROJECT_NAME=t976; unset COMPOSE_PROJECT_NAME; docker compose up -d',
+      // A prefix lasts for its own command alone.
+      'COMPOSE_PROJECT_NAME=t976 true; docker compose up -d',
+    ];
+    for (const command of allowed) assert.equal(commandDenial(command, 'bash', [], management), null, command);
+    for (const command of blocked) assert.match(commandDenial(command, 'bash', [], management) || '', /#976/, command);
+  });
+
+  test('powershell: $env:COMPOSE_PROJECT_NAME and $P set earlier name the project (#976)', () => {
+    const allowed = [
+      "$env:COMPOSE_PROJECT_NAME = 'task-976'; docker compose up -d",
+      "$env:COMPOSE_PROJECT_NAME='t976'; docker compose run --rm api true",
+      "$P = 't976'; docker compose -p $P up -d",
+    ];
+    const blocked = [
+      "$env:COMPOSE_PROJECT_NAME = 'flaky-notify'; docker compose up -d",
+      "$P = 'flaky-notify'; docker compose -p $P up -d",
+      'docker compose -p $P up -d',
+    ];
+    for (const command of allowed) assert.equal(commandDenial(command, 'powershell', [], management), null, command);
+    for (const command of blocked) assert.match(commandDenial(command, 'powershell', [], management) || '', /#976/, command);
+  });
+
+  test('COMPOSE_PROJECT_NAME of the session names the project; -p comes first (#976)', () => {
+    const run = (command, value) => hook({ ...bash(command), cwd: management }, { ...process.env, COMPOSE_PROJECT_NAME: value });
+    assert.equal(run('docker compose run --rm api true', 'task-976').code, 0);
+    assert.equal(run('docker compose up -d --build', 't976').code, 0);
+    const result = run('docker compose run --rm api true', 'flaky-notify');
+    assert.equal(result.code, 2);
+    assert.ok(result.stderr.includes('「flaky-notify」（環境變數 COMPOSE_PROJECT_NAME）'), result.stderr);
+    assert.equal(run('docker compose -p flaky-notify up -d', 'task-976').code, 2);
+    assert.equal(run('docker compose -p t976 up -d', 'flaky-notify').code, 0);
+    // An empty prefix unsets it: compose goes to the directory name.
+    assert.equal(run('COMPOSE_PROJECT_NAME= docker compose up -d', 'task-976').code, 2);
+    assert.equal(run('docker compose run --rm api true', '').code, 2);
+  });
+
+  test('compose up of the project STOCK_COMPOSE_PROJECT names passes, of another production name not (#976)', () => {
+    withEnv({ STOCK_COMPOSE_PROJECT: 'prod-976' }, () => {
+      assert.equal(commandDenial('docker compose -p prod-976 up -d', 'bash', [], management), null);
+      assert.ok(commandDenial('docker compose -p prod-977 up -d', 'bash', [], management));
+    });
+    withEnv({ STOCK_COMPOSE_PROJECT: undefined }, () => {
+      assert.ok(commandDenial('docker compose -p prod-976 up -d', 'bash', [], management));
+    });
+  });
+
+  test('the hook process blocks compose run of a project not named as a test project through Bash, PowerShell and Monitor (#976)', () => {
+    for (const tool_name of ['Bash', 'PowerShell', 'Monitor']) {
+      const result = hook({ tool_name, tool_input: { command: 'docker compose -p flaky-notify run --rm api true' }, cwd: management });
+      assert.equal(result.code, 2, tool_name);
+      assert.match(result.stderr, /「flaky-notify」/, tool_name);
+      const ok = hook({ tool_name, tool_input: { command: 'docker compose -p t975 run --rm api true' }, cwd: management });
+      assert.equal(ok.code, 0, tool_name);
     }
   });
 });
