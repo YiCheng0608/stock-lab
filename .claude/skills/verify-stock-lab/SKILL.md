@@ -172,7 +172,9 @@ dc run --rm --no-deps -v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$V
    ```
 
    範例的數值與結論是虛構的。
-3. **推送**：分支名為 `task/<n>-...` 時 `bash "$WT/tools/ops/push_pr_assets.sh" --issue <n> --dir "$OUT"`（`.private/` 等隱藏項目不推；不要把輸出接到 `head`，會讓推送中斷），「證據」行就是它印出的第二行（`https://github.com/YiCheng0608/stock-lab/tree/pr-assets/<n>/<$OUT 的目錄名>`）。分支不是 `task/<n>-...` 時不推送，證據行寫 `$OUT` 的本機路徑。
+3. **推送**：分支名為 `task/<n>-...` 時分兩個命令（同一個命令裡 hook 會先讀到還沒遮的檔而擋下）：
+   1. 遮罩：`"$PY" -B "$WT/tools/verify/page_checks.py" --mask-evidence "$OUT"`（只用標準函式庫，主機的 `$PY` 即可，容器跑法也在主機跑）。新聞原文與 AI 摘要常寫「開盤」後接數字，會被[富果報價守門員](../../../docs/DATA_SOURCES.md#盤中報價)判成報價；這一步把要推送的檔（`.private/` 等隱藏項目與圖片以外）裡命中的數值換成 `<價>`／`<時間>`／`<值>`，其餘內容不變，原檔存 `$OUT/.private/unmasked/`（不推送）。三態結果是跑檢查時用原值判的，遮罩不改。exit 1 表示有檔沒辦法自動遮（印出檔名、行號與樣式），全部未改：照訊息手動處理後再跑一次。遮罩後又改了 `summary.md` 等推送的檔就再跑一次（已遮的不重複處理，原檔不覆蓋）。人工判讀（第 3 節）在遮罩前做，讀的是原值。
+   2. `bash "$WT/tools/ops/push_pr_assets.sh" --issue <n> --dir "$OUT"`（`.private/` 等隱藏項目不推；不要把輸出接到 `head`，會讓推送中斷），「證據」行就是它印出的第二行（`https://github.com/YiCheng0608/stock-lab/tree/pr-assets/<n>/<$OUT 的目錄名>`）。分支不是 `task/<n>-...` 時不推送，證據行寫 `$OUT` 的本機路徑。
 4. 最後回覆：summary 全文。不自行在 Issue 或 PR 留言，由呼叫者決定貼到哪裡。
 
 ### 私人資料
