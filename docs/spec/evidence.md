@@ -904,6 +904,46 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #962 | 第一版；沒有人用它對回補資料跑過 |
 
+**第十三輪的假設**（[第十三輪：U1～U3](#第十三輪u1u3)）：`tools/research/round13_research.py`（[#968](https://github.com/YiCheng0608/stock-lab/issues/968)）。U1～U3 寫在 `round13_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round12_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（`--members` 只指成員表的路徑，sha256 要是 `mainstream_research.MEMBERS_SHA256`，同 `round7_research`、`round11_research`）。三個都走組合引擎：引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`explore_judge`、「大者先」排序（`round5_research.order_key`）、`vol_i`（`feature_evidence._mean_volume`）、產業成員（`mainstream_research.group_members`）、M1 的前 5 族群（`mainstream_research.signal_day`，裡面是 `rank_groups`）、除權息（`research_report.load_actions`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；U1 和 W1、U3 和 V3 的重疊，名單用 `round6_research.rank`、`round5_research.rank`（各自第 1 版的 `HYPOTHESES`），比例與摘要用 `round10_research`（`overlap_share`、`overlap_summary`）。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round12_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進、成員表的 sha256 不符）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）。成員表預設讀 DB 旁的
+# research/industry_members/industry_members_v1.json（同 mainstream_research）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round13_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **一份 panel**：`round13_research.load` 用 `explore_research.load_context` 讀一份 panel（含成交金額與籌碼），市場整天沒有法人資料的日子在同一份 panel 上算一次（`round13_research.market_gaps`），成員表的快照建在同一個 market 上（`mainstream_research.build_context`，只讀 `snapshot_date` ≤ 該段最後一天的列），除權息經 `research_report.load_actions` 讀到該段最後一天；W1、V3 的名單用的 `round6_research.Context`、`round5_research.Context`（V3 的除權息是同一批列）也建在同一個 `explore_research.Context` 上。
+- **算法**：照[第十三輪：U1～U3](#第十三輪u1u3)與[第十三輪實作釋義](#第十三輪實作釋義)。
+  - 共同：「沒有法人進出」是 `round13_research.no_trading`，這一檔那一根的 `foreign_buy`、`trust_buy`、`dealer_buy` 每一欄都是 NaN（沒有籌碼列或 null）或 0。「市場整天沒有法人資料」是 `round13_research.market_gaps`：某個交易日，panel 裡這一檔的市場（`instruments.exchange`，上市或上櫃）沒有任何一檔三欄中有一欄不是 null（0 算有資料）；panel 只含 `stock`／`ipo`，同研究工具的母體。窗口是這一檔自己的日線（at−59…at、at−19…at），窗口內任一根停牌，或任一根的交易日是它的市場整天沒有法人資料，就缺值（`round13_research.window_of`）。
+  - U1：`round13_research.inst_quiet_60`，60 根中「沒有法人進出」的根數（0～60）。退化的判準：60 根中任一根停牌，或任一根所在的交易日這一檔的市場（上市或上櫃）沒有任何一檔有法人值（三欄中有一欄非 null）時缺值、排最後；沒有籌碼列，或三欄每一欄都是 null 或 0 的根算「沒有法人進出」。母體中大者先、同值以雜湊取前 20 名。另列（只列出、不判定）：和 W1 的重疊：U1 與 W1（`round6_research` 第 1 版的 `HYPOTHESES["W1"]`）每日名單的重疊比例：|U1 的前 20 名 ∩ W1 的前 20 名| ÷ U1 當天的名單檔數；U1 或 W1 當天沒有名單的日子不計。只列出、不判定。W1 的名單由 `round13_research.w1_names`（`round6_research.rank`）在同一個 T、同一個母體算；各段的 TWSE 週六補班日天數是段內訊號日落在星期六的天數。`summary.md` 列各段平均與依年的平均，`explore.json` 的 U1 列有 `overlap_w1`、`saturdays`。
+  - U2：`round13_research.flow_i` 是 20 根三欄的合計（null 的欄與沒有進出的根算 0，不用 `feature_evidence._flow` 的缺值規則），`round13_research.vol_i` 是 `feature_evidence._mean_volume`。`round13_research.industry_day`：T 日的每個產業（`mainstream_research.group_members`，`snapshot_date` ≤ T 的最新一份），T 日母體內 `flow_i` 與 `vol_i` 都有值的成員是有效成員，有效成員至少 5 檔（`MIN_VALID`）的產業 `ind_flow_20`＝Σ `flow_i` ÷ Σ `vol_i`；一檔屬於幾個產業，每個產業的加總與有效成員數都算它，排序鍵取 `group_id` 字串最小的那個產業的 `ind_flow_20`，那個產業不排名時排序鍵缺值，不改看別的產業。退化的判準：`flow_i` 在 20 根中任一根停牌、任一根所在的交易日這一檔的市場沒有任何一檔有法人值時缺值（沒有法人進出的根與 null 的欄算 0），`vol_i`（`feature_evidence._mean_volume`）沒有值時缺值；自己的 `flow_i` 或 `vol_i` 缺值、沒有產業，或所屬產業（`group_id` 字串最小的那個）有效成員不到 5 檔時排序鍵缺值、排最後。母體依排序鍵大者先，同值（同一產業）以雜湊取前 20 名。另列（只列出、不判定）：U2 當天名單落在 M1 前 5 族群（`mainstream_research.signal_day` 的 `rank_groups`，同一個 T 算）的比例：名單中所屬產業（`group_id` 字串最小的那個）是 M1 當天選出的族群之一的檔數 ÷ U2 當天的名單檔數；名單的產業數是名單中所屬產業的個數（沒有產業的不算）。U2 或 M1 當天沒有名單的日子不計。只列出、不判定。M1 的前 5 族群由 `round13_research.m1_groups`（`mainstream_research.signal_day`）在同一個 T 算，沒有 TAIEX 240 日報酬的日子 M1 沒有名單。`explore.json` 的 U2 列有 `m1_share`、`industries`。
+  - U3：`round13_research.cash_paid_5y`，T 在 Y 年時，Y−5…Y−1 每一年都至少有一列這一檔的除權息、`action_date` 落在該年、`cash_dividend` > 0（`round13_research.paid_years` 從讀進來的除權息列整理每檔有配現金的年份，只用 T 所在年度之前的年份，所以只讀到 `action_date` < T 的列）。退化的判準：5 個曆年中任一年沒有 `cash_dividend` > 0 的列（null 不算）時不符合；只讀 `action_date` < T 的列；符合的不足 20 檔時餘額留現金。母體中 `cash_paid_5y` 成立的檔，以雜湊取前 20 名、不排序；K＝120，子帳戶與母體都是 120 份。另列（只列出、不判定）：每天符合的檔數（各段與依年的平均、不足 20 檔與沒有任何一檔的訊號日數）；和 V3 的重疊：U3 與 V3（`round5_research` 第 1 版的 `HYPOTHESES["V3"]`）每日名單的重疊比例：|U3 的前 20 名 ∩ V3 的前 20 名| ÷ U3 當天的名單檔數；U3 或 V3 當天沒有名單的日子不計。只列出、不判定。V3 的名單由 `round13_research.v3_names`（`round5_research.rank`）在同一個 T 算，`explore.json` 的 U3 列有 `overlap_v3`、`hits`、`short`。
+  - 漲跌幅依日期：`exit_research.daily_limit`（2015-05-29 以前 ±7%、2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），表算進 `definitions_sha256`；T+1 漲停鎖死依當根的日期。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.302（2 ≤ t < 3.302 判「前瞻觀察」），寫死、不在執行時重算，算進 `definitions_sha256`。
+- **探索**：`python tools/research/round13_research.py --db /research/stock.db --segment exploration --hypotheses <U1,U2,U3 或其中幾個> --out <目錄> [--members <成員表>] [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）。
+- **驗證**：`python tools/research/round13_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--members <成員表>] [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證，另加成員表的 sha256；報告要是本工具的探索段報告（`design` 是 `968`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27。**讀取的起點**：三段都從副本起點讀（`LOAD_FROM`，同 `round10_research`～`round12_research`；規則 `LOAD_RULE` 算進 `definitions_sha256`），只讀到該段的最後一天；起點之前的列只供特徵，不進淨值與判定。判「通過」的另跑已用段，寫在 `<代號>/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以。各假設用自己的訊號日；缺值比例的分母是母體檔次；每個訊號日都數。
+  - U1：依年列日數、母體檔次、`inst_quiet_60` 的缺值比例（另分停牌與市場整天沒有法人資料）、有值的檔次的分布（平均、p10／p50／p90、等於 0 與等於 60 的比例）、上市與上櫃各自整天沒有法人資料的訊號日數、週六補班日的訊號日數。
+  - U2：依年列日數、母體檔次、可排名產業數（每日平均、最少與最多的一天）、母體內有成員的產業數、沒有可排名產業的訊號日數、`flow_i` 與 `vol_i` 的缺值比例、排序鍵的缺值比例（另分自己缺值、沒有產業、產業不排名）、屬於多個產業的檔次、名單（前 20 名）中排序鍵缺值的檔次。
+  - U3：依年列日數、母體檔次、符合 `cash_paid_5y` 的檔數（每日平均、最少與最多的一天）、符合的不足 20 檔與沒有任何一檔符合的訊號日數。
+  - 耗時：總耗時、載入耗時（另列 panel、市場整天沒有法人資料的日子、成員表與除權息）、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和特徵的計算時間（`inst_quiet_60`、`w1_order`（同一個 T 算 W1 的名單，各段要用來算重疊比例；`--coverage-only` 只計時、不算重疊比例）、`flow_i`、`vol_i`、`ind_flow_20`、`u2_order`、`m1_groups`（同一個 T 算 M1 的前 5 族群，同 `w1_order`）、`cash_paid_5y`、`v3_order`（同 `w1_order`））。
+  - 有明顯斷點，或缺值比例有異常的年份或欄位時，先在工具單提問、不跑探索段。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round13_research"`、`"round": 13`。代號不重疊，各工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 3 個、累計 52 個、探索段與驗證段的門檻、引擎、U1～U3 的限制；總表每個假設列方向、日數（有淨值的交易日）、對加權指數的超額與 t（第一個列）、對母體的超額與 t、絕對報酬與判定；總表下另列 U1 和 W1 的平均重疊、U1 的週六補班日天數、U2 落在 M1 前 5 族群的平均比例與每天名單的平均產業數、U3 和 V3 的平均重疊與每天符合的平均檔數。
+  - `explore.json`：同上的總表（每個假設另有 `engine`；U1 另有 `overlap_w1`、`saturdays`，U2 另有 `m1_share`、`industries`，U3 另有 `overlap_v3`、`hits`、`short`），另有 `tool`、`design`（`968`）、`validation_min_t`、`engines`、`members_sha256`、`definitions_sha256`、工具 commit、副本資訊與先決條件。
+  - `<代號>/summary.md`（開頭列退化的判準與限制，U2 另列成員表；U1 另有「週六補班日」與「和 W1 的重疊」兩節，U2 另有「落在 M1 前 5 族群的比例」與「每天名單的產業數」兩節，U3 另有「和 V3 的重疊」與「每天符合 `cash_paid_5y` 的檔數」兩節；資料覆蓋同 `--coverage-only` 的表）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名；U1 有 `inst_quiet_60`，U2 有 `ind_flow_20`、`group`，U3 有 `cash_paid_5y`）、`trades.csv`。
+  - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
+- **耗時與記憶體**：（待 #968 AC-4 的 `--coverage-only` 實測補上）
+- 文件與程式用同一套說法：U1～U3 的退化判準與重疊比例的說明是 `round13_research` 的 `DEGENERATE`、`OVERLAP_NOTE`（`coverage.md` 的說明句 `COVERAGE_NOTES` 引用同一份 `DEGENERATE`），本段逐字照抄，`backend/tests/test_round13_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round13_research` 的版本**：`round13_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（U1～U3 的定義、窗口 60、20 與 5 個曆年、N 20 與 K 60、20、120、產業至少 5 檔有效成員、排序方向、「沒有法人進出」與「市場整天沒有法人資料」的認定、U2 的 null 欄算 0、自己缺值排最後與一檔屬於多個產業的規則、U3 的 null 不算有配與只讀 `action_date` < T、W1 與 V3 的定義、成員表、分段、兩段的門檻、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #968 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
