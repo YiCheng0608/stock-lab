@@ -819,6 +819,41 @@ def test_the_overlap_is_over_the_days_list_and_skips_days_without_a_list(
     )
 
 
+def test_the_u1_list_quiet_is_listed_by_hand(monkeypatch):
+    """#968 決定 7083548336: each day's list's inst_quiet_60 mean, minimum and
+    names at 0, by year and over the segment (listed only)."""
+
+    def rows(values):
+        return [(i, {"inst_quiet_60": v}, f"{i}") for i, v in enumerate(values)]
+
+    assert tool.list_quiet(rows([0, 3, 60, None])) == (21.0, 0, 1, 3)
+    assert tool.list_quiet(rows([None])) is None and tool.list_quiet([]) is None
+    sessions = weekdays(date(2016, 12, 29), 5)  # 2 in 2016, 3 in 2017
+    lists = {0: [5, 1, 0], 1: [10, 10], 2: [], 3: [0, 0, 6, None]}
+    monkeypatch.setattr(lib, "universe", lambda panel, day, lots: [])
+
+    def rank(ctx, spec, day, members):
+        return tool.Ranked(rows(lists[sessions.index(day)]))
+
+    monkeypatch.setattr(tool, "rank_u1", rank)
+    monkeypatch.setitem(tool.overlap_with, "U1", lambda ctx, day, members: set())
+    ctx = SimpleNamespace(panel=SimpleNamespace(sessions=sessions, symbols={}), gaps={})
+    planned = tool.plan(ctx, tool.HYPOTHESES["U1"], "U1", 1, 4)
+    assert planned.quiet_lists == {
+        "2016": [(2.0, 0, 1, 3), (10.0, 10, 0, 2)],
+        "2017": [(2.0, 0, 2, 3)],  # day 2: no list, not counted
+    }
+    got = tool.list_quiet_summary(planned.quiet_lists)
+    assert got["days"] == 3
+    assert got["mean"] == pytest.approx((2 + 10 + 2) / 3)
+    assert got["min_mean"] == pytest.approx(10 / 3) and got["min"] == 0
+    assert got["zero_share"] == pytest.approx(3 / 8)
+    assert got["years"]["2016"] == {
+        "days": 2, "mean": 6.0, "min_mean": 5.0, "min": 0, "zero_share": 1 / 5,
+    }  # fmt: skip
+    assert tool.list_quiet_summary({})["mean"] is None
+
+
 def test_the_u1_saturdays_are_counted_by_hand(monkeypatch):
     days = [date(2016, 1, 4), date(2016, 1, 5), date(2016, 1, 30),  # a Saturday
             date(2016, 2, 1), date(2016, 6, 4), date(2016, 6, 6)]  # fmt: skip
@@ -1293,6 +1328,9 @@ def test_the_exploration_reports_the_round_and_records_the_ledger(explored):
     assert report["read_until"] == days[299].isoformat()
     hyp = report["hypotheses"]
     assert hyp["U1"]["overlap_w1"]["days"] > 0 and hyp["U1"]["saturdays"] == 0
+    quiet = hyp["U1"]["list_quiet"]
+    assert quiet["days"] == hyp["U1"]["overlap_w1"]["days"] == 240
+    assert 0 <= quiet["min"] <= quiet["min_mean"] <= quiet["mean"] <= 60
     assert hyp["U2"]["industries"]["days"] > 0
     # M1 needs 241 TAIEX closes: its groups from signal date 240 on
     assert 0 < hyp["U2"]["m1_share"]["days"] <= 299 - 240
@@ -1321,6 +1359,8 @@ def test_the_exploration_reports_the_round_and_records_the_ledger(explored):
         assert tool.DEGENERATE[name] in summary and tool.OVERLAP_NOTE[name] in summary
     u1_md = (out / "U1" / "summary.md").read_text(encoding="utf-8")
     assert "## 和 W1 的重疊（U1 第 7 點）" in u1_md and "## 週六補班日" in u1_md
+    assert "## 每天名單的 `inst_quiet_60`（U1 第 8 點的限制，只列出、不判定）" in u1_md
+    assert "U1 每天名單的 `inst_quiet_60`" in text
     u2_md = (out / "U2" / "summary.md").read_text(encoding="utf-8")
     assert "## 落在 M1 前 5 族群的比例（U2 第 8 點）" in u2_md
     assert "## 每天名單的產業數" in u2_md

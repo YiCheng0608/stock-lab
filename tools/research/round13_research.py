@@ -212,6 +212,7 @@ OVERLAP_NOTE = {
     "U2": "U2 當天名單落在 M1 前 5 族群（`mainstream_research.signal_day` 的 `rank_groups`，"
     "同一個 T 算）的比例：名單中所屬產業（`group_id` 字串最小的那個）是 M1 當天選出的族群之一的檔數"
     " ÷ U2 當天的名單檔數；名單的產業數是名單中所屬產業的個數（沒有產業的不算）。"
+    "名單中排序鍵缺值的檔，產業數與比例也照 `group_id` 字串最小的產業計入。"
     "U2 或 M1 當天沒有名單的日子不計。只列出、不判定",
     "U3": 'U3 與 V3（`round5_research` 第 1 版的 `HYPOTHESES["V3"]`）每日名單的重疊比例：'
     "|U3 的前 20 名 ∩ V3 的前 20 名| ÷ U3 當天的名單檔數；U3 或 V3 當天沒有名單的日子不計。"
@@ -809,6 +810,11 @@ class Plan:
     industries: dict[str, list[float]] = field(default_factory=dict)  # U2, by year
     hits: dict[str, list[float]] = field(default_factory=dict)  # U3, by year
     saturdays: int = 0  # U1: signal dates on a Saturday
+    # U1 (listed only, #968 決定 7083548336): by year, each day's list's
+    # (mean, minimum, names at 0, names valued) of inst_quiet_60
+    quiet_lists: dict[str, list[tuple[float, int, int, int]]] = field(
+        default_factory=dict
+    )
 
 
 def _coverage_add(
@@ -877,6 +883,10 @@ def plan(
                     out.overlap.setdefault(year, []).append(share)
         if name == "U1":
             out.saturdays += day.weekday() == 5
+            if keep_rows:
+                parts = list_quiet(listed)
+                if parts is not None:
+                    out.quiet_lists.setdefault(year, []).append(parts)
         if name == "U2":
             chosen = m1_groups(ctx, at)  # timed in the coverage too
             if keep_rows:
@@ -908,6 +918,46 @@ def plan(
 
 overlap_share = r10.overlap_share
 overlap_summary = r10.overlap_summary
+
+
+def list_quiet(
+    rows: list[tuple[int, dict[str, Any], str]],
+) -> tuple[float, int, int, int] | None:
+    """U1's list of a day (listed only, #968 決定 7083548336): the mean and
+    the minimum of its ``inst_quiet_60``, its names at 0 and its names with a
+    value; None without a valued name."""
+
+    values = [v.get("inst_quiet_60") for _i, v, _t in rows]
+    values = [value for value in values if value is not None]
+    if not values:
+        return None
+    return sum(values) / len(values), min(values), values.count(0), len(values)
+
+
+def list_quiet_summary(
+    by_year: dict[str, list[tuple[float, int, int, int]]],
+) -> dict[str, Any]:
+    """The segment's and each year's: the mean of the daily means, the mean
+    and the smallest of the daily minimums, the share of the names at 0."""
+
+    def summary(days: list[tuple[float, int, int, int]]) -> dict[str, Any]:
+        if not days:
+            return {"days": 0, "mean": None, "min_mean": None, "min": None,
+                    "zero_share": None}  # fmt: skip
+        names = sum(day[3] for day in days)
+        return {
+            "days": len(days),
+            "mean": statistics.fmean(day[0] for day in days),
+            "min_mean": statistics.fmean(day[1] for day in days),
+            "min": min(day[1] for day in days),
+            "zero_share": sum(day[2] for day in days) / names,
+        }
+
+    every = [day for days in by_year.values() for day in days]
+    return {
+        **summary(every),
+        "years": {year: summary(days) for year, days in sorted(by_year.items())},
+    }
 
 
 def _result(name: str, segment: str) -> dict[str, Any]:
@@ -977,6 +1027,7 @@ def run_portfolio(
         result["overlap"] = overlap_summary(planned.overlap)
     if name == "U1":
         result["saturdays"] = planned.saturdays
+        result["list_quiet"] = list_quiet_summary(planned.quiet_lists)
     if name == "U2":
         result["industries"] = overlap_summary(planned.industries)
     if name == "U3":
@@ -1261,6 +1312,25 @@ def portfolio_markdown(result: dict[str, Any], header: dict[str, Any]) -> str:
             "（照同一規則算「沒有法人進出」，不另處理）。",
             "",
         ]
+    if "list_quiet" in result:
+        q = result["list_quiet"]
+        lines += [
+            "## 每天名單的 `inst_quiet_60`（U1 第 8 點的限制，只列出、不判定）",
+            "",
+            "每個訊號日前 20 名（有值的）的 `inst_quiet_60` 平均與最小值，各段與依年再取平均；"
+            "「最小值（最小的一天）」是段內或年內最小的一天；等於 0 的比例是等於 0 的檔次 ÷ 名單檔次"
+            "（#968 決定 7083548336）。",
+            "",
+            "| 期間 | 訊號日 | 名單平均 | 名單最小值（平均） | 名單最小值（最小的一天） | 等於 0 的檔次比例 |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+            *(
+                f"| {label} | {row['days']:,} | {lib.num(row['mean'], 1)} "
+                f"| {lib.num(row['min_mean'], 1)} | {'—' if row['min'] is None else row['min']} "
+                f"| {_pct(row['zero_share'], 1)} |"
+                for label, row in [("全段", q), *q["years"].items()]
+            ),
+            "",
+        ]
     if "overlap" in result:
         title = {
             "U1": "## 和 W1 的重疊（U1 第 7 點）",
@@ -1384,6 +1454,11 @@ def _row(result: dict[str, Any]) -> dict[str, Any]:
         row[key] = {k: result["overlap"][k] for k in ("days", "mean")}
     if "saturdays" in result:
         row["saturdays"] = result["saturdays"]
+    if "list_quiet" in result:
+        q = result["list_quiet"]
+        row["list_quiet"] = {
+            k: q[k] for k in ("days", "mean", "min_mean", "min", "zero_share")
+        }
     if "industries" in result:
         row["industries"] = {k: result["industries"][k] for k in ("days", "mean")}
     if "hits" in result:
@@ -1441,6 +1516,13 @@ def overview_markdown(report: dict[str, Any], sha256: str) -> str:
         if part:
             value = _pct(part["mean"], 1) if kind == "pct" else lib.num(part["mean"], 1)
             listed.append(f"- {label}：平均 {value}（{part['days']:,} 個訊號日）")
+    quiet = report["hypotheses"].get("U1", {}).get("list_quiet")
+    if quiet and quiet["days"]:
+        listed.append(
+            f"- U1 每天名單的 `inst_quiet_60`：平均 {lib.num(quiet['mean'], 1)}、"
+            f"最小值平均 {lib.num(quiet['min_mean'], 1)}，等於 0 的檔次比例 "
+            f"{_pct(quiet['zero_share'], 1)}（{quiet['days']:,} 個訊號日）"
+        )
     saturdays = report["hypotheses"].get("U1", {}).get("saturdays")
     if saturdays is not None:
         listed.append(f"- U1 段內的 TWSE 週六補班日：{saturdays:,} 天")
@@ -1488,7 +1570,8 @@ COVERAGE_NOTES = (
     "`w1_order` 是同一個 T 算 W1 名單的時間，`--coverage-only` 不算重疊比例，各段的 `summary.md` 才列",
     f"- U2：{DEGENERATE['U2']}。「可排名產業」是有效成員至少 5 檔的產業；"
     "「屬於多個產業的檔次」是母體中當天屬於兩個以上產業的檔次（加總都算它，排序鍵取 `group_id` 最小的）；"
-    "`m1_groups` 是同一個 T 算 M1 前 5 族群的時間，`--coverage-only` 不算比例",
+    "`m1_groups` 是同一個 T 算 M1 前 5 族群的時間，`--coverage-only` 不算比例；"
+    "名單中排序鍵缺值的檔，產業數與比例也照 `group_id` 字串最小的產業計入",
     f"- U3：{DEGENERATE['U3']}。`v3_order` 是同一個 T 算 V3 名單的時間，"
     "`--coverage-only` 不算重疊比例，各段的 `summary.md` 才列",
     "- 各假設用自己的訊號日（起日寫在各段標題）",
