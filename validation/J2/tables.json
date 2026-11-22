@@ -1,0 +1,266 @@
+{
+  "tool": "round12_research",
+  "version": 1,
+  "design": "962",
+  "definitions_sha256": "12f24befd44c279118ade14460c722f968849a00c48a27b4def7690ca3f0954f",
+  "label": "`turnover_60` 前 150 名以外、`trust_flow_20` > 0，依 `trust_flow_20` 大者先",
+  "direction": "籌碼：投信",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "exclude": [
+      "turnover_60",
+      150
+    ],
+    "conditions": [
+      [
+        "trust_flow_20",
+        ">",
+        0.0
+      ]
+    ],
+    "keys": [
+      [
+        "trust_flow_20",
+        "high"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      60
+    ]
+  },
+  "hypothesis": "J2",
+  "engine": "portfolio",
+  "segment": "validation",
+  "verdict": "驗證段反轉",
+  "reason": null,
+  "window": {
+    "first_signal": "2019-12-31",
+    "first_session": "2020-01-02",
+    "last_session": "2024-09-27",
+    "days": 1153,
+    "signal_days": 1153
+  },
+  "prerequisites": {
+    "days": 1153,
+    "min_days": 250,
+    "delisted": 60,
+    "ok": true
+  },
+  "coverage": {
+    "2019": {
+      "days": 1,
+      "members": 449,
+      "missing": {
+        "turnover_60": 1,
+        "trust_flow_20": 10
+      },
+      "positive": 146,
+      "min_positive": 146,
+      "max_positive": 146,
+      "hits": 72,
+      "max_hits": 72,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 150
+    },
+    "2020": {
+      "days": 245,
+      "members": 138611,
+      "missing": {
+        "turnover_60": 223,
+        "trust_flow_20": 4270
+      },
+      "positive": 44015,
+      "min_positive": 120,
+      "max_positive": 234,
+      "hits": 25827,
+      "max_hits": 160,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 36750
+    },
+    "2021": {
+      "days": 244,
+      "members": 160367,
+      "missing": {
+        "turnover_60": 507,
+        "trust_flow_20": 2071
+      },
+      "positive": 47086,
+      "min_positive": 136,
+      "max_positive": 232,
+      "hits": 29729,
+      "max_hits": 161,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 36600
+    },
+    "2022": {
+      "days": 246,
+      "members": 127925,
+      "missing": {
+        "turnover_60": 291,
+        "trust_flow_20": 1289
+      },
+      "positive": 49341,
+      "min_positive": 123,
+      "max_positive": 247,
+      "hits": 29505,
+      "max_hits": 157,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 36900
+    },
+    "2023": {
+      "days": 239,
+      "members": 138476,
+      "missing": {
+        "turnover_60": 327,
+        "trust_flow_20": 1112
+      },
+      "positive": 49832,
+      "min_positive": 179,
+      "max_positive": 243,
+      "hits": 31648,
+      "max_hits": 163,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 35850
+    },
+    "2024": {
+      "days": 178,
+      "members": 119781,
+      "missing": {
+        "turnover_60": 228,
+        "trust_flow_20": 925
+      },
+      "positive": 39001,
+      "min_positive": 142,
+      "max_positive": 296,
+      "hits": 25132,
+      "max_hits": 197,
+      "short_days": 0,
+      "zero_days": 0,
+      "excluded": 26700
+    }
+  },
+  "seconds": {
+    "plan": 18.42475798999658,
+    "turnover_60": 4.261544162189239,
+    "trust_flow_20": 3.107391348836245,
+    "j2_order": 1.0534129402658436
+  },
+  "short": {
+    "short_days": 0,
+    "zero_days": 0,
+    "years": {
+      "2019": {
+        "days": 1,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2020": {
+        "days": 245,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2021": {
+        "days": 244,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2022": {
+        "days": 246,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2023": {
+        "days": 239,
+        "short_days": 0,
+        "zero_days": 0
+      },
+      "2024": {
+        "days": 178,
+        "short_days": 0,
+        "zero_days": 0
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1153,
+      "mean": -0.00020875217805930621,
+      "annual": -0.052605548870945165,
+      "t": -1.061922609682932
+    },
+    "taiex": {
+      "days": 1153,
+      "mean": -0.00047783808603573487,
+      "annual": -0.12041519768100518,
+      "t": -2.007891523519201
+    }
+  },
+  "absolute": {
+    "days": 1153,
+    "mean": 0.00015035384672411854
+  },
+  "curves": {
+    "J2": {
+      "days": 1153,
+      "total": 0.10587153428398932,
+      "annual": 0.022238201786017875,
+      "volatility": 0.17777799367377617,
+      "max_drawdown": -0.2901799312950242,
+      "invested": 0.941829051307812,
+      "turnover": 12.595963888652046
+    },
+    "population": {
+      "days": 1153,
+      "total": 0.35636970743230356,
+      "annual": 0.06888895710155207,
+      "volatility": 0.21751029254827375,
+      "max_drawdown": -0.3547746486008161,
+      "invested": 0.9415165801707276,
+      "turnover": 12.384787024530977
+    },
+    "taiex": {
+      "days": 1153,
+      "total": 0.9023525606936238,
+      "annual": 0.1509114747853486,
+      "volatility": 0.1878460967388565,
+      "max_drawdown": -0.3163186488434039,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 23051,
+    "won": 11389,
+    "rate": 0.49407834801093226,
+    "unsold": 380
+  },
+  "counts": {
+    "J2": {
+      "bought": 23051,
+      "not_tradable": 5,
+      "sale_held": 14,
+      "limit_up": 4,
+      "unsold": 380
+    },
+    "population": {
+      "bought": 684714,
+      "not_tradable": 142,
+      "limit_up": 753,
+      "sale_held": 855,
+      "limit_down": 240,
+      "unsold": 12084
+    }
+  },
+  "min_t": 3.285
+}

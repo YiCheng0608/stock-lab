@@ -1,0 +1,62 @@
+{
+  "tool": "round12_research",
+  "version": 1,
+  "design": "962",
+  "registration_commit": "24d700c3",
+  "segment": "validation",
+  "round": 12,
+  "round_size": 4,
+  "cumulative": 49,
+  "validation_min_t": 3.285,
+  "definitions_sha256": "12f24befd44c279118ade14460c722f968849a00c48a27b4def7690ca3f0954f",
+  "engines": {
+    "portfolio_research": "simulate",
+    "trade_research": 1
+  },
+  "tool_commit": "c9c25a5cd84c292d0f1769bd33c88604667b8a79",
+  "command": "python tools/research/round12_research.py --db /research/stock.db --segment validation --exploration-report /out/exploration/explore.json --exploration-sha256 d11af72cd59c80d967f9cc6ead62f8504a5bb2f8d022ab6a4f03d61d34cb09af --exploration-url https://github.com/YiCheng0608/stock-lab/issues/964#issuecomment-7082081487 --out /out/validation",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2024-09-27",
+  "min_t": 3.285,
+  "exploration": {
+    "sha256": "d11af72cd59c80d967f9cc6ead62f8504a5bb2f8d022ab6a4f03d61d34cb09af",
+    "url": "https://github.com/YiCheng0608/stock-lab/issues/964#issuecomment-7082081487"
+  },
+  "hypotheses": {
+    "J2": {
+      "engine": "portfolio",
+      "verdict": "驗證段反轉",
+      "reason": null,
+      "days": 1153,
+      "taiex_excess": {
+        "days": 1153,
+        "mean": -0.00047783808603573487,
+        "annual": -0.12041519768100518,
+        "t": -2.007891523519201
+      },
+      "excess": {
+        "days": 1153,
+        "mean": -0.00020875217805930621,
+        "annual": -0.052605548870945165,
+        "t": -1.061922609682932
+      },
+      "absolute_mean": 0.00015035384672411854,
+      "prerequisites": {
+        "days": 1153,
+        "min_days": 250,
+        "delisted": 60,
+        "ok": true
+      },
+      "short": {
+        "short_days": 0,
+        "zero_days": 0
+      }
+    }
+  },
+  "elapsed_seconds": 615.0851967850031,
+  "peak_memory_gb": 2.142578125
+}
