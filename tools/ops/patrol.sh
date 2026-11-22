@@ -79,7 +79,7 @@
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Environment: STOCK_CONTEXT_LIMIT, the context in tokens above which the handoff
-#   condition holds, default 450000 (docs/ops/COORDINATOR_REFERENCE.md 換手偵測);
+#   condition holds, default 320000 (docs/ops/COORDINATOR_REFERENCE.md 換手偵測);
 #   STOCK_GOVERNANCE_BODY_LIMIT, #1's body in UTF-8 bytes above which the header says so,
 #   default 14336 (14 KB).
 # Test hook: PATROL_NOW (epoch seconds).
@@ -118,7 +118,7 @@ while [ $# -gt 0 ]; do
 done
 [ "$max_gh" != default ] || max_gh=$((1 + overview))
 case "$max_gh" in '' | *[!0-9]*) die "--max-gh must be a number" 64 ;; esac
-context_limit="${STOCK_CONTEXT_LIMIT:-450000}"
+context_limit="${STOCK_CONTEXT_LIMIT:-320000}"
 case "$context_limit" in '' | *[!0-9]* | 0*) die "STOCK_CONTEXT_LIMIT 要是正整數（token 數）：$context_limit" 64 ;; esac
 gov_limit="${STOCK_GOVERNANCE_BODY_LIMIT:-14336}"
 case "$gov_limit" in '' | *[!0-9]* | 0*) die "STOCK_GOVERNANCE_BODY_LIMIT 要是正整數（位元組數）：$gov_limit" 64 ;; esac
