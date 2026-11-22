@@ -104,15 +104,31 @@ EXEMPT = {
     "explore_research.FEATURES": "table of functions; each feature's definition is in HYPOTHESES",
     "explore_research.FEATURE_FUNCTIONS": "table of feature_evidence's functions by key",
     "explore_research.HYPOTHESES": "round10 reads X2's to list the overlap only (report)",
-    "explore_research.LOAD_FROM": "提問 (#945): the first day read, not in the hash",
-    "explore_research.WARMUP_CALENDAR_DAYS": "提問 (#945): the warm-up before a later segment, not in the hash",
+    "explore_research.LOAD_FROM": (
+        "the first day read; explore_research, mainstream_research and round5_research "
+        "have run all their hypotheses and do not run this version again; "
+        "changing it takes a new issue and a new VERSION (#945 decision 7073010102)"
+    ),
+    "explore_research.WARMUP_CALENDAR_DAYS": (
+        "the warm-up before a later segment; explore_research has run all its "
+        "hypotheses and does not run this version again; "
+        "changing it takes a new issue and a new VERSION (#945 decision 7073010102)"
+    ),
     # other shared modules
     "evidence_lib.NAN": "the missing-value marker",
     "evidence_lib.CHIP_FIELDS": "the chip columns read from the copy",
     "portfolio_research.TRADING_DAYS": "annualises the report's statistics; the verdict uses t",
     "trade_research.EXIT_REASONS": "the exits' names, the result of settle",
-    "trade_research.ENDED": "提問 (#945): the statuses settled as delisted, not in the hash",
-    "exit_research.NOT_ACTIONABLE": "提問 (#945): the statuses skipped, not in the hash",
+    "trade_research.ENDED": (
+        "the statuses settled as delisted; trade_research has run all its "
+        "hypotheses and does not run this version again; "
+        "changing it takes a new issue and a new VERSION (#945 decision 7073010102)"
+    ),
+    "exit_research.NOT_ACTIONABLE": (
+        "the statuses that do not enter; trade_research has run all its "
+        "hypotheses and does not run this version again; "
+        "changing it takes a new issue and a new VERSION (#945 decision 7073010102)"
+    ),
     "industry_members.GROUP_LABELS": "the groups' names; mainstream reads the members file by its sha256",
     "industry_members.ROW_FIELDS": "columns of the members file",
     "mainstream_research.MEMBERS_NAME": "file name of the members file; its sha256 is in the definitions",
