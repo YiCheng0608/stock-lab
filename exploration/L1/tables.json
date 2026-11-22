@@ -1,0 +1,137 @@
+{
+  "tool": "round11_research",
+  "version": 1,
+  "design": "953",
+  "definitions_sha256": "5c326147823f78ca203db3b127b6369a63305e3b62839479bf39f2ac161b67bb",
+  "label": "T 日收盤等於跌停價（`limit_down_close`），全部符合的訊號；T+1 開盤成交（期限 1 日）、沒有停損與目標、持有 5 日",
+  "direction": "事件：價格限制",
+  "parameters": {
+    "engine": "trade",
+    "kind": "event",
+    "event": "limit_down_close",
+    "market_filter": false,
+    "entry_days": 1,
+    "stop": null,
+    "target": null,
+    "hold": 5,
+    "start": [
+      "date",
+      "2015-06-01"
+    ]
+  },
+  "hypothesis": "L1",
+  "engine": "trade",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2015-06-01",
+    "first_session": "2015-06-02",
+    "last_session": "2019-12-31",
+    "days": 1127,
+    "signal_days": 1127
+  },
+  "prerequisites": {
+    "days": 1127,
+    "min_days": 500,
+    "delisted": 69,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 497,
+    "mean": -0.019786844872960875,
+    "t": -0.8529607981056091
+  },
+  "excess": {
+    "days": 497,
+    "mean": -0.01090532396489551,
+    "t": -0.48095884061556954
+  },
+  "absolute": {
+    "days": 497,
+    "mean": -0.020138880260344296
+  },
+  "signals": 1605,
+  "signal_days": 498,
+  "trade_days": 497,
+  "trades": 1598,
+  "net_mean": 0.008330099043161707,
+  "net_median": 0.007392928477689153,
+  "win_rate": 0.5387984981226533,
+  "zero": 0,
+  "won_mean": 0.08588993148581896,
+  "lost_mean": -0.08227914889866719,
+  "won": 861,
+  "lost": 737,
+  "exit_share": {
+    "stop": 0.0,
+    "target": 0.0,
+    "time": 0.9956195244055068,
+    "segment_end": 0.0006257822277847309,
+    "delisted": 0.0037546933667083854,
+    "transferred": 0.0
+  },
+  "exits": {
+    "stop": 0,
+    "target": 0,
+    "time": 1591,
+    "segment_end": 1,
+    "delisted": 6,
+    "transferred": 0
+  },
+  "both_touched": 0,
+  "gapped": 0,
+  "limit_delayed": 26,
+  "suspension_delayed": 2,
+  "holding_mean": 5.043804755944931,
+  "abandoned": 7,
+  "abandon_rate": 0.004361370716510903,
+  "abandon_reasons": {
+    "not_tradable": 7
+  },
+  "entry_limit_blocked": 0,
+  "below_lower": 0,
+  "filter_blocked_days": 0,
+  "filter_missing_days": 0,
+  "population_unbought": 95,
+  "listed": {
+    "years": {
+      "2015": {
+        "TWSE:signals": 271,
+        "signals": 442,
+        "TPEx:signals": 171,
+        "signal_days": 78
+      },
+      "2016": {
+        "TWSE:signals": 97,
+        "signals": 212,
+        "TPEx:signals": 115,
+        "signal_days": 93
+      },
+      "2017": {
+        "TWSE:signals": 98,
+        "signals": 212,
+        "TPEx:signals": 114,
+        "signal_days": 106
+      },
+      "2018": {
+        "TPEx:signals": 250,
+        "signals": 621,
+        "signal_days": 142,
+        "TWSE:signals": 371
+      },
+      "2019": {
+        "TWSE:signals": 72,
+        "signals": 118,
+        "signal_days": 79,
+        "TPEx:signals": 46
+      }
+    },
+    "t1_locked_down_fills": 69
+  },
+  "seconds": {
+    "run": 20.595023073998163,
+    "limit_down_close": 13.196348612225847
+  },
+  "min_t": 2.0
+}

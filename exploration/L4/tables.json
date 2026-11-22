@@ -1,0 +1,280 @@
+{
+  "tool": "round11_research",
+  "version": 1,
+  "design": "953",
+  "definitions_sha256": "5c326147823f78ca203db3b127b6369a63305e3b62839479bf39f2ac161b67bb",
+  "label": "同產業龍頭 3 檔的 `lead_ret_5` 大者先選跟隨者",
+  "direction": "產業內的資訊擴散",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "leaders": [
+      [
+        "turnover_60",
+        "high"
+      ]
+    ],
+    "keys": [
+      [
+        "lead_ret_5",
+        "high"
+      ]
+    ],
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "date",
+      "2013-02-01"
+    ]
+  },
+  "hypothesis": "L4",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-02-01",
+    "first_session": "2013-02-04",
+    "last_session": "2019-12-31",
+    "days": 1694,
+    "signal_days": 1694
+  },
+  "prerequisites": {
+    "days": 1694,
+    "min_days": 500,
+    "delisted": 87,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 224,
+      "members": 104456,
+      "missing": {
+        "unusable": 4341,
+        "lead_ret_5": 18631,
+        "several_groups": 0,
+        "leader": 13626,
+        "no_group": 664
+      },
+      "usable": 4542,
+      "groups": 6160,
+      "min_usable": 18,
+      "short_days": 0,
+      "filled_leader": 0,
+      "filled_other": 0
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "unusable": 5132,
+        "lead_ret_5": 21045,
+        "several_groups": 0,
+        "leader": 15327,
+        "no_group": 586
+      },
+      "usable": 5109,
+      "groups": 6916,
+      "min_usable": 17,
+      "short_days": 0,
+      "filled_leader": 0,
+      "filled_other": 0
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "unusable": 6373,
+        "lead_ret_5": 20232,
+        "several_groups": 0,
+        "leader": 13398,
+        "no_group": 461
+      },
+      "usable": 4466,
+      "groups": 6844,
+      "min_usable": 16,
+      "short_days": 0,
+      "filled_leader": 0,
+      "filled_other": 0
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "unusable": 6536,
+        "lead_ret_5": 19957,
+        "several_groups": 0,
+        "leader": 13002,
+        "no_group": 419
+      },
+      "usable": 4334,
+      "groups": 6709,
+      "min_usable": 14,
+      "short_days": 0,
+      "filled_leader": 0,
+      "filled_other": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "unusable": 6461,
+        "lead_ret_5": 20937,
+        "several_groups": 0,
+        "leader": 13983,
+        "no_group": 493
+      },
+      "usable": 4661,
+      "groups": 6910,
+      "min_usable": 16,
+      "short_days": 0,
+      "filled_leader": 0,
+      "filled_other": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "unusable": 7175,
+        "lead_ret_5": 20778,
+        "several_groups": 0,
+        "leader": 13308,
+        "no_group": 295
+      },
+      "usable": 4436,
+      "groups": 6963,
+      "min_usable": 16,
+      "short_days": 0,
+      "filled_leader": 0,
+      "filled_other": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "unusable": 8521,
+        "lead_ret_5": 21293,
+        "several_groups": 0,
+        "leader": 12480,
+        "no_group": 292
+      },
+      "usable": 4160,
+      "groups": 6897,
+      "min_usable": 15,
+      "short_days": 0,
+      "filled_leader": 0,
+      "filled_other": 0
+    }
+  },
+  "seconds": {
+    "plan": 25.82625630100665,
+    "ret_5+turnover_60": 8.831229700808763,
+    "l4_order": 18.500237824919168
+  },
+  "industries": {
+    "days": 1694,
+    "mean": 1.9327036599763872,
+    "years": {
+      "2013": {
+        "days": 224,
+        "mean": 1.8125
+      },
+      "2014": {
+        "days": 248,
+        "mean": 1.7701612903225807
+      },
+      "2015": {
+        "days": 244,
+        "mean": 1.971311475409836
+      },
+      "2016": {
+        "days": 244,
+        "mean": 2.1557377049180326
+      },
+      "2017": {
+        "days": 246,
+        "mean": 2.0569105691056913
+      },
+      "2018": {
+        "days": 247,
+        "mean": 1.9230769230769231
+      },
+      "2019": {
+        "days": 241,
+        "mean": 1.829875518672199
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1694,
+      "mean": -9.760598727808497e-05,
+      "annual": -0.024596708794077413,
+      "t": -1.2797198255815567
+    },
+    "taiex": {
+      "days": 1694,
+      "mean": -0.00046818341707155167,
+      "annual": -0.11798222110203102,
+      "t": -2.720125450720951
+    }
+  },
+  "absolute": {
+    "days": 1694,
+    "mean": -0.00018655551197082848
+  },
+  "curves": {
+    "L4": {
+      "days": 1694,
+      "total": -0.33140269881381046,
+      "annual": -0.058128987669063825,
+      "volatility": 0.1597706875041785,
+      "max_drawdown": -0.46157037484829144,
+      "invested": 0.9438984042574873,
+      "turnover": 12.349465678953585
+    },
+    "population": {
+      "days": 1694,
+      "total": -0.20410913042624945,
+      "annual": -0.033390771330521374,
+      "volatility": 0.1513121657797428,
+      "max_drawdown": -0.4210338085660795,
+      "invested": 0.9445592696087198,
+      "turnover": 12.18171569300076
+    },
+    "taiex": {
+      "days": 1694,
+      "total": 0.5271366871309309,
+      "annual": 0.06501013026492064,
+      "volatility": 0.1261268538951623,
+      "max_drawdown": -0.2569687319514852,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 33844,
+    "won": 14479,
+    "rate": 0.42781586100933694,
+    "unsold": 395
+  },
+  "counts": {
+    "L4": {
+      "bought": 33844,
+      "limit_up": 29,
+      "limit_down": 20,
+      "sale_held": 52,
+      "not_tradable": 7,
+      "unsold": 395
+    },
+    "population": {
+      "bought": 758994,
+      "limit_up": 546,
+      "not_tradable": 229,
+      "sale_held": 1507,
+      "limit_down": 523,
+      "unsold": 8726
+    }
+  },
+  "min_t": 2.0
+}

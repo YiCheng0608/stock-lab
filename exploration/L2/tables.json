@@ -1,0 +1,212 @@
+{
+  "tool": "round11_research",
+  "version": 1,
+  "design": "953",
+  "definitions_sha256": "5c326147823f78ca203db3b127b6369a63305e3b62839479bf39f2ac161b67bb",
+  "label": "`institutional_flow_20` > 0 且 `margin_flow_20` < 0，兩個名次的平均小者先",
+  "direction": "籌碼：法人與散戶槓桿",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "conditions": [
+      [
+        "institutional_flow_20",
+        ">",
+        0.0
+      ],
+      [
+        "margin_flow_20",
+        "<",
+        0.0
+      ]
+    ],
+    "ranks": [
+      [
+        "institutional_flow_20",
+        "high"
+      ],
+      [
+        "margin_flow_20",
+        "low"
+      ]
+    ],
+    "score": "low",
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ]
+  },
+  "hypothesis": "L2",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227,
+    "signal_days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "coverage": {
+    "2014": {
+      "days": 5,
+      "members": 2189,
+      "missing": {
+        "institutional_flow_20": 401,
+        "margin_flow_20": 46
+      },
+      "hits": 375,
+      "hit_days": 5,
+      "over_top_days": 5,
+      "max_hits": 82
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "institutional_flow_20": 6001,
+        "margin_flow_20": 1916
+      },
+      "hits": 28092,
+      "hit_days": 244,
+      "over_top_days": 244,
+      "max_hits": 199
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "institutional_flow_20": 6944,
+        "margin_flow_20": 1563
+      },
+      "hits": 27564,
+      "hit_days": 244,
+      "over_top_days": 244,
+      "max_hits": 178
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "institutional_flow_20": 12219,
+        "margin_flow_20": 1684
+      },
+      "hits": 28103,
+      "hit_days": 246,
+      "over_top_days": 246,
+      "max_hits": 164
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "institutional_flow_20": 6007,
+        "margin_flow_20": 1661
+      },
+      "hits": 29437,
+      "hit_days": 247,
+      "over_top_days": 247,
+      "max_hits": 173
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "institutional_flow_20": 2945,
+        "margin_flow_20": 1567
+      },
+      "hits": 25069,
+      "hit_days": 241,
+      "over_top_days": 241,
+      "max_hits": 161
+    }
+  },
+  "seconds": {
+    "plan": 12.281705764995422,
+    "institutional_flow_20": 2.941643797006691,
+    "margin_flow_20": 1.1397678902139887,
+    "l2_order": 1.3967992206889903
+  },
+  "excess": {
+    "population": {
+      "days": 1227,
+      "mean": -0.00012497705583912688,
+      "annual": -0.031494218071459974,
+      "t": -1.1244710569502152
+    },
+    "taiex": {
+      "days": 1227,
+      "mean": -0.0005246273901895844,
+      "annual": -0.13220610232777527,
+      "t": -3.103137500682492
+    }
+  },
+  "absolute": {
+    "days": 1227,
+    "mean": -0.00027555490622346786
+  },
+  "curves": {
+    "L2": {
+      "days": 1227,
+      "total": -0.3228439571404972,
+      "annual": -0.07694616484696659,
+      "volatility": 0.14500394048389878,
+      "max_drawdown": -0.40445887547714876,
+      "invested": 0.9431104441345882,
+      "turnover": 11.940406706084538
+    },
+    "population": {
+      "days": 1227,
+      "total": -0.21935361119579044,
+      "annual": -0.04958696103549709,
+      "volatility": 0.1599317048921111,
+      "max_drawdown": -0.3741763564757218,
+      "invested": 0.9426210653445751,
+      "turnover": 12.226433592050231
+    },
+    "taiex": {
+      "days": 1227,
+      "total": 0.302045675797993,
+      "annual": 0.05570314480468186,
+      "volatility": 0.1305658424039168,
+      "max_drawdown": -0.2569687319514853,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 24515,
+    "won": 10515,
+    "rate": 0.4289210687334285,
+    "unsold": 423
+  },
+  "counts": {
+    "L2": {
+      "bought": 24515,
+      "limit_down": 12,
+      "limit_up": 9,
+      "not_tradable": 16,
+      "sale_held": 105,
+      "unsold": 423
+    },
+    "population": {
+      "bought": 526856,
+      "limit_up": 286,
+      "limit_down": 290,
+      "not_tradable": 189,
+      "sale_held": 1164,
+      "unsold": 8621
+    }
+  },
+  "min_t": 2.0
+}
