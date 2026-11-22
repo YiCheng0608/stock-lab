@@ -232,6 +232,15 @@ function words(raw, shell) {
       word = null;
       continue;
     }
+    // A line continuation (bash `\`, PowerShell backtick, before a newline) is a space to the
+    // shell: `docker compose -p x \⏎ up` is one command whose words go on (PR #977 review).
+    const continuation = ch === escape && /^\r?\n/.exec(raw.slice(i + 1, i + 3));
+    if (continuation) {
+      if (word) out.push(word);
+      word = null;
+      i += continuation[0].length;
+      continue;
+    }
     word = word || { text: '', quoted: false };
     if (ch === escape && shell === 'bash' && i + 1 < raw.length) {
       word.text += raw[i + 1];
@@ -645,7 +654,7 @@ function composeCreateDenial(command, shell, ctx) {
       from = '環境變數 COMPOSE_PROJECT_NAME';
     }
   }
-  if (typeof name === 'string' && (testProject(name) || name === 'stock-lab' || name === process.env.STOCK_COMPOSE_PROJECT)) {
+  if (typeof name === 'string' && (testProject(name) || name === 'stock-lab' || (name !== '' && name === process.env.STOCK_COMPOSE_PROJECT))) {
     return null;
   }
   const dir = ctx.cwd ? path.basename(ctx.cwd).toLowerCase() : null;

@@ -1193,18 +1193,43 @@ describe('compose project rule', () => {
     'docker exec stock-lab-scheduler-1 python -m worker.cli status',
     'git commit -m "block docker compose up -d outside a test project"',
   ];
+  // A line continuation is a space to the shell (PR #977 review): bash `\`, PowerShell backtick,
+  // each in its own shell (the other one reads that character otherwise).
+  const continued = (lines, mark) => lines.join(` ${mark}\n  `);
+  const CONTINUED = (mark) => ({
+    blocked: [
+      continued(['docker compose -p flaky-notify', 'run --rm api true'], mark),
+      continued(['docker compose -f docker-compose.yml', '-p flaky-notify', 'up -d'], mark),
+      continued(['docker', 'compose -p flaky up -d'], mark),
+      continued(['docker compose -p', 'flaky up -d'], mark),
+      continued(['docker compose -p flaky-notify', 'up -d'], mark),
+      continued(['docker compose', 'run --rm api true'], mark),
+    ],
+    allowed: [
+      continued(['docker compose -p task-976', 'run --rm api true'], mark),
+      continued(['docker compose -f docker-compose.yml', '-p t976', 'up -d'], mark),
+    ],
+  });
+  const CONTINUATION = { bash: CONTINUED('\\'), powershell: CONTINUED('`') };
 
   for (const shell of ['bash', 'powershell']) {
     test(`${shell}: compose build／create／run／scale／up／watch outside a test project is blocked (#976)`, () => {
-      for (const command of CREATE_BLOCKED) {
+      for (const command of [...CREATE_BLOCKED, ...CONTINUATION[shell].blocked]) {
         assert.match(commandDenial(command, shell, [], management) || '', /#976/, command);
       }
     });
 
     test(`${shell}: compose commands of the docs, of a test or production project, and that create nothing pass (#976)`, () => {
-      for (const command of CREATE_ALLOWED) assert.equal(commandDenial(command, shell, [], management), null, command);
+      for (const command of [...CREATE_ALLOWED, ...CONTINUATION[shell].allowed]) {
+        assert.equal(commandDenial(command, shell, [], management), null, command);
+      }
     });
   }
+
+  test('a line continuation does not hide the docker subcommand of the other rules either (PR #977 review)', () => {
+    assert.match(commandDenial('docker \\\n  inspect t976-api-1', 'bash', [], management) || '', /--format/);
+    assert.match(commandDenial('docker compose -p stock-lab `\n  down -v', 'powershell', [], management) || '', /down -v/);
+  });
 
   test('the message names the project the hook read and how to write it (#976)', () => {
     const cases = {
@@ -1287,6 +1312,11 @@ describe('compose project rule', () => {
     });
     withEnv({ STOCK_COMPOSE_PROJECT: undefined }, () => {
       assert.ok(commandDenial('docker compose -p prod-976 up -d', 'bash', [], management));
+    });
+    // An empty STOCK_COMPOSE_PROJECT names no project: -p "" stays blocked (PR #977 review).
+    withEnv({ STOCK_COMPOSE_PROJECT: '' }, () => {
+      assert.ok(commandDenial('docker compose -p "" up -d', 'bash', [], management));
+      assert.ok(commandDenial('docker compose -p= up -d', 'bash', [], management));
     });
   });
 
