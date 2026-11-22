@@ -501,7 +501,7 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 - 判定欄在驗證段是「無法判定」、「通過」、「前瞻觀察」、「驗證段反轉」與「沒有通過（驗證段）」；`explore.md` 寫明前瞻觀察的條件。前瞻觀察不跑已用段。
 - 輸出：同探索的 `explore.md`／`explore.json`／`<代號>/`，另有 `ledger-entries.json`（本次寫進紀錄檔的驗證段幾筆，`segment` 是 `validation`），統籌連同報告 commit 進 `tools/research/explore_ledger.json`，那份是公開紀錄。
 
-**工具版本**：`explore_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 的 `version` 與紀錄檔，也算進 `definitions_sha256`；判定或報告格式一改就加一，驗證段會拒絕舊版的探索報告。
+**工具版本**：`explore_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 的 `version` 與紀錄檔，也算進 `definitions_sha256`；判定或報告格式一改就加一，驗證段會拒絕舊版的探索報告。各研究工具判定讀到的模組常數都要在自己的 `definitions_sha256` 裡，不在的要在豁免清單附理由，由後端測試 `test_research_definitions.py` 擋（[GUARDRAILS](../GUARDRAILS.md)，#945）。
 
 | 版本 | 任務 | 改了什麼 |
 | --- | --- | --- |
