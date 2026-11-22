@@ -35,9 +35,13 @@
 # <data>/logs/sessions/<id>.json (#595; session_state_cleanup, same rules). Then delete the
 # task's Docker resources (docker_cleanup in coordinator_lib.sh, #360: images, stopped
 # containers, volumes and networks named t<issue>/task-<issue>; none while one of them runs;
-# then dangling images and build cache once no other Docker task is in progress; no docker or
+# then dangling images and build cache once no container runs but the production project's
+# (#941) and no other Docker task is in progress; no docker or
 # no answer in time only adds a docker_skipped step), set the board to 完成, and read back
-# that all of it is gone. Then, for a PR into master and not a dry run (--no-board), the
+# that all of it is gone (before the board: the host sweep, sweep.sh with --no-prune, #941:
+# other closed tasks' ~/t<n> and Docker resources, scratchpads untouched for 7 days, old
+# trivy-*; its steps are listed as sweep:<step>, and it never fails the close). Then, for a
+# PR into master and not a dry run (--no-board), the
 # master index (#704): fast-forward this checkout (it must be on master with no uncommitted
 # change to tracked files) to origin/master, rebuild its codebase-memory index with the
 # same-engine CLI and verify the files the merge commit changed (cbm_ensure in
@@ -127,75 +131,10 @@ branch_gone() {
   [ "$rc" = 1 ]
 }
 
-# unlink_one LINK: remove a junction or symlink itself, never what it points to; the
-# JSON steps list each one. Git Bash's and GNU rm -rf do not follow them either (#282),
-# but with the links gone first no change to the delete command can reach a target.
-unlink_one() {
-  if [ -d "$1" ] && is_windows; then
-    MSYS2_ARG_CONV_EXCL='*' cmd /d /c rmdir "$(cygpath -w -- "$1")" >/dev/null 2>&1
-  else
-    rm -f -- "$1"
-  fi
-  [ ! -L "$1" ] && [ ! -e "$1" ] || return 1
-  steps+=("unlinked:$1")
-}
-
-# remove_tree DIR [residual]: check DIR with guard_dir once more (a second line of
-# defence: the checks above are not the only thing between rm and a protected path),
-# unlink every junction/symlink inside (find does not follow them), confirm none is
-# left, then delete; returns 0 only when DIR is gone.
-remove_tree() {
-  local link
-  [ -z "$(guard_dir "$1" "${2:-}")" ] || return 2
-  if [ -L "$1" ]; then
-    unlink_one "$1"
-    return
-  fi
-  while IFS= read -r -d '' link; do
-    unlink_one "$link" || return 1
-  done < <(find "$1" -type l -print0)
-  [ -z "$(find "$1" -type l -print -quit)" ] || return 1
-  rm -rf -- "$1"
-  [ ! -e "$1" ] && [ ! -L "$1" ]
-}
+# unlink_one, remove_tree, uuid_re, claude_tmp_root and scratch_remove are in
+# coordinator_lib.sh, shared with sweep.sh (#941).
 
 # --- Claude Code scratchpads (#472) ------------------------------------------------
-# Each Claude Code session keeps $TEMP/claude/<project>/<session id>/ (the project a hash,
-# or in the old format the working directory with every other character than A-Z, a-z,
-# 0-9 turned into "-"); nothing deletes it. Never fails the close: every outcome is a step.
-uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-
-# scratch_remove DIR: delete one session directory, DIR = <claude>/<project>/<uuid>.
-# This session's own directory (CLAUDE_CODE_SESSION_ID) stays. A DIR that is itself a
-# junction/symlink is unlinked, never followed, once its parent has no link on the way;
-# any other DIR goes through guard_dir and remove_tree (links inside unlinked first).
-scratch_remove() {
-  local dir="$1" reason
-  [[ "${dir##*/}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:not_a_session:$dir"); return 0; }
-  if [ "${dir##*/}" = "${CLAUDE_CODE_SESSION_ID:-}" ]; then
-    steps+=("scratchpad_skipped:own_session:$dir")
-    return 0
-  fi
-  if [ -L "$dir" ]; then
-    if [ "$(cj plain "${dir%/*}" 2>/dev/null)" != yes ]; then
-      steps+=("scratchpad_skipped:refused:$dir:上層經過 junction／symlink")
-    elif unlink_one "$dir"; then
-      steps+=("scratchpad_removed:$dir")
-    else
-      steps+=("scratchpad_skipped:delete_failed:$dir")
-    fi
-    return 0
-  fi
-  reason="$(guard_dir "$dir")"
-  if [ -n "$reason" ]; then
-    steps+=("scratchpad_skipped:refused:$dir:$reason")
-  elif remove_tree "$dir"; then
-    steps+=("scratchpad_removed:$dir")
-  else
-    steps+=("scratchpad_skipped:delete_failed:$dir")
-  fi
-}
-
 # scratchpad_cleanup: the sessions every 回報：開工 comment of the Issue names
 # (`- session：` lines; a handover adds one), at $TEMP/claude/*/<id>: one glob level, no
 # search under Temp. Then the task's old-format project directory, the worktree path in
@@ -241,22 +180,12 @@ session_state_cleanup() {
 }
 
 scratchpad_cleanup() {
-  local temp claude sid dir old found sids=() dirs=()
+  local claude sid dir old found sids=() dirs=()
   [ "$set_board" = 1 ] || { steps+=("scratchpad_skipped:no_board"); return 0; }
   # Without it this session's own directory cannot be told apart (a shell outside Claude).
   [[ "${CLAUDE_CODE_SESSION_ID:-}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:no_own_session_id"); return 0; }
-  # Claude Code keeps scratchpads under $TEMP/claude on Windows and under
-  # /private/tmp/claude-<uid> on macOS, where TEMP is not set (STOCK_CLAUDE_TMP_ROOT replaces
-  # that one, for the tests).
-  if [ -n "${TEMP:-}" ]; then
-    temp="$(native "$TEMP")" || { steps+=("scratchpad_skipped:no_temp"); return 0; }
-    claude="${temp%/}/claude"
-  elif [ "$(uname -s)" = Darwin ]; then
-    claude="${STOCK_CLAUDE_TMP_ROOT:-/private/tmp/claude-$(id -u)}"
-    [ -d "$claude" ] || { steps+=("scratchpad_skipped:no_temp"); return 0; }
-  else
-    steps+=("scratchpad_skipped:no_temp"); return 0
-  fi
+  claude_tmp_root || { steps+=("scratchpad_skipped:no_temp"); return 0; }
+  claude="$claude_root"
   task_session_ids || { steps+=("scratchpad_skipped:comments_unreadable"); return 0; }
   sids=("${task_sids[@]+"${task_sids[@]}"}")
   [ ${#sids[@]} -gt 0 ] || steps+=("scratchpad_skipped:no_session_id")
@@ -291,6 +220,29 @@ scratchpad_cleanup() {
   else
     steps+=("scratchpad_skipped:not_empty:$old")
   fi
+}
+
+# --- the host sweep (#941; sweep.sh) ----------------------------------------------------
+# What other tasks and sessions left: closed tasks' ~/t<n> and Docker resources, old
+# scratchpads, trivy-* in Temp. Run as its own process, so nothing in it can stop the close;
+# its steps join ours as sweep:<step>, and a run that fails or prints no readable JSON is one
+# sweep_failed step. --no-prune: docker_cleanup above pruned, or chose not to. A dry run
+# (--no-board) does not sweep; STOCK_SWEEP=off turns it off (the tests of other steps).
+host_sweep() {
+  local out rc=0 line
+  [ "$set_board" = 1 ] || { steps+=("sweep_skipped:no_board"); return 0; }
+  [ "${STOCK_SWEEP:-on}" != off ] || { steps+=("sweep_skipped:off"); return 0; }
+  out="$(bash "$script_dir/sweep.sh" --no-prune --python "$python" </dev/null)" || rc=$?
+  out="$(printf '%s\n' "$out" | tail -n 1 | "$python" -X utf8 -c '
+import json, sys
+sys.stdout.reconfigure(newline="\n")
+for step in json.loads(sys.stdin.read())["steps"]:
+    print(str(step).replace("\n", " "))
+' 2>/dev/null)" || { steps+=("sweep_failed:$rc"); return 0; }
+  while IFS= read -r line; do
+    [ -z "$line" ] || steps+=("sweep:$line")
+  done <<<"$out"
+  [ "$rc" = 0 ] || steps+=("sweep_failed:$rc")
 }
 
 # --- checks: nothing is deleted before all of them pass ---------------------------
@@ -461,6 +413,7 @@ docker_prune=if-found
 case " ${integration_branches[*]} " in *" $base_branch "*) docker_prune=docker-task ;; esac
 [ "$set_board" = 1 ] || docker_prune=never
 docker_cleanup "$issue" "$docker_prune"
+host_sweep
 
 # --- read back ---------------------------------------------------------------------
 [ -z "$wt_path" ] || [ ! -e "$wt_path" ] || report 3 "讀回：worktree 目錄仍在 $wt_path"
