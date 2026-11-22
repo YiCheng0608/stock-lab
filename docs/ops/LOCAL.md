@@ -76,7 +76,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
 | 清什麼 | 條件 |
 | --- | --- |
 | `~/t<n>`（名稱就是 `t` 加數字） | Issue（或 PR）`n` 讀回已關、沒有 `task/<n>-*` worktree，且沒有未兌現的[統籌承諾](../COORDINATOR.md#無人值守運作)保留它（承諾的 Issue 是 `n`，或內文、連結寫到 `t<n>`／`task-<n>`）；經 `guard_dir`／`remove_tree`，裡面有 `.git`、是資料目錄或路徑經過連結就拒絕 |
-| 名稱是 `t<n>`／`task-<n>` 的 Docker 資源 | 同上；規則同結案的 `docker_cleanup`（已停止的容器、image 以 `repository:tag`、volume、network；有在跑的就全部留著） |
+| 名稱是 `t<n>`／`task-<n>` 的 Docker 資源（agent 以 compose 建的資源只能是這種名稱或 smoke、正式 project，hook 擋其他名稱，[GUARDRAILS](../GUARDRAILS.md)，#976） | 同上；規則同結案的 `docker_cleanup`（已停止的容器、image 以 `repository:tag`、volume、network；有在跑的就全部留著） |
 | Claude Code 的 scratchpad（上表的位置） | 7 天內沒有任何檔案或目錄變動；本 session 的不刪，沒有 `CLAUDE_CODE_SESSION_ID`（不在 Claude Code 裡跑）就整段不刪。掃的是根目錄下所有專案，這台其他專案的 scratchpad 也照同一條件清；開著但 7 天沒動的 session 也會被清 |
 | `$TEMP/trivy-*`（Windows 的 docker scout 留下的） | 1 天內沒有變動 |
 | 懸空 image、build cache | 除了正式 project（`stock-lab`）以外沒有容器在跑，且沒有其他 Docker 任務進行（結案的 prune 同一條件） |

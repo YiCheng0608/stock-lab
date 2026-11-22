@@ -5,7 +5,8 @@
 //   project checkout is on a task/* branch (#705; memoryDenial below).
 // - Bash/PowerShell: git clean -x/-X, bare git stash, git stash pop/clear, git push --force/-f/
 //   --force-with-lease/+refspec, recursive rm of the data directory, docker compose down -v/--volumes
-//   of a project not named as a test project with -p.
+//   of a project not named as a test project with -p; docker compose build/create/run/scale/up/watch
+//   of a project that is neither a test project nor production named outright (#976).
 // - Every file tool, Bash/PowerShell/Monitor, Artifact uploads and codebase-memory: a .env file (`.env`, or `.env.*` not
 //   ending in `.example`, in any directory). See ENV RULES below for what each check covers.
 // Reads the hook JSON on stdin; exit 2 with the reason on stderr blocks the call, exit 0 allows
@@ -70,6 +71,10 @@ const RULES = [
       'docker volume rm／volume prune／system prune --volumes 會刪 named volume（正式 project 的 stock-data 就是正式 DB）；' +
       'volume rm 只放行測試 project 的 volume（t<n>_、task-<n>_ 開頭，或 project 名含 smoke 一詞，例如 t342_stock-data），' +
       'volume prune 要加 --filter label=com.docker.compose.project=<測試 project>，system prune --volumes 一律擋',
+  },
+  {
+    // Returns its own reason: the message names the project the hook read (#976).
+    test: (segment, shell, ctx) => composeProjectDenial(segment.raw, shell, ctx),
   },
 ];
 
@@ -225,6 +230,15 @@ function words(raw, shell) {
     if (/\s/.test(ch)) {
       if (word) out.push(word);
       word = null;
+      continue;
+    }
+    // A line continuation (bash `\`, PowerShell backtick, before a newline) is a space to the
+    // shell: `docker compose -p x \⏎ up` is one command whose words go on (PR #977 review).
+    const continuation = ch === escape && /^\r?\n/.exec(raw.slice(i + 1, i + 3));
+    if (continuation) {
+      if (word) out.push(word);
+      word = null;
+      i += continuation[0].length;
       continue;
     }
     word = word || { text: '', quoted: false };
@@ -422,7 +436,8 @@ const unwrap = (text) => text.replace(/^(?:\$?[\w:]+\+?=(?=[$@(`]))?(?:[$@<>]?\(
 
 // The docker commands in `raw`, each as `sub` (the subcommand words, lowercased; `compose` first
 // for docker-compose), `args` (the words after them) and `all` (every word after docker, options
-// included). A quoted word that starts a command with docker (`sh -c "docker compose config"`)
+// included), with `subAt` (where each subcommand word is in `all`; -1 for the `compose` of
+// docker-compose) and `assigns` (the words before docker: `X=1 docker …`). A quoted word that starts a command with docker (`sh -c "docker compose config"`)
 // counts as a command too; one that only mentions docker (a commit message) does not. Words are
 // taken as the shell runs them inside a subshell or a command substitution (unwrap).
 function dockerCommands(raw, shell) {
@@ -441,15 +456,18 @@ function dockerCommands(raw, shell) {
   const at = texts.findIndex((t) => DOCKER.test(path.basename(normalizeTarget(t))));
   if (at < 0) return found;
   const sub = /compose/i.test(path.basename(normalizeTarget(texts[at]))) ? ['compose'] : [];
+  const subAt = sub.map(() => -1);
   let i = at + 1;
   while (i < texts.length) {
     const text = texts[i];
+    const word = i - at - 1;
     i += text.startsWith('-') && DOCKER_VALUE_OPTION.test(text) ? 2 : 1;
     if (text.startsWith('-')) continue;
     sub.push(text.toLowerCase());
+    subAt.push(word);
     if (!DOCKER_GROUP.test(text)) break;
   }
-  found.push({ sub, args: texts.slice(i), all: texts.slice(at + 1) });
+  found.push({ sub, subAt, args: texts.slice(i), all: texts.slice(at + 1), assigns: texts.slice(0, at) });
   return found;
 }
 
@@ -527,6 +545,140 @@ function removesVolumes({ sub, args }) {
 }
 
 const volumeRemovalDenial = (raw, shell) => dockerCommands(raw, shell).some(removesVolumes);
+
+// COMPOSE PROJECT RULE (#976; PR #895 t-evaltiming, PR #975 flaky-notify). The compose commands
+// that create a project's containers, images, networks or volumes (`docker compose --help`,
+// Compose v5) run only in a test project, by the rule of testProject, or in production named
+// outright (stock-lab, STOCK_COMPOSE_PROJECT: docs/RELEASE.md and docs/ops/SETUP.md have the
+// agent build and recreate it by hand). Anything else leaves resources that close_task.sh and
+// sweep.sh never remove and docker volume rm refuses. Not counted: pull (pulls the image names
+// of the compose file, none of them made here), commit (an image named by the caller), start,
+// exec and the rest, which make nothing new. The project is compose's: the last -p/--project-name
+// before the subcommand (compose takes none after it), else COMPOSE_PROJECT_NAME (a prefix, an
+// earlier assignment in the command, or the session's environment), else the compose file's
+// name: or the directory name, which the hook does not take as an answer: it blocks.
+const COMPOSE_CREATES = /^(?:build|create|run|scale|up|watch)$/;
+const ASSIGN = /^([A-Za-z_]\w*)=([\s\S]*)$/;
+const UNKNOWN = Symbol('unknown'); // assigned a value the hook cannot read: $(…), an array
+const UNSET = Symbol('unset');
+
+// The environment value of `name` for a command at this point, or UNKNOWN, or undefined.
+function envValue(name, ctx) {
+  const value = ctx.env.has(name) ? ctx.env.get(name) : process.env[name];
+  return value === UNSET || value === '' ? undefined : value;
+}
+
+// A word with its $NAME, ${NAME} (PowerShell: $NAME, $env:NAME) taken from earlier assignments in
+// the command and the hook's environment, or null when some part of it cannot be read.
+function expandWord(text, ctx, shell) {
+  if (/`|\$\(|\$\{[^}]*[^\w}]/.test(text)) return null;
+  const variable = shell === 'powershell' ? /\$(env:)?([A-Za-z_]\w*)/gi : /\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/g;
+  let readable = true;
+  const out = text.replace(variable, (match, a, b) => {
+    const env = shell === 'powershell' && a;
+    const name = shell === 'powershell' ? b : a || b;
+    const key = shell === 'powershell' ? name.toLowerCase() : name;
+    const value = !env && ctx.vars.has(key) ? ctx.vars.get(key) : env || shell === 'bash' ? envValue(name, ctx) : undefined;
+    if (typeof value === 'string') return value;
+    readable = false;
+    return '';
+  });
+  return readable && !out.includes('$') ? out : null;
+}
+
+// Keeps the assignments of one segment for the segments after it: bash `P=x`, `export X=y`,
+// `unset X`; PowerShell `$P = 'x'`, `$env:X = 'y'`.
+function trackAssignments(segment, shell, ctx) {
+  if (shell === 'powershell') {
+    const m = /^\$(env:)?([A-Za-z_]\w*)\s*=\s*([\s\S]*)$/i.exec(segment.raw);
+    if (!m) return;
+    const value = words(m[3], shell);
+    const text = value.length === 1 ? expandWord(value[0].text, ctx, shell) : null;
+    if (m[1]) ctx.env.set(m[2], text ?? UNKNOWN);
+    else ctx.vars.set(m[2].toLowerCase(), text ?? UNKNOWN);
+    return;
+  }
+  const [head, ...rest] = words(segment.raw, shell).map((w) => w.text);
+  if (head === 'unset') {
+    for (const name of rest) {
+      ctx.vars.delete(name);
+      ctx.env.set(name, UNSET);
+    }
+    return;
+  }
+  const exported = head === 'export';
+  const list = exported ? rest : [head, ...rest];
+  // A command after assignments (`X=1 docker …`): they last for that command alone.
+  if (!exported && !list.every((w) => ASSIGN.test(w ?? ''))) return;
+  for (const word of list) {
+    const m = ASSIGN.exec(word);
+    if (!m) {
+      if (ctx.vars.has(word)) ctx.env.set(word, ctx.vars.get(word)); // export P
+      continue;
+    }
+    const value = expandWord(m[2], ctx, shell) ?? UNKNOWN;
+    ctx.vars.set(m[1], value);
+    if (exported || envValue(m[1], ctx) !== undefined) ctx.env.set(m[1], value);
+  }
+}
+
+// The reason one docker command creates resources of a project that is no test project, or null.
+function composeCreateDenial(command, shell, ctx) {
+  const at = command.sub.indexOf('compose');
+  const verb = at < 0 ? undefined : command.sub[at + 1];
+  if (!verb || !COMPOSE_CREATES.test(verb)) return null;
+  const before = command.all.slice(0, command.subAt[at + 1]);
+  let written = null;
+  before.forEach((t, j) => {
+    if (t === '-p' || t === '--project-name') written = before[j + 1] ?? '';
+    else if (t.startsWith('--project-name=')) written = t.slice('--project-name='.length);
+    else if (/^-p./.test(t)) written = t.slice(2).replace(/^=/, '');
+  });
+  const prefix = command.assigns
+    .map((t) => ASSIGN.exec(t))
+    .filter((m) => m && m[1] === 'COMPOSE_PROJECT_NAME')
+    .pop();
+  let name;
+  let from;
+  if (written !== null) {
+    name = expandWord(written, ctx, shell);
+    from = `-p ${written}`;
+  } else if (prefix) {
+    // `COMPOSE_PROJECT_NAME= docker compose …` unsets it: compose goes to the directory name.
+    if (prefix[2] !== '') name = expandWord(prefix[2], ctx, shell);
+    from = `前綴 COMPOSE_PROJECT_NAME=${prefix[2]}`;
+  } else {
+    const env = envValue('COMPOSE_PROJECT_NAME', ctx);
+    if (env !== undefined) {
+      name = typeof env === 'string' ? env : null;
+      from = '環境變數 COMPOSE_PROJECT_NAME';
+    }
+  }
+  if (typeof name === 'string' && (testProject(name) || name === 'stock-lab' || (name !== '' && name === process.env.STOCK_COMPOSE_PROJECT))) {
+    return null;
+  }
+  const dir = ctx.cwd ? path.basename(ctx.cwd).toLowerCase() : null;
+  const read =
+    name === undefined
+      ? `沒寫 -p／--project-name，也沒有 COMPOSE_PROJECT_NAME，project 會是 compose 檔的 name 或目錄名（目前目錄是「${dir ?? 'hook 不知道'}」）`
+      : name === null
+        ? `hook 讀不出 project 名稱（${from}）`
+        : `project 是「${name}」（${from}），不是測試 project`;
+  return (
+    `docker compose ${verb} 會建立 compose project 的容器、image、network 或 volume；${read}。` +
+    'project 要以 t<n>、task-<n> 開頭或含 smoke 一詞（tools/compose/test_project.sh），否則 close_task.sh 與 sweep.sh 清不掉、' +
+    `docker volume rm 也會被擋（#976）。改寫成 docker compose -p t<pr> ${verb} …（或 -p task-<issue>），例如 docker compose -p t975 run --rm …；` +
+    '正式 project 要寫明 -p stock-lab'
+  );
+}
+
+const composeProjectDenial = (raw, shell, ctx) => {
+  for (const command of dockerCommands(raw, shell)) {
+    const reason = composeCreateDenial(command, shell, ctx);
+    if (reason) return reason;
+  }
+  return null;
+};
 
 // The reason a docker command in `raw` prints environment values, or null.
 function dockerDenial(raw, shell) {
@@ -1100,7 +1252,8 @@ function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd
   const list = segments(command, shell);
   const checked = list.reduce((sum, s) => sum + s.raw.length, 0);
   if (checked > MAX_CHECKED) return `擋下：${TOO_LONG}（heredoc 以外 ${checked} 字元，上限 ${MAX_CHECKED}）`;
-  const ctx = { cwd: normalizeTarget(cwd), piped: false };
+  // vars/env: the assignments of earlier segments, for the compose project rule (#976).
+  const ctx = { cwd: normalizeTarget(cwd), piped: false, vars: new Map(), env: new Map() };
   const heads = list.map((s) => words(s.raw, shell)[0]?.text || '');
   const lastReader = heads.findLastIndex((head) => PIPE_READERS.test(head));
   // Heredoc and here-string bodies are dropped from segments; fed to an interpreter they are code.
@@ -1110,9 +1263,10 @@ function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd
   for (const [index, segment] of list.entries()) {
     if (allow.some((re) => re.test(segment.raw))) continue;
     for (const rule of RULES) {
-      if (rule.test ? rule.test(segment, shell) : rule.re.test(segment.bare)) {
+      const hit = rule.test ? rule.test(segment, shell, ctx) : rule.re.test(segment.bare);
+      if (hit) {
         return (
-          `擋下「${segment.raw}」：${rule.reason}。真的需要時請使用者執行，` +
+          `擋下「${segment.raw}」：${typeof hit === 'string' ? hit : rule.reason}。真的需要時請使用者執行，` +
           '或在 tools/ops/agent_guard.cjs 開頭的放行清單加一條（另開 PR）'
         );
       }
@@ -1127,6 +1281,7 @@ function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd
       const target = rest.find((w) => !/^-\w/.test(w)) || '~';
       ctx.cwd = target === '-' ? null : resolveWord(target, ctx.cwd);
     }
+    trackAssignments(segment, shell, ctx);
   }
   return null;
 }
