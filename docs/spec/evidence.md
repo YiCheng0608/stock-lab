@@ -816,6 +816,51 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #936 | 第一版；沒有人用它對回補資料跑過 |
 
+**第十一輪的假設**（[第十一輪：L1～L4](#第十一輪l1l4)）：`tools/research/round11_research.py`（[#953](https://github.com/YiCheng0608/stock-lab/issues/953)）。L1～L4 寫在 `round11_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round10_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（`--members` 只指成員表的路徑，sha256 要是 `mainstream_research.MEMBERS_SHA256`，同 `round7_research`）。L2、L3、L4 的引擎（`portfolio_research.simulate`）、母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`explore_judge`、「大者先／小者先」排序（`round5_research.order_key`）、`institutional_flow_20`（`feature_evidence` 的，經 `explore_research.FEATURES`，同 X3、X6）、`margin_flow_20` 與 `turnover_60`（`round7_research`）、產業成員（`mainstream_research.group_members`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；L1 的逐筆成交、結算與統計 import 自 `trade_research`（`TradeBars`、`_trade_row`、`settle`、`baseline`、`stats`、`State` 的占用），沒有停損與目標的出場 import 自 `round9_research`（`enter_next_open`、`NO_STOP`、`trade_context`），漲跌停價經 `portfolio_research.Market.limits` 用 `exit_research.price_limits`；L3 和 H2 的重疊 import 自 `round10_research`（`x2_names`、`overlap_share`、`overlap_summary`）。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round10_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進、成員表的 sha256 不符）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）。成員表預設讀 DB 旁的
+# research/industry_members/industry_members_v1.json（同 mainstream_research）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round11_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **一份 panel、兩個引擎**：`round11_research.load` 用 `explore_research.load_context` 讀一份 panel（含成交金額），L1 的 `trade_research.Context` 建在同一個 market 上（`round9_research.trade_context`），成員表的快照也建在同一個 market 上（`mainstream_research.build_context`，只讀 `snapshot_date` ≤ 該段最後一天的列）。
+- **算法**：照[第十一輪：L1～L4](#第十一輪l1l4)與[第十一輪實作釋義](#第十一輪實作釋義)。
+  - L1：`round11_research.limit_down_close`，T 那一根的未還原收盤 ≤ 跌停價 ＋ 1e-9（`LIMIT_EPS`，即 `exit_research.EPS`）就成立；跌停價是 `portfolio_research.Market.limits` 的下限（前一根收盤換到 T 的未還原基準，經 `exit_research.price_limits` 依日期乘 (1 − 漲跌幅)、`tick_ceil` 往上取升降單位），寫法和 `round9_research.limit_up_close` 對稱。退化的判準：T 或前一根停牌、收盤缺值或 ≤ 0，或算不出跌停價時不符合。母體扣掉占用中的股票（`trade_research.State`）。
+  - L1 的成交與出場：`round9_research.enter_next_open`，T+1 開盤成交、期限 1 日；T+1 停牌、沒有日線記放棄 `not_tradable`，漲停鎖死記放棄 `limit_up`，兩類分開列；T+1 跌停鎖死照常以開盤價成交，筆數另列（`trades.csv` 的 `t1_locked_down`、`explore.json` 的 `t1_locked_down_fills`）。出場是 `trade_research.settle`，停損給 `round9_research.NO_STOP`（−∞）、目標給 None，所以只剩持有到期（成交日算第 1 天，第 5 個交易日收盤）、跌停與停牌順延、下市、轉板與段末結算；`trades.csv` 沒有停損與目標欄。超額、t（`overlap=20`）與判定同[逐筆評估](#逐筆評估)，另加「有成交的訊號日 < 60」記無法判定。
+  - L2：`institutional_flow_20`（三大法人 20 日淨買超 ÷ 前 20 日均量）與 `margin_flow_20`（近 20 根融資餘額變化 × 1,000 ÷ 前 20 日均量），缺值規則照原函式。退化的判準：`institutional_flow_20` 或 `margin_flow_20` 任一個缺值時條件不符合；剛好等於 0 也不符合。符合的檔裡排兩個名次（r1 是 `institutional_flow_20` 大者先、r2 是 `margin_flow_20` 小者先，從 1 起，同值以雜湊），分數＝(r1 ＋ r2) ÷ 2（`RANK_WEIGHTS`，以分數算、不經浮點），小者先、同分以 `sha256("<T>:<instrument_id>")` 取前 20 名；不足 20 檔時餘額留現金（每檔仍是子帳戶現金的 1／20）。
+  - L3：`round11_research.price_raw`，T 那一根的 `market_bars.close`（未還原）。退化的判準：T 那一根的未還原收盤缺值或 ≤ 0 時 `price_raw` 缺值、排最後。母體中大者先取前 20 名。
+  - L3 的重疊比例（只列出）：L3 與 H2（X2，`explore_research` 第 2 版的 `HYPOTHESES["X2"]`）每日名單的重疊比例：|L3 的前 20 名 ∩ X2 的前 20 名| ÷ L3 當天的名單檔數；L3 或 X2 當天沒有名單的日子不計。只列出、不判定。X2 的名單由 `round10_research.x2_names`（`explore_research._rank` 用 `explore_research` 第 2 版的 `HYPOTHESES["X2"]`）在同一個 T、同一個母體算，不另寫一份；`summary.md` 列各段平均與依年的平均，`explore.json` 的 L3 列有 `overlap_x2`。
+  - L4：`round11_research.ret_5`＝c[at] ÷ c[at − 5] − 1（還原收盤），`turnover_60` 是 `round7_research.turnover_60`。產業是 `mainstream_research.group_members`（`snapshot_date ≤ T` 的最新一份）。每個產業在 T 日母體裡的成員 ≥ 6 檔（`MIN_MEMBERS`），而且 `turnover_60` 與 `ret_5` 都有值的成員 ≥ 3 檔時可用：依 `turnover_60` 大者先（同值以雜湊）取 3 檔龍頭（`LEADERS`），`lead_ret_5` 是它們 `ret_5` 的等權平均。可用產業裡不是龍頭的母體成員是跟隨者（不要求自己的 `ret_5` 有值），值是所屬產業的 `lead_ret_5`。退化的判準：`ret_5` 任一端停牌、缺值或 ≤ 0 時缺值；湊不到 3 檔龍頭或母體成員 < 6 檔的產業，跟隨者缺值、排最後；龍頭本身與不屬於任何產業的檔缺值、排最後；同時屬於幾個產業的檔，以 `group_id` 最小的那個為所屬產業（每個產業的組成都算它）。整個母體依 `lead_ret_5` 大者先排，同值以雜湊，取前 20 名；有值的跟隨者不足 20 檔時，名單照樣依雜湊補進缺值的檔（龍頭也在其中，不剔除）。
+  - L4 的產業數（只列出）：每個訊號日 T 的前 20 名裡，有值的跟隨者所屬產業的個數；沒有名單的日子不計。`summary.md` 列各段平均與依年的平均，`explore.json` 的 L4 列有 `industries`。
+  - 漲跌幅依日期：`exit_research.daily_limit`（2015-05-29 以前 ±7%、2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），表算進 `definitions_sha256`。L1 的跌停價、T+1 漲停鎖死與出場的跌停鎖死，L2～L4 的 T+1 漲停鎖死都依當根的日期。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.261（2 ≤ t < 3.261 判「前瞻觀察」），寫死、不在執行時重算，算進 `definitions_sha256`。L1 用逐筆的訊號日序列代入同一個判定。
+- **探索**：`python tools/research/round11_research.py --db /research/stock.db --segment exploration --hypotheses <L1,L2,L3,L4 或其中幾個> --out <目錄> [--members <成員表>] [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）；成員表也只讀到那天。
+- **驗證**：`python tools/research/round11_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--members <成員表>] [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `953`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27。**讀取的起點**：三段都從副本起點讀（`LOAD_FROM`，同 `round10_research`；規則 `LOAD_RULE` 算進 `definitions_sha256`），只讀到該段的最後一天；起點之前的列只供特徵，不進淨值與判定。成員表到 2024-09，已用段一律用最後一份（同 Y4）。判「通過」的另跑已用段，寫在 `<代號>/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬與成交、不算報酬、不記紀錄檔，跑幾次都可以。各假設用自己的訊號日；缺值比例的分母是母體檔次；每個訊號日都數，不扣占用。
+  - L1：依年列訊號日、有訊號的日數、訊號數（母體中 `limit_down_close` 成立的檔次，另分上市、上櫃）、母體檔次，以及算不出跌停價（T 或前一根停牌、收盤缺值或 ≤ 0）的比例。
+  - L2 第 8 點：依年列日數、母體檔次、符合 (a)(b) 的檔日數、至少一檔符合的訊號日數、一天最多的檔數、超過 20 檔的天數，以及兩個特徵的缺值比例。
+  - L3：依年列日數、母體檔次與 `price_raw` 的缺值比例。
+  - L4：依年列日數、母體檔次、可用產業數（每日平均與最少的一天）、有母體成員的產業數、跟隨者缺值比例（另分不屬於任何產業、產業不可用、是龍頭三種原因）、同時屬於幾個產業的檔次、有值的跟隨者不足 20 檔的訊號日數，以及名單補進的缺值檔次（龍頭與其他缺值分開計）。
+  - 耗時：總耗時、載入耗時（另列 panel、逐筆的標的狀態與成員表）、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和特徵的計算時間（`limit_down_close`、`institutional_flow_20`、`margin_flow_20`、`l2_order`（L2 的合成排序）、`price_raw`、`x2_order`（同一個 T 算 X2 的名單，各段要用來算重疊比例；`--coverage-only` 只計時、不算重疊比例）、`ret_5+turnover_60`（L4 的龍頭）、`l4_order`（L4 的產業與排序，含龍頭））。
+  - 有明顯斷點，或缺值比例有異常的年份或欄位時，先在工具單提問、不跑探索段。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round11_research"`、`"round": 11`。代號不重疊，各工具互不擋（`exploration_problems`／`validation_problems` 只比代號、不比 `tool`）；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 4 個、累計 45 個、探索段與驗證段的門檻、兩個引擎、L1～L4 的限制；總表每個假設列方向、引擎、日數（L2～L4 是有淨值的交易日，L1 是段內交易日）、L1 有成交的訊號日、對加權指數的超額與 t（第一個列）、對母體的超額與 t、絕對報酬與判定；總表下另列 L3 和 H2 的平均重疊與 L4 名單的平均產業數。
+  - `explore.json`：同上的總表（每個假設另有 `engine`，L1 另有成交筆數、放棄比例與 `t1_locked_down_fills`，L3 另有 `overlap_x2`，L4 另有 `industries`），另有 `tool`、`design`（`953`）、`validation_min_t`、`engines`、`definitions_sha256`、`members_sha256`、工具 commit、副本資訊與先決條件。
+  - L2、L3、L4：`<代號>/summary.md`（開頭列退化的判準與限制；L3 另有「和 H2 的重疊」一節，L4 另有「名單涉及的產業數」一節；資料覆蓋同 `--coverage-only` 的表）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的前 20 名；L2 有 `institutional_flow_20`、`margin_flow_20`、`r1`、`r2`、`score`，L3 有 `price_raw`，L4 有 `lead_ret_5`、`group`）、`trades.csv`。
+  - L1：`<代號>/summary.md`（開頭列退化的判準與限制；「只列出」表同 `trade_research`，放棄分兩類，另列 T+1 跌停鎖死而成交的筆數，出場原因不列停損與目標；每年的訊號數與有訊號的日數）、`tables.json`（另有 `listed`）、`trades.csv`（每個訊號一列，含放棄的；有 `close_raw`、`limit_down`、`t1_locked_down`）、`days.csv`。
+  - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
+- **耗時與記憶體**（[#953 AC-4](https://github.com/YiCheng0608/stock-lab/issues/953#issuecomment-7074127871)，研究 DB 到 2019-12-31 的 499 萬根，這台 macOS 主機的 OrbStack）：`--coverage-only` 521 秒（載入 395 秒，其中 panel 386 秒、逐筆的標的狀態 4 秒、成員表 5 秒）、峰值 1.57 GB，其中 `limit_down_close` 26.6 秒、`institutional_flow_20` 3.0 秒、`margin_flow_20` 1.2 秒、L2 的合成排序 1.4 秒、`price_raw` 4.9 秒、X2 的名單 35.9 秒、`ret_5+turnover_60` 9.1 秒、`l4_order` 19.5 秒。`limit_down_close` 的秒數是兩倍：`--coverage-only` 另對整個母體重算一次來數「算不出跌停價」，探索段只算一次、只算沒被占用的檔，約 13 秒；`l4_order` 已含 `ret_5+turnover_60`，兩個數不相加。panel 的載入比第十輪在 Windows 量的 173 秒慢約 2.2 倍。估一次探索段（L1～L4）約 14～22 分鐘、峰值約 2～2.5 GB（載入約 6.5 分鐘、排序與覆蓋約 2 分鐘、L2～L4 各兩次組合模擬約 5～12 分鐘、L1 的 2,058 個訊號逐筆成交約 1 分鐘）。驗證段與已用段也從副本起點讀，比探索段大（約 720 萬、820 萬根），估峰值約 2.5～3.3 GB。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
+- 文件與程式用同一套說法：L1～L4 的退化判準與 `coverage.md` 的說明句是 `round11_research` 的 `DEGENERATE`、`OVERLAP_NOTE`、`COVERAGE_NOTES`，本段逐字照抄，`backend/tests/test_round11_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round11_research` 的版本**：`round11_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（L1～L4 的定義、特徵的窗口與閾值、L2 的條件與名次合成、L4 的龍頭檔數、產業最少檔數、一檔屬於幾個產業與龍頭的處理、排序方向、成員表、L1 的出場、分段、兩段的門檻、有成交的訊號日下限、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #953 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
@@ -2387,6 +2432,8 @@ L2、L3、L4 用[假設登記表](#假設登記表)（買前 N 名、持有 K �
 - **L2 的平均投入比例可能偏低**：不足 20 檔的日子留現金，是登記時事先定的規則，不另補檔，同 F3。
 - **L3 的重疊比例只列出**：分母是 L3 當天的名單檔數；L3 或 X2 當天沒有名單的日子不計入平均。X2 的名單用 `explore_research` 第 2 版的定義在同一個 T 算，不另寫一份，同 F2。
 - **L4 的產業數只列出**：每個訊號日 T 的名單涉及幾個產業，列各段的平均與依年的平均，不設上限、不判定。
+- **L4 的一檔屬於幾個產業**（#953 統籌決定 [7073648898](https://github.com/YiCheng0608/stock-lab/issues/953#issuecomment-7073648898)，同 Y4 的 `several_groups`）：產業的組成（龍頭、母體成員 ≥ 6 檔）每個產業用自己的全部成員，那一檔在每個產業都算；那一檔的所屬產業取 `group_id` 字串最小的那個，那個產業可用、它也不是那個產業的龍頭時才是跟隨者，值取那個產業的 `lead_ret_5`，其餘缺值、排最後。在 A 產業是龍頭、在 B 產業是跟隨者的檔，只看所屬產業。`--coverage-only` 依年另列這種檔次。
+- **L4 的龍頭在排序裡**（#953 統籌決定 [7073649176](https://github.com/YiCheng0608/stock-lab/issues/953#issuecomment-7073649176)）：龍頭不是跟隨者，排序鍵視為缺值，和不屬於任何產業的檔一樣排最後、缺值之間依雜湊，不剔除；有值的跟隨者不足 20 檔時名單照樣取滿 20 檔。`--coverage-only` 依年列有值的跟隨者不足 20 檔的訊號日數，報告的覆蓋段列補進的缺值檔次（龍頭與其他缺值分開計），只列出、不判定。
 
 ## 隔夜美股條件研究
 
