@@ -216,17 +216,19 @@ docker_call() { timeout -k 5 "$docker_timeout" docker "$@"; }
 owned_name() { [[ "$2" =~ ^(t|task-)$1([-_.]|$) ]]; }
 
 # docker_listing: the containers, images, volumes and networks, one tab-separated line each
-# ("container NAME STATE IMAGE MOUNTS NETWORKS", "image REPO TAG", "volume NAME", "network
-# NAME"); prints the reason (no_docker, timeout, daemon_unreachable) and fails when one
-# listing does not answer.
+# ("container NAME STATE IMAGE MOUNTS NETWORKS PROJECT", PROJECT the compose project label;
+# "image REPO TAG", "volume NAME", "network NAME"; an empty field is "-"); prints the reason (no_docker,
+# timeout, daemon_unreachable) and fails when one listing does not answer.
 docker_listing() {
   local rc=0 out tab=$'\t'
-  out="$(docker_call ps -a --no-trunc --format "container$tab{{.Names}}$tab{{.State}}$tab{{.Image}}$tab{{.Mounts}}$tab{{.Networks}}" \
+  out="$(docker_call ps -a --no-trunc --format "container$tab{{.Names}}$tab{{.State}}$tab{{.Image}}$tab{{.Mounts}}$tab{{.Networks}}$tab{{.Label \"com.docker.compose.project\"}}" \
     && docker_call images --format "image$tab{{.Repository}}$tab{{.Tag}}" \
     && docker_call volume ls --format "volume$tab{{.Name}}" \
     && docker_call network ls --format "network$tab{{.Name}}")" || rc=$?
   case "$rc" in
-    0) printf '%s\n' "$out" | tr -d '\r' ;;
+    # An empty field is "-": `read` with IFS=tab (whitespace to bash) would run two tabs
+    # together and shift the fields after it (a container with no mounts, #941).
+    0) printf '%s\n' "$out" | tr -d '\r' | awk -F '\t' -v OFS='\t' '{ for (i = 1; i <= NF; i++) if ($i == "") $i = "-"; print }' ;;
     127) echo no_docker; return 1 ;;
     124 | 137) echo timeout; return 1 ;;
     *) echo daemon_unreachable; return 1 ;;
@@ -277,6 +279,33 @@ docker_task_issues() {
   [ ${#out[@]} -eq 0 ] || printf '%s\n' "${out[@]}" | sort -un | paste -sd, -
 }
 
+# The production compose project (deploy.sh's default): its api, web and scheduler run all the
+# time on the host (docs/ops/RELEASE.md), so they do not hold up the prune (#941).
+docker_prod_project="${STOCK_COMPOSE_PROJECT:-stock-lab}"
+
+# docker_prune LISTING ISSUE: `docker image prune -f` (dangling images only: an image a
+# container uses, or one with a tag, is never one) and `docker builder prune -f` (build cache),
+# adding steps to the caller's `steps`. Both run only when no container runs but the
+# production project's (docker_prod_project: running containers of any other project, or of
+# none, are another task's work, a research run or a build) and no task but ISSUE has Docker
+# work in progress (docker_task_issues); else docker_prune_skipped:<reason> (#360, #941).
+docker_prune() {
+  local listing="$1" issue="$2" kind name state image mounts networks project others running=0
+  while IFS=$'\t' read -r kind name state image mounts networks project; do
+    [ "$kind" = container ] || continue
+    case "$state" in exited | created | dead) continue ;; esac
+    [ -n "$project" ] && [ "$project" = "$docker_prod_project" ] && continue
+    running=$((running + 1))
+  done <<<"$listing"
+  [ "$running" = 0 ] || { steps+=("docker_prune_skipped:running_containers"); return 0; }
+  others="$(docker_task_issues "$listing" "$issue")"
+  [ "$others" != "?" ] || { steps+=("docker_prune_skipped:worktrees_unreadable"); return 0; }
+  # Left to the last Docker task to close.
+  [ -z "$others" ] || { steps+=("docker_prune_skipped:other_docker_tasks:$others"); return 0; }
+  if docker_call image prune -f >/dev/null; then steps+=("docker_pruned:images"); else steps+=("docker_prune_failed:images"); fi
+  if docker_call builder prune -f >/dev/null; then steps+=("docker_pruned:build_cache"); else steps+=("docker_prune_failed:build_cache"); fi
+}
+
 # docker_cleanup ISSUE PRUNE: delete the Docker resources named for ISSUE, adding a step for
 # each one to the caller's `steps`. Never fails: without docker, or with a daemon that does not
 # answer in time, it adds docker_skipped:<reason> and deletes nothing.
@@ -288,18 +317,18 @@ docker_task_issues() {
 #   - a container that runs (or is paused, restarting) and is named so or uses one of them:
 #     nothing of ISSUE is deleted; docker_running:<container> and docker_kept:<kind>:<name>.
 # Other images (base images such as python, node, nginx and alpine, other projects') are left
-# alone, and so are dangling ones: those go with `docker image prune -f` and
-# `docker builder prune -f` (build cache), which run only when PRUNE allows it (never; if-found:
-# ISSUE had resources; docker-task: ISSUE is a Docker subtask), no container runs and no other
-# Docker task is in progress (docker_task_issues); else docker_prune_skipped:<reason>.
+# alone, and so are dangling ones: those go with docker_prune, which runs only when PRUNE
+# allows it (never; if-found: ISSUE had resources; docker-task: ISSUE is a Docker subtask),
+# else docker_prune_skipped:<reason>; none (sweep.sh, which prunes once at its end) adds no
+# prune step at all.
 docker_cleanup() {
-  local issue="$1" prune="$2" listing kind name state image mounts networks ref x mine found others
-  local running=0 busy=() containers=() images=() volumes=() nets=() owned_images=" " used=()
+  local issue="$1" prune="$2" listing kind name state image mounts networks project ref x mine found
+  local busy=() containers=() images=() volumes=() nets=() owned_images=" " used=()
   if ! listing="$(docker_listing)"; then
     steps+=("docker_skipped:$listing")
     return 0
   fi
-  while IFS=$'\t' read -r kind name state image mounts networks; do
+  while IFS=$'\t' read -r kind name state image mounts networks project; do
     case "$kind" in
       image)
         # name and state are the repository and the tag here.
@@ -313,7 +342,7 @@ docker_cleanup() {
       network) owned_name "$issue" "$name" && nets+=("$name") ;;
     esac
   done <<<"$listing"
-  while IFS=$'\t' read -r kind name state image mounts networks; do
+  while IFS=$'\t' read -r kind name state image mounts networks project; do
     [ "$kind" = container ] || continue
     ref="$image"
     case "${ref##*/}" in *:*) ;; *) ref="$ref:latest" ;; esac
@@ -322,7 +351,6 @@ docker_cleanup() {
     case "$state" in
       exited | created | dead) [ "$mine" = 0 ] || containers+=("$name") ;;
       *)
-        running=$((running + 1))
         IFS=, read -r -a used <<<"$mounts,$networks"
         for x in "${used[@]+"${used[@]}"}"; do owned_name "$issue" "$x" && mine=1; done
         [ "$mine" = 0 ] || busy+=("$name")
@@ -354,17 +382,98 @@ docker_cleanup() {
     if docker_call network rm "$x" >/dev/null; then steps+=("docker_removed:network:$x"); else steps+=("docker_failed:network:$x"); fi
   done
   case "$prune" in
+    none) return 0 ;;
     docker-task) ;;
     if-found) [ "$found" -gt 0 ] || { steps+=("docker_prune_skipped:no_task_resources"); return 0; } ;;
     *) steps+=("docker_prune_skipped:not_requested"); return 0 ;;
   esac
-  [ "$running" = 0 ] || { steps+=("docker_prune_skipped:running_containers"); return 0; }
-  others="$(docker_task_issues "$listing" "$issue")"
-  [ "$others" != "?" ] || { steps+=("docker_prune_skipped:worktrees_unreadable"); return 0; }
-  # Left to the last Docker task to close.
-  [ -z "$others" ] || { steps+=("docker_prune_skipped:other_docker_tasks:$others"); return 0; }
-  if docker_call image prune -f >/dev/null; then steps+=("docker_pruned:images"); else steps+=("docker_prune_failed:images"); fi
-  if docker_call builder prune -f >/dev/null; then steps+=("docker_pruned:build_cache"); else steps+=("docker_prune_failed:build_cache"); fi
+  docker_prune "$listing" "$issue"
+}
+
+# --- deleting directories: close_task.sh and sweep.sh (#282, #472, #941) ---------------
+# unlink_one LINK: remove a junction or symlink itself, never what it points to; the
+# JSON steps list each one. Git Bash's and GNU rm -rf do not follow them either (#282),
+# but with the links gone first no change to the delete command can reach a target.
+unlink_one() {
+  if [ -d "$1" ] && is_windows; then
+    MSYS2_ARG_CONV_EXCL='*' cmd /d /c rmdir "$(cygpath -w -- "$1")" >/dev/null 2>&1
+  else
+    rm -f -- "$1"
+  fi
+  [ ! -L "$1" ] && [ ! -e "$1" ] || return 1
+  steps+=("unlinked:$1")
+}
+
+# remove_tree DIR [residual]: check DIR with guard_dir once more (a second line of
+# defence: the checks before it are not the only thing between rm and a protected path),
+# unlink every junction/symlink inside (find does not follow them), confirm none is
+# left, then delete; returns 0 only when DIR is gone.
+remove_tree() {
+  local link
+  [ -z "$(guard_dir "$1" "${2:-}")" ] || return 2
+  if [ -L "$1" ]; then
+    unlink_one "$1"
+    return
+  fi
+  while IFS= read -r -d '' link; do
+    unlink_one "$link" || return 1
+  done < <(find "$1" -type l -print0)
+  [ -z "$(find "$1" -type l -print -quit)" ] || return 1
+  rm -rf -- "$1"
+  [ ! -e "$1" ] && [ ! -L "$1" ]
+}
+
+# Claude Code scratchpads (#472): each session keeps <claude root>/<project>/<session id>/
+# (the project a hash, or the working directory with every other character than A-Z, a-z,
+# 0-9 turned into "-"); nothing else deletes it.
+uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+# claude_tmp_root: set claude_root to where Claude Code keeps them, $TEMP/claude on Windows
+# and /private/tmp/claude-<uid> on macOS, where TEMP is not set (STOCK_CLAUDE_TMP_ROOT
+# replaces that one, for the tests); fails when there is none.
+claude_tmp_root() {
+  local temp
+  claude_root=""
+  if [ -n "${TEMP:-}" ]; then
+    temp="$(native "$TEMP")" || return 1
+    claude_root="${temp%/}/claude"
+  elif [ "$(uname -s)" = Darwin ]; then
+    claude_root="${STOCK_CLAUDE_TMP_ROOT:-/private/tmp/claude-$(id -u)}"
+    [ -d "$claude_root" ] || return 1
+  else
+    return 1
+  fi
+}
+
+# scratch_remove DIR: delete one session directory, DIR = <claude>/<project>/<uuid>.
+# This session's own directory (CLAUDE_CODE_SESSION_ID) stays. A DIR that is itself a
+# junction/symlink is unlinked, never followed, once its parent has no link on the way;
+# any other DIR goes through guard_dir and remove_tree (links inside unlinked first).
+scratch_remove() {
+  local dir="$1" reason
+  [[ "${dir##*/}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:not_a_session:$dir"); return 0; }
+  if [ "${dir##*/}" = "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    steps+=("scratchpad_skipped:own_session:$dir")
+    return 0
+  fi
+  if [ -L "$dir" ]; then
+    if [ "$(cj plain "${dir%/*}" 2>/dev/null)" != yes ]; then
+      steps+=("scratchpad_skipped:refused:$dir:上層經過 junction／symlink")
+    elif unlink_one "$dir"; then
+      steps+=("scratchpad_removed:$dir")
+    else
+      steps+=("scratchpad_skipped:delete_failed:$dir")
+    fi
+    return 0
+  fi
+  reason="$(guard_dir "$dir")"
+  if [ -n "$reason" ]; then
+    steps+=("scratchpad_skipped:refused:$dir:$reason")
+  elif remove_tree "$dir"; then
+    steps+=("scratchpad_removed:$dir")
+  else
+    steps+=("scratchpad_skipped:delete_failed:$dir")
+  fi
 }
 
 # --- the codebase-memory master index (#704; docs/WORKFLOW.md 程式索引) ---------------
