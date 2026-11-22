@@ -72,6 +72,8 @@ SCRIPTS = (
     # #834: comment.sh checks the body for Fugle quotes first
     "quote_guard.py",
     "quote_patterns.json",
+    # #941: the host sweep close_task.sh runs after its cleanup
+    "sweep.sh",
 )
 # The sandbox memory directory every run gets (STOCK_MEMORY_DIR, #705): one memory, indexed,
 # no backticked path, so memory_check.py passes without asking git.
@@ -186,6 +188,13 @@ printf '%s\n' "$*" >>"$d/gh_calls.log"
 if [ "$1 $2" = "issue close" ] && [ -f "$d/gh_issue_close_sets_closed" ]; then
   echo '{"state": "CLOSED"}' >"$d/gh_issue_view.json"
 fi
+# sweep.sh's Issue state (#941): api repos/<owner>/<repo>/issues/<n> answers
+# <fake>/gh_issue_<n>.json and fails without one.
+if [ "$1" = api ] && [[ "${2:-}" =~ ^repos/[^/]+/[^/]+/issues/([0-9]+)$ ]]; then
+  f="$d/gh_issue_${BASH_REMATCH[1]}.json"
+  [ -f "$f" ] && { cat "$f"; exit 0; }
+  echo "HTTP 404: Not Found" >&2; exit 1
+fi
 case "$1 $2" in "api repos/"*) k=gh_comments ;; *) k="gh_$1_$2" ;; esac
 [ -f "$d/$k.hook" ] && bash "$d/$k.hook"
 [ -f "$d/$k.sleep" ] && sleep "$(cat "$d/$k.sleep")"
@@ -285,8 +294,16 @@ case "$1" in
     esac
     exit 0 ;;
   status) cat "$d/git_status.txt" 2>/dev/null ;;
+  # worktree list: <fake>/git_worktrees.txt, else this checkout alone (real git always
+  # lists it); git_worktree_fails makes it fail.
   worktree)
-    [ "$2" = list ] && cat "$d/git_worktrees.txt" 2>/dev/null
+    [ "$2" = list ] || exit 0
+    [ -f "$d/git_worktree_fails" ] && { echo "fatal: not a git repository" >&2; exit 128; }
+    if [ -f "$d/git_worktrees.txt" ]; then
+      cat "$d/git_worktrees.txt"
+    else
+      printf 'worktree %s\nHEAD %s\nbranch refs/heads/master\n\n' "$SANDBOX/repo" "$FAKE_SHA"
+    fi
     exit 0 ;;
 esac
 exit 0
@@ -294,7 +311,8 @@ exit 0
 
 
 # docker: containers, images, volumes and networks live in <fake>/docker_<kind>.tsv
-# ("NAME STATE IMAGE MOUNTS NETWORKS", "REPOSITORY TAG", "NAME", "NAME"; tab-separated), and
+# ("NAME STATE IMAGE MOUNTS NETWORKS [PROJECT]", "REPOSITORY TAG", "NAME", "NAME";
+# tab-separated; PROJECT is the compose project label, #941), and
 # the listings print them with the kind in front, as docker_listing's --format asks. rm, rmi,
 # volume rm and network rm delete the line, and fail for a resource that is not there or is
 # listed in <fake>/docker_fails.txt. <fake>/docker_missing answers 127 (no docker command),
@@ -590,6 +608,8 @@ class Harness:
             STOCK_CBM_PROJECT=CBM_PROJECT,
             FAKE_REPO=self.repo.as_posix(),
             FAKE_MERGE_SHA=MERGE_SHA,
+            # close_task.sh's host sweep (#941) has its own tests, which turn it on.
+            STOCK_SWEEP="off",
         )
         base.update(env)
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of PATH,
@@ -2867,6 +2887,94 @@ def test_close_task_reports_a_docker_resource_it_could_not_delete(
     )
     assert steps == expected + ["docker_pruned:images", "docker_pruned:build_cache"]
     assert "t282_stock-data" in _docker_left(docker, "volumes")
+
+
+# The production project's containers (#941): api and web run all the time on the host.
+PROD = [
+    (
+        "stock-lab-api-1",
+        "running",
+        "stock-lab-backend:v1.2.76",
+        "stock-lab_stock-data",
+        "stock-lab_default",
+        "stock-lab",
+    ),
+    (
+        "stock-lab-web-1",
+        "running",
+        "stock-lab-web:v1.2.76",
+        "",
+        "stock-lab_default",
+        "stock-lab",
+    ),
+]
+
+
+def test_close_task_prunes_while_only_the_production_containers_run(
+    docker: Harness,
+) -> None:
+    """AC-1 (#941): the production project's running api and web do not hold up the prune:
+    the task's resources go, then dangling images and build cache, and production's
+    images, volume and network stay. Before #941 any running container skipped it."""
+    _set_docker(docker, containers=OURS["containers"] + THEIRS["containers"] + PROD)
+    _set_docker(
+        docker,
+        volumes=OURS["volumes"]
+        + THEIRS["volumes"]
+        + ["stock-lab_stock-data", "stock-lab-research"],
+    )
+    result = docker.close_task(docker.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert _docker_steps(line) == _removed(OURS) + [
+        "docker_pruned:images",
+        "docker_pruned:build_cache",
+    ]
+    assert _docker_left(docker, "containers") == _docker_names(
+        THEIRS["containers"] + PROD
+    )
+    assert _docker_left(docker, "volumes")[-2:] == [
+        "stock-lab_stock-data",
+        "stock-lab-research",
+    ]
+    assert "stock-lab-backend:latest" in _docker_left(docker, "images")
+
+
+@pytest.mark.parametrize("why", ["other-task", "no-project", "other-project"])
+def test_close_task_with_production_running_still_skips_the_prune_for_other_work(
+    docker: Harness, why: str
+) -> None:
+    """AC-1 (#941): with production running, the prune is still left alone while another
+    Docker task is in progress (worktree task/253-other has a t253 volume), or while a
+    container of no compose project (a research `docker run`) or of another project runs."""
+    containers = OURS["containers"] + THEIRS["containers"] + PROD
+    reason = "docker_prune_skipped:running_containers"
+    if why == "other-task":
+        _set_docker(
+            docker, volumes=OURS["volumes"] + THEIRS["volumes"] + ["t253_stock-data"]
+        )
+        reason = "docker_prune_skipped:other_docker_tasks:253"
+    elif why == "no-project":
+        containers.append(
+            ("research", "running", "stock-lab-backend:v1", "stock-lab-research", "")
+        )
+    else:
+        containers.append(
+            ("myproj-app-1", "running", "myproj-app:latest", "", "bridge", "myproj")
+        )
+    _set_docker(docker, containers=containers)
+    result = docker.close_task(docker.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _docker_steps(_json_line(result)) == _removed(OURS) + [reason]
+    assert not [c for c in docker.calls("docker") if "prune" in c]
+
+
+def test_docker_listing_asks_for_the_compose_project_label(docker: Harness) -> None:
+    """#941: the container listing carries the compose project, which tells production's
+    containers apart."""
+    docker.close_task(docker.extra)
+    ps = next(c for c in docker.calls("docker") if c.startswith("ps -a"))
+    assert ps.endswith('\t{{.Label "com.docker.compose.project"}}')
 
 
 # --- Claude Code scratchpads (#472) ---------------------------------------------------
@@ -5832,3 +5940,477 @@ def test_patrol_overview_without_github_prints_the_local_part(slotted: Harness) 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "現況頁：未查完（GitHub 沒讀到），只印本機的部分" in result.stdout
     assert slotted.calls("gh") == []
+
+
+# --- the host sweep (#941, sweep.sh) ----------------------------------------------------
+# Every path lies under the sandbox: HOME, TEMP (Claude Code's scratchpads under TEMP/claude,
+# trivy-* in TEMP) and the data directory are Harness stand-ins, Docker is the fake.
+
+DAY = 86400
+
+
+def _age(path: Path, days: float) -> None:
+    """Set PATH and everything in it (links themselves, not their targets) DAYS old."""
+    when = time.time() - days * DAY
+    for top, dirs, files in os.walk(path, topdown=False):
+        for name in dirs + files:
+            os.utime(Path(top) / name, (when, when), follow_symlinks=False)
+    os.utime(path, (when, when), follow_symlinks=False)
+
+
+def _issue(h: Harness, n: int, state: str) -> None:
+    h.answer(f"gh_issue_{n}", {"number": n, "state": state})
+
+
+def _sweep(
+    h: Harness, *args: str, **env: str
+) -> tuple[subprocess.CompletedProcess, dict]:
+    env.setdefault("CLAUDE_CODE_SESSION_ID", S_SELF)
+    result = h.run("sweep.sh", *args, **env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result, _json_line(result)
+
+
+@pytest.fixture
+def swept(h: Harness) -> Harness:
+    """t100 closed, no worktree: its things go. t200 closed but its worktree is open, t300
+    open, t400's state cannot be read: theirs stay. t500 is closed and holds a .git (a
+    checkout), t600 is closed and is the data directory: refused. Production and research
+    volumes, base images and the release images are named for no task."""
+    for n in (100, 200, 300, 400, 500, 600):
+        d = h.home / f"t{n}"
+        (d / "b1").mkdir(parents=True)
+        (d / "b1" / "x.txt").write_text("x", encoding="utf-8")
+    (h.home / "t500" / ".git").mkdir()
+    for name in ("stock-lab-data", "stock-lab-release", "t12x", "evidence"):
+        (h.home / name).mkdir()
+        (h.home / name / "keep.txt").write_text("k", encoding="utf-8")
+    (h.home / "stock-lab-release" / ".git").mkdir()
+    for n, state in (
+        (100, "closed"),
+        (200, "closed"),
+        (300, "open"),
+        (500, "closed"),
+        (600, "closed"),
+    ):
+        _issue(h, n, state)
+    h.write(
+        "git_worktrees.txt",
+        f"worktree {h.repo.as_posix()}\nHEAD {SHA}\nbranch refs/heads/master\n\n"
+        f"worktree {(h.root / 'wt' / 'task-200-x').as_posix()}\nHEAD {SHA}\n"
+        "branch refs/heads/task/200-x\n\n",
+    )
+    _set_docker(
+        h,
+        containers=[
+            (
+                "t100-a-backend-1",
+                "exited",
+                "t100-a-backend",
+                "t100-a_stock-data",
+                "t100-a_default",
+            ),
+            ("t300-a-backend-1", "exited", "t300-a-backend", "", "t300-a_default"),
+            *PROD,
+        ],
+        images=[
+            "t100-a-backend:latest",
+            "stock-lab-backend:t100",
+            "t300-a-backend:latest",
+            "stock-lab-backend:v1.2.76",
+            "stock-lab-web:v1.2.76",
+            "python:3.12-slim",
+            "<none>:<none>",
+        ],
+        volumes=[
+            "t100-a_stock-data",
+            "t200_stock-data",
+            "t400_cache",
+            "stock-lab_stock-data",
+            "stock-lab-research",
+        ],
+        networks=["bridge", "t100-a_default", "t300-a_default", "stock-lab_default"],
+    )
+    return h
+
+
+def test_sweep_removes_only_what_closed_tasks_without_a_worktree_left(
+    swept: Harness,
+) -> None:
+    """AC-3 (#941): t100's directory and Docker resources go; t200 (worktree), t300 (open),
+    t400 (unreadable) stay; t500 (a .git inside) and t600 (the data directory) are refused;
+    the production and research volumes, the release checkout, stock-lab-data, evidence and
+    names that are not t<digits> are not touched."""
+    home = swept.home
+    # The data directory has its logs/ (no commitments file: no commitment).
+    (home / "t600" / "logs").mkdir()
+    result, line = _sweep(swept, STOCK_DATA_DIR=(home / "t600").as_posix())
+    steps = line["steps"]
+    assert line["error"] is None
+    assert f"sweep_removed:dir:{(home / 't100').as_posix()}" in steps
+    assert not (home / "t100").exists()
+    assert f"sweep_kept:dir:{(home / 't200').as_posix()}:worktree" in steps
+    assert f"sweep_kept:dir:{(home / 't300').as_posix()}:open" in steps
+    assert f"sweep_kept:dir:{(home / 't400').as_posix()}:issue_unreadable" in steps
+    refused = [s for s in steps if s.startswith("sweep_skipped:dir:")]
+    assert [s.split(":")[2].rsplit("/", 1)[1] for s in refused] == ["t500", "t600"]
+    for n in (200, 300, 400, 500, 600):
+        assert (home / f"t{n}" / "b1" / "x.txt").is_file(), n
+    for name in ("stock-lab-data", "stock-lab-release", "t12x", "evidence"):
+        assert (home / name / "keep.txt").is_file(), name
+    assert [s for s in steps if s.startswith("docker_removed:")] == [
+        "docker_removed:container:t100-a-backend-1",
+        "docker_removed:image:t100-a-backend:latest",
+        "docker_removed:image:stock-lab-backend:t100",
+        "docker_removed:volume:t100-a_stock-data",
+        "docker_removed:network:t100-a_default",
+    ]
+    assert "sweep_kept:docker:200:worktree" in steps
+    assert "sweep_kept:docker:300:open" in steps
+    assert "sweep_kept:docker:400:issue_unreadable" in steps
+    assert _docker_left(swept, "volumes") == [
+        "t200_stock-data",
+        "t400_cache",
+        "stock-lab_stock-data",
+        "stock-lab-research",
+    ]
+    assert _docker_left(swept, "images") == [
+        "t300-a-backend:latest",
+        "stock-lab-backend:v1.2.76",
+        "stock-lab-web:v1.2.76",
+        "python:3.12-slim",
+        "<none>:<none>",
+    ]
+    assert _docker_left(swept, "containers") == ["t300-a-backend-1"] + _docker_names(
+        PROD
+    )
+    # t200 has resources and a worktree: a Docker task in progress, so no prune.
+    assert steps[-1] == "docker_prune_skipped:other_docker_tasks:200"
+    # One state read per Issue, for the directory and the Docker resources alike.
+    assert sorted(c.split("/")[-1] for c in swept.calls("gh")) == [
+        "100",
+        "300",
+        "400",
+        "500",
+        "600",
+    ]
+    assert not [
+        c for c in swept.calls("docker") if "volume prune" in c or "system" in c
+    ]
+
+
+def test_sweep_prunes_while_only_production_runs(swept: Harness) -> None:
+    """AC-1/AC-3 (#941): with no task's Docker work left and only production running, the
+    sweep ends with the prune; --no-prune (close_task.sh's) leaves it out."""
+    swept.write(
+        "git_worktrees.txt", f"worktree {swept.repo.as_posix()}\nHEAD {SHA}\n\n"
+    )
+    _issue(swept, 400, "closed")
+    _issue(swept, 200, "closed")
+    _issue(swept, 300, "closed")
+    _, line = _sweep(swept, "--no-prune")
+    assert line["steps"][-1] == "docker_prune_skipped:not_requested"
+    assert not [c for c in swept.calls("docker") if "prune" in c]
+    _, line = _sweep(swept)
+    assert line["steps"][-2:] == ["docker_pruned:images", "docker_pruned:build_cache"]
+    assert _docker_left(swept, "volumes") == [
+        "stock-lab_stock-data",
+        "stock-lab-research",
+    ]
+
+
+def _scratch_dirs(h: Harness) -> dict[str, Path]:
+    claude = h.temp / "claude"
+    dirs = {
+        "old": claude / "hash-a" / S_ENG,
+        "recent": claude / "hash-a" / S_HANDOVER,
+        "own": claude / "-Users-me-stock-lab" / S_SELF,
+        "touched": claude / "-Users-me-stock-lab" / S_OTHER,
+        "not-uuid": claude / "hash-a" / "notes",
+    }
+    for d in dirs.values():
+        (d / "scratchpad").mkdir(parents=True)
+        (d / "scratchpad" / "a.txt").write_text("a", encoding="utf-8")
+    for name in ("old", "own", "touched", "not-uuid"):
+        _age(dirs[name], 8)
+    # A file written yesterday keeps a session whose directories are older.
+    os.utime(dirs["touched"] / "scratchpad" / "a.txt", (time.time() - DAY,) * 2)
+    _age(dirs["recent"], 6)
+    return dirs
+
+
+def test_sweep_removes_scratchpads_untouched_for_seven_days_but_its_own(
+    h: Harness,
+) -> None:
+    """AC-3 (#941): a session directory with nothing changed for 7 days goes; one changed
+    within them (the directory or a file in it), this session's own, and a directory whose
+    name is no session id stay."""
+    dirs = _scratch_dirs(h)
+    _, line = _sweep(h)
+    steps = line["steps"]
+    assert f"scratchpad_removed:{dirs['old'].as_posix()}" in steps
+    assert f"scratchpad_skipped:own_session:{dirs['own'].as_posix()}" in steps
+    assert "scratchpad_recent:2" in steps
+    assert not dirs["old"].exists()
+    for name in ("recent", "own", "touched", "not-uuid"):
+        assert (dirs[name] / "scratchpad" / "a.txt").is_file(), name
+
+
+def test_sweep_without_its_own_session_id_deletes_no_scratchpad(h: Harness) -> None:
+    """AC-3 (#941): outside Claude Code (no CLAUDE_CODE_SESSION_ID) its own directory cannot
+    be told apart, so none is deleted."""
+    dirs = _scratch_dirs(h)
+    _, line = _sweep(h, CLAUDE_CODE_SESSION_ID="")
+    assert "scratchpad_skipped:no_own_session_id" in line["steps"]
+    assert all(d.exists() for d in dirs.values())
+
+
+def test_sweep_does_not_follow_a_scratchpad_that_is_a_link(h: Harness) -> None:
+    """AC-3 (#941): an old session directory that is a link is unlinked; what it points to
+    (here a stand-in for the data directory) stays."""
+    target = h.data / "keep"
+    target.mkdir(parents=True)
+    (target / "k.txt").write_text("k", encoding="utf-8")
+    link = h.temp / "claude" / "hash-a" / S_ENG
+    link.parent.mkdir(parents=True)
+    _link(target, link)
+    _age(link, 8)
+    _, line = _sweep(h)
+    assert f"scratchpad_removed:{link.as_posix()}" in line["steps"]
+    assert not link.exists() and not link.is_symlink()
+    assert (target / "k.txt").is_file()
+
+
+def test_sweep_removes_trivy_temp_dirs_older_than_a_day(h: Harness) -> None:
+    """AC-3 (#941): docker scout's trivy-* in TEMP go after a day untouched; a newer one and
+    other names in TEMP stay."""
+    for name in ("trivy-old", "trivy-new", "other-old"):
+        (h.temp / name / "db").mkdir(parents=True)
+        (h.temp / name / "db" / "f").write_text("f", encoding="utf-8")
+    (h.temp / "trivy-file").write_text("f", encoding="utf-8")
+    for name in ("trivy-old", "other-old", "trivy-file"):
+        _age(h.temp / name, 2)
+    _, line = _sweep(h)
+    steps = line["steps"]
+    assert f"trivy_removed:{(h.temp / 'trivy-old').as_posix()}" in steps
+    assert f"trivy_removed:{(h.temp / 'trivy-file').as_posix()}" in steps
+    assert f"trivy_recent:{(h.temp / 'trivy-new').as_posix()}" in steps
+    assert not (h.temp / "trivy-old").exists()
+    assert (h.temp / "trivy-new" / "db" / "f").is_file()
+    assert (h.temp / "other-old" / "db" / "f").is_file()
+
+
+def test_sweep_without_docker_still_sweeps_the_directories(h: Harness) -> None:
+    """#941: no docker answers: one docker_skipped step, no prune, the rest goes on."""
+    (h.home / "t100").mkdir()
+    _issue(h, 100, "closed")
+    h.write("docker_down", "")
+    _, line = _sweep(h)
+    assert "docker_skipped:daemon_unreachable" in line["steps"]
+    assert not (h.home / "t100").exists()
+    assert not [c for c in h.calls("docker") if "prune" in c]
+
+
+def _promise(h: Harness, cid: str, issue: int, text: str) -> None:
+    """Append a commitment (commit.sh add's record) to the sandbox commitments file."""
+    record = {
+        "type": "add",
+        "id": cid,
+        "issue": issue,
+        "due": None,
+        "text": text,
+        "url": f"https://github.com/YiCheng0608/stock-lab/issues/{issue}#issuecomment-1",
+        "at": "2026-11-20T00:00:00Z",
+        "session_id": None,
+    }
+    with (h.data / "logs" / "commitments.jsonl").open("a", encoding="utf-8") as out:
+        out.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _promise_kept(h: Harness, cid: str) -> None:
+    with (h.data / "logs" / "commitments.jsonl").open("a", encoding="utf-8") as out:
+        out.write(
+            json.dumps({"type": "done", "id": cid, "at": "x", "url": None}) + "\n"
+        )
+
+
+@pytest.fixture
+def held(h: Harness) -> Harness:
+    """t100 and t700 closed, no worktree: t700 is a commitment's Issue, t100's research
+    volume is named in another commitment's text (#776's task-776_research for #790)."""
+    for n in (100, 700):
+        (h.home / f"t{n}" / "b1").mkdir(parents=True)
+        _issue(h, n, "closed")
+    _set_docker(h, volumes=["task-100_research", "t700_stock-data"])
+    _promise(h, "c1", 700, "結案時先不清 ~/t700，留給下一張用")
+    _promise(h, "c2", 790, "volume `task-100_research` 留給 #790 當副本來源")
+    return h
+
+
+def test_sweep_keeps_what_a_commitment_not_kept_yet_holds(held: Harness) -> None:
+    """PR #942 review M1: a commitment not kept yet holds its Issue's things and those of
+    the t<n>/task-<n> its text names; once kept (commit.sh done) they go."""
+    _, line = _sweep(held)
+    steps = line["steps"]
+    for n in (100, 700):
+        assert f"sweep_kept:dir:{(held.home / f't{n}').as_posix()}:commitment" in steps
+        assert f"sweep_kept:docker:{n}:commitment" in steps
+        assert (held.home / f"t{n}" / "b1").is_dir()
+    assert _docker_left(held, "volumes") == ["task-100_research", "t700_stock-data"]
+    # A commitment holds without reading the Issue.
+    assert held.calls("gh") == []
+    _promise_kept(held, "c1")
+    _promise_kept(held, "c2")
+    _, line = _sweep(held)
+    for n in (100, 700):
+        assert f"sweep_removed:dir:{(held.home / f't{n}').as_posix()}" in line["steps"]
+        assert not (held.home / f"t{n}").exists()
+    assert _docker_left(held, "volumes") == []
+
+
+@pytest.mark.parametrize("how", ["bad-line", "no-logs", "no-data-dir"])
+def test_sweep_keeps_every_task_when_the_commitments_cannot_be_read(
+    held: Harness, how: str
+) -> None:
+    """PR #942 review M1: a commitments file with a line that cannot be read, a data
+    directory without logs/, or no data directory: one commitments_unreadable step, and
+    nothing of any task goes (it may be the line that holds it)."""
+    env = {}
+    if how == "bad-line":
+        with (held.data / "logs" / "commitments.jsonl").open("a") as out:
+            out.write("{not json\n")
+    elif how == "no-logs":
+        env["STOCK_DATA_DIR"] = (held.root / "data-elsewhere").as_posix()
+        (held.root / "data-elsewhere").mkdir()
+    else:
+        env["STOCK_DATA_DIR"] = (held.root / "no-such-data").as_posix()
+    _issue(held, 300, "closed")
+    (held.home / "t300").mkdir()
+    _, line = _sweep(held, **env)
+    steps = line["steps"]
+    assert "sweep_skipped:commitments_unreadable" in steps
+    for n in (100, 300, 700):
+        assert (
+            f"sweep_kept:dir:{(held.home / f't{n}').as_posix()}:commitments_unreadable"
+            in steps
+        )
+        assert (held.home / f"t{n}").is_dir()
+    assert "sweep_kept:docker:100:commitments_unreadable" in steps
+    assert _docker_left(held, "volumes") == ["task-100_research", "t700_stock-data"]
+
+
+@pytest.mark.parametrize("how", ["fails", "empty", "other-checkout"])
+def test_sweep_deletes_nothing_of_a_task_without_a_worktree_list(
+    held: Harness, how: str
+) -> None:
+    """PR #942 review M2: git worktree list failing, answering nothing, or not listing this
+    checkout (it was not read) keeps every task's directory and Docker resources."""
+    _promise_kept(held, "c1")
+    _promise_kept(held, "c2")
+    if how == "fails":
+        held.write("git_worktree_fails", "")
+    elif how == "empty":
+        held.write("git_worktrees.txt", "")
+    else:
+        held.write(
+            "git_worktrees.txt",
+            f"worktree {(held.root / 'elsewhere').as_posix()}\nHEAD {SHA}\n\n",
+        )
+    _, line = _sweep(held)
+    steps = line["steps"]
+    assert "sweep_skipped:worktrees_unreadable" in steps
+    for n in (100, 700):
+        assert (
+            f"sweep_kept:dir:{(held.home / f't{n}').as_posix()}:worktrees_unreadable"
+            in steps
+        )
+        assert f"sweep_kept:docker:{n}:worktrees_unreadable" in steps
+        assert (held.home / f"t{n}" / "b1").is_dir()
+    assert _docker_left(held, "volumes") == ["task-100_research", "t700_stock-data"]
+    assert steps[-1] == "docker_prune_skipped:worktrees_unreadable"
+    assert not [c for c in held.calls("docker") if re.search(r"\brmi?\b|prune", c)]
+
+
+def test_sweep_refuses_to_run_from_the_release_checkout(held: Harness) -> None:
+    """PR #942 review S3: the release checkout sees no task worktree, so a sweep from it
+    refuses (exit 2, error set) and deletes nothing, as deploy.sh does."""
+    _promise_kept(held, "c1")
+    _promise_kept(held, "c2")
+    result = held.run(
+        "sweep.sh",
+        STOCK_RELEASE_DIR=held.repo.as_posix(),
+        CLAUDE_CODE_SESSION_ID=S_SELF,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["steps"] == [] and "發佈 checkout" in line["error"]
+    assert (held.home / "t100").is_dir()
+    assert held.calls("docker") == []
+
+
+def test_close_task_keeps_the_closed_tasks_dir_a_commitment_holds(
+    close: Harness,
+) -> None:
+    """PR #942 review M1: the coordinator keeps ~/t<issue> by a commitment and no
+    --extra-dir; the sweep in the same close_task.sh run (Issue closed, worktree gone)
+    keeps it."""
+    (close.home / "t282" / "b1").mkdir(parents=True)
+    _issue(close, 282, "closed")
+    _promise(close, "c1", 282, "結案先不清 ~/t282")
+    # What git lists once the close removed the task's worktree.
+    close.write(
+        "git_worktrees.txt",
+        f"worktree {close.repo.as_posix()}\nHEAD {SHA}\n\n"
+        f"worktree {close.other.as_posix()}\nHEAD {SHA}\n"
+        "branch refs/heads/task/253-other\n\n",
+    )
+    result = close.close_task(STOCK_SWEEP="on", CLAUDE_CODE_SESSION_ID=S_SELF)
+    assert result.returncode == 0, result.stdout + result.stderr
+    steps = _json_line(result)["steps"]
+    assert (
+        f"sweep:sweep_kept:dir:{(close.home / 't282').as_posix()}:commitment" in steps
+    )
+    assert (close.home / "t282" / "b1").is_dir()
+
+
+def test_close_task_runs_the_sweep_after_its_own_cleanup(close: Harness) -> None:
+    """#941: after a close, the sweep's steps follow the task's own as sweep:<step>; it runs
+    with --no-prune (the close pruned), and a dry run does not sweep."""
+    (close.home / "t100").mkdir()
+    _issue(close, 100, "closed")
+    result = close.close_task(
+        close.extra, STOCK_SWEEP="on", CLAUDE_CODE_SESSION_ID=S_SELF
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    steps = _json_line(result)["steps"]
+    first = next(i for i, s in enumerate(steps) if s.startswith("sweep:"))
+    assert steps.index("docker_prune_skipped:no_task_resources") < first
+    assert f"sweep:sweep_removed:dir:{(close.home / 't100').as_posix()}" in steps
+    assert "sweep:docker_prune_skipped:not_requested" in steps
+    assert not (close.home / "t100").exists()
+    (close.home / "t100").mkdir()
+    close.write("branches.txt", "master\ntask/282-dryrun\n")
+    close.wt.mkdir(parents=True, exist_ok=True)
+    result = close.run(
+        "close_task.sh",
+        "282",
+        "--no-board",
+        STOCK_SWEEP="on",
+        CLAUDE_CODE_SESSION_ID=S_SELF,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "sweep_skipped:no_board" in _json_line(result)["steps"]
+    assert (close.home / "t100").is_dir()
+
+
+@pytest.mark.parametrize("how", ["exit", "no-json"])
+def test_close_task_goes_on_when_the_sweep_fails(close: Harness, how: str) -> None:
+    """#941: a sweep that fails or prints no JSON is one sweep_failed step; the close is
+    done (exit 0, board 完成)."""
+    body = "echo boom >&2; exit 3\n" if how == "exit" else "echo not json\n"
+    (close.ops / "sweep.sh").write_text(body, encoding="utf-8", newline="\n")
+    result = close.close_task(close.extra, STOCK_SWEEP="on")
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert ("sweep_failed:3" if how == "exit" else "sweep_failed:0") in line["steps"]
+    assert line["board"] == "完成"
