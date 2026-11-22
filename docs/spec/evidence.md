@@ -944,6 +944,44 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #968 | 第一版；沒有人用它對回補資料跑過 |
 
+**第十四輪的假設**（[第十四輪：K1～K3](#第十四輪k1k3)）：`tools/research/round14_research.py`（[#978](https://github.com/YiCheng0608/stock-lab/issues/978)）。K1～K3 寫在 `round14_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round13_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（不讀成員表，沒有 `--members`）。三個都走組合引擎：K1、K3 用 `portfolio_research.simulate`（K 份子帳戶），K2 用 X7 的事件日帳戶（`explore_research.simulate_events`）；母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`explore_judge`、`row_cash`（`round5_research`）、`_quarter_eps`（`feature_evidence`）、除權息（`research_report.load_actions`）、「市場整天沒有法人資料」與窗口的缺值（`round13_research.market_gaps`、`window_of`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；K1 和 J3、K2 和 X4、K3 和 U1 的重疊，名單用 `round12_research.cash_div_ex`、`explore_research._rank`、`round13_research.rank_u1`（各自現行版本的定義），比例與摘要用 `round10_research`（`overlap_share`、`overlap_summary`）。K1 的「權重 1／n、母體只在事件日買」不必改引擎：名單先取到最多 20 檔，再以 `simulate(..., top=None)` 等分那一份子帳戶，母體也只在同一組事件日放進 `simulate`。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round13_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round14_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **一份 panel**：`round14_research.load` 用 `explore_research.load_context` 讀一份 panel（含成交金額、籌碼與季報 EPS），市場整天沒有法人資料的日子在同一份 panel 上算一次（`round13_research.market_gaps`），除權息經 `research_report.load_actions` 讀到該段最後一天，K1 用 `round5_research.actions_of`（`row_cash`）整理，J3 的 `round12_research.cash_dividends` 是同一批列；J3、U1 的 `round12_research.Context`、`round13_research.Context` 也建在同一個 `explore_research.Context` 上。
+- **算法**：照[第十四輪：K1～K3](#第十四輪k1k3)與[第十四輪實作釋義](#第十四輪實作釋義)。三個都不排序：條件成立的檔以 `sha256("<T>:<instrument_id>")`（`portfolio_research.tie_break`）取前 20 名，不足 20 檔時餘額留現金。
+  - K1：`round14_research.div_initiation`。條件①由 `round14_research.first_cash` 整理：`row_cash` > 0（`cash_dividend` 有值時就是它）的列，`action_date` 不是交易日的算之後第一個交易日，同一個交易日多列取最大、d 是那一列的 `action_date`（同額取較早的）；條件②看 `row_cash` 在 [d − 1,095, d) 的列；條件③看 panel 裡這一檔的第一根日線。退化的判準：T 日沒有 `cash_dividend` > 0 的列（`action_date` 不是交易日的列算之後第一個交易日，同一天多列取最大，d 是那一列的 `action_date`）、窗口 [d − 1,095, d) 內有 `row_cash` > 0 的列、窗口內有三欄都是 null 的列，或第一根日線晚於 T − 1,095 個日曆日時，不符合；只看 T 日母體內的檔；事件超過 20 檔時以雜湊取前 20 名，沒有事件的日子那份子帳戶留現金。調倉是 `simulate` 的 240 份子帳戶，T 日的名單放在 T+1 那一份，n 檔各 1／n；母體只在有名單的 T 放進同一份子帳戶，各 1／（母體檔數）。「有成交的事件日」是 `round14_research.fill_days`：組合那一邊至少買到 1 檔的 T（成交部位的買進日），探索段、驗證段各自數，少於 60（`MIN_FILL_DAYS`）記「無法判定」（「有成交的事件日不足 60 日」）。另列（只列出、不判定）：每個事件日的事件數（取前 20 名之前），依年與全段平均；和 J3 的重疊：K1 與 J3（`round12_research` 第 1 版的 `cash_div_ex`，同一個 T 算）每個事件日的重疊檔數：K1 當天名單（前 20 名）中 `cash_div_ex` 也成立的檔數；沒有事件的日子不計。只列出、不判定。平均投入比例與期末未賣的比例（期末未賣的筆數 ÷ 買進筆數）列在 `summary.md` 與 `explore.md`。`explore.json` 的 K1 列有 `events`、`overlap_j3`、`invested`、`unsold_share`、`fill_days`。
+  - K2：事件日是 `round14_research.quarter_events`（3/31、5/15、8/14、11/14，不是交易日時取之後第一個交易日；對應前一年 Q4、當年 Q1、Q2、Q3）。`round14_research.eps_turn`：`announcement_date` ≤ T 的季報列中期末最晚的一季要是事件日對應的那一季，再由 `feature_evidence._quarter_eps` 取（最新一季單季 EPS、去年同季單季 EPS），前者 > 0 且後者 < 0。退化的判準：最新一季（`announcement_date` ≤ T、期末最晚的一季）不是事件日對應的那一季，或兩季中任一季沒有單季值時，不符合；符合的不足 20 檔時餘額留現金。帳戶照 X7（`explore_research.simulate_events`，[#978 決定 7086070149](https://github.com/YiCheng0608/stock-lab/issues/978#issuecomment-7086070149)）：T+1 開盤每檔帳戶現金的 1／20 買進，持有到下一個事件日 T′ 的收盤賣，T′ 的新名單在 T′+1 開盤買；順延同「X7 的金額與順延」；母體同一個帳戶規則、同一組事件日。段內第一個事件日之前沒有淨值。另列（只列出、不判定）：每次調倉的母體檔次、符合的檔數、名單檔數、買進那天收盤的投入比例；和 X4 的重疊：K2 與 X4（`explore_research` 第 2 版的 `HYPOTHESES["X4"]`，同一個 T 算）每個事件日名單的重疊比例：|K2 的名單 ∩ X4 的前 20 名| ÷ K2 當天的名單檔數；K2 或 X4 當天沒有名單的事件日不計。只列出、不判定。X4 的名單由 `round14_research.x4_names`（`explore_research._rank`）在同一個 T、同一個母體算。`explore.json` 的 K2 列有 `hits`、`overlap_x4`、`invested`、`unsold_share`。
+  - K3：`round14_research.inst_sell_5q`，這一檔自己的 at−299…at 切成 5 個 60 根區塊，每塊 Σ（`foreign_buy` ＋ `trust_buy`），null 的欄與沒有法人進出的根算 0，不讀 `dealer_buy`；5 塊都 < 0 才成立。窗口的缺值用 `round13_research.window_of`（不足 300 根、任一根停牌，或任一根的交易日是它的市場整天沒有法人資料）。退化的判準：300 根中任一根停牌、不足 300 根，或窗口內有市場整天沒有法人資料的日子時，不符合；5 塊中任一塊的合計（外資＋投信，沒有法人進出的根與 null 的欄算 0）≥ 0 時也不符合；符合的不足 20 檔時餘額留現金。K＝120，子帳戶與母體都是 120 份。另列（只列出、不判定）：每天符合的檔數（各段與依年的平均）；和 U1 的重疊：K3 與 U1（`round13_research` 第 1 版的 `HYPOTHESES["U1"]`，同一個 T 算）每日名單的重疊比例：|K3 的名單 ∩ U1 的前 20 名| ÷ K3 當天的名單檔數；K3 或 U1 當天沒有名單的日子不計。只列出、不判定。U1 的名單由 `round14_research.u1_names`（`round13_research.rank_u1`）算。`explore.json` 的 K3 列有 `hits`、`overlap_u1`、`invested`、`unsold_share`。
+  - 漲跌幅依日期：`exit_research.daily_limit`（2015-05-29 以前 ±7%、2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），表算進 `definitions_sha256`。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.317（t < 3.317 判「前瞻觀察」，沒有 t 下限），寫死、不在執行時重算，算進 `definitions_sha256`；K1 之後再套有成交的事件日下限。
+- **探索**：`python tools/research/round14_research.py --db /research/stock.db --segment exploration --hypotheses <K1,K2,K3 或其中幾個> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）。
+- **驗證**：`python tools/research/round14_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `978`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27。**讀取的起點**：三段都從副本起點讀（`LOAD_FROM`，同 `round10_research`～`round13_research`；規則 `LOAD_RULE` 算進 `definitions_sha256`），只讀到該段的最後一天。判「通過」的另跑已用段，寫在 `<代號>/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不讀價格與報酬、不記紀錄檔，跑幾次都可以。各假設用自己的訊號日；缺值比例的分母是母體檔次；每個訊號日都數。
+  - K1：依年列日數、母體檔次、條件①成立的檔次、符合的檔次（事件數）、事件日數、超過 20 檔的事件日數與最多的一天、窗口內有配現金、窗口內有三欄都是 null 的列（另列只因 null 不符合的檔次）、上市未滿 3 年的檔次，以及平均投入比例的估計（每個有淨值的交易日，前 240 個訊號日中有名單的天數 ÷ 240，不讀價格、買不到的不扣）。另列「K1 的事件日」：探索段有名單的訊號日數（有成交的事件日不會多於它），驗證段估計＝探索段完整年（至少 200 個訊號日）平均每年的事件日數 × 驗證段的年數（`round14_research.k1_estimate`，不讀驗證段的資料）。
+  - K2：每個事件日一列：對應的季、母體檔次、符合 `eps_turn` 的檔數、名單檔數、最新一季不是對應的那一季與任一季沒有單季值的檔數和比例。
+  - K3：依年列日數、母體檔次、符合 `inst_sell_5q` 的檔數（每日平均、最少與最多的一天）、符合的不足 20 檔與沒有任何一檔符合的訊號日數、`inst_sell_5q` 的缺值比例（另分不足 300 根、停牌、市場整天沒有法人資料）。
+  - 耗時：總耗時、載入耗時（另列 panel、市場整天沒有法人資料的日子與除權息）、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和特徵的計算時間（`div_initiation`、`cash_div_ex`（同一個 T 算 J3，各段要用來算重疊；`--coverage-only` 只計時、不算重疊）、`eps_turn`、`x4_order`（同 `cash_div_ex`）、`inst_sell_5q`、`u1_order`（同 `cash_div_ex`））。
+  - 有明顯斷點，或缺值比例有異常的年份或欄位，或 K1 任一段估得出的事件日少於 60 日時，先在工具單提問、不跑探索段。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round14_research"`、`"round": 14`。代號不重疊，各工具互不擋；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 3 個、累計 55 個、探索段與驗證段的門檻（K1 另有有成交的事件日下限）、引擎、K1～K3 的限制；驗證段另寫前瞻觀察的條件（t < 3.317，沒有 t 下限）；總表每個假設列方向、日數（有淨值的交易日）、對加權指數的超額與 t（第一個列）、對母體的超額與 t、絕對報酬與判定；總表下另列 K1 每個事件日的事件數與和 J3 的重疊檔數、K2 每次調倉的名單檔數與和 X4 的重疊、K3 每天符合的檔數與和 U1 的重疊、各假設的平均投入比例與期末未賣的比例、K1 有成交的事件日。
+  - `explore.json`：同上的總表（每個假設另有 `engine`，與上面各假設列出的欄位），另有 `tool`、`design`（`978`）、`validation_min_t`、`engines`、`definitions_sha256`、工具 commit、副本資訊與先決條件。
+  - `<代號>/summary.md`（開頭列退化的判準與限制，K1 另列有成交的事件日；K1 另有「每天的事件數」與「和 J3 的重疊檔數」兩節，K2 另有「和 X4 的重疊」與「每次調倉」兩節，K3 另有「和 U1 的重疊」與「每天符合 `inst_sell_5q` 的檔數」兩節；資料覆蓋同 `--coverage-only` 的表）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的名單；K1 有 `cash_dividend`、`action_date`、`events`，K2 有 `eps_now`、`eps_year_before`，K3 有 `blocks`）、`trades.csv`。
+  - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
+- **耗時與記憶體**：COVERAGE_TIMING
+- 文件與程式用同一套說法：K1～K3 的退化判準與重疊比例的說明是 `round14_research` 的 `DEGENERATE`、`OVERLAP_NOTE`（`coverage.md` 的說明句 `COVERAGE_NOTES` 引用同一份 `DEGENERATE`），本段逐字照抄，`backend/tests/test_round14_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round14_research` 的版本**：`round14_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（K1～K3 的定義、K1 的停發窗口與上市滿 1,095 個日曆日、每天最多 20 檔、K 240、權重 1／n 與母體只在事件日買、有成交的事件日下限 60、`row_cash` 的口徑與三欄都 null 不符合、條件①的 `cash_dividend` > 0；K2 的 4 個法定期限與「最新一季必須是對應的那一季」、N 20、持有到下一個事件日、T′ 收盤賣；K3 的 60 根 × 5 塊、只用外資＋投信、合計 < 0、null 算 0、停牌與市場整天沒有法人資料的缺值、N 20、K 120；三個共用的雜湊取前 N 名與起日、J3、X4、U1 的定義、分段、兩段的門檻、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #978 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
@@ -3089,6 +3127,7 @@ K1～K3 都用[假設登記表](#假設登記表)（買前 N 名、持有 K 天�
 - **K2 的事件日與持有**：照 X7 的帳戶規則（[實作釋義](#實作釋義)「X7 的金額與順延」）。事件日之間沒有新名單；段內第一個事件日之前沒有淨值。驗證段第一個事件日是 2020-03-31（2019 年報的期限），淨值從之後的第一個交易日起。
 - **重疊比例只列出**：分母是本假設當天的名單檔數；本假設或對照的假設當天沒有名單的日子不計入平均，同 F2、L3、J1、J4、U1～U3。J3、X4、U1 的名單用 `round12_research`、`explore_research`、`round13_research` 現行版本的定義在同一個 T 算，不另寫一份。
 - **持有 240 日與 120 日（K＝240、K＝120）的子帳戶**：K1、K3 照用 `simulate` 的 K 份子帳戶；母體也用同一個 K。期末未賣以最後收盤計，同[實作釋義](#實作釋義)。
+- **K2 的賣出時點**（[#978 決定 7086070149](https://github.com/YiCheng0608/stock-lab/issues/978#issuecomment-7086070149)）：舊名單在下一個事件日 T′ 的收盤賣，T′ 選出的新名單在 T′+1 開盤買，同 X7（`explore_research.simulate_events`）；T′ 跌停一字鎖或停牌時照「X7 的金額與順延」順延。K2 第 4 點的「在那一天的 T+1 開盤」指新名單的買進時點，不是舊名單的賣出時點。
 
 ## 隔夜美股條件研究
 
