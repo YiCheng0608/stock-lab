@@ -70,7 +70,7 @@ REQUIRED: dict[str, tuple[str, str, str]] = {
         "docs/COORDINATOR.md",
         "無人值守運作",
         "觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；"
-        "最後一次呼叫的 context 超過門檻（預設 450K",
+        "最後一次呼叫的 context 超過門檻（預設 320K",
     ),
     # #850 review 7017916742: a new coordinator never runs the handoff, so this line from
     # 自動換手 5 stays in the handbook instead of only in the reference's 執行換手.
