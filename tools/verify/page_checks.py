@@ -30,6 +30,15 @@ Exit 0 when no check failed (a matching, unexpired ``KNOWN_FAILURES`` entry may
 fail; with ``--fixture`` no check may be 無法判定 either), 1 when one did, 2 when the
 features files and ``CHECKS``/``MANUAL`` disagree or ``--g7`` finds the program
 is not the committed tip of G7_REF (the release branch).
+
+    python tools/verify/page_checks.py --mask-evidence <out>
+
+is the step before ``tools/ops/push_pr_assets.sh --dir <out>`` (#943): news text such as
+「開盤」 and a number reads as a Fugle quote to ``tools/ops/quote_guard.py``, and the hook
+refuses the push. It masks only the hit values of the files that would be pushed, keeps
+each original under ``<out>/.private/unmasked/`` (hidden: not pushed) and leaves
+``results.json``'s states as the run decided them on the original values
+(``mask_evidence``).
 """
 
 from __future__ import annotations
@@ -40,6 +49,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -5221,7 +5231,164 @@ def summary_markdown(
     return "\n".join(lines)
 
 
+# ---- masking the evidence before it is pushed (#943) ----
+
+QUOTE_GUARD = ROOT / "tools" / "ops" / "quote_guard.py"
+# Where --mask-evidence keeps the original of each file it masks: hidden, so neither
+# push_pr_assets.sh nor the hook's reading of its --dir takes it.
+UNMASKED = Path(".private") / "unmasked"
+# The files push_pr_assets.sh pushes that the hook does not read (agent_guard.cjs QUOTE_IMAGE).
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+# The ways a JSON line is written here: json.dumps (page_checks, quote_guard) and
+# JSON.stringify (screenshot.cjs), with or without escaping.
+JSON_STYLES = (
+    {"ensure_ascii": False, "separators": (",", ":")},
+    {"ensure_ascii": False},
+    {"ensure_ascii": True, "separators": (",", ":")},
+    {"ensure_ascii": True},
+)
+
+
+def _quote_guard():
+    if "quote_guard" not in sys.modules:
+        _load(QUOTE_GUARD, "quote_guard")
+    return sys.modules["quote_guard"]
+
+
+def pushed_evidence(out: Path) -> list[Path]:
+    """The files of OUT that push_pr_assets.sh --dir OUT pushes and the hook reads: every
+    file outside a hidden entry, images left out."""
+
+    return sorted(
+        path
+        for path in out.rglob("*")
+        if path.is_file()
+        and not any(part.startswith(".") for part in path.relative_to(out).parts)
+        and not path.name.lower().endswith(IMAGE_SUFFIXES)
+    )
+
+
+def _same_style(before: str, after: str, guard) -> str:
+    """AFTER, quote_guard's masking of the line BEFORE: a JSON line quote_guard re-dumped is
+    put back in BEFORE's own spacing and escaping (unchanged when nothing in it was masked)."""
+
+    record = guard.patterns()["record"]
+    old, new = record.match(before), record.match(after)
+    if before == after or not old or not new:
+        return after
+    try:
+        old_value, new_value = json.loads(old.group(1)), json.loads(new.group(1))
+    except ValueError:
+        return after
+    if old_value == new_value:
+        return before
+    for style in JSON_STYLES:
+        if json.dumps(old_value, **style) == old.group(1):
+            body = json.dumps(new_value, **style)
+            return before[: old.start(1)] + body + before[old.end(1) :]
+    return after
+
+
+def mask_text(text: str, guard=None) -> str:
+    """TEXT with only the values of its quote_guard hits masked: quote_guard.mask, but a JSON
+    line keeps its own spacing and escaping."""
+
+    guard = guard or _quote_guard()
+    masked = guard.mask(text)
+    before, after = text.split("\n"), masked.split("\n")
+    if len(before) != len(after):
+        return masked
+    kept = "\n".join(_same_style(b, a, guard) for b, a in zip(before, after))
+    return kept if not guard.hits(kept) else masked
+
+
+def _json_problem(rel: str, text: str) -> str | None:
+    try:
+        if rel.endswith(".jsonl"):
+            for line in text.split("\n"):
+                if line.strip():
+                    json.loads(line)
+        elif rel.endswith(".json"):
+            json.loads(text)
+    except ValueError:
+        return "遮罩後不是合法的 JSON"
+    return None
+
+
+def _free(path: Path) -> Path:
+    """PATH, or PATH.2, PATH.3, ... when it exists: an earlier original is never overwritten."""
+
+    if not path.exists():
+        return path
+    n = 2
+    while path.with_name(f"{path.name}.{n}").exists():
+        n += 1
+    return path.with_name(f"{path.name}.{n}")
+
+
+def mask_evidence(out: Path) -> int:
+    """Mask every Fugle-quote hit in the files push_pr_assets.sh would push from OUT (#943).
+
+    Only the hit values change (quote_guard.mask: <價>, <時間>, <值>); a file without a hit
+    is not touched. The original of each masked file goes to OUT/.private/unmasked/<path>
+    first (never overwritten: a later one is <path>.2, ...). When any file cannot be read as
+    UTF-8, still hits once masked, or is JSON no longer parsing, nothing is changed and the
+    files are named (line and pattern, never the quote). Exit 0 done, 1 refused, 2 no OUT.
+    """
+
+    if not out.is_dir():
+        print(f"--mask-evidence: not a directory: {out}", file=sys.stderr)
+        return 2
+    guard = _quote_guard()
+    planned: list[tuple[Path, str, int]] = []
+    problems: list[str] = []
+    for path in pushed_evidence(out):
+        rel = path.relative_to(out).as_posix()
+        try:
+            text = path.read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            problems.append(f"{rel}: 不是 UTF-8，hook 讀不了")
+            continue
+        found = guard.hits(text)
+        if not found:
+            continue
+        masked = mask_text(text, guard)
+        left = guard.hits(masked)
+        if left:
+            problems += guard.describe(f"{rel}（遮罩後仍命中）", left)
+            continue
+        problem = _json_problem(rel, masked)
+        if problem:
+            problems.append(f"{rel}: {problem}（{len(found)} 處命中）")
+            continue
+        planned.append((path, masked, len(found)))
+    if problems:
+        print(
+            "--mask-evidence：下列檔沒辦法自動遮罩，全部未改；先手動處理再推送"
+            "（docs/DATA_SOURCES.md 盤中報價）：\n" + "\n".join(problems),
+            file=sys.stderr,
+        )
+        return 1
+    for path, masked, count in planned:
+        rel = path.relative_to(out)
+        keep = _free(out / UNMASKED / rel)
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, keep)
+        path.write_bytes(masked.encode("utf-8"))
+        print(
+            f"masked {rel.as_posix()}: {count} 處（原檔 {keep.relative_to(out).as_posix()}）"
+        )
+    print(f"--mask-evidence: {len(planned)} 個檔已遮罩，推送的檔沒有富果報價樣式")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["--mask-evidence"]:
+        if len(argv) != 2:
+            print("usage: page_checks.py --mask-evidence <out>", file=sys.stderr)
+            return 2
+        return mask_evidence(Path(argv[1]))
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--api", default=os.environ.get("VERIFY_API_URL"), help="API origin"
