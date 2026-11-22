@@ -4059,6 +4059,36 @@ def test_patrol_hands_off_above_the_context_limit(
     assert "其餘依手冊" in out
 
 
+def test_patrol_context_limit_defaults_below_the_autocompact_point(
+    patrol: Harness,
+) -> None:
+    """#958 AC-1: the coordinator opens with --autocompact 400k and compacts at about
+    367K (400K less the 33K buffer), so the default limit is 320,000, below 400,000:
+    the handoff is due before the compaction. STOCK_CONTEXT_LIMIT still overrides it."""
+    _transcript(patrol, [320_001])
+    result = _patrol(patrol)
+    header = next(
+        line for line in result.stdout.splitlines() if line.startswith("context：")
+    )
+    match = re.match(r"context：320001（門檻 (\d+)，", header)
+    assert match, header
+    default = int(match.group(1))
+    assert default == 320_000, header
+    assert default < 400_000
+    assert result.returncode == 10, result.stdout + result.stderr
+    assert "context 320001 超過門檻 320000" in result.stdout.strip().splitlines()[-1]
+    overridden = patrol.run(
+        "patrol.sh",
+        "--session-id",
+        "sess-1",
+        "--terminal",
+        "term_coord",
+        STOCK_CONTEXT_LIMIT="400000",
+    )
+    assert overridden.returncode == 0, overridden.stdout + overridden.stderr
+    assert "context：320001（門檻 400000，80%）" in overridden.stdout
+
+
 def test_patrol_names_both_handoff_conditions(patrol: Harness) -> None:
     _transcript(patrol, [500_000])
     _compacted(patrol, 2)
