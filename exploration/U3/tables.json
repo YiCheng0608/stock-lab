@@ -1,0 +1,266 @@
+{
+  "tool": "round13_research",
+  "version": 1,
+  "design": "968",
+  "definitions_sha256": "cb2415931db08b31d37318b164056bd30c35c9ff53b6d01627c54c7bab88bc21",
+  "label": "`cash_paid_5y`（T 所在年度之前的 5 個完整曆年每年都有現金股利除息）成立，以雜湊取 20 檔、不排序",
+  "direction": "品質：連續配息",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "conditions": [
+      [
+        "cash_paid_5y",
+        "is",
+        true
+      ]
+    ],
+    "order": "the hash only",
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": 120,
+    "start": [
+      "date",
+      "2013-01-02"
+    ]
+  },
+  "hypothesis": "U3",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-01-02",
+    "first_session": "2013-01-03",
+    "last_session": "2019-12-31",
+    "days": 1716,
+    "signal_days": 1716
+  },
+  "prerequisites": {
+    "days": 1716,
+    "min_days": 500,
+    "delisted": 89,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {},
+      "hits": 43221,
+      "min_hits": 149,
+      "max_hits": 202,
+      "short_days": 0,
+      "zero_days": 0
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {},
+      "hits": 49485,
+      "min_hits": 140,
+      "max_hits": 256,
+      "short_days": 0,
+      "zero_days": 0
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {},
+      "hits": 48803,
+      "min_hits": 170,
+      "max_hits": 234,
+      "short_days": 0,
+      "zero_days": 0
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {},
+      "hits": 45719,
+      "min_hits": 150,
+      "max_hits": 245,
+      "short_days": 0,
+      "zero_days": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {},
+      "hits": 55776,
+      "min_hits": 164,
+      "max_hits": 265,
+      "short_days": 0,
+      "zero_days": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {},
+      "hits": 56188,
+      "min_hits": 175,
+      "max_hits": 266,
+      "short_days": 0,
+      "zero_days": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {},
+      "hits": 57143,
+      "min_hits": 190,
+      "max_hits": 266,
+      "short_days": 0,
+      "zero_days": 0
+    }
+  },
+  "seconds": {
+    "plan": 15.492631608998636,
+    "cash_paid_5y": 2.1566944726218935,
+    "v3_order": 6.219795904762577
+  },
+  "overlap": {
+    "days": 1716,
+    "mean": 0.06083916083916084,
+    "years": {
+      "2013": {
+        "days": 246,
+        "mean": 0.061382113821138215
+      },
+      "2014": {
+        "days": 248,
+        "mean": 0.06612903225806452
+      },
+      "2015": {
+        "days": 244,
+        "mean": 0.06639344262295081
+      },
+      "2016": {
+        "days": 244,
+        "mean": 0.06680327868852459
+      },
+      "2017": {
+        "days": 246,
+        "mean": 0.06239837398373983
+      },
+      "2018": {
+        "days": 247,
+        "mean": 0.057287449392712554
+      },
+      "2019": {
+        "days": 241,
+        "mean": 0.045228215767634854
+      }
+    }
+  },
+  "hits": {
+    "days": 1716,
+    "mean": 207.6544289044289,
+    "years": {
+      "2013": {
+        "days": 246,
+        "mean": 175.6951219512195
+      },
+      "2014": {
+        "days": 248,
+        "mean": 199.53629032258064
+      },
+      "2015": {
+        "days": 244,
+        "mean": 200.0122950819672
+      },
+      "2016": {
+        "days": 244,
+        "mean": 187.37295081967213
+      },
+      "2017": {
+        "days": 246,
+        "mean": 226.73170731707316
+      },
+      "2018": {
+        "days": 247,
+        "mean": 227.48178137651823
+      },
+      "2019": {
+        "days": 241,
+        "mean": 237.1078838174274
+      }
+    }
+  },
+  "short": {
+    "short_days": 0,
+    "zero_days": 0
+  },
+  "excess": {
+    "population": {
+      "days": 1716,
+      "mean": 6.624331631451565e-05,
+      "annual": 0.01669331571125794,
+      "t": 1.5000360675334898
+    },
+    "taiex": {
+      "days": 1716,
+      "mean": 9.093065339798634e-05,
+      "annual": 0.022914524656292557,
+      "t": 0.8208293710130145
+    }
+  },
+  "absolute": {
+    "days": 1716,
+    "mean": 0.0003749469061051145
+  },
+  "curves": {
+    "U3": {
+      "days": 1716,
+      "total": 0.7864135868419766,
+      "annual": 0.08894100435120289,
+      "volatility": 0.13566782137852668,
+      "max_drawdown": -0.27286606174085726,
+      "invested": 0.9564622675444315,
+      "turnover": 2.06084145179807
+    },
+    "population": {
+      "days": 1716,
+      "total": 0.5758141625193283,
+      "annual": 0.06906529345764567,
+      "volatility": 0.14770460667714622,
+      "max_drawdown": -0.326133725113795,
+      "invested": 0.9554892426753087,
+      "turnover": 2.037661541473609
+    },
+    "taiex": {
+      "days": 1716,
+      "total": 0.54220345998699,
+      "annual": 0.06568584369316732,
+      "volatility": 0.12587179388473815,
+      "max_drawdown": -0.2569687319514855,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 34301,
+    "won": 18853,
+    "rate": 0.549634121454185,
+    "unsold": 2494
+  },
+  "counts": {
+    "U3": {
+      "bought": 34301,
+      "limit_up": 8,
+      "sale_held": 156,
+      "limit_down": 6,
+      "not_tradable": 11,
+      "unsold": 2494
+    },
+    "population": {
+      "bought": 768605,
+      "limit_up": 553,
+      "not_tradable": 233,
+      "sale_held": 5198,
+      "limit_down": 421,
+      "unsold": 54683
+    }
+  },
+  "min_t": 2.0
+}

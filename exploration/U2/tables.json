@@ -1,0 +1,299 @@
+{
+  "tool": "round13_research",
+  "version": 1,
+  "design": "968",
+  "definitions_sha256": "cb2415931db08b31d37318b164056bd30c35c9ff53b6d01627c54c7bab88bc21",
+  "label": "所屬產業的 `ind_flow_20`（產業的三大法人 20 日淨買超合計 ÷ 成員的 20 日均量合計）大者先",
+  "direction": "籌碼：產業資金流向",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "keys": [
+      [
+        "ind_flow_20",
+        "high"
+      ]
+    ],
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2014-12-01",
+      20
+    ]
+  },
+  "hypothesis": "U2",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-12-26",
+    "first_session": "2014-12-27",
+    "last_session": "2019-12-31",
+    "days": 1227,
+    "signal_days": 1227
+  },
+  "prerequisites": {
+    "days": 1227,
+    "min_days": 500,
+    "delisted": 71,
+    "ok": true
+  },
+  "coverage": {
+    "2014": {
+      "days": 5,
+      "members": 2189,
+      "missing": {
+        "flow_i": 1,
+        "vol_i": 1,
+        "ind_flow_20": 109,
+        "unranked": 93,
+        "several_groups": 0,
+        "no_group": 14,
+        "own": 2
+      },
+      "ranked": 100,
+      "min_ranked": 20,
+      "max_ranked": 20,
+      "groups": 140,
+      "no_ranked_days": 0,
+      "list_missing": 0
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "flow_i": 0,
+        "vol_i": 24,
+        "ind_flow_20": 4891,
+        "unranked": 4407,
+        "several_groups": 0,
+        "no_group": 460,
+        "own": 24
+      },
+      "ranked": 4859,
+      "min_ranked": 18,
+      "max_ranked": 22,
+      "groups": 6844,
+      "no_ranked_days": 0,
+      "list_missing": 0
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "flow_i": 0,
+        "vol_i": 13,
+        "ind_flow_20": 4651,
+        "unranked": 4219,
+        "several_groups": 0,
+        "no_group": 419,
+        "own": 13
+      },
+      "ranked": 4797,
+      "min_ranked": 16,
+      "max_ranked": 22,
+      "groups": 6709,
+      "no_ranked_days": 0,
+      "list_missing": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "flow_i": 0,
+        "vol_i": 12,
+        "ind_flow_20": 4936,
+        "unranked": 4431,
+        "several_groups": 0,
+        "no_group": 493,
+        "own": 12
+      },
+      "ranked": 5067,
+      "min_ranked": 18,
+      "max_ranked": 24,
+      "groups": 6910,
+      "no_ranked_days": 0,
+      "list_missing": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "flow_i": 0,
+        "vol_i": 23,
+        "ind_flow_20": 5986,
+        "unranked": 5669,
+        "several_groups": 0,
+        "no_group": 294,
+        "own": 23
+      },
+      "ranked": 4737,
+      "min_ranked": 16,
+      "max_ranked": 22,
+      "groups": 6963,
+      "no_ranked_days": 0,
+      "list_missing": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "flow_i": 0,
+        "vol_i": 10,
+        "ind_flow_20": 5798,
+        "unranked": 5496,
+        "several_groups": 0,
+        "own": 10,
+        "no_group": 292
+      },
+      "ranked": 4765,
+      "min_ranked": 16,
+      "max_ranked": 23,
+      "groups": 6897,
+      "no_ranked_days": 0,
+      "list_missing": 0
+    }
+  },
+  "seconds": {
+    "plan": 27.742367219005246,
+    "flow_i": 2.073085734824417,
+    "vol_i": 0.8601674179371912,
+    "ind_flow_20": 6.056981811096193,
+    "u2_order": 2.290677959244931,
+    "m1_groups": 10.837692038679961
+  },
+  "overlap": {
+    "days": 1227,
+    "mean": 0.2555827220863896,
+    "years": {
+      "2014": {
+        "days": 5,
+        "mean": 0.0
+      },
+      "2015": {
+        "days": 244,
+        "mean": 0.15881147540983606
+      },
+      "2016": {
+        "days": 244,
+        "mean": 0.24016393442622952
+      },
+      "2017": {
+        "days": 246,
+        "mean": 0.3347560975609756
+      },
+      "2018": {
+        "days": 247,
+        "mean": 0.1917004048582996
+      },
+      "2019": {
+        "days": 241,
+        "mean": 0.3591286307053942
+      }
+    }
+  },
+  "industries": {
+    "days": 1227,
+    "mean": 2.0709046454767726,
+    "years": {
+      "2014": {
+        "days": 5,
+        "mean": 1.6
+      },
+      "2015": {
+        "days": 244,
+        "mean": 1.959016393442623
+      },
+      "2016": {
+        "days": 244,
+        "mean": 2.1434426229508197
+      },
+      "2017": {
+        "days": 246,
+        "mean": 2.1463414634146343
+      },
+      "2018": {
+        "days": 247,
+        "mean": 2.2267206477732793
+      },
+      "2019": {
+        "days": 241,
+        "mean": 1.883817427385892
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1227,
+      "mean": 6.0706317722528786e-05,
+      "annual": 0.015297992066077255,
+      "t": 0.41841651302989785
+    },
+    "taiex": {
+      "days": 1227,
+      "mean": -0.0003389440166279287,
+      "annual": -0.08541389219023802,
+      "t": -1.712257438737333
+    }
+  },
+  "absolute": {
+    "days": 1227,
+    "mean": -8.98715326618122e-05
+  },
+  "curves": {
+    "U2": {
+      "days": 1227,
+      "total": -0.1577201529490433,
+      "annual": -0.03463774555082444,
+      "volatility": 0.15809116318842423,
+      "max_drawdown": -0.33102708415493276,
+      "invested": 0.9423133194361307,
+      "turnover": 12.527940785904384
+    },
+    "population": {
+      "days": 1227,
+      "total": -0.21935361119579044,
+      "annual": -0.04958696103549709,
+      "volatility": 0.1599317048921111,
+      "max_drawdown": -0.3741763564757218,
+      "invested": 0.9426210653445751,
+      "turnover": 12.226433592050231
+    },
+    "taiex": {
+      "days": 1227,
+      "total": 0.302045675797993,
+      "annual": 0.05570314480468186,
+      "volatility": 0.1305658424039168,
+      "max_drawdown": -0.2569687319514853,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 24530,
+    "won": 10859,
+    "rate": 0.44268242967794535,
+    "unsold": 389
+  },
+  "counts": {
+    "U2": {
+      "bought": 24530,
+      "limit_up": 8,
+      "limit_down": 6,
+      "sale_held": 29,
+      "not_tradable": 2,
+      "unsold": 389
+    },
+    "population": {
+      "bought": 526856,
+      "limit_up": 286,
+      "limit_down": 290,
+      "not_tradable": 189,
+      "sale_held": 1164,
+      "unsold": 8621
+    }
+  },
+  "min_t": 2.0
+}
