@@ -1,0 +1,391 @@
+{
+  "tool": "round10_research",
+  "version": 1,
+  "design": "936",
+  "registration_commit": "e495fa70",
+  "segment": "exploration",
+  "round": 10,
+  "round_size": 4,
+  "cumulative": 41,
+  "validation_min_t": 3.234,
+  "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+  "engines": {
+    "portfolio_research": "simulate",
+    "trade_research": 1
+  },
+  "tool_commit": "93db10d71dd2656ce062c8d4ea2e09d6f0b5472e",
+  "command": "python tools/research/round10_research.py --db /research/stock.db --segment exploration --hypotheses F1,F2,F3,F4 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "F1",
+    "F2",
+    "F3",
+    "F4"
+  ],
+  "hypotheses": {
+    "F1": {
+      "engine": "trade",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2966,
+      "trade_days": 428,
+      "taiex_excess": {
+        "days": 428,
+        "mean": -0.046540202389586456,
+        "t": -1.4985585002003503
+      },
+      "excess": {
+        "days": 428,
+        "mean": -0.03280685887595967,
+        "t": -1.1218934212149902
+      },
+      "absolute_mean": -0.07398728330550827,
+      "trades": 774,
+      "abandon_rate": 0.0012903225806451613,
+      "prerequisites": {
+        "days": 2966,
+        "min_days": 500,
+        "delisted": 152,
+        "ok": true
+      },
+      "coverage": null
+    },
+    "F2": {
+      "engine": "portfolio",
+      "verdict": "探索通過",
+      "reason": null,
+      "days": 2265,
+      "taiex_excess": {
+        "days": 2265,
+        "mean": 0.0002044395132082904,
+        "annual": 0.05151875732848918,
+        "t": 1.8339480071809384
+      },
+      "excess": {
+        "days": 2265,
+        "mean": 0.000327470192305017,
+        "annual": 0.0825224884608643,
+        "t": 3.7023615269652983
+      },
+      "absolute_mean": 0.00041616819565653884,
+      "prerequisites": {
+        "days": 2265,
+        "min_days": 500,
+        "delisted": 112,
+        "ok": true
+      },
+      "overlap_x2": {
+        "days": 2265,
+        "mean": 0.09419426048565122
+      },
+      "coverage": {
+        "2010": {
+          "days": 52,
+          "members": 27744,
+          "missing": {
+            "vol_720": 2436,
+            "cash_yield_12m": 0,
+            "mom_240_20": 766
+          },
+          "half": 12663
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "vol_720": 10001,
+            "cash_yield_12m": 0,
+            "mom_240_20": 3506
+          },
+          "half": 53983
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "vol_720": 10605,
+            "cash_yield_12m": 0,
+            "mom_240_20": 4026
+          },
+          "half": 44403
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "vol_720": 12099,
+            "cash_yield_12m": 0,
+            "mom_240_20": 2465
+          },
+          "half": 51057
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "vol_720": 10309,
+            "cash_yield_12m": 0,
+            "mom_240_20": 2438
+          },
+          "half": 59995
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "vol_720": 6105,
+            "cash_yield_12m": 0,
+            "mom_240_20": 1712
+          },
+          "half": 49449
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "vol_720": 6173,
+            "cash_yield_12m": 0,
+            "mom_240_20": 1575
+          },
+          "half": 44070
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "vol_720": 5965,
+            "cash_yield_12m": 0,
+            "mom_240_20": 1275
+          },
+          "half": 55079
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "vol_720": 4701,
+            "cash_yield_12m": 3,
+            "mom_240_20": 1206
+          },
+          "half": 52426
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "vol_720": 4301,
+            "cash_yield_12m": 0,
+            "mom_240_20": 1550
+          },
+          "half": 48230
+        }
+      }
+    },
+    "F3": {
+      "engine": "portfolio",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2926,
+      "taiex_excess": {
+        "days": 2926,
+        "mean": -0.00024399781263897695,
+        "annual": -0.06148744878502219,
+        "t": -1.502758910272208
+      },
+      "excess": {
+        "days": 2926,
+        "mean": 0.00010722604780655444,
+        "annual": 0.02702096404725172,
+        "t": 0.6194210970912145
+      },
+      "absolute_mean": -6.362838905555701e-05,
+      "prerequisites": {
+        "days": 2926,
+        "min_days": 500,
+        "delisted": 147,
+        "ok": true
+      },
+      "coverage": {
+        "2008": {
+          "days": 211,
+          "members": 93747,
+          "missing": {
+            "drawdown_60": 339,
+            "margin_drop_5": 4631
+          },
+          "hits": 3958,
+          "hit_days": 198,
+          "over_top_days": 51,
+          "max_hits": 223
+        },
+        "2009": {
+          "days": 251,
+          "members": 146889,
+          "missing": {
+            "drawdown_60": 715,
+            "margin_drop_5": 7402
+          },
+          "hits": 431,
+          "hit_days": 165,
+          "over_top_days": 1,
+          "max_hits": 25
+        },
+        "2010": {
+          "days": 251,
+          "members": 157930,
+          "missing": {
+            "drawdown_60": 954,
+            "margin_drop_5": 8998
+          },
+          "hits": 703,
+          "hit_days": 170,
+          "over_top_days": 6,
+          "max_hits": 45
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "missing": {
+            "drawdown_60": 706,
+            "margin_drop_5": 5105
+          },
+          "hits": 1343,
+          "hit_days": 201,
+          "over_top_days": 10,
+          "max_hits": 98
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "missing": {
+            "drawdown_60": 627,
+            "margin_drop_5": 4494
+          },
+          "hits": 409,
+          "hit_days": 147,
+          "over_top_days": 1,
+          "max_hits": 27
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "drawdown_60": 627,
+            "margin_drop_5": 5916
+          },
+          "hits": 159,
+          "hit_days": 96,
+          "over_top_days": 0,
+          "max_hits": 5
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "drawdown_60": 527,
+            "margin_drop_5": 7228
+          },
+          "hits": 334,
+          "hit_days": 124,
+          "over_top_days": 1,
+          "max_hits": 21
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "drawdown_60": 481,
+            "margin_drop_5": 4960
+          },
+          "hits": 1720,
+          "hit_days": 148,
+          "over_top_days": 21,
+          "max_hits": 144
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "drawdown_60": 270,
+            "margin_drop_5": 3970
+          },
+          "hits": 483,
+          "hit_days": 173,
+          "over_top_days": 0,
+          "max_hits": 15
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "drawdown_60": 234,
+            "margin_drop_5": 5919
+          },
+          "hits": 312,
+          "hit_days": 167,
+          "over_top_days": 0,
+          "max_hits": 9
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "drawdown_60": 338,
+            "margin_drop_5": 4418
+          },
+          "hits": 1969,
+          "hit_days": 217,
+          "over_top_days": 27,
+          "max_hits": 133
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "drawdown_60": 193,
+            "margin_drop_5": 3431
+          },
+          "hits": 203,
+          "hit_days": 110,
+          "over_top_days": 0,
+          "max_hits": 11
+        }
+      }
+    },
+    "F4": {
+      "engine": "trade",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2966,
+      "trade_days": 82,
+      "taiex_excess": {
+        "days": 82,
+        "mean": -0.024481087326662154,
+        "t": -0.40014718114473663
+      },
+      "excess": {
+        "days": 82,
+        "mean": -0.014178966587244953,
+        "t": -0.22799521259665861
+      },
+      "absolute_mean": -0.02170134478756357,
+      "trades": 84,
+      "abandon_rate": 0.0,
+      "prerequisites": {
+        "days": 2966,
+        "min_days": 500,
+        "delisted": 152,
+        "ok": true
+      },
+      "coverage": null
+    }
+  },
+  "elapsed_seconds": 1263.5356529609999,
+  "peak_memory_gb": 1.9187088012695312
+}

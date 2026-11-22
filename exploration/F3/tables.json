@@ -1,0 +1,269 @@
+{
+  "tool": "round10_research",
+  "version": 1,
+  "design": "936",
+  "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+  "label": "`drawdown_60` ≤ −0.22 且 `margin_drop_5` ≤ −0.10，依 `margin_drop_5` 小者先",
+  "direction": "散戶槓桿：斷頭賣壓",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "conditions": [
+      "drawdown_60",
+      "margin_drop_5"
+    ],
+    "keys": [
+      [
+        "margin_drop_5",
+        "low"
+      ]
+    ],
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2007-12-03",
+      60
+    ]
+  },
+  "hypothesis": "F3",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2008-03-05",
+    "first_session": "2008-03-06",
+    "last_session": "2019-12-31",
+    "days": 2926,
+    "signal_days": 2926
+  },
+  "prerequisites": {
+    "days": 2926,
+    "min_days": 500,
+    "delisted": 147,
+    "ok": true
+  },
+  "coverage": {
+    "2008": {
+      "days": 211,
+      "members": 93747,
+      "missing": {
+        "drawdown_60": 339,
+        "margin_drop_5": 4631
+      },
+      "hits": 3958,
+      "hit_days": 198,
+      "over_top_days": 51,
+      "max_hits": 223
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "missing": {
+        "drawdown_60": 715,
+        "margin_drop_5": 7402
+      },
+      "hits": 431,
+      "hit_days": 165,
+      "over_top_days": 1,
+      "max_hits": 25
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "missing": {
+        "drawdown_60": 954,
+        "margin_drop_5": 8998
+      },
+      "hits": 703,
+      "hit_days": 170,
+      "over_top_days": 6,
+      "max_hits": 45
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "drawdown_60": 706,
+        "margin_drop_5": 5105
+      },
+      "hits": 1343,
+      "hit_days": 201,
+      "over_top_days": 10,
+      "max_hits": 98
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "drawdown_60": 627,
+        "margin_drop_5": 4494
+      },
+      "hits": 409,
+      "hit_days": 147,
+      "over_top_days": 1,
+      "max_hits": 27
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "drawdown_60": 627,
+        "margin_drop_5": 5916
+      },
+      "hits": 159,
+      "hit_days": 96,
+      "over_top_days": 0,
+      "max_hits": 5
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "drawdown_60": 527,
+        "margin_drop_5": 7228
+      },
+      "hits": 334,
+      "hit_days": 124,
+      "over_top_days": 1,
+      "max_hits": 21
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "drawdown_60": 481,
+        "margin_drop_5": 4960
+      },
+      "hits": 1720,
+      "hit_days": 148,
+      "over_top_days": 21,
+      "max_hits": 144
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "drawdown_60": 270,
+        "margin_drop_5": 3970
+      },
+      "hits": 483,
+      "hit_days": 173,
+      "over_top_days": 0,
+      "max_hits": 15
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "drawdown_60": 234,
+        "margin_drop_5": 5919
+      },
+      "hits": 312,
+      "hit_days": 167,
+      "over_top_days": 0,
+      "max_hits": 9
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "drawdown_60": 338,
+        "margin_drop_5": 4418
+      },
+      "hits": 1969,
+      "hit_days": 217,
+      "over_top_days": 27,
+      "max_hits": 133
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "drawdown_60": 193,
+        "margin_drop_5": 3431
+      },
+      "hits": 203,
+      "hit_days": 110,
+      "over_top_days": 0,
+      "max_hits": 11
+    }
+  },
+  "seconds": {
+    "plan": 44.876823743994464,
+    "drawdown_60+margin_drop_5": 23.707950311290915
+  },
+  "excess": {
+    "population": {
+      "days": 2926,
+      "mean": 0.00010722604780655444,
+      "annual": 0.02702096404725172,
+      "t": 0.6194210970912145
+    },
+    "taiex": {
+      "days": 2926,
+      "mean": -0.00024399781263897695,
+      "annual": -0.06148744878502219,
+      "t": -1.502758910272208
+    }
+  },
+  "absolute": {
+    "days": 2926,
+    "mean": -6.362838905555701e-05
+  },
+  "curves": {
+    "F3": {
+      "days": 2926,
+      "total": -0.20277400658160272,
+      "annual": -0.019328032270878093,
+      "volatility": 0.08335322608973199,
+      "max_drawdown": -0.3739063393602253,
+      "invested": 0.2248869170447969,
+      "turnover": 1.5640352619368438
+    },
+    "population": {
+      "days": 2926,
+      "total": -0.5152521746358798,
+      "annual": -0.060460069549749584,
+      "volatility": 0.19584510554869985,
+      "max_drawdown": -0.6370390848752356,
+      "invested": 0.9486814453563001,
+      "turnover": 11.441958523876202
+    },
+    "taiex": {
+      "days": 2926,
+      "total": 0.41409838577548874,
+      "annual": 0.030291146433941485,
+      "volatility": 0.17651755619025358,
+      "max_drawdown": -0.5599954815388593,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 8112,
+    "won": 3908,
+    "rate": 0.4817554240631164,
+    "unsold": 122
+  },
+  "counts": {
+    "F3": {
+      "bought": 8112,
+      "not_tradable": 24,
+      "limit_down": 75,
+      "limit_up": 72,
+      "sale_held": 117,
+      "unsold": 122
+    },
+    "population": {
+      "bought": 1382310,
+      "limit_up": 2405,
+      "not_tradable": 363,
+      "limit_down": 1905,
+      "sale_held": 3091,
+      "unsold": 9435
+    }
+  },
+  "min_t": 2.0
+}

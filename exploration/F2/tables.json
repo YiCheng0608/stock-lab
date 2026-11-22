@@ -1,0 +1,280 @@
+{
+  "tool": "round10_research",
+  "version": 1,
+  "design": "936",
+  "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+  "label": "保守公式：`vol_720` 較小的一半裡，`cash_yield_12m` 與 `mom_240_20` 的平均名次小者先",
+  "direction": "多因子合成",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "half": [
+      "vol_720",
+      "low"
+    ],
+    "ranks": [
+      [
+        "cash_yield_12m",
+        "high"
+      ],
+      [
+        "mom_240_20",
+        "high"
+      ]
+    ],
+    "score": "low",
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      721
+    ]
+  },
+  "hypothesis": "F2",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "探索通過",
+  "reason": null,
+  "window": {
+    "first_signal": "2010-10-21",
+    "first_session": "2010-10-22",
+    "last_session": "2019-12-31",
+    "days": 2265,
+    "signal_days": 2265
+  },
+  "prerequisites": {
+    "days": 2265,
+    "min_days": 500,
+    "delisted": 112,
+    "ok": true
+  },
+  "coverage": {
+    "2010": {
+      "days": 52,
+      "members": 27744,
+      "missing": {
+        "vol_720": 2436,
+        "cash_yield_12m": 0,
+        "mom_240_20": 766
+      },
+      "half": 12663
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "missing": {
+        "vol_720": 10001,
+        "cash_yield_12m": 0,
+        "mom_240_20": 3506
+      },
+      "half": 53983
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "missing": {
+        "vol_720": 10605,
+        "cash_yield_12m": 0,
+        "mom_240_20": 4026
+      },
+      "half": 44403
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "missing": {
+        "vol_720": 12099,
+        "cash_yield_12m": 0,
+        "mom_240_20": 2465
+      },
+      "half": 51057
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "missing": {
+        "vol_720": 10309,
+        "cash_yield_12m": 0,
+        "mom_240_20": 2438
+      },
+      "half": 59995
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "missing": {
+        "vol_720": 6105,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1712
+      },
+      "half": 49449
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "missing": {
+        "vol_720": 6173,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1575
+      },
+      "half": 44070
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "vol_720": 5965,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1275
+      },
+      "half": 55079
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "vol_720": 4701,
+        "cash_yield_12m": 3,
+        "mom_240_20": 1206
+      },
+      "half": 52426
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "vol_720": 4301,
+        "cash_yield_12m": 0,
+        "mom_240_20": 1550
+      },
+      "half": 48230
+    }
+  },
+  "seconds": {
+    "plan": 154.1047298229969,
+    "vol_720": 14.541748699484742,
+    "cash_yield_12m": 13.611880260461476,
+    "mom_240_20": 2.9116443156381138,
+    "f2_order": 19.815291422550217,
+    "x2_order": 68.07666930492269
+  },
+  "overlap": {
+    "days": 2265,
+    "mean": 0.09419426048565122,
+    "years": {
+      "2010": {
+        "days": 52,
+        "mean": 0.08365384615384616
+      },
+      "2011": {
+        "days": 247,
+        "mean": 0.14008097165991903
+      },
+      "2012": {
+        "days": 250,
+        "mean": 0.18480000000000002
+      },
+      "2013": {
+        "days": 246,
+        "mean": 0.0774390243902439
+      },
+      "2014": {
+        "days": 248,
+        "mean": 0.048185483870967744
+      },
+      "2015": {
+        "days": 244,
+        "mean": 0.09631147540983606
+      },
+      "2016": {
+        "days": 244,
+        "mean": 0.12110655737704919
+      },
+      "2017": {
+        "days": 246,
+        "mean": 0.037601626016260166
+      },
+      "2018": {
+        "days": 247,
+        "mean": 0.0665991902834008
+      },
+      "2019": {
+        "days": 241,
+        "mean": 0.07655601659751037
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2265,
+      "mean": 0.000327470192305017,
+      "annual": 0.0825224884608643,
+      "t": 3.7023615269652983
+    },
+    "taiex": {
+      "days": 2265,
+      "mean": 0.0002044395132082904,
+      "annual": 0.05151875732848918,
+      "t": 1.8339480071809384
+    }
+  },
+  "absolute": {
+    "days": 2265,
+    "mean": 0.00041616819565653884
+  },
+  "curves": {
+    "F2": {
+      "days": 2265,
+      "total": 1.3392133741880605,
+      "annual": 0.09916293413508703,
+      "volatility": 0.14317936940693524,
+      "max_drawdown": -0.26889817744566535,
+      "invested": 0.9696199064809811,
+      "turnover": 4.111391847437219
+    },
+    "population": {
+      "days": 2265,
+      "total": 0.07635578515285668,
+      "annual": 0.008220103349392494,
+      "volatility": 0.1677101778160828,
+      "max_drawdown": -0.4047898333624983,
+      "invested": 0.969094362707561,
+      "turnover": 4.043841081717482
+    },
+    "taiex": {
+      "days": 2265,
+      "total": 0.4754397551170002,
+      "annual": 0.04422458308853994,
+      "volatility": 0.14177594324513515,
+      "max_drawdown": -0.27467729501878047,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 45277,
+    "won": 23986,
+    "rate": 0.5297612474324712,
+    "unsold": 1239
+  },
+  "counts": {
+    "F2": {
+      "bought": 45277,
+      "not_tradable": 14,
+      "sale_held": 105,
+      "limit_down": 10,
+      "limit_up": 9,
+      "unsold": 1239
+    },
+    "population": {
+      "bought": 1013162,
+      "limit_up": 826,
+      "not_tradable": 268,
+      "sale_held": 3458,
+      "limit_down": 838,
+      "unsold": 27671
+    }
+  },
+  "min_t": 2.0
+}

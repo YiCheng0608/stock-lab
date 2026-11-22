@@ -1,0 +1,179 @@
+{
+  "tool": "round10_research",
+  "version": 1,
+  "design": "936",
+  "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+  "label": "T 日是除權交易日、配股率 `stock_dividend_ratio` ≥ 0.05（`stock_div_ex`），全部符合的訊號；T+1 開盤成交（期限 1 日）、沒有停損與目標、持有 60 日",
+  "direction": "事件：配股除權",
+  "parameters": {
+    "engine": "trade",
+    "kind": "event",
+    "event": "stock_div_ex",
+    "market_filter": false,
+    "entry_days": 1,
+    "stop": null,
+    "target": null,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      20
+    ]
+  },
+  "hypothesis": "F1",
+  "engine": "trade",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-12-28",
+    "first_session": "2007-12-31",
+    "last_session": "2019-12-31",
+    "days": 2966,
+    "signal_days": 2966
+  },
+  "prerequisites": {
+    "days": 2966,
+    "min_days": 500,
+    "delisted": 152,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 428,
+    "mean": -0.046540202389586456,
+    "t": -1.4985585002003503
+  },
+  "excess": {
+    "days": 428,
+    "mean": -0.03280685887595967,
+    "t": -1.1218934212149902
+  },
+  "absolute": {
+    "days": 428,
+    "mean": -0.07398728330550827
+  },
+  "signals": 775,
+  "signal_days": 428,
+  "trade_days": 428,
+  "trades": 774,
+  "net_mean": -0.09141795943142404,
+  "net_median": -0.061586614117388895,
+  "win_rate": 0.2997416020671835,
+  "zero": 0,
+  "won_mean": 0.1367917540258915,
+  "lost_mean": -0.18910182201831924,
+  "won": 232,
+  "lost": 542,
+  "exit_share": {
+    "stop": 0.0,
+    "target": 0.0,
+    "time": 0.9935400516795866,
+    "segment_end": 0.0012919896640826874,
+    "delisted": 0.003875968992248062,
+    "transferred": 0.0012919896640826874
+  },
+  "exits": {
+    "stop": 0,
+    "target": 0,
+    "time": 769,
+    "segment_end": 1,
+    "delisted": 3,
+    "transferred": 1
+  },
+  "both_touched": 0,
+  "gapped": 0,
+  "limit_delayed": 2,
+  "suspension_delayed": 0,
+  "holding_mean": 59.89922480620155,
+  "abandoned": 1,
+  "abandon_rate": 0.0012903225806451613,
+  "abandon_reasons": {
+    "limit_up": 1
+  },
+  "entry_limit_blocked": 1,
+  "below_lower": 0,
+  "filter_blocked_days": 0,
+  "filter_missing_days": 0,
+  "population_unbought": 62,
+  "listed": {
+    "years": {
+      "2008": {
+        "TWSE:signals": 109,
+        "signals": 133,
+        "signal_days": 59,
+        "TPEx:signals": 24
+      },
+      "2009": {
+        "TWSE:signals": 72,
+        "signals": 102,
+        "signal_days": 49,
+        "TPEx:signals": 30
+      },
+      "2010": {
+        "TWSE:signals": 71,
+        "signals": 94,
+        "signal_days": 51,
+        "TPEx:signals": 23
+      },
+      "2011": {
+        "TWSE:signals": 93,
+        "signals": 113,
+        "signal_days": 54,
+        "TPEx:signals": 20
+      },
+      "2012": {
+        "TWSE:signals": 42,
+        "signals": 52,
+        "signal_days": 28,
+        "TPEx:signals": 10
+      },
+      "2013": {
+        "TWSE:signals": 51,
+        "signals": 67,
+        "signal_days": 40,
+        "TPEx:signals": 16
+      },
+      "2014": {
+        "TWSE:signals": 51,
+        "signals": 64,
+        "signal_days": 35,
+        "TPEx:signals": 13
+      },
+      "2015": {
+        "TPEx:signals": 10,
+        "signals": 36,
+        "signal_days": 25,
+        "TWSE:signals": 26
+      },
+      "2016": {
+        "TWSE:signals": 28,
+        "signals": 35,
+        "signal_days": 27,
+        "TPEx:signals": 7
+      },
+      "2017": {
+        "TWSE:signals": 17,
+        "signals": 24,
+        "signal_days": 19,
+        "TPEx:signals": 7
+      },
+      "2018": {
+        "TWSE:signals": 21,
+        "signals": 28,
+        "signal_days": 22,
+        "TPEx:signals": 7
+      },
+      "2019": {
+        "TWSE:signals": 20,
+        "signals": 27,
+        "signal_days": 19,
+        "TPEx:signals": 7
+      }
+    }
+  },
+  "seconds": {
+    "run": 45.07104811799945,
+    "stock_div_ex": 1.7649229850067059
+  },
+  "min_t": 2.0
+}

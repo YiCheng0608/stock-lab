@@ -1,0 +1,179 @@
+{
+  "tool": "round10_research",
+  "version": 1,
+  "design": "936",
+  "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+  "label": "第一次出現在融資融券名單上（`margin_first`），全部符合的訊號；T+1 開盤成交（期限 1 日）、沒有停損與目標、持有 20 日",
+  "direction": "事件：第一次成為融資標的",
+  "parameters": {
+    "engine": "trade",
+    "kind": "event",
+    "event": "margin_first",
+    "market_filter": false,
+    "entry_days": 1,
+    "stop": null,
+    "target": null,
+    "hold": 20,
+    "start": [
+      "session",
+      "2007-12-03",
+      20
+    ]
+  },
+  "hypothesis": "F4",
+  "engine": "trade",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-12-28",
+    "first_session": "2007-12-31",
+    "last_session": "2019-12-31",
+    "days": 2966,
+    "signal_days": 2966
+  },
+  "prerequisites": {
+    "days": 2966,
+    "min_days": 500,
+    "delisted": 152,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 82,
+    "mean": -0.024481087326662154,
+    "t": -0.40014718114473663
+  },
+  "excess": {
+    "days": 82,
+    "mean": -0.014178966587244953,
+    "t": -0.22799521259665861
+  },
+  "absolute": {
+    "days": 82,
+    "mean": -0.02170134478756357
+  },
+  "signals": 84,
+  "signal_days": 82,
+  "trade_days": 82,
+  "trades": 84,
+  "net_mean": -0.022739339819517448,
+  "net_median": -0.029643653519754322,
+  "win_rate": 0.40476190476190477,
+  "zero": 0,
+  "won_mean": 0.10601563434571039,
+  "lost_mean": -0.11029272225187237,
+  "won": 34,
+  "lost": 50,
+  "exit_share": {
+    "stop": 0.0,
+    "target": 0.0,
+    "time": 1.0,
+    "segment_end": 0.0,
+    "delisted": 0.0,
+    "transferred": 0.0
+  },
+  "exits": {
+    "stop": 0,
+    "target": 0,
+    "time": 84,
+    "segment_end": 0,
+    "delisted": 0,
+    "transferred": 0
+  },
+  "both_touched": 0,
+  "gapped": 0,
+  "limit_delayed": 0,
+  "suspension_delayed": 0,
+  "holding_mean": 20.0,
+  "abandoned": 0,
+  "abandon_rate": 0.0,
+  "abandon_reasons": {},
+  "entry_limit_blocked": 0,
+  "below_lower": 0,
+  "filter_blocked_days": 0,
+  "filter_missing_days": 0,
+  "population_unbought": 12,
+  "listed": {
+    "years": {
+      "2008": {
+        "TWSE:signals": 5,
+        "signals": 5,
+        "signal_days": 5
+      },
+      "2009": {
+        "TWSE:signals": 11,
+        "signals": 12,
+        "signal_days": 11,
+        "TPEx:signals": 1
+      },
+      "2010": {
+        "TWSE:signals": 8,
+        "signals": 12,
+        "signal_days": 12,
+        "TPEx:signals": 4
+      },
+      "2011": {
+        "TWSE:signals": 7,
+        "signals": 8,
+        "signal_days": 8,
+        "TPEx:signals": 1
+      },
+      "2012": {
+        "TPEx:signals": 5,
+        "signals": 14,
+        "signal_days": 13,
+        "TWSE:signals": 9
+      },
+      "2013": {
+        "TPEx:signals": 2,
+        "signals": 6,
+        "signal_days": 6,
+        "TWSE:signals": 4
+      },
+      "2014": {
+        "TPEx:signals": 3,
+        "signals": 6,
+        "signal_days": 6,
+        "TWSE:signals": 3
+      },
+      "2015": {
+        "TWSE:signals": 3,
+        "signals": 5,
+        "signal_days": 5,
+        "TPEx:signals": 2
+      },
+      "2016": {
+        "TWSE:signals": 1,
+        "signals": 1,
+        "signal_days": 1
+      },
+      "2017": {
+        "TPEx:signals": 1,
+        "signals": 3,
+        "signal_days": 3,
+        "TWSE:signals": 2
+      },
+      "2018": {
+        "TPEx:signals": 2,
+        "signals": 4,
+        "signal_days": 4,
+        "TWSE:signals": 2
+      },
+      "2019": {
+        "TWSE:signals": 7,
+        "signals": 8,
+        "signal_days": 8,
+        "TPEx:signals": 1
+      }
+    },
+    "missing_list_days": {
+      "TWSE": 0,
+      "TPEx": 2
+    }
+  },
+  "seconds": {
+    "run": 19.422092576001887,
+    "margin_first": 2.849644701142097
+  },
+  "min_t": 2.0
+}
