@@ -8,7 +8,9 @@ report as H1 (#699).  The first object is X4 (#867's validation, comment
 validation (#864 comment 7043710015, kind ``通過驗證`` until the user decides
 on the product, #875); the third H2 again, in the product from 2026-11-21
 (key ``H2-product``, kind ``已進產品``, #902; the old row stays and runs on,
-and the reports name both H2).  Nothing here is a command-line option: ``WATCHES`` holds each
+and the reports name both H2); the fourth round 10's F2
+(round10_research 第 1 版, #944 validation 7072993427, kind ``前瞻觀察`` from
+2026-11-22, #949).  Nothing here is a command-line option: ``WATCHES`` holds each
 object's frozen entry, its definition is the one its own tool ran (imported,
 not copied, and refused when that tool's ``definitions_sha256`` is not the
 frozen one), and the golden test of its output fails on any change.
@@ -18,8 +20,10 @@ forward``: signal dates T from the first session on or after ``since`` to the
 session before the cutoff, T+1's open to the K-th session's close
 (``portfolio_research.simulate``), the benchmark the same engine over the
 day's whole population (``evidence_lib.universe``), TAIEX only listed.  The
-bars before ``since`` are read for the features only (``WARMUP_CALENDAR_DAYS``,
-as explore_research's later segments).  The verdict is
+bars before ``since`` are read for the features only, as far back as the
+source tool reads a later segment: ``WARMUP_CALENDAR_DAYS`` for
+explore_research, the copy from ``LOAD_FROM`` for round10_research (F2's
+``vol_720`` needs 721 bars).  The verdict is
 ``portfolio_research.forward_judge`` on every session to the cutoff with
 ``min_days`` 60: before 60 sessions it is ``樣本不足`` and the numbers are no
 verdict.  What follows a verdict is the kind's (``KIND_NOTES``): only a
@@ -47,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import evidence_lib as lib  # noqa: E402
 import explore_research as er  # noqa: E402
 import portfolio_research as pr  # noqa: E402
+import round10_research as r10  # noqa: E402
 
 VERSION = 1
 DESIGN = "868"
@@ -122,8 +127,26 @@ WATCHES: dict[str, dict[str, Any]] = {
             "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7050216934"
         ),
     },
+    # Round 10's F2 was judged 前瞻觀察 on its validation (#944 7072993427,
+    # 決定 7073015041): round10_research 第 1 版's definition, followed from
+    # the day the validation was written to the ledger (finished_at
+    # 2026-11-22T02:33:50Z, #949).
+    "F2": {
+        "kind": WATCH,
+        "source": "round10_research",
+        "source_version": 1,
+        "code": "F2",
+        "definitions_sha256": (
+            "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9"
+        ),
+        "since": date(2026, 11, 22),
+        "min_days": MIN_DAYS,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7072993427"
+        ),
+    },
 }
-SOURCES = {"explore_research": er}
+SOURCES = {"explore_research": er, "round10_research": r10}
 
 
 def display(name: str) -> str:
@@ -161,6 +184,74 @@ def source_problems(name: str) -> list[str]:
 # --- the engines ---------------------------------------------------------------
 
 
+def _signal_window(
+    sessions: list[date], since: date, cutoff: date | None
+) -> tuple[int, list[int]]:
+    """The last session valued and the signal dates' indexes: from the first
+    session on or after ``since`` to the session before the last."""
+
+    position = {day: index for index, day in enumerate(sessions)}
+    if cutoff is not None and cutoff not in position:
+        raise SystemExit(f"cutoff {cutoff} is not a market session")
+    last = position[cutoff] if cutoff is not None else len(sessions) - 1
+    return last, [at for at in range(last) if sessions[at] >= since]
+
+
+def _empty_run(panel: lib.Panel, last: int, signals: list[int]) -> dict[str, Any]:
+    sessions = panel.sessions
+    return {
+        "panel": panel,
+        "cutoff": sessions[last].isoformat() if sessions else None,
+        "signal_days": len(signals),
+        "dates": [],
+        "rows": [],
+        "positions": [],
+        "equity": ([], []),
+        "returns": ([], []),
+        "taiex": [],
+        "invested": ([], []),
+        "turnover": ([], []),
+        "counts": {},
+        "coverage": {},
+    }
+
+
+def _simulated(
+    run: dict[str, Any],
+    code: str,
+    spec: dict[str, Any],
+    planned: Any,
+    quote: Callable,
+    first: int,
+    last: int,
+) -> dict[str, Any]:
+    """``simulate`` for the picks and the population from ``first`` to
+    ``last`` (both engines: the H1 ``--window forward`` rule)."""
+
+    panel = run["panel"]
+    mine = pr.simulate(planned.picks, quote, first, last, spec["hold"], spec["top"])
+    population = pr.simulate(planned.population, quote, first, last, spec["hold"], None)
+    run.update(
+        {
+            "dates": panel.sessions[first : last + 1],
+            "rows": planned.rows,
+            "positions": mine.positions,
+            "equity": (mine.equity, population.equity),
+            "returns": (
+                pr.daily_returns(mine.equity),
+                pr.daily_returns(population.equity),
+            ),
+            "taiex": er._taiex(panel, first, last),
+            "invested": (mine.invested, population.invested),
+            "turnover": (er._turnover(mine), er._turnover(population)),
+            "counts": {code: dict(mine.counts), POPULATION: dict(population.counts)},
+            "coverage": planned.coverage,
+            "win": er.win_rate(mine),
+        }
+    )
+    return run
+
+
 def explore_daily(
     db: Path, entry: dict[str, Any], since: date, cutoff: date | None, out: Path
 ) -> dict[str, Any]:
@@ -177,60 +268,56 @@ def explore_daily(
         db, since - timedelta(days=WARMUP_CALENDAR_DAYS), end, out / RAW_DIR_NAME
     )
     panel = ctx.market.panel
-    sessions = panel.sessions
-    position = {day: index for index, day in enumerate(sessions)}
-    if cutoff is not None and cutoff not in position:
-        raise SystemExit(f"cutoff {cutoff} is not a market session")
-    last = position[cutoff] if cutoff is not None else len(sessions) - 1
-    signals = [at for at in range(last) if sessions[at] >= since]
-    run: dict[str, Any] = {
-        "panel": panel,
-        "cutoff": sessions[last].isoformat() if sessions else None,
-        "signal_days": len(signals),
-        "dates": [],
-        "rows": [],
-        "positions": [],
-        "equity": ([], []),
-        "returns": ([], []),
-        "taiex": [],
-        "invested": ([], []),
-        "turnover": ([], []),
-        "counts": {},
-        "coverage": {},
-    }
+    last, signals = _signal_window(panel.sessions, since, cutoff)
+    run = _empty_run(panel, last, signals)
     if not signals:
         return run
     first = signals[0] + 1
     planned = er.plan(ctx, spec, first, last)
-    mine = pr.simulate(planned.picks, ctx.quote, first, last, spec["hold"], spec["top"])
-    population = pr.simulate(
-        planned.population, ctx.quote, first, last, spec["hold"], None
-    )
-    run.update(
-        {
-            "dates": sessions[first : last + 1],
-            "rows": planned.rows,
-            "positions": mine.positions,
-            "equity": (mine.equity, population.equity),
-            "returns": (
-                pr.daily_returns(mine.equity),
-                pr.daily_returns(population.equity),
-            ),
-            "taiex": er._taiex(panel, first, last),
-            "invested": (mine.invested, population.invested),
-            "turnover": (er._turnover(mine), er._turnover(population)),
-            "counts": {
-                entry["code"]: dict(mine.counts),
-                POPULATION: dict(population.counts),
-            },
-            "coverage": planned.coverage,
-            "win": er.win_rate(mine),
-        }
-    )
-    return run
+    return _simulated(run, entry["code"], spec, planned, ctx.quote, first, last)
 
 
-ENGINES: dict[str, Callable[..., dict[str, Any]]] = {"explore_research": explore_daily}
+def round10_portfolio(
+    db: Path, entry: dict[str, Any], since: date, cutoff: date | None, out: Path
+) -> dict[str, Any]:
+    """A round10_research portfolio hypothesis (F2) forward: the copy read
+    from ``LOAD_FROM`` (its own rule: F2's ``vol_720`` needs 721 bars, more
+    than ``WARMUP_CALENDAR_DAYS``), its ``plan`` (the half, the two ranks, the
+    mean rank, and the overlap with X2's list) on the signal dates from
+    ``since``, ``simulate`` for it and the population."""
+
+    code = entry["code"]
+    spec = r10.HYPOTHESES[code]
+    if spec["engine"] != r10.PORTFOLIO or spec["rule"] != "daily":
+        raise SystemExit(f"{code} is not a daily portfolio hypothesis")
+    latest = pr.copy_facts(db)["latest"]
+    end = cutoff or (date.fromisoformat(latest) if latest else since)
+    ctx = r10.load(db, r10.LOAD_FROM, end, out / RAW_DIR_NAME)
+    panel = ctx.panel
+    last, signals = _signal_window(panel.sessions, since, cutoff)
+    run = _empty_run(panel, last, signals)
+    run["overlap"] = r10.overlap_summary({})
+    if not signals:
+        return run
+    first = signals[0] + 1
+    planned = r10.plan(ctx, spec, code, first, last)
+    run["overlap"] = r10.overlap_summary(planned.overlap)
+    return _simulated(run, code, spec, planned, ctx.quote, first, last)
+
+
+ENGINES: dict[str, Callable[..., dict[str, Any]]] = {
+    "explore_research": explore_daily,
+    "round10_research": round10_portfolio,
+}
+# The source's columns of picks.csv and lines of 資料覆蓋 (each its own tool's)
+PICK_FIELDS: dict[str, Callable[[str, dict[str, Any]], tuple[str, ...]]] = {
+    "explore_research": lambda code, spec: er.used_features(spec),
+    "round10_research": lambda code, spec: r10.PICK_FIELDS[code],
+}
+COVERAGE_LINES: dict[str, Callable[[str, dict[str, Any]], list[str]]] = {
+    "explore_research": er.coverage_lines,
+    "round10_research": r10.portfolio_coverage_lines,
+}
 
 
 # --- the run ---------------------------------------------------------------------
@@ -318,6 +405,8 @@ def run_watch(
         "signal_days": run["signal_days"],
         **study(run, code, entry["min_days"]),
     }
+    if "overlap" in run:  # F2 第 6 點: its list's overlap with H2's, listed only
+        result["overlap"] = run["overlap"]
     result["elapsed_seconds"] = time.monotonic() - started
     result["peak_memory_gb"] = lib._load("backtest_research").peak_memory_gb()
     write_outputs(out, result, run)
@@ -422,8 +511,18 @@ def markdown(result: dict[str, Any]) -> str:
         f"{counts.get('sale_held', 0):,}、期末未賣 {counts.get('unsold', 0):,}。",
         "",
     ]
+    if "overlap" in result:
+        o = result["overlap"]
+        lines += [
+            "## 和 H2 的重疊（只列出）",
+            "",
+            r10.OVERLAP_NOTE + "。",
+            "",
+            f"前瞻起日至今平均：{_pct(o['mean'], 1)}（{o['days']:,} 個訊號日）。",
+            "",
+        ]
     if result["coverage"]:
-        coverage = er.coverage_lines(entry["code"], result["coverage"])
+        coverage = COVERAGE_LINES[entry["source"]](entry["code"], result["coverage"])
         lines += ["## 資料覆蓋", "", *coverage, ""]
     return "\n".join(lines)
 
@@ -454,7 +553,9 @@ def write_outputs(out: Path, result: dict[str, Any], run: dict[str, Any]) -> Non
         "rank",
         "exchange",
         "symbol",
-        *er.used_features(result["definition"]),
+        *PICK_FIELDS[result["entry"]["source"]](
+            result["entry"]["code"], result["definition"]
+        ),
         "tie",
     ]
     with (out / "picks.csv").open("w", encoding="utf-8", newline="") as handle:

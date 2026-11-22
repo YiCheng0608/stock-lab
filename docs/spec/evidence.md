@@ -278,14 +278,15 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 **每月流程**（統籌）
 1. 每月第一個交易日之後的白天（不在台北 21:30～23:30），以 `copy_db.py` 複製唯讀副本到任務 volume（空閒記憶體 ≥ 5 GB）。
 2. 跑上面的命令（`--window forward`）。剛複製完時，容器看到的可用記憶體會被頁面快取吃掉（2026-11-14 試跑讀到 0.1 GB，被 `--min-free-gb 2` 擋下）。先在主機確認空閒 ≥ 5 GB，再加 `--min-free-gb 0`，與 #689 相同；試跑耗時 3 秒，峰值 0.2 GB。
-3. 對同一份副本，每個前瞻監測對象（[前瞻監測與下架](#前瞻監測與下架)的對象清單）各跑一次它的入口，`--watch` 給 `WATCHES` 的鍵，目前是 X4、H2 與 H2-product（記憶體同上）：
+3. 對同一份副本，每個前瞻監測對象（[前瞻監測與下架](#前瞻監測與下架)的對象清單）各跑一次它的入口，`--watch` 給 `WATCHES` 的鍵，目前是 X4、H2、H2-product 與 F2（記憶體同上；F2 從副本的第一天讀起，比其他三個久）：
    - `python tools/research/forward_watch.py --db <副本> --watch X4 --out <目錄>/X4 --min-free-gb 0`
    - `python tools/research/forward_watch.py --db <副本> --watch H2 --out <目錄>/H2 --min-free-gb 0`
    - `python tools/research/forward_watch.py --db <副本> --watch H2-product --out <目錄>/H2-product --min-free-gb 0`
-4. 原始輸出：H1 推 `pr-assets/691` 的 `run-<YYYYMMDD>/`，前瞻監測對象推 `pr-assets/868` 的 `run-<YYYYMMDD>/<WATCHES 的鍵>/`（X4、H2、H2-product 各一個子目錄；兩列 H2 的代號相同，子目錄用鍵分開）。
+   - `python tools/research/forward_watch.py --db <副本> --watch F2 --out <目錄>/F2 --min-free-gb 0`
+4. 原始輸出：H1 推 `pr-assets/691` 的 `run-<YYYYMMDD>/`，前瞻監測對象推 `pr-assets/868` 的 `run-<YYYYMMDD>/<WATCHES 的鍵>/`（X4、H2、H2-product、F2 各一個子目錄，F2 的是 `pr-assets/868/run-<YYYYMMDD>/F2/`；兩列 H2 的代號相同，子目錄用鍵分開）。
 5. 在追蹤 Issue「H1 前瞻驗證月報」（[#699](https://github.com/YiCheng0608/stock-lab/issues/699)）留言，H1 與每個對象各一則：
    - **H1**：第一個列對加權指數的超額，再貼 `summary.md` 的判定與 pr-assets 連結。滿 250 日的那一則照常寫出判定，標明只當紀錄、不改 H1 成立與否，不另在 #1 回報。
-   - **前瞻監測對象**：第一行寫「`<代號>`（前瞻觀察，只當紀錄）」、「`<代號>`（通過驗證，只當紀錄）」或「`<代號>`（已進產品，監測）」，目前是「`X4`（前瞻觀察，只當紀錄）」、「`H2`（通過驗證，只當紀錄）」與「`H2`（已進產品，監測）」（鍵 `H2-product`；代號用 `summary.md` 第一行的，不寫鍵）；接著照 `summary.md` 開頭三行的順序貼：對加權指數的超額日均與 t、對母體的超額日均、t 與累積日數、判定，最後是 pr-assets 連結。未滿 60 日的判定寫「樣本不足（累積 X／60 日）」，數字照列、標明不是判定。判到「輸給基準」之後的動作依類別（[前瞻監測與下架](#前瞻監測與下架)的「判定之後」）：前瞻觀察只記錄，不在 #1 提案；通過驗證的對象，統籌在 #1 的進產品提案補一則（事實，不是下架提案）；已進產品的策略，統籌另在 #1 提案下架。
+   - **前瞻監測對象**：第一行寫「`<代號>`（前瞻觀察，只當紀錄）」、「`<代號>`（通過驗證，只當紀錄）」或「`<代號>`（已進產品，監測）」，目前是「`X4`（前瞻觀察，只當紀錄）」、「`H2`（通過驗證，只當紀錄）」、「`H2`（已進產品，監測）」（鍵 `H2-product`）與「`F2`（前瞻觀察，只當紀錄）」（代號用 `summary.md` 第一行的，不寫鍵）；接著照 `summary.md` 開頭三行的順序貼：對加權指數的超額日均與 t、對母體的超額日均、t 與累積日數、判定，最後是 pr-assets 連結。F2 還沒有名單的月份（正式 DB 個股日線不足 721 根，見[前瞻監測與下架](#前瞻監測與下架)的對象清單），第一行之後加一句「本月沒有名單（`vol_720` 缺值 100%，個股日線不足 721 根）」，數字照列；第一次出現名單的那個月，寫明第一個有名單的訊號日（`picks.csv` 的第一列）。未滿 60 日的判定寫「樣本不足（累積 X／60 日）」，數字照列、標明不是判定。判到「輸給基準」之後的動作依類別（[前瞻監測與下架](#前瞻監測與下架)的「判定之後」）：前瞻觀察只記錄，不在 #1 提案；通過驗證的對象，統籌在 #1 的進產品提案補一則（事實，不是下架提案）；已進產品的策略，統籌另在 #1 提案下架。
 6. 刪副本並讀回。
 
 ## 新策略探索
@@ -455,14 +456,15 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 | X4 | 前瞻觀察 | `explore_research` 第 2 版的 `HYPOTHESES["X4"]`（[第一輪](#第一輪x1x8)，N＝20、K＝60） | `600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63` | 2026-11-20 | 2026-11-20 起第一個交易日 | #867 驗證段 [7033243199](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7033243199) |
 | H2 | 通過驗證 | `explore_research` 第 2 版的 `HYPOTHESES["X2"]`（[第一輪](#第一輪x1x8)，N＝20、K＝60；`WATCHES` 的鍵 `H2`） | `600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63` | 2026-11-20 | 2026-11-20 起第一個交易日 | #864 探索段 [7041131687](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7041131687)、驗證段 [7043710015](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043710015)；[#875](https://github.com/YiCheng0608/stock-lab/issues/875) |
 | H2 | 已進產品 | `explore_research` 第 2 版的 `HYPOTHESES["X2"]`（[第一輪](#第一輪x1x8)，N＝20、K＝60；`WATCHES` 的鍵 `H2-product`） | `600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63` | 2026-11-21 | 2026-11-21 起第一個交易日 | 使用者決定進產品 [#1 7044998169](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7044998169)，v1.2.74 部署 [#1 7050216934](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7050216934)；[#902](https://github.com/YiCheng0608/stock-lab/issues/902) |
+| F2 | 前瞻觀察 | `round10_research` 第 1 版的 `HYPOTHESES["F2"]`（[第十輪](#第十輪f1f4)，N＝20、K＝60；組合引擎；正式 DB 的個股日線從 2024-09-30 起，`vol_720` 要 721 根，約 2027-08 以前每天沒有名單、全部留現金，那段的數字是「現金對母體」，只是紀錄，[#949 決定 7073263170](https://github.com/YiCheng0608/stock-lab/issues/949#issuecomment-7073263170)） | `453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9` | 2026-11-22 | 2026-11-22 起第一個交易日 | #944 驗證段 [7072993427](https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7072993427)，決定 [7073015041](https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7073015041)；[#949](https://github.com/YiCheng0608/stock-lab/issues/949) |
 
 **前瞻入口**：`tools/research/forward_watch.py`（[#868](https://github.com/YiCheng0608/stock-lab/issues/868)）
-- **凍結**：每個對象在 `WATCHES` 登記來源工具、代號、來源工具的版本與 `definitions_sha256`、前瞻起日、類別與 M＝60；命令列沒有改參數、起日或 M 的旗標。定義從來源工具 import，不另寫一份；來源工具的版本或 `definitions_sha256` 和登記的不同就拒絕（exit 2），所以來源工具改了定義，入口就停下來，要另登記新的對象。金樣測試（`backend/tests/test_forward_watch.py`）鎖住五個輸出檔。
+- **凍結**：每個對象在 `WATCHES` 登記來源工具、代號、來源工具的版本與 `definitions_sha256`、前瞻起日、類別與 M＝60；命令列沒有改參數、起日或 M 的旗標。定義從來源工具 import，不另寫一份；來源工具的版本或 `definitions_sha256` 和登記的不同就拒絕（exit 2），所以來源工具改了定義，入口就停下來，要另登記新的對象。金樣測試（`backend/tests/test_forward_watch.py`；F2 的在 `backend/tests/test_forward_watch_f2.py`）鎖住五個輸出檔。
 - **命令**：`python tools/research/forward_watch.py --db <副本> --watch <WATCHES 的鍵> --out <目錄> [--cutoff <日>] [--min-free-gb 2]`；只讀，拒絕的情況同[組合層級回測](#組合層級回測)（正式 DB、台北 21:30～23:30、可用記憶體不足）。
-- **窗口**：訊號日從前瞻起日（含）以後的第一個交易日起，到 cutoff（預設副本最新的交易日）的前一個交易日；T+1 起有淨值。起日以前讀 730 個日曆日的資料當暖機（同 `explore_research` 驗證段），只供特徵使用，不進淨值與判定。引擎是因果的：在資料尾端多加日子，以前的日子的淨值與名單不變，同一個 cutoff 得到同一份輸出。
+- **窗口**：訊號日從前瞻起日（含）以後的第一個交易日起，到 cutoff（預設副本最新的交易日）的前一個交易日；T+1 起有淨值。起日以前的資料只當暖機，讀多遠照來源工具讀後段的規則：`explore_research` 的對象讀 730 個日曆日（同它的驗證段），`round10_research` 的對象從副本的第一天讀起（`LOAD_FROM`，F2 的 `vol_720` 要 721 根）；只供特徵使用，不進淨值與判定。引擎是因果的：在資料尾端多加日子，以前的日子的淨值與名單不變，同一個 cutoff 得到同一份輸出。
 - **判定**：`portfolio_research.forward_judge`，對母體、用起日到 cutoff 的全部交易日，M＝60；未滿 60 日是「樣本不足（累積 X／60 日）」，數字照列、不是判定。判定的後續動作依類別（本節上面的「判定之後」）：前瞻觀察只記錄；通過驗證判到「輸給基準」在 #1 的進產品提案補一則；已進產品判到「輸給基準」就提案下架。
-- **輸出**：`summary.md`（開頭依序是對加權指數的超額、對母體的超額日均、t 與累積日數、判定）、`tables.json`、`equity.csv`（對象與母體的每日淨值）、`picks.csv`（每日名單與特徵值）、`trades.csv`（對象每筆）。
-- **下一個對象**：在 `WATCHES` 加一列、在本表加一列、補金樣；來源工具的調倉方式還沒有引擎時（目前只接 `explore_research` 的每日調倉），在 `ENGINES` 加一個。命令、判定與月報寫法不變。
+- **輸出**：`summary.md`（開頭依序是對加權指數的超額、對母體的超額日均、t 與累積日數、判定）、`tables.json`、`equity.csv`（對象與母體的每日淨值）、`picks.csv`（每日名單與特徵值）、`trades.csv`（對象每筆）。F2 另列和 H2（X2）每日名單的重疊比例（`tables.json` 的 `overlap`、`summary.md` 的「和 H2 的重疊」），只列出。
+- **下一個對象**：在 `WATCHES` 加一列、在本表加一列、補金樣；來源工具的調倉方式還沒有引擎時（目前接 `explore_research` 的每日調倉與 `round10_research` 的組合引擎），在 `ENGINES` 加一個，`SOURCES`、`PICK_FIELDS`、`COVERAGE_LINES` 同時加來源工具的一項。命令、判定與月報寫法不變。
 
 #### 第 2 步的工具
 
