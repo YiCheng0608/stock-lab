@@ -188,6 +188,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         ),
         (tool, "DEADLINES", ((3, 31, 12, -1), (5, 15, 3, 0), (8, 14, 6, 0))),
         (tool, "EPS_MIN", 0.01),
+        (tool, "EVENT_DAY_RULE", "the first session on or after the deadline"),
         (tool, "LATEST_RULE", "the latest quarter within 200 days"),
         (tool, "SALE", "at T'+1's open"),
         (features, "VERSION", features.VERSION + 1),
@@ -653,6 +654,29 @@ def test_the_event_days_are_the_4_deadlines_or_the_next_session():
         (date(2016, 11, 14), date(2016, 9, 30)),
         (date(2017, 3, 31), date(2016, 12, 31)),
     ]
+
+
+def test_a_deadline_on_a_saturday_make_up_session_moves_to_the_next_weekday():
+    """#978 決定 7086393113: 2018-03-31 was a Saturday make-up session; the
+    copy's 2017 annual reports are dated 2018-04-02."""
+
+    holidays = {date(2018, 5, 15), date(2018, 11, 14)}  # made holidays here
+    sessions = sorted(
+        [d for d in weekdays(date(2018, 3, 26), 180) if d not in holidays]
+        + [date(2018, 3, 31)]  # the Saturday make-up session
+    )
+    found = [(sessions[at], quarter) for at, quarter in tool.quarter_events(sessions)]
+    assert found == [
+        (date(2018, 4, 2), date(2017, 12, 31)),  # not the Saturday 03-31
+        (date(2018, 5, 16), date(2018, 3, 31)),  # 05-15 no session: the next one
+        (date(2018, 8, 14), date(2018, 6, 30)),  # a weekday session: itself
+        (date(2018, 11, 15), date(2018, 9, 30)),
+    ]
+    # a Saturday make-up session that is no deadline changes nothing
+    plain = sorted([*weekdays(date(2018, 8, 13), 5), date(2018, 8, 18)])
+    events = {plain[at]: q for at, q in tool.quarter_events(plain)}
+    assert events[date(2018, 8, 14)] == date(2018, 6, 30)
+    assert date(2018, 8, 18) not in events
 
 
 def quarters_item(rows, day=date(2017, 5, 15)):

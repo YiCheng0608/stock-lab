@@ -136,6 +136,12 @@ FILL_RULE = "a signal date T on which the hypothesis bought at least one name"
 # that quarter's year less the deadline's
 DEADLINES = ((3, 31, 12, -1), (5, 15, 3, 0), (8, 14, 6, 0), (11, 14, 9, 0))
 EPS_MIN = 0.0  # the latest > 0 and the year before's < 0, strictly
+# #978 決定 7086393113: a deadline on a Saturday make-up session is put off to
+# the next Monday～Friday session, as the copy's announcement_date is.
+EVENT_DAY_RULE = (
+    "the first Monday-to-Friday session on or after the deadline; a Saturday "
+    "make-up session is skipped"
+)
 LATEST_RULE = (
     "the latest quarter known on T (announcement_date <= T, the largest period "
     "end) must be the deadline's quarter; feature_evidence._quarter_eps gives "
@@ -277,6 +283,7 @@ def definitions() -> dict[str, Any]:
             },
             "eps_turn": {
                 "deadlines": DEADLINES,
+                "event_day": EVENT_DAY_RULE,
                 "eps_min": EPS_MIN,
                 "latest": LATEST_RULE,
                 "quarter_eps": "feature_evidence._quarter_eps",
@@ -467,8 +474,9 @@ class Turn:
 
 
 def quarter_events(sessions: list[date]) -> list[tuple[int, date]]:
-    """K2 第 1 點: (index of the first session from each deadline, the end of
-    the deadline's quarter), in date order."""
+    """K2 第 1 點: (index of the first Monday～Friday session from each
+    deadline, the end of the deadline's quarter), in date order; a Saturday
+    make-up session is skipped (#978 決定 7086393113)."""
 
     if not sessions:
         return []
@@ -476,6 +484,8 @@ def quarter_events(sessions: list[date]) -> list[tuple[int, date]]:
     for year in range(sessions[0].year, sessions[-1].year + 1):
         for month, day, end_month, offset in DEADLINES:
             at = bisect_left(sessions, date(year, month, day))
+            while at < len(sessions) and sessions[at].weekday() >= 5:
+                at += 1
             if at >= len(sessions) or (out and out[-1][0] >= at):
                 continue
             end_day = 31 if end_month in (3, 12) else 30
