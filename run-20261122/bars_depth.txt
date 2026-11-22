@@ -1,0 +1,5 @@
+etf count 376 median 519 max 519 >=721 0
+futures count 1 median 780 max 780 >=721 1
+index count 6 median 809 max 809 >=721 6
+ipo count 18 median 25 max 456 >=721 0
+stock count 2001 median 519 max 519 >=721 0

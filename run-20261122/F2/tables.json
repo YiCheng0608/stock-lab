@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "design": "868",
+  "watch": "F2",
+  "kind": "前瞻觀察",
+  "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；之後的數字再好也不改成「通過」、不進產品",
+  "entry": {
+    "kind": "前瞻觀察",
+    "source": "round10_research",
+    "source_version": 1,
+    "code": "F2",
+    "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+    "since": "2026-11-22",
+    "min_days": 60,
+    "registered": "https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7072993427"
+  },
+  "definition": {
+    "engine": "portfolio",
+    "direction": "多因子合成",
+    "label": "保守公式：`vol_720` 較小的一半裡，`cash_yield_12m` 與 `mom_240_20` 的平均名次小者先",
+    "rule": "daily",
+    "half": [
+      "vol_720",
+      "low"
+    ],
+    "ranks": [
+      [
+        "cash_yield_12m",
+        "high"
+      ],
+      [
+        "mom_240_20",
+        "high"
+      ]
+    ],
+    "score": "low",
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      721
+    ]
+  },
+  "command": "python tools/research/forward_watch.py --db /db/stock.db --watch F2 --out /out/F2 --min-free-gb 0",
+  "tool_commit": "f15237937ebd389d3a66fc9293222c2a4b2ed58d",
+  "copy": {
+    "latest": "2026-11-20",
+    "alembic": "0034_h2_lists",
+    "mtime": "2026-11-22T02:53:15.196751+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "since": "2026-11-22",
+  "cutoff": "2026-11-20",
+  "first_signal": null,
+  "first_session": null,
+  "last_session": null,
+  "signal_days": 0,
+  "days": 0,
+  "min_days": 60,
+  "verdict": "樣本不足",
+  "excess": {
+    "taiex": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    },
+    "population": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    }
+  },
+  "absolute": {
+    "days": 0,
+    "mean": null
+  },
+  "curves": {
+    "taiex": {
+      "days": 0
+    },
+    "F2": {
+      "days": 0
+    },
+    "population": {
+      "days": 0
+    }
+  },
+  "win": null,
+  "counts": {},
+  "coverage": {},
+  "overlap": {
+    "days": 0,
+    "mean": null,
+    "years": {}
+  },
+  "elapsed_seconds": 37.182279701009975,
+  "peak_memory_gb": 0.32662200927734375
+}

@@ -1,0 +1,12 @@
+FAILED backend/tests/test_forward_watch_f2.py::test_f2_is_the_frozen_entry - ...
+FAILED backend/tests/test_forward_watch_f2.py::test_the_command_takes_f2_and_no_parameter
+FAILED backend/tests/test_forward_watch_f2.py::test_more_days_at_the_end_change_no_earlier_number
+FAILED backend/tests/test_forward_watch_f2.py::test_short_of_60_days_lists_numbers_and_no_verdict
+FAILED backend/tests/test_forward_watch_f2.py::test_before_any_session_after_the_start
+FAILED backend/tests/test_forward_watch_f2.py::test_a_changed_source_is_refused[VERSION-2-version 2]
+FAILED backend/tests/test_forward_watch_f2.py::test_a_changed_source_is_refused[HYPOTHESES-None-definitions_sha256]
+ERROR backend/tests/test_forward_watch_f2.py::test_f2_output_is_frozen - Syst...
+ERROR backend/tests/test_forward_watch_f2.py::test_f2_reports_its_kind_and_round10s_picks
+ERROR backend/tests/test_forward_watch_f2.py::test_only_signal_dates_from_the_start_count
+ERROR backend/tests/test_forward_watch_f2.py::test_the_entry_is_round10_researchs_own
+7 failed, 2 passed, 4 errors in 6.34s

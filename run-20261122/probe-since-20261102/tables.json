@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "design": "868",
+  "watch": "F2",
+  "kind": "前瞻觀察",
+  "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；之後的數字再好也不改成「通過」、不進產品",
+  "entry": {
+    "kind": "前瞻觀察",
+    "source": "round10_research",
+    "source_version": 1,
+    "code": "F2",
+    "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+    "since": "2026-11-22",
+    "min_days": 60,
+    "registered": "https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7072993427"
+  },
+  "definition": {
+    "engine": "portfolio",
+    "direction": "多因子合成",
+    "label": "保守公式：`vol_720` 較小的一半裡，`cash_yield_12m` 與 `mom_240_20` 的平均名次小者先",
+    "rule": "daily",
+    "half": [
+      "vol_720",
+      "low"
+    ],
+    "ranks": [
+      [
+        "cash_yield_12m",
+        "high"
+      ],
+      [
+        "mom_240_20",
+        "high"
+      ]
+    ],
+    "score": "low",
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      721
+    ]
+  },
+  "command": "run_watch(since=2026-11-02) 查證用，不是凍結入口",
+  "tool_commit": "f15237937ebd389d3a66fc9293222c2a4b2ed58d",
+  "copy": {
+    "latest": "2026-11-20",
+    "alembic": "0034_h2_lists",
+    "mtime": "2026-11-22T02:53:15.196751+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "since": "2026-11-02",
+  "cutoff": "2026-11-20",
+  "first_signal": null,
+  "first_session": "2026-11-03",
+  "last_session": "2026-11-20",
+  "signal_days": 14,
+  "days": 14,
+  "min_days": 60,
+  "verdict": "樣本不足",
+  "excess": {
+    "taiex": {
+      "days": 14,
+      "mean": 0.015029388299164741,
+      "annual": 3.7874058513895146,
+      "t": 1.5783886951506
+    },
+    "population": {
+      "days": 14,
+      "mean": 0.0029730460013507242,
+      "annual": 0.7492075923403825,
+      "t": 1.8349195545586832
+    }
+  },
+  "absolute": {
+    "days": 14,
+    "mean": 0.0
+  },
+  "curves": {
+    "taiex": {
+      "days": 14,
+      "total": -0.19783664966315806,
+      "annual": -0.9810882949984397,
+      "volatility": 0.5655768588247116,
+      "max_drawdown": -0.19783664966315806,
+      "invested": 1.0,
+      "turnover": 0.0
+    },
+    "F2": {
+      "days": 14,
+      "total": 0.0,
+      "annual": 0.0,
+      "volatility": 0.0,
+      "max_drawdown": 0.0,
+      "invested": 0.0,
+      "turnover": 0.0
+    },
+    "population": {
+      "days": 14,
+      "total": -0.04105915109374292,
+      "annual": -0.5298323508328888,
+      "volatility": 0.09623850952015278,
+      "max_drawdown": -0.044643097313749935,
+      "invested": 0.11883082232299898,
+      "turnover": 4.204391987326992
+    }
+  },
+  "win": {
+    "bought": 0,
+    "won": 0,
+    "rate": null,
+    "unsold": 0
+  },
+  "counts": {
+    "F2": {},
+    "population": {
+      "bought": 8226,
+      "limit_up": 23,
+      "not_tradable": 3,
+      "unsold": 8226
+    }
+  },
+  "coverage": {
+    "2026": {
+      "days": 14,
+      "members": 8252,
+      "missing": {
+        "vol_720": 8252,
+        "cash_yield_12m": 0,
+        "mom_240_20": 43
+      },
+      "half": 0
+    }
+  },
+  "overlap": {
+    "days": 0,
+    "mean": null,
+    "years": {}
+  },
+  "elapsed_seconds": 30.98142812300648,
+  "peak_memory_gb": 0.322784423828125
+}
