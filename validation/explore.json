@@ -1,0 +1,76 @@
+{
+  "tool": "round15_research",
+  "version": 1,
+  "design": "984",
+  "registration_commit": "7612838a",
+  "segment": "validation",
+  "round": 15,
+  "round_size": 3,
+  "cumulative": 58,
+  "validation_min_t": 3.332,
+  "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+  "engines": {
+    "portfolio_research": "simulate",
+    "explore_research": "simulate_events"
+  },
+  "tool_commit": "91d9e0709d37c7d4c86e10158b6c02b0e15bb876",
+  "command": "python tools/research/round15_research.py --db /research/stock.db --segment validation --exploration-report /out/exploration/explore.json --exploration-sha256 a6a97da06db34eba3e967451747812f8590db2c66304d57e8f77fd1b801e11fb --exploration-url https://github.com/YiCheng0608/stock-lab/blob/pr-assets/986/exploration/explore.json --out /out/validation",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2024-09-27",
+  "members_sha256": "2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827",
+  "min_t": 3.332,
+  "exploration": {
+    "sha256": "a6a97da06db34eba3e967451747812f8590db2c66304d57e8f77fd1b801e11fb",
+    "url": "https://github.com/YiCheng0608/stock-lab/blob/pr-assets/986/exploration/explore.json"
+  },
+  "hypotheses": {
+    "P2": {
+      "engine": "events",
+      "verdict": "前瞻觀察",
+      "reason": null,
+      "days": 1097,
+      "taiex_excess": {
+        "days": 1097,
+        "mean": 0.0006831863122526949,
+        "annual": 0.1721629506876791,
+        "t": 1.8155635360090492
+      },
+      "excess": {
+        "days": 1097,
+        "mean": 0.0005881678256619259,
+        "annual": 0.1482182920668053,
+        "t": 2.5882108492910025
+      },
+      "absolute_mean": 0.0015246678318468752,
+      "prerequisites": {
+        "days": 1097,
+        "min_days": 250,
+        "delisted": 57,
+        "ok": true
+      },
+      "overlap_k2": {
+        "days": 19,
+        "mean": 0.20789473684210527
+      },
+      "overlap_x4": {
+        "days": 19,
+        "mean": 0.10263157894736842
+      },
+      "reference_excess": {
+        "days": 1097,
+        "mean": 0.0005622816833569962,
+        "annual": 0.14169498420596305,
+        "t": 2.4972268342369177
+      },
+      "names": 20.0,
+      "invested": 0.98359161349134,
+      "unsold_share": 0.05263157894736842
+    }
+  },
+  "elapsed_seconds": 630.0030050990172,
+  "peak_memory_gb": 2.115375518798828
+}

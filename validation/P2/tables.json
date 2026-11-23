@@ -1,0 +1,858 @@
+{
+  "tool": "round15_research",
+  "version": 1,
+  "design": "984",
+  "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+  "label": "每季法定期限的事件日，`margins_up`（最新一季單季毛利率、營益率、淨利率都高於上一季，也都高於去年同季）成立，以雜湊取 20 檔、不排序；持有到下一個事件日",
+  "direction": "基本面：三率三升",
+  "parameters": {
+    "engine": "events",
+    "rule": "quarterly",
+    "conditions": [
+      [
+        "margins_up",
+        "is",
+        true
+      ]
+    ],
+    "order": "the hash only",
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": "next_event",
+    "start": [
+      "date",
+      "2014-05-15"
+    ]
+  },
+  "hypothesis": "P2",
+  "engine": "events",
+  "segment": "validation",
+  "verdict": "前瞻觀察",
+  "reason": null,
+  "window": {
+    "first_signal": "2020-03-31",
+    "first_session": "2020-04-01",
+    "last_session": "2024-09-27",
+    "days": 1097,
+    "signal_days": 19,
+    "event_days": 19
+  },
+  "prerequisites": {
+    "days": 1097,
+    "min_days": 250,
+    "delisted": 57,
+    "ok": true
+  },
+  "coverage": {
+    "2020": {
+      "days": 4,
+      "members": 2219,
+      "hits": 457,
+      "delisted": 108,
+      "delisted_missing": 108,
+      "events": [
+        {
+          "signal_date": "2020-03-31",
+          "quarter": "2019-12-31",
+          "members": 535,
+          "hits": 49,
+          "stale": 2,
+          "format": 34,
+          "fields": 27,
+          "revenue": 0,
+          "lower": 423,
+          "names": 20,
+          "delisted": 29,
+          "delisted_missing": 29,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2020-05-15",
+          "quarter": "2020-03-31",
+          "members": 542,
+          "hits": 77,
+          "stale": 18,
+          "format": 13,
+          "fields": 28,
+          "revenue": 0,
+          "lower": 406,
+          "names": 20,
+          "delisted": 30,
+          "delisted_missing": 30,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2020-08-14",
+          "quarter": "2020-06-30",
+          "members": 598,
+          "hits": 200,
+          "stale": 35,
+          "format": 3,
+          "fields": 24,
+          "revenue": 1,
+          "lower": 335,
+          "names": 20,
+          "delisted": 27,
+          "delisted_missing": 27,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2020-11-16",
+          "quarter": "2020-09-30",
+          "members": 544,
+          "hits": 131,
+          "stale": 24,
+          "format": 13,
+          "fields": 17,
+          "revenue": 1,
+          "lower": 358,
+          "names": 20,
+          "delisted": 22,
+          "delisted_missing": 22,
+          "fallback": 0
+        }
+      ]
+    },
+    "2021": {
+      "days": 4,
+      "members": 2784,
+      "hits": 718,
+      "delisted": 74,
+      "delisted_missing": 74,
+      "events": [
+        {
+          "signal_date": "2021-03-31",
+          "quarter": "2020-12-31",
+          "members": 717,
+          "hits": 125,
+          "stale": 4,
+          "format": 33,
+          "fields": 18,
+          "revenue": 1,
+          "lower": 536,
+          "names": 20,
+          "delisted": 20,
+          "delisted_missing": 20,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2021-05-17",
+          "quarter": "2021-03-31",
+          "members": 844,
+          "hits": 243,
+          "stale": 20,
+          "format": 24,
+          "fields": 17,
+          "revenue": 2,
+          "lower": 538,
+          "names": 20,
+          "delisted": 19,
+          "delisted_missing": 19,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2021-08-16",
+          "quarter": "2021-06-30",
+          "members": 643,
+          "hits": 212,
+          "stale": 36,
+          "format": 3,
+          "fields": 18,
+          "revenue": 0,
+          "lower": 374,
+          "names": 20,
+          "delisted": 19,
+          "delisted_missing": 19,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2021-11-15",
+          "quarter": "2021-09-30",
+          "members": 580,
+          "hits": 138,
+          "stale": 17,
+          "format": 18,
+          "fields": 15,
+          "revenue": 1,
+          "lower": 391,
+          "names": 20,
+          "delisted": 16,
+          "delisted_missing": 16,
+          "fallback": 0
+        }
+      ]
+    },
+    "2022": {
+      "days": 4,
+      "members": 1995,
+      "hits": 332,
+      "delisted": 47,
+      "delisted_missing": 47,
+      "events": [
+        {
+          "signal_date": "2022-03-31",
+          "quarter": "2021-12-31",
+          "members": 528,
+          "hits": 66,
+          "stale": 3,
+          "format": 32,
+          "fields": 9,
+          "revenue": 0,
+          "lower": 418,
+          "names": 20,
+          "delisted": 10,
+          "delisted_missing": 10,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2022-05-16",
+          "quarter": "2022-03-31",
+          "members": 521,
+          "hits": 78,
+          "stale": 16,
+          "format": 18,
+          "fields": 12,
+          "revenue": 1,
+          "lower": 396,
+          "names": 20,
+          "delisted": 13,
+          "delisted_missing": 13,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2022-08-15",
+          "quarter": "2022-06-30",
+          "members": 501,
+          "hits": 114,
+          "stale": 30,
+          "format": 2,
+          "fields": 15,
+          "revenue": 0,
+          "lower": 340,
+          "names": 20,
+          "delisted": 13,
+          "delisted_missing": 13,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2022-11-14",
+          "quarter": "2022-09-30",
+          "members": 445,
+          "hits": 74,
+          "stale": 16,
+          "format": 12,
+          "fields": 9,
+          "revenue": 0,
+          "lower": 334,
+          "names": 20,
+          "delisted": 11,
+          "delisted_missing": 11,
+          "fallback": 0
+        }
+      ]
+    },
+    "2023": {
+      "days": 4,
+      "members": 2390,
+      "hits": 291,
+      "delisted": 48,
+      "delisted_missing": 48,
+      "events": [
+        {
+          "signal_date": "2023-03-31",
+          "quarter": "2022-12-31",
+          "members": 623,
+          "hits": 44,
+          "stale": 2,
+          "format": 29,
+          "fields": 16,
+          "revenue": 0,
+          "lower": 532,
+          "names": 20,
+          "delisted": 13,
+          "delisted_missing": 13,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2023-05-15",
+          "quarter": "2023-03-31",
+          "members": 615,
+          "hits": 47,
+          "stale": 15,
+          "format": 14,
+          "fields": 15,
+          "revenue": 1,
+          "lower": 523,
+          "names": 20,
+          "delisted": 14,
+          "delisted_missing": 14,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2023-08-14",
+          "quarter": "2023-06-30",
+          "members": 659,
+          "hits": 102,
+          "stale": 31,
+          "format": 2,
+          "fields": 11,
+          "revenue": 1,
+          "lower": 512,
+          "names": 20,
+          "delisted": 10,
+          "delisted_missing": 10,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2023-11-14",
+          "quarter": "2023-09-30",
+          "members": 493,
+          "hits": 98,
+          "stale": 15,
+          "format": 15,
+          "fields": 10,
+          "revenue": 1,
+          "lower": 354,
+          "names": 20,
+          "delisted": 11,
+          "delisted_missing": 11,
+          "fallback": 0
+        }
+      ]
+    },
+    "2024": {
+      "days": 3,
+      "members": 2104,
+      "hits": 375,
+      "delisted": 21,
+      "delisted_missing": 21,
+      "events": [
+        {
+          "signal_date": "2024-04-01",
+          "quarter": "2023-12-31",
+          "members": 714,
+          "hits": 72,
+          "stale": 4,
+          "format": 35,
+          "fields": 8,
+          "revenue": 1,
+          "lower": 594,
+          "names": 20,
+          "delisted": 8,
+          "delisted_missing": 8,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2024-05-15",
+          "quarter": "2024-03-31",
+          "members": 682,
+          "hits": 117,
+          "stale": 17,
+          "format": 23,
+          "fields": 4,
+          "revenue": 2,
+          "lower": 519,
+          "names": 20,
+          "delisted": 6,
+          "delisted_missing": 6,
+          "fallback": 0
+        },
+        {
+          "signal_date": "2024-08-14",
+          "quarter": "2024-06-30",
+          "members": 708,
+          "hits": 186,
+          "stale": 37,
+          "format": 3,
+          "fields": 6,
+          "revenue": 3,
+          "lower": 473,
+          "names": 20,
+          "delisted": 7,
+          "delisted_missing": 7,
+          "fallback": 0
+        }
+      ]
+    }
+  },
+  "seconds": {
+    "plan": 8.237340613995912,
+    "margins_up": 2.8764102879795246,
+    "reference": 0.012387334951199591,
+    "k2_order": 0.27349688997492194,
+    "x4_order": 2.403961628966499
+  },
+  "overlap": {
+    "P2_K2": {
+      "days": 19,
+      "mean": 0.20789473684210527,
+      "years": {
+        "2020": {
+          "days": 4,
+          "mean": 0.2625
+        },
+        "2021": {
+          "days": 4,
+          "mean": 0.2875
+        },
+        "2022": {
+          "days": 4,
+          "mean": 0.08750000000000001
+        },
+        "2023": {
+          "days": 4,
+          "mean": 0.0875
+        },
+        "2024": {
+          "days": 3,
+          "mean": 0.35000000000000003
+        }
+      }
+    },
+    "P2_X4": {
+      "days": 19,
+      "mean": 0.10263157894736842,
+      "years": {
+        "2020": {
+          "days": 4,
+          "mean": 0.1625
+        },
+        "2021": {
+          "days": 4,
+          "mean": 0.0875
+        },
+        "2022": {
+          "days": 4,
+          "mean": 0.07500000000000001
+        },
+        "2023": {
+          "days": 4,
+          "mean": 0.125
+        },
+        "2024": {
+          "days": 3,
+          "mean": 0.05000000000000001
+        }
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1097,
+      "mean": 0.0005881678256619259,
+      "annual": 0.1482182920668053,
+      "t": 2.5882108492910025
+    },
+    "taiex": {
+      "days": 1097,
+      "mean": 0.0006831863122526949,
+      "annual": 0.1721629506876791,
+      "t": 1.8155635360090492
+    },
+    "reference": {
+      "days": 1097,
+      "mean": 0.0005622816833569962,
+      "annual": 0.14169498420596305,
+      "t": 2.4972268342369177
+    }
+  },
+  "absolute": {
+    "days": 1097,
+    "mean": 0.0015246678318468752
+  },
+  "curves": {
+    "P2": {
+      "days": 1097,
+      "total": 3.557953069474987,
+      "annual": 0.4168729342395434,
+      "volatility": 0.2658676175667782,
+      "max_drawdown": -0.3288133647328395,
+      "invested": 0.98359161349134,
+      "turnover": 4.364630811303555
+    },
+    "population": {
+      "days": 1097,
+      "total": 1.5453632967409043,
+      "annual": 0.23938943126048806,
+      "volatility": 0.20550597988199365,
+      "max_drawdown": -0.29267629472478063,
+      "invested": 0.9822508565134929,
+      "turnover": 4.286332827567377
+    },
+    "taiex": {
+      "days": 1097,
+      "total": 1.3509115106416627,
+      "annual": 0.2169687819105759,
+      "volatility": 0.17642378981870027,
+      "max_drawdown": -0.31631864884340344,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 380,
+    "won": 218,
+    "rate": 0.5736842105263158,
+    "unsold": 20
+  },
+  "counts": {
+    "P2": {
+      "bought": 380,
+      "unsold": 20
+    },
+    "population": {
+      "bought": 11476,
+      "limit_up": 15,
+      "sale_held": 24,
+      "limit_down": 6,
+      "not_tradable": 1,
+      "unsold": 726
+    }
+  },
+  "unsold_share": 0.05263157894736842,
+  "rebalances": [
+    {
+      "signal_date": "2020-03-31",
+      "quarter": "2019-12-31",
+      "members": 535,
+      "hits": 49,
+      "stale": 2,
+      "format": 34,
+      "fields": 27,
+      "revenue": 0,
+      "lower": 423,
+      "names": 20,
+      "delisted": 29,
+      "delisted_missing": 29,
+      "fallback": 0,
+      "k2_overlap": 0.2,
+      "x4_overlap": 0.1,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2020-05-15",
+      "quarter": "2020-03-31",
+      "members": 542,
+      "hits": 77,
+      "stale": 18,
+      "format": 13,
+      "fields": 28,
+      "revenue": 0,
+      "lower": 406,
+      "names": 20,
+      "delisted": 30,
+      "delisted_missing": 30,
+      "fallback": 0,
+      "k2_overlap": 0.15,
+      "x4_overlap": 0.25,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2020-08-14",
+      "quarter": "2020-06-30",
+      "members": 598,
+      "hits": 200,
+      "stale": 35,
+      "format": 3,
+      "fields": 24,
+      "revenue": 1,
+      "lower": 335,
+      "names": 20,
+      "delisted": 27,
+      "delisted_missing": 27,
+      "fallback": 0,
+      "k2_overlap": 0.2,
+      "x4_overlap": 0.2,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2020-11-16",
+      "quarter": "2020-09-30",
+      "members": 544,
+      "hits": 131,
+      "stale": 24,
+      "format": 13,
+      "fields": 17,
+      "revenue": 1,
+      "lower": 358,
+      "names": 20,
+      "delisted": 22,
+      "delisted_missing": 22,
+      "fallback": 0,
+      "k2_overlap": 0.5,
+      "x4_overlap": 0.1,
+      "invested": 0.9999999999999999
+    },
+    {
+      "signal_date": "2021-03-31",
+      "quarter": "2020-12-31",
+      "members": 717,
+      "hits": 125,
+      "stale": 4,
+      "format": 33,
+      "fields": 18,
+      "revenue": 1,
+      "lower": 536,
+      "names": 20,
+      "delisted": 20,
+      "delisted_missing": 20,
+      "fallback": 0,
+      "k2_overlap": 0.2,
+      "x4_overlap": 0.15,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2021-05-17",
+      "quarter": "2021-03-31",
+      "members": 844,
+      "hits": 243,
+      "stale": 20,
+      "format": 24,
+      "fields": 17,
+      "revenue": 2,
+      "lower": 538,
+      "names": 20,
+      "delisted": 19,
+      "delisted_missing": 19,
+      "fallback": 0,
+      "k2_overlap": 0.45,
+      "x4_overlap": 0.05,
+      "invested": 0.9999999999999996
+    },
+    {
+      "signal_date": "2021-08-16",
+      "quarter": "2021-06-30",
+      "members": 643,
+      "hits": 212,
+      "stale": 36,
+      "format": 3,
+      "fields": 18,
+      "revenue": 0,
+      "lower": 374,
+      "names": 20,
+      "delisted": 19,
+      "delisted_missing": 19,
+      "fallback": 0,
+      "k2_overlap": 0.15,
+      "x4_overlap": 0.05,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2021-11-15",
+      "quarter": "2021-09-30",
+      "members": 580,
+      "hits": 138,
+      "stale": 17,
+      "format": 18,
+      "fields": 15,
+      "revenue": 1,
+      "lower": 391,
+      "names": 20,
+      "delisted": 16,
+      "delisted_missing": 16,
+      "fallback": 0,
+      "k2_overlap": 0.35,
+      "x4_overlap": 0.1,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2022-03-31",
+      "quarter": "2021-12-31",
+      "members": 528,
+      "hits": 66,
+      "stale": 3,
+      "format": 32,
+      "fields": 9,
+      "revenue": 0,
+      "lower": 418,
+      "names": 20,
+      "delisted": 10,
+      "delisted_missing": 10,
+      "fallback": 0,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.1,
+      "invested": 0.9999999999999999
+    },
+    {
+      "signal_date": "2022-05-16",
+      "quarter": "2022-03-31",
+      "members": 521,
+      "hits": 78,
+      "stale": 16,
+      "format": 18,
+      "fields": 12,
+      "revenue": 1,
+      "lower": 396,
+      "names": 20,
+      "delisted": 13,
+      "delisted_missing": 13,
+      "fallback": 0,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.0,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2022-08-15",
+      "quarter": "2022-06-30",
+      "members": 501,
+      "hits": 114,
+      "stale": 30,
+      "format": 2,
+      "fields": 15,
+      "revenue": 0,
+      "lower": 340,
+      "names": 20,
+      "delisted": 13,
+      "delisted_missing": 13,
+      "fallback": 0,
+      "k2_overlap": 0.2,
+      "x4_overlap": 0.0,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2022-11-14",
+      "quarter": "2022-09-30",
+      "members": 445,
+      "hits": 74,
+      "stale": 16,
+      "format": 12,
+      "fields": 9,
+      "revenue": 0,
+      "lower": 334,
+      "names": 20,
+      "delisted": 11,
+      "delisted_missing": 11,
+      "fallback": 0,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.2,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2023-03-31",
+      "quarter": "2022-12-31",
+      "members": 623,
+      "hits": 44,
+      "stale": 2,
+      "format": 29,
+      "fields": 16,
+      "revenue": 0,
+      "lower": 532,
+      "names": 20,
+      "delisted": 13,
+      "delisted_missing": 13,
+      "fallback": 0,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.3,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2023-05-15",
+      "quarter": "2023-03-31",
+      "members": 615,
+      "hits": 47,
+      "stale": 15,
+      "format": 14,
+      "fields": 15,
+      "revenue": 1,
+      "lower": 523,
+      "names": 20,
+      "delisted": 14,
+      "delisted_missing": 14,
+      "fallback": 0,
+      "k2_overlap": 0.1,
+      "x4_overlap": 0.05,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2023-08-14",
+      "quarter": "2023-06-30",
+      "members": 659,
+      "hits": 102,
+      "stale": 31,
+      "format": 2,
+      "fields": 11,
+      "revenue": 1,
+      "lower": 512,
+      "names": 20,
+      "delisted": 10,
+      "delisted_missing": 10,
+      "fallback": 0,
+      "k2_overlap": 0.15,
+      "x4_overlap": 0.05,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2023-11-14",
+      "quarter": "2023-09-30",
+      "members": 493,
+      "hits": 98,
+      "stale": 15,
+      "format": 15,
+      "fields": 10,
+      "revenue": 1,
+      "lower": 354,
+      "names": 20,
+      "delisted": 11,
+      "delisted_missing": 11,
+      "fallback": 0,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.1,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2024-04-01",
+      "quarter": "2023-12-31",
+      "members": 714,
+      "hits": 72,
+      "stale": 4,
+      "format": 35,
+      "fields": 8,
+      "revenue": 1,
+      "lower": 594,
+      "names": 20,
+      "delisted": 8,
+      "delisted_missing": 8,
+      "fallback": 0,
+      "k2_overlap": 0.4,
+      "x4_overlap": 0.05,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2024-05-15",
+      "quarter": "2024-03-31",
+      "members": 682,
+      "hits": 117,
+      "stale": 17,
+      "format": 23,
+      "fields": 4,
+      "revenue": 2,
+      "lower": 519,
+      "names": 20,
+      "delisted": 6,
+      "delisted_missing": 6,
+      "fallback": 0,
+      "k2_overlap": 0.4,
+      "x4_overlap": 0.05,
+      "invested": 0.9999999999999996
+    },
+    {
+      "signal_date": "2024-08-14",
+      "quarter": "2024-06-30",
+      "members": 708,
+      "hits": 186,
+      "stale": 37,
+      "format": 3,
+      "fields": 6,
+      "revenue": 3,
+      "lower": 473,
+      "names": 20,
+      "delisted": 7,
+      "delisted_missing": 7,
+      "fallback": 0,
+      "k2_overlap": 0.25,
+      "x4_overlap": 0.05,
+      "invested": 1.0000000000000002
+    }
+  ],
+  "min_t": 3.332
+}
