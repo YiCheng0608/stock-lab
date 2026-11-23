@@ -19,6 +19,8 @@ import type {
   ThemeBoardResponse,
   ThemeDetail,
   ThemeEvidence,
+  ThemeHeatItem,
+  ThemeHeatResponse,
   ThemeInlineMember,
   ThemeMemberRow,
   ThemeMemberSort,
@@ -30,7 +32,10 @@ import {
   DEFAULT_MEMBER_SORT,
   MEMBER_SORTS,
   RETURN_WINDOWS,
+  HEAT_COMPONENTS,
+  HEAT_NOT_A_SIGNAL,
   THEME_BOARDS,
+  THEME_TABS,
   boardDates,
   boardLabel,
   boardPagePath,
@@ -39,8 +44,12 @@ import {
   componentExtremes,
   evidenceUrl,
   filterBoardItems,
+  heatComponentExtremes,
+  heatNewsItems,
+  heatNewsNote,
   formatComponent,
   formatDate,
+  formatHeat,
   formatMembers,
   formatRank,
   formatScore,
@@ -54,7 +63,9 @@ import {
   relevanceLabel,
   themeDetailPath,
   trendHasEnoughPoints,
+  type ThemeTab,
 } from './themeBoards'
+import './themeHeat.css'
 
 // Vite resolves the ESM default export; under plain Node (scripts/ci-test.cjs) the CJS build arrives as its module object.
 const ReactECharts = (ReactEChartsModule as unknown as { default?: typeof ReactEChartsModule }).default ?? ReactEChartsModule
@@ -207,6 +218,84 @@ export function ThemeBoardPanel({ board, data, search, candidates }: { board: Th
   )
 }
 
+// ---- /themes 熱度 tab: theme_heat_v1 (docs/spec/theme_heat.md, #1017), the board-row layout with six components ----
+
+function HeatExtremes({ item }: { item: ThemeHeatItem }) {
+  const extremes = heatComponentExtremes(item.components)
+  if (extremes.length === 0) return <span className="board-row-extremes">六分項無資料</span>
+  return (
+    <span className="board-row-extremes">
+      {extremes.map((entry, index) => <span key={entry.key}>{index > 0 && '・'}{entry.label} <b>{formatComponent(entry.value)}</b></span>)}
+    </span>
+  )
+}
+
+function HeatRow({ item, open, onOpen }: { item: ThemeHeatItem; open: boolean; onOpen: (open: boolean) => void }) {
+  const detailId = `heat-detail-${item.theme_id}`
+  return (
+    <li className={cx('board-row', open && 'board-row-open')} data-theme-id={item.theme_id}>
+      <div className="board-row-main">
+        <span className="board-rank" aria-label={item.rank === null ? '未排名' : `第 ${item.rank} 名`}>{formatRank(item.rank)}</span>
+        <p className="board-row-title">
+          <Link className="board-row-name" to={themeDetailPath(item.theme_id)}>{item.display_name}</Link>
+          {item.rank === null && <Badge className="badge-compact">成員不足</Badge>}
+          <HeatExtremes item={item} />
+        </p>
+        <p className="board-row-meta">
+          <span>5 日 <GroupReturn label="5 日超額" value={item.raw.excess_5d} /></span>
+          <span>20 日 <GroupReturn label="20 日超額" value={item.raw.excess_20d} /></span>
+        </p>
+        <span className="board-row-score"><span>熱度</span> <b>{formatHeat(item.heat)}</b></span>
+        <button type="button" className="btn btn-ghost board-row-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>六分項 {open ? '▾' : '▸'}</button>
+      </div>
+      <details className="board-row-detail" id={detailId} open={open} onToggle={(event) => onOpen(event.currentTarget.open)}>
+        <summary>{item.display_name} 六分項</summary>
+        <div className="board-row-detail-body">
+          <dl className="board-components">
+            {HEAT_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd><ComponentBar label={component.label} value={item.components[component.key]} /></dd></div>)}
+            <div><dt>新聞（則）</dt><dd>{heatNewsItems(item)}</dd></div>
+            <div><dt>成員（檔）</dt><dd>{formatMembers(item.eligible_members, item.member_count)}</dd></div>
+          </dl>
+          <Link className="text-link" to={themeDetailPath(item.theme_id)}>族群詳情 →</Link>
+        </div>
+      </details>
+    </li>
+  )
+}
+
+export function ThemeHeatPanel({ data, search }: { data: ThemeHeatResponse; search: string }) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  const needle = search.trim().toLowerCase()
+  const items = needle ? data.items.filter((item) => item.display_name.toLowerCase().includes(needle)) : data.items
+  const newsNote = heatNewsNote(data.meta.news_status)
+  const setTheme = (id: string, value: boolean) => setOpen((current) => {
+    if (current.has(id) === value) return current
+    const next = new Set(current)
+    if (value) next.add(id)
+    else next.delete(id)
+    return next
+  })
+  return (
+    <>
+      <div className="board-toolbar">
+        <span className="small-note board-count">{boardCountText(data.items.length, needle ? items.length : null)}</span>
+        <Badge tone="warning" className="heat-not-signal">{HEAT_NOT_A_SIGNAL}</Badge>
+        {newsNote && <Badge className="heat-news-note">{newsNote}</Badge>}
+        <span className="board-dates"><DateBadge date={data.meta.trading_date} /></span>
+      </div>
+      {data.items.length === 0
+        ? <Card><EmptyState reason="題材熱度尚未計算" /></Card>
+        : items.length === 0
+          ? <Card><EmptyState title="沒有符合的題材" reason="換個名稱關鍵字再試" /></Card>
+          : (
+            <ol className="board-list heat-list">
+              {items.map((item) => <HeatRow key={item.theme_id} item={item} open={open.has(item.theme_id)} onOpen={(value) => setTheme(item.theme_id, value)} />)}
+            </ol>
+          )}
+    </>
+  )
+}
+
 export function ThemesBoardView({
   board,
   onBoardChange,
@@ -216,9 +305,10 @@ export function ThemesBoardView({
   loading,
   error,
   candidates,
+  heat,
 }: {
-  board: ThemeBoard
-  onBoardChange: (board: ThemeBoard) => void
+  board: ThemeTab
+  onBoardChange: (board: ThemeTab) => void
   search: string
   onSearchChange: (value: string) => void
   data: ThemeBoardResponse | undefined
@@ -226,7 +316,12 @@ export function ThemesBoardView({
   error: unknown
   // The latest 今日名單 list, counted per group on the rows (Issue 522); missing or of another day, the rows say nothing.
   candidates?: CandidatesResponse
+  // The 熱度 tab's data (#1017); the board props are unused there.
+  heat?: { data: ThemeHeatResponse | undefined; loading: boolean; error: unknown }
 }) {
+  const current = board === 'heat'
+    ? { loading: heat?.loading ?? false, error: heat?.error ?? null, label: '題材熱度載入中…' }
+    : { loading, error, label: '族群榜載入中…' }
   // The page explanation moved into the board's 說明 fold (Issue 522), so the title is only the eyebrow and the heading.
   return (
     <div className="page themes-page">
@@ -235,7 +330,7 @@ export function ThemesBoardView({
         <h1>族群</h1>
       </section>
       <div className="board-controls">
-        <Tabs items={THEME_BOARDS} value={board} onChange={onBoardChange} label="族群榜別" idPrefix="board" />
+        <Tabs items={THEME_TABS} value={board} onChange={onBoardChange} label="族群榜別" idPrefix="board" />
         <input
           className="search-input board-search"
           type="search"
@@ -246,11 +341,13 @@ export function ThemesBoardView({
         />
       </div>
       <div id={tabPanelId('board', board)} role="tabpanel" aria-labelledby={tabId('board', board)} className="board-panel">
-        {loading
-          ? <Skeleton lines={6} label="族群榜載入中…" />
-          : error
-            ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
-            : data && <ThemeBoardPanel board={board} data={data} search={search} candidates={candidates} />}
+        {current.loading
+          ? <Skeleton lines={6} label={current.label} />
+          : current.error
+            ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(current.error)} /></Card>
+            : board === 'heat'
+              ? heat?.data && <ThemeHeatPanel data={heat.data} search={search} />
+              : data && <ThemeBoardPanel board={board} data={data} search={search} candidates={candidates} />}
       </div>
     </div>
   )

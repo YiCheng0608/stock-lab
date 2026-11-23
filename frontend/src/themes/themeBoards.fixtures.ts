@@ -6,6 +6,8 @@ import type {
   ThemeBoardResponse,
   ThemeDetail,
   ThemeEvidence,
+  ThemeHeatItem,
+  ThemeHeatResponse,
   ThemeMembersResponse,
   ThemeTrendPoint,
 } from '../types'
@@ -221,4 +223,46 @@ export function newsItems(count: number): NewsItem[] {
       product_time: productTime(dateOnly ? { event_date: knownDate('event_date', '2026-09-08') } : { published_at: knownInstant('published_at', publishedAt) }),
     })
   })
+}
+
+// GET /api/theme-heat (backend/app/theme_heat.py theme_heat): a ranked complete theme, a ranked one without
+// institutional data, and one without enough members.
+export function heatItem(overrides: Partial<ThemeHeatItem> = {}): ThemeHeatItem {
+  return {
+    theme_id: 'theme-memory',
+    display_name: '記憶體',
+    rank: 1,
+    heat: 0.94,
+    quality: 'complete',
+    member_count: 6,
+    eligible_members: 6,
+    available_weight: 1,
+    components: { excess_5d: 1, excess_20d: 0.9, turnover_ratio: 0.75, institutional_ratio: 0.5, breadth: 0.8, news: 0.25 },
+    raw: { excess_5d: 0.0321, excess_20d: -0.0123, turnover_ratio: 1.6, institutional_ratio: 0.02, breadth: 0.67, news: 2 },
+    news_items: { recent: 6, prior: 19 },
+    ...overrides,
+  }
+}
+
+export function heatResponse(overrides: Partial<ThemeHeatResponse['meta']> = {}, items?: ThemeHeatItem[]): ThemeHeatResponse {
+  return {
+    meta: {
+      version: 'theme_heat_v1',
+      requested_date: null,
+      trading_date: '2026-09-08',
+      computed_at: '2026-09-08T13:40:00+00:00',
+      news_status: 'available',
+      weights: { excess_5d: 0.2, excess_20d: 0.2, turnover_ratio: 0.2, institutional_ratio: 0.12, breadth: 0.08, news: 0.2 },
+      theme_count: 3,
+      ranked_count: 2,
+      not_a_signal: '不是買賣訊號',
+      empty_reason: null,
+      ...overrides,
+    },
+    items: items ?? [
+      heatItem(),
+      heatItem({ theme_id: 'theme-abf-substrate', display_name: 'ABF 載板', rank: 2, heat: 0.31, quality: 'partial', components: { excess_5d: 0, excess_20d: 0.1, turnover_ratio: 0.25, institutional_ratio: null, breadth: 0.2, news: 0 }, news_items: { recent: 2, prior: 0 } }),
+      heatItem({ theme_id: 'theme-leadframe', display_name: '導線架', rank: null, heat: null, quality: 'insufficient_data', member_count: 2, eligible_members: 0, components: { excess_5d: null, excess_20d: null, turnover_ratio: null, institutional_ratio: null, breadth: null, news: null }, raw: { excess_5d: null, excess_20d: null, turnover_ratio: null, institutional_ratio: null, breadth: null, news: null }, news_items: { recent: null, prior: null } }),
+    ],
+  }
 }

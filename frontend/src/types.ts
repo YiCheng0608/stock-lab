@@ -1138,6 +1138,40 @@ export type ThemeBoardMeta = {
 
 export type ThemeBoardResponse = { items: ThemeBoardItem[]; meta: ThemeBoardMeta }
 
+// GET /api/theme-heat (docs/spec/theme_heat.md, #1017): theme_heat_v1 of one day; not a buy or sell signal.
+export type ThemeHeatComponent = 'excess_5d' | 'excess_20d' | 'turnover_ratio' | 'institutional_ratio' | 'breadth' | 'news'
+export type ThemeHeatNewsStatus = 'available' | 'no_news_run' | 'history_short'
+
+export type ThemeHeatItem = {
+  theme_id: string
+  display_name: string
+  rank: number | null
+  heat: number | null
+  quality: 'complete' | 'partial' | 'insufficient_data' | string
+  member_count: number
+  eligible_members: number
+  available_weight: number | null
+  // Same-board percentiles 0–1; null is no data, never 0.
+  components: Record<ThemeHeatComponent, number | null>
+  raw: Record<ThemeHeatComponent, number | null>
+  news_items: { recent: number | null; prior: number | null }
+}
+
+export type ThemeHeatMeta = {
+  version: string
+  requested_date: string | null
+  trading_date: string | null
+  computed_at: string | null
+  news_status: ThemeHeatNewsStatus | string | null
+  weights: Record<ThemeHeatComponent, number>
+  theme_count: number
+  ranked_count: number
+  not_a_signal: string
+  empty_reason: 'not_computed' | 'no_theme' | string | null
+}
+
+export type ThemeHeatResponse = { items: ThemeHeatItem[]; meta: ThemeHeatMeta }
+
 // Membership source of a theme-table member (docs/INDUSTRY_CLASSIFICATION.md §7); null for other groups.
 export type ThemeEvidence = {
   kind?: string | null

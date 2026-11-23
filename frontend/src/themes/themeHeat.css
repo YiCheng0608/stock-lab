@@ -1,0 +1,4 @@
+/* 熱度 tab (theme_heat_v1, #1017): the rows reuse the board-row styles; only the toolbar badges are its own.
+   Colors and sizes come from styles/tokens.css (docs/DESIGN_SYSTEM.md). */
+.heat-not-signal,
+.heat-news-note { white-space: nowrap; }

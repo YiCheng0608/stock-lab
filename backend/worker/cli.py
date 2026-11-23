@@ -20,6 +20,7 @@ from .action_tiers import run_action_tiers
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import notes_after_candidates, run_candidate_notes_batch
 from .candidates import run_candidates
+from .theme_heat import run_theme_heat, run_theme_heat_range
 from .chip_provenance import run_fill_provenance
 from .chip_revisions import run_fill_short_balance, run_revise_institutional
 from .corporate_action_sync import (
@@ -323,6 +324,22 @@ def main() -> None:
     )
     levels_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"
+    )
+    heat_parser = subparsers.add_parser(
+        "theme-heat",
+        help="計算題材熱度 theme_heat_v1（daily 的 theme_heat 步驟；逐日重算，同日重跑改寫，#1017）",
+    )
+    heat_parser.add_argument(
+        "--date", dest="run_date", help="YYYY-MM-DD 交易日；只算這一天"
+    )
+    heat_parser.add_argument(
+        "--since", help="YYYY-MM-DD 起日；與 --until 一起逐個交易日重算"
+    )
+    heat_parser.add_argument("--until", help="YYYY-MM-DD 迄日；未指定為 --since 當天")
+    heat_parser.add_argument(
+        "--weekly",
+        action="store_true",
+        help="輸出每週最後一個交易日的排名（題材 id 與熱度）",
     )
     tiers_parser = subparsers.add_parser(
         "action-tiers",
@@ -910,6 +927,18 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_strategy_levels(parse_date(args.run_date))
     elif args.command == "action-tiers":
         result = run_action_tiers(parse_date(args.run_date))
+    elif args.command == "theme-heat":
+        if args.since:
+            since = date.fromisoformat(args.since)
+            result = run_theme_heat_range(
+                since,
+                date.fromisoformat(args.until) if args.until else since,
+                weekly=args.weekly,
+            )
+        elif args.run_date:
+            result = run_theme_heat(date.fromisoformat(args.run_date))
+        else:
+            parser.error("theme-heat 要 --date 或 --since")
     elif args.command == "news-project":
         result = run_news_project()
     elif args.command == "trading-calendar":
@@ -1069,6 +1098,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         "trading-calendar",
         "action-tiers",
         "news-project",
+        "theme-heat",
     } and result.get("status") not in {
         "success",
         "no_data",

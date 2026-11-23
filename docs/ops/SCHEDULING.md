@@ -155,6 +155,15 @@ daily 在主流族群前 20 之後，另算一份「H2 名單」（`explore_rese
 - **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.h2_list as h; print(h.run_h2_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天：catchup 補抓的日子、migration 0034 降級後再升回時，舊日期都要逐日跑。
 - **實測**（2026-11-21，正式 DB 副本，2026-11-20）：計算 8.2～9.6 秒，母體 586 檔（有值 584）；`/api/h2` 讀取 0.01 秒。2026-11-13 在研究 DB 上，研究工具與本模組的 20 檔逐檔相同。
 
+## 題材熱度
+
+daily 在 H2 名單之後算當天的題材熱度（`theme_heat_v1`，[#1017](https://github.com/YiCheng0608/stock-lab/issues/1017)）。公式、缺資料與存放見[規格](../spec/theme_heat.md)；熱度不是買賣訊號，今日名單與其他名單都不讀它。
+
+- **誰寫**：daily 的 theme_heat 步驟（`worker.theme_heat.run_theme_heat`），只算 daily 的目標日，只讀已存的日線、籌碼、新聞與題材成員。失敗是不阻擋的步驟（`NON_BLOCKING_STEPS`）：stderr 一行 `warning:`，step 列記 `failed`，run 狀態與結束碼不變，那天不寫入、之前算的留著。T 不是交易日（沒有 TAIEX 日線）時算失敗。
+- **存放**：`theme_heat_runs` 與 `theme_heat_scores`（[欄位](../spec/theme_heat.md#存放與讀取)）。同一天重算時整份換掉。
+- **讀取**：`GET /api/theme-heat?date=`；族群頁的「熱度」分頁讀它。
+- **重算與回算**：`python -m worker.cli theme-heat --date <日>` 算一天；`--since <起日> [--until <迄日>]` 逐個交易日重算，每天用那天有效的成員（不回溯），`--weekly` 再印每週最後一個交易日的排名（[CLI](CLI.md#現有-worker-cli)）。catchup 補抓的日子、migration 0035 降級後再升回時用它補。新聞從 2026-10-16 起收，之前的日子沒有新聞分項；初版題材的成員從 2026-01-01 起有效，之前的日子沒有題材上榜（`status=zero`）。
+
 ## 重跑與回補
 
 - **手動重跑**：見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)「不經排程執行一次」，或直接 `python -m worker.cli daily --date YYYY-MM-DD`。已完成的日期加 `-Force`／`--force` 才會再跑各步驟。
