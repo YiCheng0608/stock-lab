@@ -81,6 +81,16 @@
   - **選法**：照凍結的研究定義（`explore_research` 第 2 版 X2），每個交易日從共同口徑母體依「收盤距 240 日最高價」大者先取 20 檔。產品與研究的名單由金樣鎖成逐筆相同；任何簡化都是新的假設，另開單（[排程「H2 名單」](ops/SCHEDULING.md#h2-名單)）。
   - **不附點位**：只有名單、`high_gap_240` 與收盤，不附進場區、停損與目標。當天也在今日名單的帶出名次。
   - **前瞻**：H2 從 2026-11-20 起照常前瞻監測（[#875](https://github.com/YiCheng0608/stock-lab/issues/875)），進產品不改它的判定。
+- **X4 名單**（評估 [#1001](https://github.com/YiCheng0608/stock-lab/issues/1001) → [#1014](https://github.com/YiCheng0608/stock-lab/issues/1014) 通用策略名單表、H2 搬進去且行為不變 → [#1016](https://github.com/YiCheng0608/stock-lab/issues/1016) 計算、金樣與 API → [#1019](https://github.com/YiCheng0608/stock-lab/issues/1019) 分頁與 `X4-product` 監測列 → [#1021](https://github.com/YiCheng0608/stock-lab/issues/1021) H2、X4 兩個分頁的「近 60 日入選過」）：第一輪 X4 驗證段判前瞻觀察（[策略證據「狀態紀錄」](spec/evidence.md#狀態紀錄)）。使用者 2026-11-23 決定在今日名單頁加 X4 分頁、標「前瞻觀察（未通過驗證）」，之後通過驗證的策略照同一套接上（[#1 7106346106](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7106346106)）；表與 API 用通用的策略名單表、分頁名稱「盈餘殖利率前 20」、另做「近 60 日入選過」、前瞻監測加 `X4-product`，由統籌照評估建議先做；H2 分頁要不要對稱標「通過驗證」仍待使用者，先不標（[#1 7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228)）。
+  - **選法**：照凍結的研究定義（`explore_research` 第 2 版 X4），每個交易日從共同口徑母體只取月營收年增與單季 EPS 年增都為正的股票，依「最新一季 EPS × 4 ÷ 未還原收盤」大者先取 20 檔，通過的不到 20 檔就只列那幾檔。產品與研究的名單由金樣鎖成逐筆相同。
+  - **不附點位**：只有名單、盈餘殖利率、營收年增、EPS 與收盤，不附進場區、停損與目標。頁面只放「前瞻觀察（未通過驗證）」標籤，不放研究數字與 t。
+  - **前瞻**：原本的前瞻觀察列照常；上線日起另加 `X4-product`（已進產品），滿 60 日起照下架條件判。
+- **候選池與熱門題材**（評估在 [#1003](https://github.com/YiCheng0608/stock-lab/issues/1003)）：使用者要候選池從「規則選出可以買的」改成「今天值得 AI 看的」，交給早盤 AI 判讀（[#1002](https://github.com/YiCheng0608/stock-lab/issues/1002)），怎麼挑交給統籌（[#1 7107251741](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107251741)、更正 [7107407625](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107407625)）。統籌 2026-11-24 照評估的建議決定（[#1 7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228)、[#1003 7114639094](https://github.com/YiCheng0608/stock-lab/issues/1003#issuecomment-7114639094)）。
+  - **用途**：題材熱度與候選池只決定 AI 要看哪些題材與股票，不是買賣訊號。今日名單照常產出，直到 #1002 上線、使用者同意替換。
+  - **題材表**：AI 每週提出新題材與成員，附公司官方資料的證據；程式核對證據，統籌 review 後收。新題材從加入當天起生效，不回溯。
+  - **上限**：晚上 40 檔，早上最多補 10 檔，同一題材最多 4 檔；三個數都是設定值，#1002 估完 AI 成本後再調。早盤 AI 可以從池外補股，每天最多 5 檔，規則寫在 #1002 的實作單。
+  - **討論來源**（論壇、節目）：先不加，由使用者決定；選了再另開單。
+  - **順序**：[#1015](https://github.com/YiCheng0608/stock-lab/issues/1015) 題材表擴充到至少 23 個題材、證據核對工具與每週維護流程 → [#1017](https://github.com/YiCheng0608/stock-lab/issues/1017) 題材熱度 `theme_heat_v1` 與 [#1018](https://github.com/YiCheng0608/stock-lab/issues/1018) 量價共振分群與 AI 命名（兩張都在 #1015 合併後）→ [#1020](https://github.com/YiCheng0608/stock-lab/issues/1020) 候選池 `candidate_pool_v1`（#1017 合併、#1002 結案後）。
 
 使用者 2026-11-15 決定不做（[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）：08:45 通知加「我的追蹤觸發」（要的是上面的盤中即時版）、「資料或排程異常」通知、實際交易紀錄。
 
