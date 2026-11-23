@@ -238,7 +238,7 @@ HYPOTHESES: dict[str, dict[str, Any]] = {
         "engine": EVENTS,
         "direction": "事件：投信季底作帳",
         "label": "每季最後一個交易日往前 10 個交易日的窗口，窗口前一天 T 依 `trust_flow_60`"
-        "（近 60 根投信淨買超 ÷ 前 60 根平均量）大者先取 20 檔，持有到季底收盤，窗口之間留現金",
+        "（近 60 根投信淨買超 ÷ T 之前 20 根平均量）大者先取 20 檔，持有到季底收盤，窗口之間留現金",
         "rule": "quarter_end",
         "keys": (("trust_flow_60", HIGH),),
         "short": SHORT_RULE,
@@ -267,7 +267,7 @@ LIMITS = {
 # reads the docs' tool section for them).
 DEGENERATE = {
     "N1": "at < 20（不足 21 根）、at−20…at 的 21 根中任一根停牌、需要的收盤（at−20…at）缺值或 ≤ 0，"
-    "或 20 個 m_s 中任一個缺（那天母體沒有任何一檔有日報酬）時缺值、排最後、不剔除；"
+    "或 20 個 m_s 中任一個缺（那天母體沒有任何一檔在上一個全市場交易日有非停牌日線、且兩根收盤都 > 0）時缺值、排最後、不剔除；"
     "20 個 r_s 全部相同時 `st_20`＝0，照值排序",
     "N2": "最新一季（`announcement_date` ≤ T 的季報列中期末最晚的一季，EPS 是 null 的列也算）不是事件日對應的那一季、"
     "q、q−4 與算單季要用的前一季中任一列的 `report_format` 不是 `general`（`report_format` 是 null 的列算欄位缺）、"
