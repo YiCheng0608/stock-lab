@@ -261,8 +261,10 @@ fail() {
 listener_up() { bash "$script_dir/wake_listener_start.sh" --status >/dev/null 2>&1; }
 listener_wait="${TAKE_OVER_LISTENER_WAIT:-10}"
 close_wait="${TAKE_OVER_CLOSE_WAIT:-600}" close_settle="${TAKE_OVER_CLOSE_SETTLE:-2}"
-for n in "$close_wait" "$close_settle"; do
-  case "$n" in '' | *[!0-9]*) die "TAKE_OVER_CLOSE_WAIT、TAKE_OVER_CLOSE_SETTLE 要是秒數（整數）：$n" 64 ;; esac
+# A wait that is not a whole number would make a [ -ge ] test fail as "not yet", and the
+# wait after relisten's kill would go on for ever (PR #999 review): refused before any step.
+for n in "$close_wait" "$close_settle" "$listener_wait"; do
+  case "$n" in '' | *[!0-9]*) die "TAKE_OVER_CLOSE_WAIT、TAKE_OVER_CLOSE_SETTLE、TAKE_OVER_LISTENER_WAIT 要是秒數（整數）：$n" 64 ;; esac
 done
 [ "$close_wait" -gt 0 ] || die "TAKE_OVER_CLOSE_WAIT 要大於 0" 64
 # listener_gone: the listener that ran before the take-over (the old terminal's) stops with
@@ -287,7 +289,7 @@ listener_gone() {
 # found; only this checkout's listener is ever stopped.
 listener_port="${WAKE_LISTENER_PORT:-47338}"
 lsof_cmd="${TAKE_OVER_LSOF:-lsof}" ps_cmd="${TAKE_OVER_PS:-ps}" kill_cmd="${TAKE_OVER_KILL:-kill}"
-restart_why=""
+restart_why="" restart_killed=0
 listener_restart() {
   local pids pid cmdline started word prev="" script_ok=0 dir_ok=0 port_ok=0
   local -a words=()
@@ -326,6 +328,7 @@ listener_restart() {
     restart_why="kill $pid 失敗（命令列：$cmdline）"
     return 1
   fi
+  restart_killed=1
   # /health stops answering before the dying process lets the port go: a start then
   # cannot bind it (seen on macOS, #997 AC-3), so the port must be free too.
   local waited=0
@@ -342,8 +345,10 @@ listener_restart() {
 # listener_rebind: the start after listener_restart. The killed listener answered every
 # /health first and closed those connections, so the port sits in TIME_WAIT for a while
 # (30 seconds on macOS) and wake_listener.py, which binds it alone (no SO_REUSEADDR),
-# cannot have it yet (#997 AC-3): the start is tried again every second up to
-# TAKE_OVER_REBIND_WAIT seconds (default 60). Only the last try's output is printed.
+# cannot have it yet (#997 AC-3): a start that says so (綁不到, Address already in use) is
+# tried again every second up to TAKE_OVER_REBIND_WAIT seconds (default 60). Any other
+# failure (no token, another program on the port) fails at once with its output. Only
+# the last try's output is printed.
 rebind_wait="${TAKE_OVER_REBIND_WAIT:-60}" rebind_out=""
 case "$rebind_wait" in '' | *[!0-9]*) die "TAKE_OVER_REBIND_WAIT 要是秒數（整數）：$rebind_wait" 64 ;; esac
 listener_rebind() {
@@ -352,8 +357,10 @@ listener_rebind() {
     rc=0
     rebind_out="$(bash "$script_dir/wake_listener_start.sh" 2>&1)" || rc=$?
     [ "$rc" = 0 ] && { printf '%s\n' "$rebind_out"; return 0; }
-    # 2: another program answers on the port; trying again changes nothing.
+    # Only the port not free yet is waited for: exit 2 (another program answers on the
+    # port) or any other exit 1 changes nothing on a second try.
     [ "$rc" = 1 ] && [ "$waited" -lt "$rebind_wait" ] || return 1
+    case "$rebind_out" in *綁不到* | *'Address already in use'*) ;; *) return 1 ;; esac
     [ "$waited" = 0 ] && echo "新 wake listener 還綁不到埠 $listener_port（舊的連線還在 TIME_WAIT），每秒重試，最多 $rebind_wait 秒"
     sleep 1
     waited=$((waited + 1))
@@ -473,11 +480,15 @@ for line in json.load(sys.stdin): print("  |", line)' 2>/dev/null || echo "  （
       # neither waits nor restarts: whoever runs it checked the listener that still answers.
       restarted=0
       if [ "$rec_listener" != started ] && [ "$from" != relisten ] && ! listener_gone; then
-        listener_restart || fail relisten "關掉舊 terminal $listener_wait 秒後，接手前就在跑的 wake listener 仍在回應，沒有重啟：$restart_why。它可能不是舊 terminal 啟動的，或還沒結束，結束後就沒有 listener。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
+        if ! listener_restart; then
+          [ "$restart_killed" = 1 ] \
+            && fail relisten "停掉本 checkout 的舊 wake listener 後沒能重啟：$restart_why。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
+          fail relisten "關掉舊 terminal $listener_wait 秒後，接手前就在跑的 wake listener 仍在回應，沒有停它：$restart_why。它可能不是舊 terminal 啟動的，或還沒結束，結束後就沒有 listener。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
+        fi
         restarted=1
       fi
       if [ "$restarted" = 1 ]; then
-        listener_rebind || fail relisten "停掉舊 listener 後 $rebind_wait 秒內新的 wake listener 起不來：$rebind_out"
+        listener_rebind || fail relisten "停掉舊 listener 後新的 wake listener 起不來（埠還綁不到時重試到 $rebind_wait 秒）：$rebind_out"
       else
         bash "$script_dir/wake_listener_start.sh" || fail relisten "wake_listener_start.sh 失敗"
       fi

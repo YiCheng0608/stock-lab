@@ -76,6 +76,6 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 - 認證檔的路徑（發佈 checkout 根目錄那份）寫在腳本裡，不出現在統籌的命令裡（命令提到它會被 agent hook 擋下）；listener 的輸出附加到 `<資料目錄>/logs/wake-listener.out`。
 - **生命週期**：listener 在啟動它的 Bash 指令結束後繼續執行；跟不跟著啟動它的統籌 terminal 結束，兩個主機不同：
   - **Windows**：跟著 terminal 結束（Orca 關 terminal 時結束它底下所有程序，PowerShell 的 `Start-Process` 也一樣，2026-10-29 實測）。
-  - **macOS**：活過 terminal。`nohup … &` 啟動它的 shell 一結束，它就改掛 launchd（PPID 1），Orca 關 terminal 時不會結束它，要到重開機或有人停掉它（#997）。它一直跑啟動當時的 `wake_listener.py`，所以換手時由 `take_over.sh` 重啟，master 改了 listener 之後才會換新。
+  - **macOS**：活過 terminal。`nohup … &` 啟動它的 shell 一結束，它就改掛 launchd（PPID 1），Orca 關 terminal 時不會結束它，要到重開機或有人停掉它（#997）。它一直跑啟動當時的 `wake_listener.py`，所以換手時由 `take_over.sh` 重啟，master 改了 listener 之後才會換新。重啟時從 `kill` 到新 listener 綁上埠約 30～40 秒沒有 listener（舊連線的 TIME_WAIT），這段時間的喚醒失敗、10 分鐘後再試，事件留在佇列。
   - 換手時新統籌接手先跑腳本：舊統籌的 listener 還在就沿用，它每次喚醒前都重讀心跳檔，喚醒的是新統籌；收尾關掉舊 terminal 後，`take_over.sh` 等舊 listener 結束（Windows）或認出是本 checkout 的就停掉它（macOS），再跑一次腳本；怎麼認、認不出時怎麼辦見[統籌手冊參考「接手腳本的步驟」](COORDINATOR_REFERENCE.md#接手腳本的步驟)。
   - 統籌 session 結束而沒有接手者時：Windows 的 listener 跟著結束，沒有統籌就沒有喚醒對象，monitor 記 `send_failed`、事件留在佇列，佇列等 60 分鐘後照常在 #1 留「請開統籌」。listener 留著（macOS，或 terminal 還開著）也不會出錯：心跳指向已結束的 terminal 時 send 失敗，記 `send_failed`。

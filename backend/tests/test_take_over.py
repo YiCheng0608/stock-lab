@@ -72,7 +72,9 @@ esac
 # A listener answers while <fake>/listener_up exists: --status exits 0 then, else 1; a
 # start creates it (exit 0) unless <fake>/listener_start_fails exists (exit 1, none
 # started) or <fake>/listener_start_dud exists (exit 0, none started), or <fake>/bind_fails
-# says the port cannot be bound yet (exit 1).
+# says the port cannot be bound yet (exit 1), or <fake>/restart_start_rc holds the exit
+# code of a start with no listener up for another reason (1: no token; 2: another
+# program on the port).
 FAKE_LISTENER = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "${1:-start}" >>"$d/listener_calls.log"
@@ -84,6 +86,10 @@ if [ ! -f "$d/listener_up" ] && [ -s "$d/bind_fails" ] && [ "$(cat "$d/bind_fail
   echo "wake listener：啟動失敗：綁不到（fake）" >&2
   exit 1
 fi
+if [ ! -f "$d/listener_up" ] && [ -s "$d/restart_start_rc" ]; then
+  echo "wake listener：起不來（fake rc $(cat "$d/restart_start_rc")）" >&2
+  exit "$(cat "$d/restart_start_rc")"
+fi
 [ -f "$d/listener_start_dud" ] || touch "$d/listener_up"
 echo "wake listener：已啟動（fake）"
 exit 0
@@ -93,7 +99,8 @@ exit 0
 # lsof prints <fake>/lsof_pids; ps prints <fake>/ps_command or <fake>/ps_lstart for
 # -o command= or -o lstart=; kill records its argument and ends the listener, freeing the
 # port, unless <fake>/kill_ignored exists (it goes on answering) or <fake>/kill_keeps_port
-# (/health stops, but the dying process still holds the port, as seen on macOS).
+# (/health stops, but the dying process still holds the port, as seen on macOS), or
+# <fake>/kill_fails (kill exits 1, nothing stopped).
 FAKE_LSOF = r"""#!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DIR/lsof_calls.log"
 [ -f "$FAKE_DIR/lsof_pids" ] && cat "$FAKE_DIR/lsof_pids"
@@ -109,6 +116,7 @@ esac
 """
 FAKE_KILL = r"""#!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DIR/kill_calls.log"
+[ -f "$FAKE_DIR/kill_fails" ] && exit 1
 [ -f "$FAKE_DIR/kill_ignored" ] && exit 0
 rm -f "$FAKE_DIR/listener_up"
 [ -f "$FAKE_DIR/kill_keeps_port" ] || rm -f "$FAKE_DIR/lsof_pids"
@@ -423,8 +431,8 @@ def test_take_over_restarts_this_checkouts_listener_that_outlived_the_terminal(
 def test_take_over_tries_the_start_again_while_the_port_is_in_time_wait(
     to: Harness, fails: int
 ) -> None:
-    """#997 AC-3: after the kill the port sits in TIME_WAIT and the new listener cannot
-    bind it yet: the start is tried again each second up to TAKE_OVER_REBIND_WAIT (3
+    """#997 AC-1 (what the Mac run of AC-3 found): after the kill the port sits in
+    TIME_WAIT and the new listener cannot bind it yet: the start is tried again each second up to TAKE_OVER_REBIND_WAIT (3
     here) seconds, then the step fails with the last start's output."""
     _old_listener_outlives_the_terminal(to, _listener_cmdline(to))
     to.write("bind_fails", f"{fails}\n")
@@ -443,6 +451,51 @@ def test_take_over_tries_the_start_again_while_the_port_is_in_time_wait(
         assert "起不來" in line["reason"] and "綁不到（fake）" in line["reason"]
         assert len(starts) == 1 + 4  # the first try and three more
         assert not (to.fake / "listener_up").exists()
+
+
+@pytest.mark.parametrize("rc", ["1", "2"], ids=["no-token", "taken"])
+def test_take_over_does_not_wait_for_a_start_that_fails_for_another_reason(
+    to: Harness, rc: str
+) -> None:
+    """PR #999 review: only a start that cannot bind the port yet is tried again; one
+    without a token (exit 1) or with another program on the port (exit 2) fails at once,
+    with that start's output, and says the old listener was stopped."""
+    _old_listener_outlives_the_terminal(to, _listener_cmdline(to))
+    to.write("restart_start_rc", rc)
+    result = _take_over(to, "term_old", TAKE_OVER_REBIND_WAIT="60")
+    assert result.returncode == 1, result.stdout + result.stderr
+    line = _last(result)
+    assert line["failed"] == "relisten"
+    assert f"起不來（fake rc {rc}）" in line["reason"]
+    assert "每秒重試" not in result.stdout
+    assert to.calls("kill") == ["4242"]
+    # The listener step's start, then one try after the kill.
+    assert [c for c in _listener(to) if c == "start"] == ["start", "start"]
+
+
+def test_take_over_stops_at_relisten_when_the_kill_fails(to: Harness) -> None:
+    """PR #999 review: a kill that fails stops the step; nothing is started."""
+    cmdline = _listener_cmdline(to)
+    _old_listener_outlives_the_terminal(to, cmdline)
+    to.write("kill_fails", "")
+    reason = _stops_at_relisten(to, _take_over(to, "term_old"))
+    assert "kill 4242 失敗" in reason and cmdline in reason
+    assert to.calls("kill") == ["4242"]
+
+
+@pytest.mark.parametrize("env", ["TAKE_OVER_LISTENER_WAIT", "TAKE_OVER_REBIND_WAIT"])
+@pytest.mark.parametrize("value", ["1.5", "x"])
+def test_take_over_refuses_a_wait_that_is_not_whole_seconds(
+    to: Harness, env: str, value: str
+) -> None:
+    """PR #999 review: a wait that is not a whole number would leave the wait after the
+    kill running for ever ([ -ge ] fails as "not yet"): refused before any step."""
+    before = (to.data / "logs" / "coordinator-heartbeat.json").read_bytes()
+    result = _take_over(to, "term_old", **{env: value})
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert env in result.stderr
+    assert (to.data / "logs" / "coordinator-heartbeat.json").read_bytes() == before
+    assert to.calls("gh") == [] and _orca(to) == [] and _listener(to) == []
 
 
 def _stops_at_relisten(h: Harness, result: subprocess.CompletedProcess) -> str:
@@ -506,7 +559,7 @@ def test_take_over_stops_at_relisten_when_the_killed_listener_still_answers(
     to: Harness, left: str
 ) -> None:
     """#997 AC-2: the kill leaves it answering, or holding the port (a start could not
-    bind it, AC-3), after the wait: no new one is started."""
+    bind it, as the Mac run of AC-3 found), after the wait: no new one is started."""
     cmdline = _listener_cmdline(to)
     _old_listener_outlives_the_terminal(to, cmdline)
     to.write(left, "")
