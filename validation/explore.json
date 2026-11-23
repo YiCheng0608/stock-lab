@@ -1,0 +1,71 @@
+{
+  "tool": "round17_research",
+  "version": 1,
+  "design": "1008",
+  "registration_commit": "cbcfd002",
+  "segment": "validation",
+  "round": 17,
+  "round_size": 3,
+  "cumulative": 64,
+  "validation_min_t": 3.359,
+  "definitions_sha256": "505666ec2537fdb6b77086ce6b633bd6b58b4a61de8b7aa5f6213ef18d4c95df",
+  "engines": {
+    "portfolio_research": "simulate",
+    "explore_research": "simulate_events"
+  },
+  "tool_commit": "ae9a6222c8353d8d6c6e1f5840a8ff948b5ef666",
+  "command": "python tools/research/round17_research.py --db /research/stock.db --segment validation --exploration-report /out/exploration/explore.json --exploration-sha256 4e292417e1a9786d21651cee07bb6a1f4f7289de56af9e693984319331a36c36 --exploration-url https://github.com/YiCheng0608/stock-lab/issues/1011#issuecomment-7113049679 --out /out/validation",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2024-09-27",
+  "min_t": 3.359,
+  "exploration": {
+    "sha256": "4e292417e1a9786d21651cee07bb6a1f4f7289de56af9e693984319331a36c36",
+    "url": "https://github.com/YiCheng0608/stock-lab/issues/1011#issuecomment-7113049679"
+  },
+  "hypotheses": {
+    "A1": {
+      "engine": "events",
+      "verdict": "前瞻觀察",
+      "reason": null,
+      "days": 1097,
+      "taiex_excess": {
+        "days": 1097,
+        "mean": 0.0002989420983580436,
+        "annual": 0.07533340878622699,
+        "t": 0.9481083532341845
+      },
+      "excess": {
+        "days": 1097,
+        "mean": 0.0002039236117672746,
+        "annual": 0.0513887501653532,
+        "t": 1.119835772627971
+      },
+      "absolute_mean": 0.001140423617952224,
+      "prerequisites": {
+        "days": 1097,
+        "min_days": 250,
+        "delisted": 57,
+        "ok": true
+      },
+      "overlap_x8": {
+        "days": 2,
+        "mean": 0.0
+      },
+      "reference_excess": {
+        "days": 1097,
+        "mean": 0.0001780374694623449,
+        "annual": 0.044865442304510915,
+        "t": 0.9723737020169243
+      },
+      "names": 20.0,
+      "invested": 0.98359161349134,
+      "unsold_share": 0.05263157894736842
+    }
+  },
+  "elapsed_seconds": 671.7643678479944,
+  "peak_memory_gb": 1.9809188842773438
+}
