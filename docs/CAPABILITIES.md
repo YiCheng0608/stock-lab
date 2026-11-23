@@ -32,7 +32,7 @@
 | 條件價位 | `daily` 的 strategy_levels 步驟為每個訊號保存下一交易日要達到的收盤與量、參考停損與目標；不影響訊號與 run 狀態；步驟失敗由看門狗回報 | — | [條件價位 `strategy_levels_v1`](spec/strategy_levels.md) |
 | 規則最早執行日 | 由 trading_calendar 步驟保存的官方休市表推算，不再依賴之後的日線 | — | [價位、ETF 與生命週期](spec/README.md#價位etf-與生命週期) |
 | 資料不足原因 | 策略判斷資料不足時，個股頁與行動摘要寫出原因句（上市未滿 60 日、停牌、官方無成交、官方行情表或法人／融資表未列、ETF 類別不適用等），狀態寫「資料不足，無法判斷」（只有 ETF 類別不適用時寫「不適用一般研究條件」）；策略總表的「差哪個條件」寫同主題的原因句，只有沒收到、可回補的缺口寫「待回補」 | [#511](https://github.com/YiCheng0608/stock-lab/issues/511)、[#524](https://github.com/YiCheng0608/stock-lab/issues/524) | [UI_COPY_SPEC §6.1](UI_COPY_SPEC.md#61-資料不足的原因句) |
-| 族群分層 | 族群分官方產業與版本化題材表兩層 | — | [題材表](INDUSTRY_CLASSIFICATION.md#7-題材表) |
+| 族群分層 | 族群分官方產業與版本化題材表兩層；題材表 23 個題材，2026-11-24 起新收的成員附 MOPS 等官方證據，由 `themes verify` 抓頁核對引文、題材詞與代號，每週維護 | [#1015](https://github.com/YiCheng0608/stock-lab/issues/1015) | [題材表](INDUSTRY_CLASSIFICATION.md#7-題材表) |
 | 族群熱度 | `hot_group_v1` 對兩層各算一榜並有排名 API；催化劑依 MOPS 日期覆蓋計算（窗口全部核實才有值，沒有事件是 0，#453），值是有事件成員比例的同榜 percentile（#474） | — | [hot_group_v1](spec/hot_group.md) |
 | 技術回測與研究介面 | 已有技術回測及研究介面 | — | — |
 

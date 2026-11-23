@@ -257,6 +257,13 @@ def validate_theme_table(data: Any) -> list[str]:
             # "etf" as an ETF group.
             errors.append(f"{location}.name: must not contain 'ETF'")
         _text(theme.get("description"), f"{location}.description", errors)
+        keywords = theme.get("keywords")
+        if keywords is not None and (
+            not isinstance(keywords, list)
+            or not keywords
+            or not all(isinstance(word, str) and word.strip() for word in keywords)
+        ):
+            errors.append(f"{location}.keywords: non-empty list of words required")
         theme_from = _date(
             theme.get("valid_from"), f"{location}.valid_from", errors, required=True
         )
