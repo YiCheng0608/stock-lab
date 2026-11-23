@@ -768,6 +768,52 @@ def test_the_real_726_and_728_lines_leave_the_reference_open_issues_out() -> Non
     assert (lines[-1], code) == ("名額空缺 3 個，請派工：#728", 11)
 
 
+@pytest.mark.parametrize(
+    "line, waits",
+    [
+        # #927 on 2026-11-23 (#987): #925 is closed, the 公告 has not come.
+        (
+            "#925 合併；櫃買中心公告實施日（外部）。",
+            ["外部（本文）：櫃買中心公告實施日（外部）"],
+        ),
+        ("#925 合併後派; 櫃買中心公告 (外部) ", ["外部（本文）：櫃買中心公告 (外部)"]),
+        # The coordinator lifts it by rewriting the mark: no new syntax.
+        (
+            "#925 合併；櫃買中心公告實施日（已公告：https://www.tpex.org.tw/x）。",
+            [],
+        ),
+        ("#925 合併後派。", []),
+        (
+            "公告" + "很長" * 60 + "（外部）",
+            ["外部（本文）：公告" + ("很長" * 60)[:57] + "…"],
+        ),
+    ],
+    ids=["927", "half-width", "lifted", "no-external", "cut"],
+)
+def test_an_external_event_in_the_dependency_line_waits(line, waits) -> None:
+    item = _todo(927, body=f"依賴的任務／資料：{line}")["content"]
+    # #925 is not open: only the external event waits.
+    assert slots.dependencies(item, {10}) == waits
+    # Open numbers not read: the external wait holds all the same.
+    assert [w for w in slots.dependencies(item, None) if "#" not in w] == waits
+
+
+def test_a_board_with_only_an_external_wait_claims_no_dispatchable_task() -> None:
+    board = [
+        _todo(927, body="依賴的任務／資料：#925 合併；櫃買中心公告實施日（外部）。")
+    ]
+    lines, code = slots.report(_answer(board=board), {}, NOW)
+    assert (
+        "  #927 有依賴，等 外部（本文）：櫃買中心公告實施日（外部）［V1.1］[任務] 下一張"
+        in lines
+    )
+    assert (lines[-1], code) == ("名額空缺 3 個，待辦沒有可派的單", 0)
+    # Next to a task that can go, only that one is named.
+    board.append(_todo(928, body="依賴的任務／資料：#925 合併後派。"))
+    lines, code = slots.report(_answer(board=board), {}, NOW)
+    assert (lines[-1], code) == ("名額空缺 3 個，請派工：#928", 11)
+
+
 def test_every_open_pr_of_the_task_must_only_wait_for_its_merge() -> None:
     ok = _pr(20, "task/10-x", [_commit(SHA_A)], [_review(20, 5, OK_REVIEW)])
     other = _pr(21, "task/10-y", [_commit(SHA_B)])

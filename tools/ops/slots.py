@@ -21,7 +21,9 @@ Candidates, when a slot is free: the board's 待辦 items in board order (projec
 POSITION), open `[任務]` Issues with no task worktree. One waits (有依賴) while GitHub's
 blocked-by holds an open Issue, or the body's 依賴的任務／資料 line waits for an open
 Issue or PR: a #n before a 後 in the same sentence (cut at 。；;) with 合併, 完成, 結案
-or 驗收 between them (waited_refs).
+or 驗收 between them (waited_refs), or for an event outside GitHub: a sentence marked
+（外部） or (外部) (external_waits, #987), until the coordinator rewrites the mark (as
+（已公告：<連結>）). A 待辦 of such waits only is not dispatchable: no 請派工, no exit 11.
 
 One GraphQL call reads all of it, and the unanswered questions as well (QUERY keeps the
 OpenQuestions name and every field coordinator_json.unanswered_questions reads, and #1's
@@ -125,6 +127,9 @@ _DEPENDS = re.compile(r"依賴的任務／資料[：:](.*)")
 _REF = re.compile(r"#(\d+)")
 _SENTENCE = re.compile(r"[。；;]")
 _WAIT_WORDS = ("合併", "完成", "結案", "驗收")
+_EXTERNAL_MARK = ("（外部）", "(外部)")
+# Characters of an external sentence shown in the 待辦 line.
+EXTERNAL_WIDTH = 60
 _GITHUB = ("GitHub", "noreply@github.com")
 
 
@@ -396,7 +401,8 @@ def _decide_one(repo, issue: int, worktrees: list[Worktree], now: int) -> Verdic
 
 
 def dependencies(item: dict, open_numbers: set[int] | None) -> list[str]:
-    """What the 待辦 Issue waits for: "#n（blocked-by）" or "#n（本文）"."""
+    """What the 待辦 Issue waits for: "#n（blocked-by）", "#n（本文）" or
+    "外部（本文）：<sentence>" (external_waits)."""
     waits = []
     blocked = item.get("blockedBy") or {}
     for node in blocked.get("nodes") or []:
@@ -413,7 +419,20 @@ def dependencies(item: dict, open_numbers: set[int] | None) -> list[str]:
                 waits.append(f"#{n}（本文，open 與否未查完）")
             elif n in open_numbers and n != item.get("number"):
                 waits.append(f"#{n}（本文）")
+        waits += [f"外部（本文）：{s}" for s in external_waits(match.group(1))]
     return list(dict.fromkeys(waits))
+
+
+def external_waits(text: str) -> list[str]:
+    """The sentences of the 依賴 line (cut at 。, ；, ;) marked （外部） or (外部), on one
+    line and cut at EXTERNAL_WIDTH (#987): an event outside GitHub, as in
+    「櫃買中心公告實施日（外部）」. It waits until the coordinator rewrites the mark, as
+    「（已公告：<連結>）」."""
+    return [
+        one_line(sentence, EXTERNAL_WIDTH)
+        for sentence in _SENTENCE.split(text)
+        if any(mark in sentence for mark in _EXTERNAL_MARK)
+    ]
 
 
 def waited_refs(text: str) -> list[int]:
