@@ -6,7 +6,10 @@ evidence says.  A member passes only when all of these hold:
 1. its instrument exists in the DB and is a stock (``stock``/``ipo``);
 2. every evidence page can be fetched and its ``quote`` appears verbatim in
    the page text (whitespace and HTML markup ignored, NFKC-normalised);
-3. every ``quote`` contains at least one of the theme's ``keywords``.
+3. every ``quote`` contains at least one of the theme's ``keywords``
+   (case-insensitive);
+4. for a MOPS 公司基本資料 (t05st03) URL, its ``co_id`` is the member's symbol
+   and the ``quote`` is inside the 主要經營業務 cell.
 
 Pages are fetched one at a time with a delay and cached per URL within a run.
 ``pages_dir`` reads previously saved pages instead of the network (offline
@@ -26,6 +29,7 @@ import unicodedata
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from sqlalchemy import select
@@ -46,6 +50,8 @@ USER_AGENT = "taiwan-stock-research/0.1"
 FETCH_DELAY_SECONDS = 3.0
 FETCH_TIMEOUT_SECONDS = 30.0
 PAGES_INDEX = "index.json"
+MOPS_MAIN_BUSINESS = "主要經營業務"
+MOPS_NEXT_FIELD = "公司成立日期"
 
 _DROP_BLOCKS = re.compile(r"<(script|style)\b[^>]*>.*?</\1\s*>", re.S | re.I)
 _TAG = re.compile(r"<[^>]+>")
@@ -196,20 +202,53 @@ def check_member(
         errors.append("unknown instrument")
     elif instrument_type not in THEME_MEMBER_TYPES:
         errors.append(f"instrument_type={instrument_type} is not a stock")
-    keywords = [normalize_text(word) for word in theme.get("keywords") or []]
+    symbol = split_instrument(member["instrument"])[1]
+    keywords = [normalize_text(word).casefold() for word in theme.get("keywords") or []]
     for index, item in enumerate(member["evidence"]):
         location = f"evidence[{index}]"
         quote = normalize_text(item["quote"])
-        if not any(word and word in quote for word in keywords):
+        if not any(word and word in quote.casefold() for word in keywords):
             errors.append(f"{location}.quote: no theme keyword")
+        mops_co_id = _mops_profile_co_id(item["url"])
+        if mops_co_id is not None and mops_co_id != symbol:
+            errors.append(f"{location}.url: co_id={mops_co_id} is not {symbol}")
         try:
             text = pages.text(item["url"])
         except EvidenceFetchError as error:
             errors.append(f"{location}.url: {error}")
             continue
-        if quote not in text:
+        if mops_co_id is not None:
+            # A MOPS company profile: only the 主要經營業務 cell counts, so a
+            # company name or another field cannot carry the theme word.
+            cell = _mops_main_business(text)
+            if cell is None:
+                errors.append(f"{location}.url: no {MOPS_MAIN_BUSINESS} on page")
+            elif quote not in cell:
+                errors.append(f"{location}.quote: not found in {MOPS_MAIN_BUSINESS}")
+        elif quote not in text:
             errors.append(f"{location}.quote: not found on page")
     return errors
+
+
+def _mops_profile_co_id(url: str) -> str | None:
+    """``co_id`` of a MOPS 公司基本資料 (t05st03) URL; None for other pages."""
+
+    parts = urlsplit(url)
+    if not parts.hostname or not parts.hostname.endswith("twse.com.tw"):
+        return None
+    if "t05st03" not in parts.path:
+        return None
+    return (parse_qs(parts.query).get("co_id") or [""])[0]
+
+
+def _mops_main_business(text: str) -> str | None:
+    """The normalised 主要經營業務 cell of a normalised MOPS profile page."""
+
+    start = text.find(MOPS_MAIN_BUSINESS)
+    end = text.find(MOPS_NEXT_FIELD, start)
+    if start < 0 or end < 0:
+        return None
+    return text[start + len(MOPS_MAIN_BUSINESS) : end]
 
 
 def verify_table(

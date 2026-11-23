@@ -2,7 +2,7 @@
 
 ``fixtures/theme_evidence/mops_t05st03_2327.html`` is a trimmed copy of the
 MOPS 公司基本資料 page of 2327 國巨 fetched 2026-11-24 (rows other than 股票代號,
-主要經營業務 and 公司成立日期 removed; the script line is added to check that
+主要經營業務, 公司成立日期 and 英文簡稱 removed; the script line is added to check that
 scripts are not page text).
 """
 
@@ -15,8 +15,12 @@ from pathlib import Path
 
 import httpx
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 import worker.theme_evidence as evidence_module
+from app.migrations import upgrade_database
+from app.models import Instrument
 from app.theme_table import validate_theme_table
 from worker.theme_evidence import (
     PAGES_INDEX,
@@ -30,10 +34,12 @@ from worker.theme_evidence import (
 
 PAGES = Path(__file__).parent / "fixtures" / "theme_evidence"
 URL = "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?co_id=2327"
+# The same saved page under a non-MOPS URL: whole-page matching, no co_id check.
+OTHER_URL = "https://www.example.com/yageo-profile"
 TYPES = {("TWSE", "2327"): "stock", ("TWSE", "0050"): "etf"}
 
 
-def _table():
+def _table(url=URL):
     return {
         "schema_version": "theme-table/v1",
         "table": "themes_v1",
@@ -53,7 +59,7 @@ def _table():
                         "relevance": "high",
                         "evidence": [
                             {
-                                "url": URL,
+                                "url": url,
                                 "title": "公開資訊觀測站 公司基本資料：國巨",
                                 "quote": "被動元件、電阻原料半成品 天線、主動元件",
                             }
@@ -84,21 +90,60 @@ def test_matching_member_passes(pages):
 # AC-2: the three failures
 
 
-def test_quote_not_on_page_fails(pages):
-    table = _table()
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        (OTHER_URL, "evidence[0].quote: not found on page"),
+        (URL, "evidence[0].quote: not found in 主要經營業務"),
+    ],
+)
+def test_quote_not_on_page_fails(pages, url, expected):
+    table = _table(url)
     _member(table)["evidence"][0]["quote"] = "被動元件、積層陶瓷電容"
     result = verify_table(table, pages, TYPES)
     assert result["status"] == "failed"
     assert result["failures"] == [
         {
             "location": "themes[0](passive).members[0](TWSE:2327)",
-            "errors": ["evidence[0].quote: not found on page"],
+            "errors": [expected],
         }
     ]
 
 
-def test_quote_from_script_is_not_page_text(pages):
+def test_mops_quote_from_another_field_fails(pages):
     table = _table()
+    table["themes"][0]["keywords"].append("國巨")
+    _member(table)["evidence"][0]["quote"] = "國巨*"
+    assert check_member(table["themes"][0], _member(table), pages, TYPES) == [
+        "evidence[0].quote: not found in 主要經營業務"
+    ]
+    # The same text passes as a whole-page quote on a non-MOPS page.
+    _member(table)["evidence"][0]["url"] = OTHER_URL
+    assert check_member(table["themes"][0], _member(table), pages, TYPES) == []
+
+
+def test_mops_co_id_must_be_the_member_symbol(pages):
+    table = _table()
+    _member(table)["instrument"] = "TWSE:2492"
+    errors = check_member(
+        table["themes"][0], _member(table), pages, {("TWSE", "2492"): "stock"}
+    )
+    assert errors == ["evidence[0].url: co_id=2327 is not 2492"]
+
+
+def test_keywords_match_case_insensitively(pages):
+    table = _table(OTHER_URL)
+    table["themes"][0]["keywords"] = ["yageo"]
+    _member(table)["evidence"][0]["quote"] = "國巨*"
+    assert check_member(table["themes"][0], _member(table), pages, TYPES) == [
+        "evidence[0].quote: no theme keyword"
+    ]
+    _member(table)["evidence"][0]["quote"] = "YAGEO"
+    assert check_member(table["themes"][0], _member(table), pages, TYPES) == []
+
+
+def test_quote_from_script_is_not_page_text(pages):
+    table = _table(OTHER_URL)
     table["themes"][0]["keywords"].append("積層陶瓷電容")
     _member(table)["evidence"][0]["quote"] = "積層陶瓷電容龍頭"
     assert check_member(table["themes"][0], _member(table), pages, TYPES) == [
@@ -122,7 +167,7 @@ def test_quote_without_theme_keyword_fails(pages):
     ],
 )
 def test_instrument_that_is_not_a_stock_fails(pages, instrument, expected):
-    table = _table()
+    table = _table(OTHER_URL)
     _member(table)["instrument"] = instrument
     result = verify_table(table, pages, TYPES)
     assert result["status"] == "failed"
@@ -134,7 +179,7 @@ def test_instrument_that_is_not_a_stock_fails(pages, instrument, expected):
 
 def test_page_missing_from_saved_pages_fails(pages):
     table = _table()
-    _member(table)["evidence"][0]["url"] = URL.replace("2327", "2492")
+    _member(table)["evidence"][0]["url"] = OTHER_URL + "-missing"
     assert check_member(table["themes"][0], _member(table), pages, TYPES) == [
         "evidence[0].url: page not in saved pages"
     ]
@@ -234,4 +279,47 @@ def test_cli_verify_exits_1_on_failure(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as error:
         cli.main()
     assert error.value.code == 1
-    assert "not found on page" in capsys.readouterr().out
+    assert "not found in 主要經營業務" in capsys.readouterr().out
+
+
+def test_cli_verify_rejects_bad_since(monkeypatch, capsys):
+    import worker.cli as cli
+
+    monkeypatch.setattr(
+        "sys.argv", ["worker.cli", "themes", "verify", "--since", "11/24"]
+    )
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2
+    assert "--since must be YYYY-MM-DD" in capsys.readouterr().err
+
+
+def test_instrument_types_read_twse_and_tpex_from_db(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{tmp_path / 'types.db'}")
+    upgrade_database(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        for exchange, symbol, kind in [
+            ("TWSE", "2327", "stock"),
+            ("TPEx", "6488", "stock"),
+            ("TWSE", "0050", "etf"),
+            ("TAIFEX", "TX", "futures"),
+        ]:
+            db.add(
+                Instrument(
+                    market="TW",
+                    exchange=exchange,
+                    symbol=symbol,
+                    name=symbol,
+                    instrument_type=kind,
+                    status="active",
+                )
+            )
+        db.commit()
+    monkeypatch.setattr(evidence_module, "SessionLocal", factory)
+    assert evidence_module._instrument_types() == {
+        ("TWSE", "2327"): "stock",
+        ("TPEx", "6488"): "stock",
+        ("TWSE", "0050"): "etf",
+    }
+    engine.dispose()

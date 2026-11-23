@@ -2,5 +2,9 @@
  "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?co_id=2327": {
   "content_type": "text/html; charset=UTF-8",
   "file": "mops_t05st03_2327.html"
+ },
+ "https://www.example.com/yageo-profile": {
+  "content_type": "text/html; charset=UTF-8",
+  "file": "mops_t05st03_2327.html"
  }
 }

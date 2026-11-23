@@ -930,10 +930,14 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             parse_date(args.run_date), dry_run=args.dry_run, limit=args.limit
         )
     elif args.command == "themes" and args.themes_command == "verify":
+        try:
+            since = parse_date(args.since)
+        except ValueError:
+            parser.error("--since must be YYYY-MM-DD")
         result = verify_themes(
             args.file,
             theme_ids=args.theme_ids,
-            since=parse_date(args.since),
+            since=since,
             pages_dir=args.pages_dir,
             save_dir=args.save_dir,
         )
