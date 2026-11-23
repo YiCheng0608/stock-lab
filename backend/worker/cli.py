@@ -62,6 +62,7 @@ from .schedule_runs import (
     record_preflight_skip,
 )
 from .strategy_levels import run_strategy_levels
+from .theme_evidence import verify_themes
 from .themes import sync_themes
 from .margin_lists import run_margin_lists
 from .no_trade_days import run_no_trade_days
@@ -389,6 +390,28 @@ def main() -> None:
     )
     themes_sync_parser.add_argument(
         "--file", help="題材表 JSON；未指定使用 backend/data/themes/themes_v1.json"
+    )
+    themes_verify_parser = themes_subparsers.add_parser(
+        "verify",
+        help="抓證據頁核對成員：quote 逐字在頁面上、quote 含題材詞、代號是股票（不寫 DB）",
+    )
+    themes_verify_parser.add_argument(
+        "--file", help="題材表 JSON；未指定使用 backend/data/themes/themes_v1.json"
+    )
+    themes_verify_parser.add_argument(
+        "--theme",
+        action="append",
+        dest="theme_ids",
+        help="只核對這個題材 id（可重複）；未指定為全部",
+    )
+    themes_verify_parser.add_argument(
+        "--since", help="只核對生效日在這天（YYYY-MM-DD）以後的成員"
+    )
+    themes_verify_parser.add_argument(
+        "--pages-dir", help="讀已存的證據頁目錄（含 index.json），不連網"
+    )
+    themes_verify_parser.add_argument(
+        "--save-dir", help="把抓到的證據頁與 index.json 存到這個目錄"
     )
     industry_parser = subparsers.add_parser("industry", help="官方產業群組")
     industry_subparsers = industry_parser.add_subparsers(
@@ -905,6 +928,18 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             parser.error("--limit must be at least 1")
         result = run_candidate_notes_batch(
             parse_date(args.run_date), dry_run=args.dry_run, limit=args.limit
+        )
+    elif args.command == "themes" and args.themes_command == "verify":
+        try:
+            since = parse_date(args.since)
+        except ValueError:
+            parser.error("--since must be YYYY-MM-DD")
+        result = verify_themes(
+            args.file,
+            theme_ids=args.theme_ids,
+            since=since,
+            pages_dir=args.pages_dir,
+            save_dir=args.save_dir,
         )
     elif args.command == "themes":
         result = sync_themes(args.file)

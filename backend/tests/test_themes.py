@@ -128,14 +128,48 @@ def _memberships(db):
 
 def test_repo_theme_table_is_valid_and_every_member_has_evidence():
     table = load_theme_table(THEME_TABLE_PATH)
-    assert 10 <= len(table["themes"]) <= 15
+    assert len(table["themes"]) >= 23
     for theme in table["themes"]:
         assert len(theme["members"]) >= 3, theme["id"]
+        assert theme.get("keywords"), theme["id"]
+        # Themes added after the 2026.10.17 first version start on the day
+        # they were added (#1015): no back-dating.
+        if theme["valid_from"] != "2026-01-01":
+            assert theme["valid_from"] >= "2026-11-24", theme["id"]
         for member in theme["members"]:
             assert member["evidence"] and all(
                 item["url"].startswith(("https://", "http://"))
                 for item in member["evidence"]
             )
+
+
+def test_repo_theme_table_syncs_over_the_first_version(factory):
+    """The 2026.10.17 themes synced first, then the current table (#1015 AC-1)."""
+
+    table = load_theme_table(THEME_TABLE_PATH)
+    first = {
+        **copy.deepcopy(table),
+        "version": "2026.10.17",
+        "themes": [t for t in table["themes"] if t["valid_from"] == "2026-01-01"],
+    }
+    symbols = {
+        tuple(member["instrument"].split(":"))
+        for theme in table["themes"]
+        for member in theme["members"]
+    }
+    with factory() as db:
+        _add_instruments(db, sorted(symbols))
+        themes_module.apply_theme_table(db, first)
+        result = themes_module.apply_theme_table(db, table)
+        new_themes = len(table["themes"]) - len(first["themes"])
+        new_members = sum(
+            len(t["members"]) for t in table["themes"] if t not in first["themes"]
+        )
+        assert (result["groups_created"], result["memberships_created"]) == (
+            new_themes,
+            new_members,
+        )
+        assert result["memberships_closed"] == 0
 
 
 @pytest.mark.parametrize(
