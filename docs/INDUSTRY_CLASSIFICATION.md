@@ -118,10 +118,10 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 | 層級 | 欄位 |
 | --- | --- |
-| 題材 | `id`（小寫 kebab-case）、`name`（顯示名，不得含 ETF）、`description`、`valid_from`（必填）、`valid_to`（可空）、`members[]` |
+| 題材 | `id`（小寫 kebab-case）、`name`（顯示名，不得含 ETF）、`description`、`keywords`（題材詞與產品詞，供[證據核對](#證據核對)；只存在檔案，不寫 DB）、`valid_from`（必填）、`valid_to`（可空）、`members[]` |
 | 成員 | `instrument`（`TWSE:XXXX` 或 `TPEx:XXXX`）、`name`（只供人工對照，不參與比對）、`relation`、`relevance`、`valid_from`／`valid_to`（可省略，預設沿用題材日期，且必須落在題材期間內）、`evidence[]`（至少一筆；每筆的 `url`、`title`、`quote` 皆必填，`quote` 是頁面原文摘錄） |
 
-`relation` 的值：`core_business` 表示主要業務就是該題材；`product_line` 表示有該題材的產品線；`supply_chain` 表示供應該題材的零組件、設備或材料。`relevance` 的值為 `high`、`medium`、`low`。證據只收公開、可開啟的頁面，例如公司官網、官方公告或財經媒體報導；找不到證據的成員不收。
+`relation` 的值：`core_business` 表示主要業務就是該題材；`product_line` 表示有該題材的產品線；`supply_chain` 表示供應該題材的零組件、設備或材料。`relevance` 的值為 `high`、`medium`、`low`。證據只收公開、可開啟的頁面；找不到證據的成員不收。2026-11-24 起新收的成員只用 B 類官方證據：MOPS 公司基本資料的「主要經營業務」、公司年報或法說簡報（公司官網）；初版的成員有一部分是財經媒體報導。
 
 **驗證**：缺證據或證據缺 `title`／`quote`、URL 不是 http(s)、日期倒置、成員日期超出題材期間、同題材重複成員、重複題材 id、代號格式錯誤、DB 查無代號、代號不是股票，或寫入 `source` 的 JSON 超過 500 字，都會讓整批拒絕。錯誤訊息會指出位置：`themes[序號]` 後接括號內的題材 id，`members[序號]` 後接括號內的代號，再接欄位名（如 `.evidence`）。
 
@@ -132,9 +132,36 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 **版本與生效／失效**：每次修改表都要更新 `version`，sync 時把新版本寫入 `definition_version`。sync 比對 DB 現有題材的 `definition_version`：表版本較舊時整批拒絕；版本相同但題材欄位或成員期間、證據 JSON 有任何不同時也整批拒絕，並列出每個異動的題材／成員位置（檔案路徑不算內容）。題材與成員不從表中刪除，失效一律填 `valid_to`；sync 只關閉期間，不刪列。DB 有開放中的題材 membership、表內卻沒有該題材或成員時，整批拒絕。同一成員改用較晚的 `valid_from` 重新納入時，舊的開放期間關在新起日前一天。重跑同一版本不改任何列。
 
-**初版**：`2026.10.17` 收 12 個題材、77 筆成員。生效日統一為 2026-01-01，是人工回溯判定的起日；表版本日（2026-10-17）之前算出的題材榜含後見之明，不代表當時就能取得這份分類。
+**初版與回溯限制**：`2026.10.17` 收 12 個題材、77 筆成員，生效日統一為 2026-01-01，是人工回溯判定的起日；表版本日（2026-10-17）之前算出的題材榜含後見之明，不代表當時就能取得這份分類，這段期間的題材榜與回測不能當成當時可知的結果。`2026.11.24` 加 11 個題材（被動元件、導線架、封測、銅箔／銅箔基板、PCB、機器人、電源／BBU、軍工／無人機、ASIC／矽智財、矽晶圓、資安），成員取自 [#1003](https://github.com/YiCheng0608/stock-lab/issues/1003) 的草案、過[證據核對](#證據核對)才收；`valid_from` 是加入當天 2026-11-24，不回溯，所以這 11 個題材在 2026-11-24 前沒有分數。草案是看過去哪些股票一起漲擬的，成員名單本身仍帶後見之明，只是不再回填到過去的日期。
 
-**維護流程**：先改 JSON（附證據），再執行 `python -m worker.cli themes sync`（[現有 worker CLI](ops/CLI.md#現有-worker-cli)）。驗證失敗時 exit 1 且不寫入；成功後由下一次 analyze／daily 計分。
+#### 證據核對
+
+`python -m worker.cli themes verify`（[現有 worker CLI](ops/CLI.md#現有-worker-cli)），程式在 `backend/worker/theme_evidence.py`。一筆成員要全部通過才收：
+
+1. 代號在 DB 存在而且是股票（`instrument_type` 為 `stock` 或 `ipo`）。
+2. 每筆證據的頁面抓得到（HTTP 200），`quote` 逐字出現在頁面文字裡。比對前兩邊都去掉 HTML 標記與 `<script>`／`<style>`、做 NFKC（全形英數轉半形），並刪掉所有空白，所以頁面的換行與 `<br>` 不影響比對，但字要一字不差。
+3. 每筆 `quote` 至少含題材 `keywords` 裡的一個詞。沒有 `keywords` 的題材不能核對。
+
+範圍用 `--theme <id>`（可重複）或 `--since <YYYY-MM-DD>`（成員生效日在這天以後）選，不指定就核對全部。頁面一次抓一頁、間隔 3 秒，同一網址一次執行只抓一次；`--save-dir` 把抓到的頁面與 `index.json`（網址、檔名、SHA-256、抓取日）存下來，`--pages-dir` 讀存下來的頁面重核、不連網。任何成員不過就 exit 1，結果列出每個不過的位置（寫法同上面「驗證」的錯誤訊息）與原因；不寫 DB。
+
+只讀公開頁面（MOPS、公司官網的年報與法說簡報），低頻、不註冊帳戶；TPEx 產業價值鏈平台的條款拒絕自動讀取，不用它。核對只證明引文真的在官方頁面上、而且提到題材；成員的 `relation`／`relevance` 合不合理由統籌 review 判斷。
+
+#### 維護流程
+
+每週一次，表的所有修改都走同一條路：
+
+1. **提案**：AI（本機 `claude -p`）提出新題材與成員，每筆成員附 B 類證據的 `url`、`title`、`quote`。提案的 Issue 或 PR 本文記模型與提示版本。AI 提案的程式由後續的單另做；在那之前由工程師或統籌照同樣格式手動提案。
+2. **改表**：在任務 branch 改 `themes_v1.json`，`version` 改成當天（同一天第二次改用 `YYYY.MM.DD.N`）。
+3. **核對**：跑 `themes verify --since <當天>`（換成員的題材另加 `--theme <id>`）與 `--save-dir`，不過的成員刪掉不收，不改寫 `quote` 去湊頁面；存下來的頁面放 evidence 目錄並寫 `SHA256SUMS`。
+4. **review 與合併**：PR 附核對結果；統籌看 `relation`／`relevance` 與證據來源後合併。合併後統籌在正式 DB 跑 `themes sync`（驗證失敗 exit 1 且不寫入），題材榜由下一次 analyze／daily 計分。
+
+改表的規則：
+
+- **新題材**：補 `id`、`name`、`description`、`keywords`、`valid_from`（加入當天，不回溯）與至少 3 筆過核對的成員。
+- **新成員**：加進題材的 `members[]`，成員 `valid_from` 填加入當天。
+- **換掉成員**：在舊成員填 `valid_to`（最後一天），不刪列；同一檔之後要再收，改用較晚的 `valid_from`，sync 會把舊的開放期間關在新起日前一天。
+- **停用題材**：題材填 `valid_to`，成員跟著題材的期間結束；不從表刪除。題材熱度長期沒有、或產品已經不是公司的主要業務時停用。
+
 **候選題材群組（保留）**：`group_type="theme_candidate"`（`active=false`、`name_status="pending_verification"`、成員 `role="candidate"`）保留給日後的人工核實流程，目前沒有程式產生；這類群組即使誤設為 active 也不計分、不進榜。
 
 **欄位值域（現行）**

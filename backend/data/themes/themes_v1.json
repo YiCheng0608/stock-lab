@@ -1,12 +1,19 @@
 {
   "schema_version": "theme-table/v1",
   "table": "themes_v1",
-  "version": "2026.10.17",
+  "version": "2026.11.24",
   "themes": [
     {
       "id": "ai-server",
       "name": "AI 伺服器",
       "description": "設計、組裝與出貨 AI 伺服器、GPU 機櫃與資料中心伺服器系統的代工廠與品牌廠。",
+      "keywords": [
+        "AI 伺服器",
+        "伺服器",
+        "GPU",
+        "資料中心",
+        "server"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -135,6 +142,15 @@
       "id": "thermal",
       "name": "散熱",
       "description": "供應 AI 伺服器與資料中心用水冷板、液冷系統、均熱片、風扇與熱交換器等散熱元件與模組的廠商。",
+      "keywords": [
+        "散熱",
+        "風扇",
+        "水冷",
+        "均熱",
+        "熱導管",
+        "thermal",
+        "cooling"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -227,6 +243,11 @@
       "id": "abf-substrate",
       "name": "ABF 載板",
       "description": "生產 ABF（FC-BGA）等高階 IC 載板，供 CPU、GPU 與 AI 加速晶片封裝使用的載板廠。",
+      "keywords": [
+        "ABF",
+        "載板",
+        "substrate"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -285,6 +306,14 @@
       "id": "heavy-electrical",
       "name": "重電",
       "description": "生產電力變壓器、氣體絕緣開關（GIS）與配電設備，受惠電網強化與資料中心用電需求的重電廠。",
+      "keywords": [
+        "重電",
+        "變壓器",
+        "配電",
+        "輸電",
+        "電力設備",
+        "開關"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -384,6 +413,13 @@
       "id": "semiconductor-equipment",
       "name": "半導體設備",
       "description": "供應晶圓廠與封測廠製程設備、設備次系統，以及無塵室與廠務工程的廠商。",
+      "keywords": [
+        "半導體設備",
+        "半導體",
+        "製程設備",
+        "設備",
+        "equipment"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -497,6 +533,13 @@
       "id": "cowos",
       "name": "CoWoS 先進封裝",
       "description": "以 CoWoS 為核心的 2.5D／3D 先進封裝，含晶圓代工與封測產能，以及濕製程、點膠、挑揀與黏晶等設備和測試供應鏈。",
+      "keywords": [
+        "CoWoS",
+        "先進封裝",
+        "封裝",
+        "2.5D",
+        "3D"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -602,6 +645,16 @@
       "id": "silicon-photonics",
       "name": "矽光子／光通訊",
       "description": "資料中心與電信用光通訊元件，涵蓋雷射與磊晶片、光收發模組、光纖連接與被動元件，以及矽光子／CPO 供應鏈。",
+      "keywords": [
+        "矽光子",
+        "光通訊",
+        "光纖",
+        "光收發",
+        "光模組",
+        "雷射",
+        "CPO",
+        "optical"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -720,6 +773,14 @@
       "id": "memory",
       "name": "記憶體",
       "description": "DRAM、NOR／NAND Flash 記憶體晶片製造商，以及快閃記憶體控制晶片、記憶體模組與儲存品牌廠。",
+      "keywords": [
+        "記憶體",
+        "DRAM",
+        "NAND",
+        "Flash",
+        "快閃",
+        "SSD"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -807,6 +868,13 @@
       "id": "electric-vehicle",
       "name": "電動車",
       "description": "電動車動力系統、減速齒輪、高壓線束、車載充電與充電樁等零組件，以及電動車銷售相關業者。",
+      "keywords": [
+        "電動車",
+        "車用",
+        "汽車",
+        "電動",
+        "EV"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -907,6 +975,13 @@
       "id": "leo-satellite",
       "name": "低軌衛星",
       "description": "低軌衛星本體與酬載元件、衛星用印刷電路板、射頻模組，以及地面站與用戶終端設備等通訊供應鏈。",
+      "keywords": [
+        "低軌衛星",
+        "衛星",
+        "微波",
+        "天線",
+        "satellite"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -1007,6 +1082,12 @@
       "id": "biotech-pharma",
       "name": "生技製藥",
       "description": "新藥研發、學名藥與特色藥製造，以及藥品與生物藥委託開發製造（CDMO）業者。",
+      "keywords": [
+        "生技",
+        "製藥",
+        "藥",
+        "新藥"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -1094,6 +1175,13 @@
       "id": "financial-holding",
       "name": "金控",
       "description": "旗下整合銀行、壽險、產險、證券與投信等子公司的金融控股公司。",
+      "keywords": [
+        "金控",
+        "金融控股",
+        "銀行",
+        "保險",
+        "證券"
+      ],
       "valid_from": "2026-01-01",
       "valid_to": null,
       "members": [
@@ -1172,6 +1260,1012 @@
               "url": "https://www.yuanta.com/",
               "title": "元大金控",
               "quote": "元大金控集團致力將永續發展理念融入企業經營核心"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "passive",
+      "name": "被動元件",
+      "description": "電容、電阻、電感與電路保護元件等被動元件的製造商。",
+      "keywords": [
+        "被動元件",
+        "電容",
+        "電阻",
+        "電感",
+        "保護元件",
+        "線圈",
+        "磁珠",
+        "濾波器"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2327",
+          "name": "國巨",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2327",
+              "title": "公開資訊觀測站 公司基本資料：國巨（2327）主要經營業務",
+              "quote": "被動元件、電阻原料半成品 天線、主動元件 機器設備、零件製造及銷售。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2492",
+          "name": "華新科",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2492",
+              "title": "公開資訊觀測站 公司基本資料：華新科（2492）主要經營業務",
+              "quote": "電子零組件製造業 積層陶瓷及圓板電容、晶片電阻及保險絲、電感、射頻元件製造銷售 高壓、高頻與精密電容，車用與工業用特殊電阻及陶瓷粉末製造加工"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3026",
+          "name": "禾伸堂",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3026",
+              "title": "公開資訊觀測站 公司基本資料：禾伸堂（3026）主要經營業務",
+              "quote": "被動元件 系統模組 主動元件"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6173",
+          "name": "信昌電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6173",
+              "title": "公開資訊觀測站 公司基本資料：信昌電（6173）主要經營業務",
+              "quote": "晶片電容、晶片電阻、介電瓷粉"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2375",
+          "name": "凱美",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2375",
+              "title": "公開資訊觀測站 公司基本資料：凱美（2375）主要經營業務",
+              "quote": "電子電機製品及其生產設備器材零件類；通信器材零件類； 光學之電子器材零件類；電容器生產設備類； 電容器及其零件材料類；電阻及其零件材料類。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6449",
+          "name": "鈺邦",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6449",
+              "title": "公開資訊觀測站 公司基本資料：鈺邦（6449）主要經營業務",
+              "quote": "鋁捲繞固態電容之研究、開發、製造及銷售。 貼片式鋁捲繞固態電容之研究、開發、製造及銷售。 堆疊型鋁晶片固態電容之研究、開發、製造及銷售。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2428",
+          "name": "興勤",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2428",
+              "title": "公開資訊觀測站 公司基本資料：興勤（2428）主要經營業務",
+              "quote": "機械陶瓷.熱敏電阻.變阻體.陶瓷電容器製造加工買賣 精密電子儀器.電子零件之製造加工買賣"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6284",
+          "name": "佳邦",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6284",
+              "title": "公開資訊觀測站 公司基本資料：佳邦（6284）主要經營業務",
+              "quote": "各式微波高頻天線及模組、線圈電感、疊層電感、濾波器、壓敏電阻 及各式保護元件等被動元件之研究、開發、製造及銷售"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2478",
+          "name": "大毅",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2478",
+              "title": "公開資訊觀測站 公司基本資料：大毅（2478）主要經營業務",
+              "quote": "厚膜晶片電阻、電阻網路、積體電路等零阻件製造加工、買賣業務。 有關前產品及原料之進出口貿易業務。 代理國內外有關廠商產品之報價投標及經銷買賣等業務。"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:8042",
+          "name": "金山電",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=8042",
+              "title": "公開資訊觀測站 公司基本資料：金山電（8042）主要經營業務",
+              "quote": "各種電子器材電容器之製造加工買賣及進出口業務 承包設計各種無線電工程業務 除許可業務外得經營法令非禁止或限制之業務"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3357",
+          "name": "臺慶科",
+          "relation": "core_business",
+          "relevance": "low",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3357",
+              "title": "公開資訊觀測站 公司基本資料：臺慶科（3357）主要經營業務",
+              "quote": "線圈 晶片 其他"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6155",
+          "name": "鈞寶",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6155",
+              "title": "公開資訊觀測站 公司基本資料：鈞寶（6155）主要經營業務",
+              "quote": "磁鐵心、氧化鐵心、偏向軛及偏向軛磁鐵心。 排感、收斂線圈、延遲線濾波器、電磁組件。 共模抗流線圈、天線棒、積層晶片、電感晶片、磁珠。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "leadframe",
+      "name": "導線架",
+      "description": "半導體封裝用導線架的製造商。",
+      "keywords": [
+        "導線架",
+        "lead frame"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2351",
+          "name": "順德",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2351",
+              "title": "公開資訊觀測站 公司基本資料：順德（2351）主要經營業務",
+              "quote": "半導體導線架 五金文具用品 模具及其他"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:5285",
+          "name": "界霖",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=5285",
+              "title": "公開資訊觀測站 公司基本資料：界霖（5285）主要經營業務",
+              "quote": "導線架 模具及其它"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2486",
+          "name": "一詮",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2486",
+              "title": "公開資訊觀測站 公司基本資料：一詮（2486）主要經營業務",
+              "quote": "散熱元件 LED及SMD導線架、TV背光模組及陶瓷電路板 智能服務機器人及其他電子零組件"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "osat",
+      "name": "封測",
+      "description": "積體電路封裝、凸塊與晶圓／成品測試的專業封測廠。",
+      "keywords": [
+        "封裝",
+        "測試",
+        "封測",
+        "凸塊"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2449",
+          "name": "京元電子",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2449",
+              "title": "公開資訊觀測站 公司基本資料：京元電子（2449）主要經營業務",
+              "quote": "各種積體電路之設計.製造.測試.配件.加工.包裝.買賣業務 各種奔應機及其零配件之製造.加工.買賣業務 前各項產品之進出口貿易業務"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6239",
+          "name": "力成",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6239",
+              "title": "公開資訊觀測站 公司基本資料：力成（6239）主要經營業務",
+              "quote": "積體電路與半導體元件之測試服務 積體電路與半導體元件自動測試電腦軟體之研發、設計與銷售 CC01080電子零組件製造業"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6147",
+          "name": "頎邦",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6147",
+              "title": "公開資訊觀測站 公司基本資料：頎邦（6147）主要經營業務",
+              "quote": "金凸塊(GOLD BUMPING)，錫鉛凸塊(SOLD BUMPING)，晶圓測試(CP) 捲帶軟板封裝(TCP)，捲帶式薄膜覆晶(COF)，玻璃覆晶封裝(COG)"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:8150",
+          "name": "南茂",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=8150",
+              "title": "公開資訊觀測站 公司基本資料：南茂（8150）主要經營業務",
+              "quote": "研究開發生產製造銷售高集積度高精密度記憶體之封裝及測試服務 顯示器驅動IC封裝測試(含金凸塊)業務 混合訊號IC封裝測試業務"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2441",
+          "name": "超豐",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2441",
+              "title": "公開資訊觀測站 公司基本資料：超豐（2441）主要經營業務",
+              "quote": "各種積體電路之封裝、測試及相關業務"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3264",
+          "name": "欣銓",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3264",
+              "title": "公開資訊觀測站 公司基本資料：欣銓（3264）主要經營業務",
+              "quote": "記憶體IC之晶圓測試 數位訊號IC及混合訊號IC之晶圓及成品測試 晶圓型式之Burn in 之測試"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3374",
+          "name": "精材",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3374",
+              "title": "公開資訊觀測站 公司基本資料：精材（3374）主要經營業務",
+              "quote": "測試服務 晶圓級尺寸封裝業務 晶圓級後護層封裝業務"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2369",
+          "name": "菱生",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2369",
+              "title": "公開資訊觀測站 公司基本資料：菱生（2369）主要經營業務",
+              "quote": "積體電路封裝.積體電路測試 發光二極體顯示燈 一般進出口貿易(許可業務除外)"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:8131",
+          "name": "福懋科",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=8131",
+              "title": "公開資訊觀測站 公司基本資料：福懋科（8131）主要經營業務",
+              "quote": "接受委託各型積體電路之封裝、測試與模組之加工及研究開發業務 CC01080電子零組件製造業"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3265",
+          "name": "台星科",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3265",
+              "title": "公開資訊觀測站 公司基本資料：台星科（3265）主要經營業務",
+              "quote": "積體電路,IC 及其測試機組之研發及測試 資訊軟體服務業 電子零組件製造業"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "copper-foil",
+      "name": "銅箔／銅箔基板",
+      "description": "銅箔、銅箔基板（CCL）與上游電子級玻璃纖維布的製造商。",
+      "keywords": [
+        "銅箔",
+        "銅箔基板",
+        "基板",
+        "玻璃纖維",
+        "玻璃布",
+        "黏合片",
+        "粘合片"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2383",
+          "name": "台光電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2383",
+              "title": "公開資訊觀測站 公司基本資料：台光電（2383）主要經營業務",
+              "quote": "銅箔基板 黏合片 多層壓合板"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6213",
+          "name": "聯茂",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6213",
+              "title": "公開資訊觀測站 公司基本資料：聯茂（6213）主要經營業務",
+              "quote": "多層印刷電路基材及銅箔基板及半成品及成品之製造、加工及買賣 電子零組件製造業 電子材料批發業"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6274",
+          "name": "台燿",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6274",
+              "title": "公開資訊觀測站 公司基本資料：台燿（6274）主要經營業務",
+              "quote": "銅箔基板、粘合片、多層壓合板之製造、加工及買賣"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:4989",
+          "name": "榮科",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=4989",
+              "title": "公開資訊觀測站 公司基本資料：榮科（4989）主要經營業務",
+              "quote": "電解銅箔之製造及銷售"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:1815",
+          "name": "富喬",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=1815",
+              "title": "公開資訊觀測站 公司基本資料：富喬（1815）主要經營業務",
+              "quote": "電子級玻璃纖維 電子級玻璃纖維 電子級玻璃纖維"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1802",
+          "name": "台玻",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=1802",
+              "title": "公開資訊觀測站 公司基本資料：台玻（1802）主要經營業務",
+              "quote": "平板玻璃之製造與銷售 玻璃纖維布及玻璃纖維束之製造與銷售 玻璃器皿之製造與銷售"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:5475",
+          "name": "德宏",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=5475",
+              "title": "公開資訊觀測站 公司基本資料：德宏（5475）主要經營業務",
+              "quote": "印刷電路基層板,玻璃布之製造加工及買賣業務 前項之原材料,零配組件,製成品之製造加工買賣業務 前項產品之進出口及國內外廠商產品之經銷,投標,報價業務"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pcb",
+      "name": "PCB",
+      "description": "硬板、軟板與多層印刷電路板的製造商。",
+      "keywords": [
+        "印刷電路板",
+        "電路板",
+        "PCB"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2368",
+          "name": "金像電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2368",
+              "title": "公開資訊觀測站 公司基本資料：金像電（2368）主要經營業務",
+              "quote": "雙層、多層印刷電路板之製造加工及買賣業務。 各種電腦、電子、通訊、資訊產品及其週邊設備與電子零件、加工。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3044",
+          "name": "健鼎",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3044",
+              "title": "公開資訊觀測站 公司基本資料：健鼎（3044）主要經營業務",
+              "quote": "印刷電路板 工業自動化機械 電子收銀機系統"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2313",
+          "name": "華通",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2313",
+              "title": "公開資訊觀測站 公司基本資料：華通（2313）主要經營業務",
+              "quote": "多層印刷電路板"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:4958",
+          "name": "臻鼎-KY",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=4958",
+              "title": "公開資訊觀測站 公司基本資料：臻鼎-KY（4958）主要經營業務",
+              "quote": "PCB"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6269",
+          "name": "台郡",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6269",
+              "title": "公開資訊觀測站 公司基本資料：台郡（6269）主要經營業務",
+              "quote": "加成(Build-up)銅箔基層板之製造 多層加成(Build-up)印刷電路板,軟式印刷電路板製造 聚醯亞胺薄膜銅箔基層板半製品之零組配件之製造,研究,開發,買賣"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3037",
+          "name": "欣興",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3037",
+              "title": "公開資訊觀測站 公司基本資料：欣興（3037）主要經營業務",
+              "quote": "PCB製造"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "robot",
+      "name": "機器人",
+      "description": "機器人整機、視覺與運動控制、驅動與氣動等自動化關鍵零組件的廠商。",
+      "keywords": [
+        "機器人",
+        "自動化",
+        "運動及控制",
+        "定位系統",
+        "傳動",
+        "氣動"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2359",
+          "name": "所羅門",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2359",
+              "title": "公開資訊觀測站 公司基本資料：所羅門（2359）主要經營業務",
+              "quote": "AI視覺軟體開發、機器人代理、工業控制產品代理 燃氣沼氣發電機代理、柴油發電機組代理 其他"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1590",
+          "name": "亞德客-KY",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=1590",
+              "title": "公開資訊觀測站 公司基本資料：亞德客-KY（1590）主要經營業務",
+              "quote": "氣動控制元件,氣動執行元件, 氣源處理元件及氣動輔助元件之研發,生產及銷售"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:8374",
+          "name": "羅昇",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=8374",
+              "title": "公開資訊觀測站 公司基本資料：羅昇（8374）主要經營業務",
+              "quote": "變頻器/自動化驅動控制系統 自動化傳動系列 控制器及監控系統"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:4576",
+          "name": "大銀微系統",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=4576",
+              "title": "公開資訊觀測站 公司基本資料：大銀微系統（4576）主要經營業務",
+              "quote": "精密運動及控制元件之研究開發製造及銷售 微米與奈米級定位系統之研究開發製造及銷售"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "power-bbu",
+      "name": "電源／BBU",
+      "description": "電源供應器、不斷電系統（UPS）與電池模組（含伺服器備援電池 BBU）的廠商。",
+      "keywords": [
+        "電源",
+        "電池",
+        "UPS",
+        "不斷電",
+        "BBU"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2308",
+          "name": "台達電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2308",
+              "title": "公開資訊觀測站 公司基本資料：台達電（2308）主要經營業務",
+              "quote": "電源供應系統、無刷直流風扇、散熱系統、微型化關鍵零組件、 電動車電源相關系統、工業自動化、視訊顯示、資訊、網路通訊 消費性電子、可再生能源應用、智慧樓宇管理與控制解決方案等"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6409",
+          "name": "旭隼",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6409",
+              "title": "公開資訊觀測站 公司基本資料：旭隼（6409）主要經營業務",
+              "quote": "UPS(Uninterruptible power system) INVERTER/PV INVERTER / AVR / Electronic Components"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3211",
+          "name": "順達",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3211",
+              "title": "公開資訊觀測站 公司基本資料：順達（3211）主要經營業務",
+              "quote": "電池製造業 電子零組件製造業 發電、輸電、配電機械製造業"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6121",
+          "name": "新普",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6121",
+              "title": "公開資訊觀測站 公司基本資料：新普（6121）主要經營業務",
+              "quote": "電池製造業電池組裝配(筆記型電腦電池組、行動電話電池組)"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6282",
+          "name": "康舒",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6282",
+              "title": "公開資訊觀測站 公司基本資料：康舒（6282）主要經營業務",
+              "quote": "交換式電源供應器之研發設計、製造及銷售"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "defense-drone",
+      "name": "軍工／無人機",
+      "description": "軍用航空、船艦、無人載具與航空零組件的廠商。",
+      "keywords": [
+        "軍用",
+        "國防",
+        "無人機",
+        "無人載具",
+        "航空",
+        "船艦",
+        "飛機"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2634",
+          "name": "漢翔",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2634",
+              "title": "公開資訊觀測站 公司基本資料：漢翔（2634）主要經營業務",
+              "quote": "國內外軍用、民用航空及相關工業產品之發展、製造、裝修及銷售。 協助國內航空工業建立中心衛星體系與制度。 提供對航空工業系統之規劃、製造、整合、發展及管理之技術服務。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2645",
+          "name": "長榮航太",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2645",
+              "title": "公開資訊觀測站 公司基本資料：長榮航太（2645）主要經營業務",
+              "quote": "航空器機體、零組件及發動機維修 航空器零組件製造及組裝 除許可業務外，得經營非法令禁止或限制之業務"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:8033",
+          "name": "雷虎",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=8033",
+              "title": "公開資訊觀測站 公司基本資料：雷虎（8033）主要經營業務",
+              "quote": "精密醫療器材製造與買賣 中大型無人載具及無線電遙控模型及其零配件等製造與買賣 無菌包材產品製造與買賣"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2208",
+          "name": "台船",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=2208",
+              "title": "公開資訊觀測站 公司基本資料：台船（2208）主要經營業務",
+              "quote": "船艦建造及維修 大型鋼構及機械製造 海工及其他營業工程"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:4572",
+          "name": "駐龍",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=4572",
+              "title": "公開資訊觀測站 公司基本資料：駐龍（4572）主要經營業務",
+              "quote": "大型飛機機身結構零組件 大型飛機引擎及起落架結構零組件 特殊模治具"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "asic-ip",
+      "name": "ASIC／矽智財",
+      "description": "特殊應用積體電路（ASIC）設計服務與矽智財（IP）授權的廠商。",
+      "keywords": [
+        "ASIC",
+        "應用積體電路",
+        "矽智財",
+        "智財",
+        "IP授權"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:3443",
+          "name": "創意",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3443",
+              "title": "公開資訊觀測站 公司基本資料：創意（3443）主要經營業務",
+              "quote": "一、研究、開發、生產、製造及銷售：各種應用積體電路1.嵌入式記 憶體及邏輯元件。2.設計用元件資料庫。3.設計用自動化工具 二、提供前述產品相關及客戶委託之技術服務。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3661",
+          "name": "世芯-KY",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3661",
+              "title": "公開資訊觀測站 公司基本資料：世芯-KY（3661）主要經營業務",
+              "quote": "專業特殊應用積體電路(Application Specific IC, ASIC) 系統單晶片(System-on-Chip; SoC)設計及製造生產"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3035",
+          "name": "智原",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3035",
+              "title": "公開資訊觀測站 公司基本資料：智原（3035）主要經營業務",
+              "quote": "特殊應用積體電路設計(ASIC) 特殊應用積體電路設計用矽智財及系統平台(IP & System Platform) 特殊應用積體電路電子設計、自動化軟體工具(ASIC EDA Tools)"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6643",
+          "name": "M31",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6643",
+              "title": "公開資訊觀測站 公司基本資料：M31（6643）主要經營業務",
+              "quote": "矽智財授權金及權利金"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6533",
+          "name": "晶心科",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6533",
+              "title": "公開資訊觀測站 公司基本資料：晶心科（6533）主要經營業務",
+              "quote": "晶心嵌入式微處理器核心智財及其相關硬體、軟體發展平台與工具鏈"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3529",
+          "name": "力旺",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3529",
+              "title": "公開資訊觀測站 公司基本資料：力旺（3529）主要經營業務",
+              "quote": "嵌入式非揮發記憶體IP授權及技術服務"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "silicon-wafer",
+      "name": "矽晶圓",
+      "description": "半導體與太陽能矽晶棒、矽晶圓的製造商。",
+      "keywords": [
+        "矽晶圓",
+        "晶圓",
+        "晶棒"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:3532",
+          "name": "台勝科",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=3532",
+              "title": "公開資訊觀測站 公司基本資料：台勝科（3532）主要經營業務",
+              "quote": "矽晶圓電子材料之製造及銷售進出口業務 前項原材料之買賣及進出口業務 除許可業務外，得經營非法令非禁止或限制之業務"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6488",
+          "name": "環球晶",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6488",
+              "title": "公開資訊觀測站 公司基本資料：環球晶（6488）主要經營業務",
+              "quote": "半導體晶棒及晶圓之研發、設計與製造"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:5483",
+          "name": "中美晶",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=5483",
+              "title": "公開資訊觀測站 公司基本資料：中美晶（5483）主要經營業務",
+              "quote": "太陽能晶錠 太陽能晶圓 太陽能電池 太陽能模組 太陽能發電系統"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cybersecurity",
+      "name": "資安",
+      "description": "資訊安全服務、資安產品與資安系統整合的廠商。",
+      "keywords": [
+        "資安",
+        "資訊安全",
+        "網路安全"
+      ],
+      "valid_from": "2026-11-24",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TPEx:6690",
+          "name": "安碁資訊",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=6690",
+              "title": "公開資訊觀測站 公司基本資料：安碁資訊（6690）主要經營業務",
+              "quote": "資訊安全管理服務"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:7765",
+          "name": "中華資安",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=7765",
+              "title": "公開資訊觀測站 公司基本資料：中華資安（7765）主要經營業務",
+              "quote": "資安專業服務 上網資安 資安商品銷售"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:8099",
+          "name": "大世科",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://mopsov.twse.com.tw/mops/web/ajax_t05st03?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&co_id=8099",
+              "title": "公開資訊觀測站 公司基本資料：大世科（8099）主要經營業務",
+              "quote": "資訊 , 通訊 , 網路 , 資安 , 軟體產品 , 專業服務"
             }
           ]
         }
