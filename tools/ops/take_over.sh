@@ -24,9 +24,11 @@
 #               still answers is stopped (kill) and waited for when it is this checkout's
 #               (on macOS it outlives the terminal, #997: lsof finds the one process on the
 #               port, ps its command line: $script_dir/wake_listener.py with this run's
-#               --data-dir and --port), else the step fails naming the PID and command
-#               line. One this run started is kept; --from relisten neither waits nor
-#               stops one (skipped with --no-old-terminal)
+#               --data-dir and --port; the start after it is tried again while the port
+#               is in TIME_WAIT, up to TAKE_OVER_REBIND_WAIT seconds), else the step
+#               fails naming the PID and command line. One this run started is kept;
+#               --from relisten neither waits nor stops one (skipped with
+#               --no-old-terminal)
 #   commitments the commitments not kept yet (commit.sh list)
 #   closed      the Issues and PRs closed in the last 48 hours (#713): every merged PR's
 #               merge commit has green CI (the CI workflow's push run) and no worktree or
@@ -74,6 +76,7 @@
 #   may compact first), TAKE_OVER_CLOSE_SETTLE (seconds between starting that wait and
 #   sending the text, default 2), TAKE_OVER_LSOF, TAKE_OVER_PS, TAKE_OVER_KILL (the
 #   commands relisten finds and stops the old listener with, default lsof, ps, kill),
+#   TAKE_OVER_REBIND_WAIT (seconds the start after that stop is tried again, default 60),
 #   WAKE_LISTENER_PORT (the listener's port, as wake_listener_start.sh takes it).
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -279,8 +282,9 @@ listener_gone() {
 # when it is this checkout's: the one process that LISTENs on the port runs
 # $script_dir/wake_listener.py with this run's --data-dir and --port. Anything else (no
 # lsof or ps, as in Git Bash; no process or more than one; another program, checkout,
-# data directory or port; one that still answers after the kill) returns 1 with
-# restart_why naming the PID and command line it found, and nothing is stopped.
+# data directory or port; one that still answers or holds the port TAKE_OVER_LISTENER_WAIT
+# seconds after the kill) returns 1 with restart_why naming the PID and command line it
+# found; only this checkout's listener is ever stopped.
 listener_port="${WAKE_LISTENER_PORT:-47338}"
 lsof_cmd="${TAKE_OVER_LSOF:-lsof}" ps_cmd="${TAKE_OVER_PS:-ps}" kill_cmd="${TAKE_OVER_KILL:-kill}"
 restart_why=""
@@ -322,10 +326,38 @@ listener_restart() {
     restart_why="kill $pid 失敗（命令列：$cmdline）"
     return 1
   fi
-  if ! listener_gone; then
-    restart_why="kill $pid 後 $listener_wait 秒仍在回應（命令列：$cmdline）"
-    return 1
-  fi
+  # /health stops answering before the dying process lets the port go: a start then
+  # cannot bind it (seen on macOS, #997 AC-3), so the port must be free too.
+  local waited=0
+  while listener_up || [ -n "$("$lsof_cmd" -t -nP -iTCP:"$listener_port" -sTCP:LISTEN 2>/dev/null)" ]; do
+    if [ "$waited" -ge "$listener_wait" ]; then
+      restart_why="kill $pid 後 $listener_wait 秒仍在回應或仍占著埠 $listener_port（命令列：$cmdline）"
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
+# listener_rebind: the start after listener_restart. The killed listener answered every
+# /health first and closed those connections, so the port sits in TIME_WAIT for a while
+# (30 seconds on macOS) and wake_listener.py, which binds it alone (no SO_REUSEADDR),
+# cannot have it yet (#997 AC-3): the start is tried again every second up to
+# TAKE_OVER_REBIND_WAIT seconds (default 60). Only the last try's output is printed.
+rebind_wait="${TAKE_OVER_REBIND_WAIT:-60}" rebind_out=""
+case "$rebind_wait" in '' | *[!0-9]*) die "TAKE_OVER_REBIND_WAIT 要是秒數（整數）：$rebind_wait" 64 ;; esac
+listener_rebind() {
+  local waited=0 rc
+  while :; do
+    rc=0
+    rebind_out="$(bash "$script_dir/wake_listener_start.sh" 2>&1)" || rc=$?
+    [ "$rc" = 0 ] && { printf '%s\n' "$rebind_out"; return 0; }
+    # 2: another program answers on the port; trying again changes nothing.
+    [ "$rc" = 1 ] && [ "$waited" -lt "$rebind_wait" ] || return 1
+    [ "$waited" = 0 ] && echo "新 wake listener 還綁不到埠 $listener_port（舊的連線還在 TIME_WAIT），每秒重試，最多 $rebind_wait 秒"
+    sleep 1
+    waited=$((waited + 1))
+  done
 }
 
 for step in "${steps_all[@]:$start}"; do
@@ -439,10 +471,16 @@ for line in json.load(sys.stdin): print("  |", line)' 2>/dev/null || echo "  （
       # stops with the old terminal on Windows; on macOS it outlives it and is restarted
       # when it is this checkout's (listener_restart, #997). A run going on --from relisten
       # neither waits nor restarts: whoever runs it checked the listener that still answers.
+      restarted=0
       if [ "$rec_listener" != started ] && [ "$from" != relisten ] && ! listener_gone; then
-        listener_restart || fail relisten "關掉舊 terminal $listener_wait 秒後，接手前就在跑的 wake listener 仍在回應，且認不出是本 checkout 的：$restart_why。它可能不是舊 terminal 啟動的，或還沒結束，結束後就沒有 listener。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
+        listener_restart || fail relisten "關掉舊 terminal $listener_wait 秒後，接手前就在跑的 wake listener 仍在回應，沒有重啟：$restart_why。它可能不是舊 terminal 啟動的，或還沒結束，結束後就沒有 listener。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
+        restarted=1
       fi
-      bash "$script_dir/wake_listener_start.sh" || fail relisten "wake_listener_start.sh 失敗"
+      if [ "$restarted" = 1 ]; then
+        listener_rebind || fail relisten "停掉舊 listener 後 $rebind_wait 秒內新的 wake listener 起不來：$rebind_out"
+      else
+        bash "$script_dir/wake_listener_start.sh" || fail relisten "wake_listener_start.sh 失敗"
+      fi
       listener_up || fail relisten "wake_listener_start.sh 之後 --status 仍說 listener 沒在跑"
       ;;
     commitments)
