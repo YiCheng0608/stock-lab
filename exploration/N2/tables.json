@@ -1,0 +1,967 @@
+{
+  "tool": "round16_research",
+  "version": 1,
+  "design": "994",
+  "definitions_sha256": "28c4651b1574b8ecc3cd60757c067322532c3ddf62d27291c6e5579ac4016edc",
+  "label": "每季法定期限的事件日，`tax_mom`（最新一季單季所得稅費用減去年同季，除以去年同季單季營收）大者先取 20 檔",
+  "direction": "基本面：稅費動能",
+  "parameters": {
+    "engine": "events",
+    "rule": "quarterly",
+    "keys": [
+      [
+        "tax_mom",
+        "high"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": "next_event",
+    "start": [
+      "date",
+      "2014-05-15"
+    ]
+  },
+  "hypothesis": "N2",
+  "engine": "events",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-05-15",
+    "first_session": "2014-05-16",
+    "last_session": "2019-12-31",
+    "days": 1384,
+    "signal_days": 23,
+    "event_days": 23
+  },
+  "prerequisites": {
+    "days": 1384,
+    "min_days": 500,
+    "delisted": 79,
+    "ok": true
+  },
+  "coverage": {
+    "2014": {
+      "days": 3,
+      "members": 1401,
+      "valued": 1145,
+      "delisted": 161,
+      "delisted_missing": 161,
+      "events": [
+        {
+          "signal_date": "2014-05-15",
+          "quarter": "2014-03-31",
+          "members": 525,
+          "valued": 434,
+          "stale": 16,
+          "format": 16,
+          "fields": 59,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 57,
+          "delisted_missing": 57
+        },
+        {
+          "signal_date": "2014-08-14",
+          "quarter": "2014-06-30",
+          "members": 509,
+          "valued": 413,
+          "stale": 34,
+          "format": 3,
+          "fields": 59,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 58,
+          "delisted_missing": 58
+        },
+        {
+          "signal_date": "2014-11-14",
+          "quarter": "2014-09-30",
+          "members": 367,
+          "valued": 298,
+          "stale": 15,
+          "format": 12,
+          "fields": 42,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 46,
+          "delisted_missing": 46
+        }
+      ]
+    },
+    "2015": {
+      "days": 4,
+      "members": 1763,
+      "valued": 1433,
+      "delisted": 194,
+      "delisted_missing": 194,
+      "events": [
+        {
+          "signal_date": "2015-03-31",
+          "quarter": "2014-12-31",
+          "members": 473,
+          "valued": 390,
+          "stale": 2,
+          "format": 29,
+          "fields": 51,
+          "revenue": 1,
+          "names": 20,
+          "delisted": 53,
+          "delisted_missing": 53
+        },
+        {
+          "signal_date": "2015-05-15",
+          "quarter": "2015-03-31",
+          "members": 466,
+          "valued": 376,
+          "stale": 16,
+          "format": 25,
+          "fields": 49,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 47,
+          "delisted_missing": 47
+        },
+        {
+          "signal_date": "2015-08-14",
+          "quarter": "2015-06-30",
+          "members": 372,
+          "valued": 295,
+          "stale": 31,
+          "format": 3,
+          "fields": 43,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 45,
+          "delisted_missing": 45
+        },
+        {
+          "signal_date": "2015-11-16",
+          "quarter": "2015-09-30",
+          "members": 452,
+          "valued": 372,
+          "stale": 16,
+          "format": 13,
+          "fields": 50,
+          "revenue": 1,
+          "names": 20,
+          "delisted": 49,
+          "delisted_missing": 49
+        }
+      ]
+    },
+    "2016": {
+      "days": 4,
+      "members": 1637,
+      "valued": 1376,
+      "delisted": 139,
+      "delisted_missing": 139,
+      "events": [
+        {
+          "signal_date": "2016-03-31",
+          "quarter": "2015-12-31",
+          "members": 479,
+          "valued": 404,
+          "stale": 2,
+          "format": 28,
+          "fields": 45,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 39,
+          "delisted_missing": 39
+        },
+        {
+          "signal_date": "2016-05-16",
+          "quarter": "2016-03-31",
+          "members": 361,
+          "valued": 301,
+          "stale": 15,
+          "format": 9,
+          "fields": 36,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 31,
+          "delisted_missing": 31
+        },
+        {
+          "signal_date": "2016-08-15",
+          "quarter": "2016-06-30",
+          "members": 461,
+          "valued": 390,
+          "stale": 26,
+          "format": 1,
+          "fields": 43,
+          "revenue": 1,
+          "names": 20,
+          "delisted": 39,
+          "delisted_missing": 39
+        },
+        {
+          "signal_date": "2016-11-14",
+          "quarter": "2016-09-30",
+          "members": 336,
+          "valued": 281,
+          "stale": 14,
+          "format": 11,
+          "fields": 30,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 30,
+          "delisted_missing": 30
+        }
+      ]
+    },
+    "2017": {
+      "days": 4,
+      "members": 1912,
+      "valued": 1620,
+      "delisted": 171,
+      "delisted_missing": 171,
+      "events": [
+        {
+          "signal_date": "2017-03-31",
+          "quarter": "2016-12-31",
+          "members": 502,
+          "valued": 426,
+          "stale": 2,
+          "format": 32,
+          "fields": 42,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 39,
+          "delisted_missing": 39
+        },
+        {
+          "signal_date": "2017-05-15",
+          "quarter": "2017-03-31",
+          "members": 427,
+          "valued": 363,
+          "stale": 16,
+          "format": 10,
+          "fields": 38,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 41,
+          "delisted_missing": 41
+        },
+        {
+          "signal_date": "2017-08-14",
+          "quarter": "2017-06-30",
+          "members": 471,
+          "valued": 391,
+          "stale": 29,
+          "format": 2,
+          "fields": 49,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 47,
+          "delisted_missing": 47
+        },
+        {
+          "signal_date": "2017-11-14",
+          "quarter": "2017-09-30",
+          "members": 512,
+          "valued": 440,
+          "stale": 17,
+          "format": 11,
+          "fields": 44,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 44,
+          "delisted_missing": 44
+        }
+      ]
+    },
+    "2018": {
+      "days": 4,
+      "members": 1700,
+      "valued": 1429,
+      "delisted": 142,
+      "delisted_missing": 142,
+      "events": [
+        {
+          "signal_date": "2018-04-02",
+          "quarter": "2017-12-31",
+          "members": 500,
+          "valued": 421,
+          "stale": 1,
+          "format": 30,
+          "fields": 48,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 47,
+          "delisted_missing": 47
+        },
+        {
+          "signal_date": "2018-05-15",
+          "quarter": "2018-03-31",
+          "members": 442,
+          "valued": 369,
+          "stale": 16,
+          "format": 13,
+          "fields": 43,
+          "revenue": 1,
+          "names": 20,
+          "delisted": 38,
+          "delisted_missing": 38
+        },
+        {
+          "signal_date": "2018-08-14",
+          "quarter": "2018-06-30",
+          "members": 416,
+          "valued": 347,
+          "stale": 26,
+          "format": 2,
+          "fields": 41,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 33,
+          "delisted_missing": 33
+        },
+        {
+          "signal_date": "2018-11-14",
+          "quarter": "2018-09-30",
+          "members": 342,
+          "valued": 292,
+          "stale": 15,
+          "format": 13,
+          "fields": 22,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 24,
+          "delisted_missing": 24
+        }
+      ]
+    },
+    "2019": {
+      "days": 4,
+      "members": 1774,
+      "valued": 1552,
+      "delisted": 93,
+      "delisted_missing": 93,
+      "events": [
+        {
+          "signal_date": "2019-04-01",
+          "quarter": "2018-12-31",
+          "members": 449,
+          "valued": 390,
+          "stale": 0,
+          "format": 29,
+          "fields": 30,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 26,
+          "delisted_missing": 26
+        },
+        {
+          "signal_date": "2019-05-15",
+          "quarter": "2019-03-31",
+          "members": 451,
+          "valued": 394,
+          "stale": 16,
+          "format": 13,
+          "fields": 28,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 23,
+          "delisted_missing": 23
+        },
+        {
+          "signal_date": "2019-08-14",
+          "quarter": "2019-06-30",
+          "members": 435,
+          "valued": 379,
+          "stale": 28,
+          "format": 2,
+          "fields": 26,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 22,
+          "delisted_missing": 22
+        },
+        {
+          "signal_date": "2019-11-14",
+          "quarter": "2019-09-30",
+          "members": 439,
+          "valued": 389,
+          "stale": 15,
+          "format": 12,
+          "fields": 23,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 22,
+          "delisted_missing": 22
+        }
+      ]
+    }
+  },
+  "seconds": {
+    "plan": 3.0757430259836838,
+    "tax_mom": 0.6739177549316082,
+    "reference": 0.015451232029590756,
+    "p2_order": 1.4249229618289974,
+    "k2_order": 0.18442656609113328,
+    "x4_order": 0.622077661100775
+  },
+  "overlap": {
+    "N2_P2": {
+      "days": 23,
+      "mean": 0.0891304347826087,
+      "years": {
+        "2014": {
+          "days": 3,
+          "mean": 0.09999999999999999
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.05
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.1
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.1375
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.0875
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.0625
+        }
+      }
+    },
+    "N2_K2": {
+      "days": 23,
+      "mean": 0.09999999999999999,
+      "years": {
+        "2014": {
+          "days": 3,
+          "mean": 0.09999999999999999
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.1
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.1
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.1375
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.08750000000000001
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.075
+        }
+      }
+    },
+    "N2_X4": {
+      "days": 23,
+      "mean": 0.18043478260869567,
+      "years": {
+        "2014": {
+          "days": 3,
+          "mean": 0.11666666666666665
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.1375
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.2
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.25
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.2625
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.1
+        }
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1384,
+      "mean": -1.592623251650164e-05,
+      "annual": -0.004013410594158414,
+      "t": -0.09608526395741498
+    },
+    "taiex": {
+      "days": 1384,
+      "mean": -5.795912844606039e-05,
+      "annual": -0.014605700368407219,
+      "t": -0.22453653674382473
+    },
+    "reference": {
+      "days": 1384,
+      "mean": -5.84609537781239e-05,
+      "annual": -0.014732160352087223,
+      "t": -0.35751939020391343
+    }
+  },
+  "absolute": {
+    "days": 1384,
+    "mean": 0.00019254374706880172
+  },
+  "curves": {
+    "N2": {
+      "days": 1384,
+      "total": 0.15788674061638863,
+      "annual": 0.02705187281746979,
+      "volatility": 0.2082116898260018,
+      "max_drawdown": -0.4228256072908564,
+      "invested": 0.9841040462427746,
+      "turnover": 4.187861271676301
+    },
+    "population": {
+      "days": 1384,
+      "total": 0.2438388869202246,
+      "annual": 0.04053032205299223,
+      "volatility": 0.1593183428608393,
+      "max_drawdown": -0.3328431833233858,
+      "invested": 0.9833919911043948,
+      "turnover": 4.068444442323899
+    },
+    "taiex": {
+      "days": 1384,
+      "total": 0.3509303936085739,
+      "annual": 0.0562963338975313,
+      "volatility": 0.1290318388438865,
+      "max_drawdown": -0.25696873195148584,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 460,
+    "won": 213,
+    "rate": 0.46304347826086956,
+    "unsold": 20
+  },
+  "counts": {
+    "N2": {
+      "bought": 460,
+      "unsold": 20
+    },
+    "population": {
+      "bought": 10181,
+      "sale_held": 35,
+      "limit_down": 7,
+      "not_tradable": 4,
+      "limit_up": 2,
+      "unsold": 467
+    }
+  },
+  "unsold_share": 0.043478260869565216,
+  "rebalances": [
+    {
+      "signal_date": "2014-05-15",
+      "quarter": "2014-03-31",
+      "members": 525,
+      "valued": 434,
+      "stale": 16,
+      "format": 16,
+      "fields": 59,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 57,
+      "delisted_missing": 57,
+      "p2_overlap": 0.05,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.1,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2014-08-14",
+      "quarter": "2014-06-30",
+      "members": 509,
+      "valued": 413,
+      "stale": 34,
+      "format": 3,
+      "fields": 59,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 58,
+      "delisted_missing": 58,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.0,
+      "x4_overlap": 0.1,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2014-11-14",
+      "quarter": "2014-09-30",
+      "members": 367,
+      "valued": 298,
+      "stale": 15,
+      "format": 12,
+      "fields": 42,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 46,
+      "delisted_missing": 46,
+      "p2_overlap": 0.25,
+      "k2_overlap": 0.25,
+      "x4_overlap": 0.15,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2015-03-31",
+      "quarter": "2014-12-31",
+      "members": 473,
+      "valued": 390,
+      "stale": 2,
+      "format": 29,
+      "fields": 51,
+      "revenue": 1,
+      "names": 20,
+      "delisted": 53,
+      "delisted_missing": 53,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.1,
+      "x4_overlap": 0.15,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2015-05-15",
+      "quarter": "2015-03-31",
+      "members": 466,
+      "valued": 376,
+      "stale": 16,
+      "format": 25,
+      "fields": 49,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 47,
+      "delisted_missing": 47,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.0,
+      "x4_overlap": 0.25,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2015-08-14",
+      "quarter": "2015-06-30",
+      "members": 372,
+      "valued": 295,
+      "stale": 31,
+      "format": 3,
+      "fields": 43,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 45,
+      "delisted_missing": 45,
+      "p2_overlap": 0.1,
+      "k2_overlap": 0.15,
+      "x4_overlap": 0.05,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2015-11-16",
+      "quarter": "2015-09-30",
+      "members": 452,
+      "valued": 372,
+      "stale": 16,
+      "format": 13,
+      "fields": 50,
+      "revenue": 1,
+      "names": 20,
+      "delisted": 49,
+      "delisted_missing": 49,
+      "p2_overlap": 0.1,
+      "k2_overlap": 0.15,
+      "x4_overlap": 0.1,
+      "invested": 0.9999999999999993
+    },
+    {
+      "signal_date": "2016-03-31",
+      "quarter": "2015-12-31",
+      "members": 479,
+      "valued": 404,
+      "stale": 2,
+      "format": 28,
+      "fields": 45,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 39,
+      "delisted_missing": 39,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.0,
+      "x4_overlap": 0.3,
+      "invested": 0.9999999999999993
+    },
+    {
+      "signal_date": "2016-05-16",
+      "quarter": "2016-03-31",
+      "members": 361,
+      "valued": 301,
+      "stale": 15,
+      "format": 9,
+      "fields": 36,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 31,
+      "delisted_missing": 31,
+      "p2_overlap": 0.15,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.15,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2016-08-15",
+      "quarter": "2016-06-30",
+      "members": 461,
+      "valued": 390,
+      "stale": 26,
+      "format": 1,
+      "fields": 43,
+      "revenue": 1,
+      "names": 20,
+      "delisted": 39,
+      "delisted_missing": 39,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.1,
+      "x4_overlap": 0.15,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2016-11-14",
+      "quarter": "2016-09-30",
+      "members": 336,
+      "valued": 281,
+      "stale": 14,
+      "format": 11,
+      "fields": 30,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 30,
+      "delisted_missing": 30,
+      "p2_overlap": 0.25,
+      "k2_overlap": 0.25,
+      "x4_overlap": 0.2,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2017-03-31",
+      "quarter": "2016-12-31",
+      "members": 502,
+      "valued": 426,
+      "stale": 2,
+      "format": 32,
+      "fields": 42,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 39,
+      "delisted_missing": 39,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.0,
+      "x4_overlap": 0.2,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2017-05-15",
+      "quarter": "2017-03-31",
+      "members": 427,
+      "valued": 363,
+      "stale": 16,
+      "format": 10,
+      "fields": 38,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 41,
+      "delisted_missing": 41,
+      "p2_overlap": 0.2,
+      "k2_overlap": 0.2,
+      "x4_overlap": 0.25,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2017-08-14",
+      "quarter": "2017-06-30",
+      "members": 471,
+      "valued": 391,
+      "stale": 29,
+      "format": 2,
+      "fields": 49,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 47,
+      "delisted_missing": 47,
+      "p2_overlap": 0.15,
+      "k2_overlap": 0.2,
+      "x4_overlap": 0.35,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2017-11-14",
+      "quarter": "2017-09-30",
+      "members": 512,
+      "valued": 440,
+      "stale": 17,
+      "format": 11,
+      "fields": 44,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 44,
+      "delisted_missing": 44,
+      "p2_overlap": 0.2,
+      "k2_overlap": 0.15,
+      "x4_overlap": 0.2,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2018-04-02",
+      "quarter": "2017-12-31",
+      "members": 500,
+      "valued": 421,
+      "stale": 1,
+      "format": 30,
+      "fields": 48,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 47,
+      "delisted_missing": 47,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.1,
+      "x4_overlap": 0.2,
+      "invested": 0.9999999999999994
+    },
+    {
+      "signal_date": "2018-05-15",
+      "quarter": "2018-03-31",
+      "members": 442,
+      "valued": 369,
+      "stale": 16,
+      "format": 13,
+      "fields": 43,
+      "revenue": 1,
+      "names": 20,
+      "delisted": 38,
+      "delisted_missing": 38,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.2,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2018-08-14",
+      "quarter": "2018-06-30",
+      "members": 416,
+      "valued": 347,
+      "stale": 26,
+      "format": 2,
+      "fields": 41,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 33,
+      "delisted_missing": 33,
+      "p2_overlap": 0.25,
+      "k2_overlap": 0.1,
+      "x4_overlap": 0.25,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2018-11-14",
+      "quarter": "2018-09-30",
+      "members": 342,
+      "valued": 292,
+      "stale": 15,
+      "format": 13,
+      "fields": 22,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 24,
+      "delisted_missing": 24,
+      "p2_overlap": 0.1,
+      "k2_overlap": 0.1,
+      "x4_overlap": 0.4,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2019-04-01",
+      "quarter": "2018-12-31",
+      "members": 449,
+      "valued": 390,
+      "stale": 0,
+      "format": 29,
+      "fields": 30,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 26,
+      "delisted_missing": 26,
+      "p2_overlap": 0.0,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.15,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2019-05-15",
+      "quarter": "2019-03-31",
+      "members": 451,
+      "valued": 394,
+      "stale": 16,
+      "format": 13,
+      "fields": 28,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 23,
+      "delisted_missing": 23,
+      "p2_overlap": 0.1,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.1,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2019-08-14",
+      "quarter": "2019-06-30",
+      "members": 435,
+      "valued": 379,
+      "stale": 28,
+      "format": 2,
+      "fields": 26,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 22,
+      "delisted_missing": 22,
+      "p2_overlap": 0.1,
+      "k2_overlap": 0.15,
+      "x4_overlap": 0.05,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2019-11-14",
+      "quarter": "2019-09-30",
+      "members": 439,
+      "valued": 389,
+      "stale": 15,
+      "format": 12,
+      "fields": 23,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 22,
+      "delisted_missing": 22,
+      "p2_overlap": 0.05,
+      "k2_overlap": 0.05,
+      "x4_overlap": 0.1,
+      "invested": 0.9999999999999998
+    }
+  ],
+  "min_t": 2.0
+}

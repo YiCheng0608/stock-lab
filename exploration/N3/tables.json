@@ -1,0 +1,786 @@
+{
+  "tool": "round16_research",
+  "version": 1,
+  "design": "994",
+  "definitions_sha256": "28c4651b1574b8ecc3cd60757c067322532c3ddf62d27291c6e5579ac4016edc",
+  "label": "每季最後一個交易日往前 10 個交易日的窗口，窗口前一天 T 依 `trust_flow_60`（近 60 根投信淨買超 ÷ T 之前 20 根平均量）大者先取 20 檔，持有到季底收盤，窗口之間留現金",
+  "direction": "事件：投信季底作帳",
+  "parameters": {
+    "engine": "events",
+    "rule": "quarter_end",
+    "keys": [
+      [
+        "trust_flow_60",
+        "high"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": "quarter_end",
+    "start": [
+      "session",
+      "2014-12-01",
+      60
+    ]
+  },
+  "hypothesis": "N3",
+  "engine": "events",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2015-03-17",
+    "first_session": "2015-03-18",
+    "last_session": "2019-12-31",
+    "days": 1178,
+    "signal_days": 20,
+    "event_days": 20
+  },
+  "prerequisites": {
+    "days": 1178,
+    "min_days": 500,
+    "delisted": 70,
+    "ok": true
+  },
+  "coverage": {
+    "2015": {
+      "days": 4,
+      "members": 1719,
+      "valued": 1520
+    },
+    "windows": [
+      {
+        "signal_date": "2015-03-17",
+        "quarter_end": "2015-03-31",
+        "members": 438,
+        "valued": 323,
+        "missing": 115,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2015-06-15",
+        "quarter_end": "2015-06-30",
+        "members": 449,
+        "valued": 407,
+        "missing": 42,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2015-09-14",
+        "quarter_end": "2015-09-30",
+        "members": 410,
+        "valued": 393,
+        "missing": 17,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2015-12-17",
+        "quarter_end": "2015-12-31",
+        "members": 422,
+        "valued": 397,
+        "missing": 25,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2016-03-17",
+        "quarter_end": "2016-03-31",
+        "members": 484,
+        "valued": 393,
+        "missing": 91,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2016-06-16",
+        "quarter_end": "2016-06-30",
+        "members": 321,
+        "valued": 250,
+        "missing": 71,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2016-09-12",
+        "quarter_end": "2016-09-30",
+        "members": 392,
+        "valued": 320,
+        "missing": 72,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2016-12-16",
+        "quarter_end": "2016-12-30",
+        "members": 386,
+        "valued": 336,
+        "missing": 50,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2017-03-17",
+        "quarter_end": "2017-03-31",
+        "members": 510,
+        "valued": 347,
+        "missing": 163,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2017-06-16",
+        "quarter_end": "2017-06-30",
+        "members": 427,
+        "valued": 321,
+        "missing": 106,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2017-09-18",
+        "quarter_end": "2017-09-30",
+        "members": 542,
+        "valued": 448,
+        "missing": 94,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2017-12-15",
+        "quarter_end": "2017-12-29",
+        "members": 477,
+        "valued": 321,
+        "missing": 156,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2018-03-19",
+        "quarter_end": "2018-03-31",
+        "members": 481,
+        "valued": 421,
+        "missing": 60,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2018-06-14",
+        "quarter_end": "2018-06-29",
+        "members": 511,
+        "valued": 373,
+        "missing": 138,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2018-09-13",
+        "quarter_end": "2018-09-28",
+        "members": 395,
+        "valued": 370,
+        "missing": 25,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2018-12-17",
+        "quarter_end": "2018-12-28",
+        "members": 405,
+        "valued": 383,
+        "missing": 22,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2019-03-15",
+        "quarter_end": "2019-03-29",
+        "members": 449,
+        "valued": 335,
+        "missing": 114,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2019-06-14",
+        "quarter_end": "2019-06-28",
+        "members": 352,
+        "valued": 338,
+        "missing": 14,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2019-09-12",
+        "quarter_end": "2019-09-27",
+        "members": 428,
+        "valued": 402,
+        "missing": 26,
+        "names": 20,
+        "days": 10
+      },
+      {
+        "signal_date": "2019-12-17",
+        "quarter_end": "2019-12-31",
+        "members": 431,
+        "valued": 400,
+        "missing": 31,
+        "names": 20,
+        "days": 10
+      }
+    ],
+    "2016": {
+      "days": 4,
+      "members": 1583,
+      "valued": 1299
+    },
+    "2017": {
+      "days": 4,
+      "members": 1956,
+      "valued": 1437
+    },
+    "2018": {
+      "days": 4,
+      "members": 1792,
+      "valued": 1547
+    },
+    "2019": {
+      "days": 4,
+      "members": 1660,
+      "valued": 1475
+    }
+  },
+  "seconds": {
+    "plan": 0.5483436500071548,
+    "trust_flow_60": 0.26578883500769734,
+    "turnover_60": 0.061912457313155755,
+    "trust_flow_20": 0.04188883272581734,
+    "j2_order": 0.17520690787932836
+  },
+  "overlap": {
+    "N3_J2": {
+      "days": 20,
+      "mean": 0.26,
+      "years": {
+        "2015": {
+          "days": 4,
+          "mean": 0.2375
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.3
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.3
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.2375
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.225
+        }
+      }
+    }
+  },
+  "trust_flow_20": {
+    "days": 20,
+    "mean": 0.6184252080991903,
+    "years": {
+      "2015": {
+        "days": 4,
+        "mean": 0.5221034763963589
+      },
+      "2016": {
+        "days": 4,
+        "mean": 0.8819474667465268
+      },
+      "2017": {
+        "days": 4,
+        "mean": 0.6306421539072846
+      },
+      "2018": {
+        "days": 4,
+        "mean": 0.48927293755206025
+      },
+      "2019": {
+        "days": 4,
+        "mean": 0.568160005893721
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1178,
+      "mean": -1.500287803678104e-05,
+      "annual": -0.003780725265268822,
+      "t": -0.23378714627373376
+    },
+    "taiex": {
+      "days": 1178,
+      "mean": -0.0003586986530589443,
+      "annual": -0.09039206057085396,
+      "t": -1.4658755141053883
+    }
+  },
+  "absolute": {
+    "days": 1178,
+    "mean": -0.0001296749134491295
+  },
+  "curves": {
+    "N3": {
+      "days": 1178,
+      "total": -0.15240847470946772,
+      "annual": -0.03475504111571415,
+      "volatility": 0.07328749820674259,
+      "max_drawdown": -0.20133008955278542,
+      "invested": 0.15280135823429544,
+      "turnover": 4.278438030560272
+    },
+    "population": {
+      "days": 1178,
+      "total": -0.1329994373428134,
+      "annual": -0.030068670108603257,
+      "volatility": 0.057015196640856226,
+      "max_drawdown": -0.16668591195990057,
+      "invested": 0.15462954073376942,
+      "turnover": 4.267532246270458
+    },
+    "taiex": {
+      "days": 1178,
+      "total": 0.2576356683411214,
+      "annual": 0.05026033042925926,
+      "volatility": 0.13146099300059944,
+      "max_drawdown": -0.25696873195148584,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 400,
+    "won": 153,
+    "rate": 0.3825,
+    "unsold": 0
+  },
+  "counts": {
+    "N3": {
+      "bought": 400
+    },
+    "population": {
+      "bought": 8705,
+      "sale_held": 25,
+      "not_tradable": 4,
+      "limit_down": 2,
+      "limit_up": 1,
+      "unsold": 4
+    }
+  },
+  "unsold_share": 0.0,
+  "windows": [
+    {
+      "signal_date": "2015-03-17",
+      "quarter_end": "2015-03-31",
+      "members": 438,
+      "valued": 323,
+      "missing": 115,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.3,
+      "trust_flow_20": 0.38386831353945433,
+      "excess": {
+        "days": 10,
+        "mean": 0.0014071687595421211,
+        "annual": 0.3546065274046145,
+        "t": 0.6724065332297766
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 0.9999999999999909
+    },
+    {
+      "signal_date": "2015-06-15",
+      "quarter_end": "2015-06-30",
+      "members": 449,
+      "valued": 407,
+      "missing": 42,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.1,
+      "trust_flow_20": 0.34636193465182785,
+      "excess": {
+        "days": 10,
+        "mean": 0.0029881520841894328,
+        "annual": 0.7530143252157371,
+        "t": 1.5787264627298436
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 0.9999999999999971
+    },
+    {
+      "signal_date": "2015-09-14",
+      "quarter_end": "2015-09-30",
+      "members": 410,
+      "valued": 393,
+      "missing": 17,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.35,
+      "trust_flow_20": 0.5888117617956792,
+      "excess": {
+        "days": 10,
+        "mean": -0.001403269977016519,
+        "annual": -0.3536240342081628,
+        "t": -0.7914589251471396
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 1.0000000000000042
+    },
+    {
+      "signal_date": "2015-12-17",
+      "quarter_end": "2015-12-31",
+      "members": 422,
+      "valued": 397,
+      "missing": 25,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.2,
+      "trust_flow_20": 0.7693718955984743,
+      "excess": {
+        "days": 10,
+        "mean": 2.805115285123838e-05,
+        "annual": 0.007068890518512071,
+        "t": 0.020778735979678095
+      },
+      "invested": 0.9999999999999998,
+      "population_invested": 0.999999999999997
+    },
+    {
+      "signal_date": "2016-03-17",
+      "quarter_end": "2016-03-31",
+      "members": 484,
+      "valued": 393,
+      "missing": 91,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.4,
+      "trust_flow_20": 1.1111596126089391,
+      "excess": {
+        "days": 10,
+        "mean": 0.0012434668970739415,
+        "annual": 0.31335365806263327,
+        "t": 0.5474166351933193
+      },
+      "invested": 0.9999999999999998,
+      "population_invested": 0.9999999999999912
+    },
+    {
+      "signal_date": "2016-06-16",
+      "quarter_end": "2016-06-30",
+      "members": 321,
+      "valued": 250,
+      "missing": 71,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.3,
+      "trust_flow_20": 1.0486773300074481,
+      "excess": {
+        "days": 10,
+        "mean": -0.0007598805942548248,
+        "annual": -0.19148990975221586,
+        "t": -0.37498537768642826
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 0.9999999999999933
+    },
+    {
+      "signal_date": "2016-09-12",
+      "quarter_end": "2016-09-30",
+      "members": 392,
+      "valued": 320,
+      "missing": 72,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.4,
+      "trust_flow_20": 0.9748052643780711,
+      "excess": {
+        "days": 10,
+        "mean": 0.0005102999129028563,
+        "annual": 0.12859557805151978,
+        "t": 0.42034406812514424
+      },
+      "invested": 1.0000000000000004,
+      "population_invested": 0.9948019855512954
+    },
+    {
+      "signal_date": "2016-12-16",
+      "quarter_end": "2016-12-30",
+      "members": 386,
+      "valued": 336,
+      "missing": 50,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.1,
+      "trust_flow_20": 0.3931476599916486,
+      "excess": {
+        "days": 10,
+        "mean": -0.0005422202243984264,
+        "annual": -0.13663949654840346,
+        "t": -0.5071493217772363
+      },
+      "invested": 0.9999999999999998,
+      "population_invested": 0.9999999999999976
+    },
+    {
+      "signal_date": "2017-03-17",
+      "quarter_end": "2017-03-31",
+      "members": 510,
+      "valued": 347,
+      "missing": 163,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.25,
+      "trust_flow_20": 0.3881807586297259,
+      "excess": {
+        "days": 10,
+        "mean": 0.0003583113908567692,
+        "annual": 0.09029447049590583,
+        "t": 0.33290080442363695
+      },
+      "invested": 0.9999999999999996,
+      "population_invested": 1.000000000000009
+    },
+    {
+      "signal_date": "2017-06-16",
+      "quarter_end": "2017-06-30",
+      "members": 427,
+      "valued": 321,
+      "missing": 106,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.25,
+      "trust_flow_20": 0.4543141440617945,
+      "excess": {
+        "days": 10,
+        "mean": 0.00025968480000310157,
+        "annual": 0.0654405696007816,
+        "t": 0.18584049719615342
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 0.9999999999999949
+    },
+    {
+      "signal_date": "2017-09-18",
+      "quarter_end": "2017-09-30",
+      "members": 542,
+      "valued": 448,
+      "missing": 94,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.25,
+      "trust_flow_20": 0.633115609750052,
+      "excess": {
+        "days": 10,
+        "mean": -0.003115054317386556,
+        "annual": -0.7849936879814121,
+        "t": -1.3742126337836544
+      },
+      "invested": 1.0,
+      "population_invested": 0.9981296104619967
+    },
+    {
+      "signal_date": "2017-12-15",
+      "quarter_end": "2017-12-29",
+      "members": 477,
+      "valued": 321,
+      "missing": 156,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.45,
+      "trust_flow_20": 1.0469581031875659,
+      "excess": {
+        "days": 10,
+        "mean": -0.0013070090885431095,
+        "annual": -0.3293662903128636,
+        "t": -0.98688771244802
+      },
+      "invested": 0.9999999999999997,
+      "population_invested": 0.9999999999999896
+    },
+    {
+      "signal_date": "2018-03-19",
+      "quarter_end": "2018-03-31",
+      "members": 481,
+      "valued": 421,
+      "missing": 60,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.1,
+      "trust_flow_20": 0.05363118221211123,
+      "excess": {
+        "days": 10,
+        "mean": 0.0015403084660055133,
+        "annual": 0.38815773343338933,
+        "t": 0.9485311825530989
+      },
+      "invested": 0.9999999999999997,
+      "population_invested": 0.9979237941626365
+    },
+    {
+      "signal_date": "2018-06-14",
+      "quarter_end": "2018-06-29",
+      "members": 511,
+      "valued": 373,
+      "missing": 138,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.35,
+      "trust_flow_20": 0.4504426734521056,
+      "excess": {
+        "days": 10,
+        "mean": 0.0008929335110803183,
+        "annual": 0.22501924479224023,
+        "t": 0.39715743663254904
+      },
+      "invested": 1.0000000000000004,
+      "population_invested": 1.00000000000001
+    },
+    {
+      "signal_date": "2018-09-13",
+      "quarter_end": "2018-09-28",
+      "members": 395,
+      "valued": 370,
+      "missing": 25,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.1,
+      "trust_flow_20": 0.7314215214950146,
+      "excess": {
+        "days": 10,
+        "mean": 3.467549973527051e-05,
+        "annual": 0.008738225933288168,
+        "t": 0.014848128148461263
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 1.000000000000007
+    },
+    {
+      "signal_date": "2018-12-17",
+      "quarter_end": "2018-12-28",
+      "members": 405,
+      "valued": 383,
+      "missing": 22,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.4,
+      "trust_flow_20": 0.7215963730490095,
+      "excess": {
+        "days": 10,
+        "mean": 0.002518746611117462,
+        "annual": 0.6347241460016004,
+        "t": 1.8488694324505537
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 1.0000000000000016
+    },
+    {
+      "signal_date": "2019-03-15",
+      "quarter_end": "2019-03-29",
+      "members": 449,
+      "valued": 335,
+      "missing": 114,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.2,
+      "trust_flow_20": 0.5046030443742872,
+      "excess": {
+        "days": 10,
+        "mean": -0.00031993905354533726,
+        "annual": -0.08062464149342499,
+        "t": -0.28266618828975826
+      },
+      "invested": 1.0000000000000002,
+      "population_invested": 1.0000000000000047
+    },
+    {
+      "signal_date": "2019-06-14",
+      "quarter_end": "2019-06-28",
+      "members": 352,
+      "valued": 338,
+      "missing": 14,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.4,
+      "trust_flow_20": 0.9036083459548054,
+      "excess": {
+        "days": 10,
+        "mean": -0.0012565955448662013,
+        "annual": -0.3166620773062827,
+        "t": -0.857173684885268
+      },
+      "invested": 1.0000000000000004,
+      "population_invested": 1.0000000000000029
+    },
+    {
+      "signal_date": "2019-09-12",
+      "quarter_end": "2019-09-27",
+      "members": 428,
+      "valued": 402,
+      "missing": 26,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.1,
+      "trust_flow_20": 0.2604804248439873,
+      "excess": {
+        "days": 10,
+        "mean": -0.0018477354276821068,
+        "annual": -0.46562932777589094,
+        "t": -0.9509458584026942
+      },
+      "invested": 1.0000000000000004,
+      "population_invested": 0.9976650527599487
+    },
+    {
+      "signal_date": "2019-12-17",
+      "quarter_end": "2019-12-31",
+      "members": 431,
+      "valued": 400,
+      "missing": 31,
+      "names": 20,
+      "days": 10,
+      "j2_overlap": 0.2,
+      "trust_flow_20": 0.603948208401804,
+      "excess": {
+        "days": 10,
+        "mean": -0.0011087297271864082,
+        "annual": -0.27939989125097486,
+        "t": -1.7748510736956624
+      },
+      "invested": 0.9999999999999999,
+      "population_invested": 0.9999999999999928
+    }
+  ],
+  "window_excess": {
+    "days": 200,
+    "mean": 6.068256523926729e-06,
+    "annual": 0.0015292006440295357,
+    "t": 0.016181637973806815
+  },
+  "window_split": {
+    "6/12": {
+      "days": 100,
+      "mean": 0.0001713132979992582,
+      "annual": 0.043170951095813065,
+      "t": 0.35122199782208313
+    },
+    "3/9": {
+      "days": 100,
+      "mean": -0.00015917678495140476,
+      "annual": -0.040112549807754,
+      "t": -0.278400891280226
+    }
+  },
+  "window_days": 200,
+  "min_t": 2.0
+}
