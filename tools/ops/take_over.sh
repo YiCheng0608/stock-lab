@@ -19,9 +19,14 @@
 #               read, send or wait that fails closes nothing
 #               (skipped with --no-old-terminal)
 #   relisten    wake_listener_start.sh again, then --status: a listener that ran before the
-#               take-over (the old terminal's, which ends with it, docs/ops/MONITOR.md)
-#               must stop answering within TAKE_OVER_LISTENER_WAIT seconds first, else the
-#               step fails; one this run started is kept (skipped with --no-old-terminal)
+#               take-over must stop answering within TAKE_OVER_LISTENER_WAIT seconds first
+#               (on Windows it ends with the old terminal, docs/ops/MONITOR.md); one that
+#               still answers is stopped (kill) and waited for when it is this checkout's
+#               (on macOS it outlives the terminal, #997: lsof finds the one process on the
+#               port, ps its command line: $script_dir/wake_listener.py with this run's
+#               --data-dir and --port), else the step fails naming the PID and command
+#               line. One this run started is kept; --from relisten neither waits nor
+#               stops one (skipped with --no-old-terminal)
 #   commitments the commitments not kept yet (commit.sh list)
 #   closed      the Issues and PRs closed in the last 48 hours (#713): every merged PR's
 #               merge commit has green CI (the CI workflow's push run) and no worktree or
@@ -67,7 +72,9 @@
 #   (the closed step's window, default 48), TAKE_OVER_CLOSE_WAIT (seconds the close step
 #   waits for the old terminal to turn idle after its text, default 600: the old session
 #   may compact first), TAKE_OVER_CLOSE_SETTLE (seconds between starting that wait and
-#   sending the text, default 2).
+#   sending the text, default 2), TAKE_OVER_LSOF, TAKE_OVER_PS, TAKE_OVER_KILL (the
+#   commands relisten finds and stops the old listener with, default lsof, ps, kill),
+#   WAKE_LISTENER_PORT (the listener's port, as wake_listener_start.sh takes it).
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
@@ -267,6 +274,59 @@ listener_gone() {
     waited=$((waited + 1))
   done
 }
+# listener_restart: on macOS the listener outlives the terminal that started it (nohup
+# leaves it to launchd, #997), so one that still answers after listener_gone is stopped
+# when it is this checkout's: the one process that LISTENs on the port runs
+# $script_dir/wake_listener.py with this run's --data-dir and --port. Anything else (no
+# lsof or ps, as in Git Bash; no process or more than one; another program, checkout,
+# data directory or port; one that still answers after the kill) returns 1 with
+# restart_why naming the PID and command line it found, and nothing is stopped.
+listener_port="${WAKE_LISTENER_PORT:-47338}"
+lsof_cmd="${TAKE_OVER_LSOF:-lsof}" ps_cmd="${TAKE_OVER_PS:-ps}" kill_cmd="${TAKE_OVER_KILL:-kill}"
+restart_why=""
+listener_restart() {
+  local pids pid cmdline started word prev="" script_ok=0 dir_ok=0 port_ok=0
+  local -a words=()
+  local want="$script_dir/wake_listener.py（--data-dir $data_dir --port $listener_port）"
+  if is_windows || ! command -v "$lsof_cmd" >/dev/null 2>&1 || ! command -v "$ps_cmd" >/dev/null 2>&1; then
+    restart_why="找不到 lsof／ps，認不出埠 $listener_port 的占用者"
+    return 1
+  fi
+  pids="$("$lsof_cmd" -t -nP -iTCP:"$listener_port" -sTCP:LISTEN 2>/dev/null | sort -u)"
+  if [ -z "$pids" ]; then
+    restart_why="埠 $listener_port 上找不到 LISTEN 的程序"
+    return 1
+  fi
+  if [ "$(printf '%s\n' "$pids" | wc -l)" -ne 1 ]; then
+    restart_why="埠 $listener_port 上 LISTEN 的程序不只一個：PID $(printf '%s' "$pids" | tr '\n' ' ')"
+    return 1
+  fi
+  pid="$pids"
+  cmdline="$("$ps_cmd" -p "$pid" -o command= 2>/dev/null | sed 's/[[:space:]]*$//')"
+  started="$("$ps_cmd" -p "$pid" -o lstart= 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  # Word by word (read -a: no glob): a path with a space in it is not recognised, so
+  # nothing is stopped.
+  read -ra words <<<"$cmdline"
+  for word in ${words[@]+"${words[@]}"}; do
+    [ "$word" = "$script_dir/wake_listener.py" ] && script_ok=1
+    [ "$prev" = --data-dir ] && [ "$word" = "$data_dir" ] && dir_ok=1
+    [ "$prev" = --port ] && [ "$word" = "$listener_port" ] && port_ok=1
+    prev="$word"
+  done
+  if [ "$script_ok$dir_ok$port_ok" != 111 ]; then
+    restart_why="埠 $listener_port 上的 PID $pid（命令列：${cmdline:-讀不到}）不是本 checkout 的 wake listener $want"
+    return 1
+  fi
+  echo "舊 wake listener：PID $pid（啟動於 ${started:-讀不到}；$cmdline），停止後重啟"
+  if ! "$kill_cmd" "$pid"; then
+    restart_why="kill $pid 失敗（命令列：$cmdline）"
+    return 1
+  fi
+  if ! listener_gone; then
+    restart_why="kill $pid 後 $listener_wait 秒仍在回應（命令列：$cmdline）"
+    return 1
+  fi
+}
 
 for step in "${steps_all[@]:$start}"; do
   case "$step" in
@@ -376,10 +436,11 @@ for line in json.load(sys.stdin): print("  |", line)' 2>/dev/null || echo "  （
         continue
       fi
       # A listener this run started lives in this terminal and is kept. One that ran before
-      # must stop with the old terminal first; a run going on --from relisten does not wait
-      # again: whoever runs it checked the listener that still answers.
-      if [ "$rec_listener" != started ] && [ "$from" != relisten ]; then
-        listener_gone || fail relisten "關掉舊 terminal $listener_wait 秒後，接手前就在跑的 wake listener 仍在回應：它可能不是舊 terminal 啟動的，或還沒結束，結束後就沒有 listener。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
+      # stops with the old terminal on Windows; on macOS it outlives it and is restarted
+      # when it is this checkout's (listener_restart, #997). A run going on --from relisten
+      # neither waits nor restarts: whoever runs it checked the listener that still answers.
+      if [ "$rec_listener" != started ] && [ "$from" != relisten ] && ! listener_gone; then
+        listener_restart || fail relisten "關掉舊 terminal $listener_wait 秒後，接手前就在跑的 wake listener 仍在回應，且認不出是本 checkout 的：$restart_why。它可能不是舊 terminal 啟動的，或還沒結束，結束後就沒有 listener。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
       fi
       bash "$script_dir/wake_listener_start.sh" || fail relisten "wake_listener_start.sh 失敗"
       listener_up || fail relisten "wake_listener_start.sh 之後 --status 仍說 listener 沒在跑"
