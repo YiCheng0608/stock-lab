@@ -779,6 +779,60 @@
       "tool_commit": "c679209d1f6b1ee42f7bc5f52be60ae687561794",
       "definitions_sha256": "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
       "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "P1",
+      "tool": "round15_research",
+      "round": 15,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-23T09:35:46+00:00",
+      "report_sha256": "a6a97da06db34eba3e967451747812f8590db2c66304d57e8f77fd1b801e11fb",
+      "tool_commit": "91d9e0709d37c7d4c86e10158b6c02b0e15bb876",
+      "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "P2",
+      "tool": "round15_research",
+      "round": 15,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-23T09:35:46+00:00",
+      "report_sha256": "a6a97da06db34eba3e967451747812f8590db2c66304d57e8f77fd1b801e11fb",
+      "tool_commit": "91d9e0709d37c7d4c86e10158b6c02b0e15bb876",
+      "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+      "verdict": "探索通過"
+    },
+    {
+      "hypothesis": "P3",
+      "tool": "round15_research",
+      "round": 15,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-23T09:35:46+00:00",
+      "report_sha256": "a6a97da06db34eba3e967451747812f8590db2c66304d57e8f77fd1b801e11fb",
+      "tool_commit": "91d9e0709d37c7d4c86e10158b6c02b0e15bb876",
+      "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "P2",
+      "tool": "round15_research",
+      "round": 15,
+      "segment": "validation",
+      "version": 1,
+      "status": "finished",
+      "started_at": "2026-11-23T10:11:28+00:00",
+      "report_sha256": "a6a97da06db34eba3e967451747812f8590db2c66304d57e8f77fd1b801e11fb",
+      "url": "https://github.com/YiCheng0608/stock-lab/blob/pr-assets/986/exploration/explore.json",
+      "tool_commit": "91d9e0709d37c7d4c86e10158b6c02b0e15bb876",
+      "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+      "finished_at": "2026-11-23T10:21:58+00:00",
+      "verdict": "前瞻觀察"
     }
   ]
 }
