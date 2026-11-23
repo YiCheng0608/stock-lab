@@ -32,7 +32,11 @@
 - **查現況**：`ioreg -r -k AppleClamshellState` 讀感應器。快闔上、還沒全闔，也可能判成闔上。
 - **排程有空窗時**：先查 `pmset -g log | grep -E 'Clamshell|LidOpen'`。是闔上造成的，就照 [SCHEDULING](../SCHEDULING.md) 補跑。
 
-**記憶體門檻看容器，不看主機**：主機 8 GB，OrbStack 的 VM 占 5.86 GiB，主機端的空閒最多約 4.7 GiB。文件寫「空閒記憶體 ≥ 5 GB」的地方（研究工具、[月報的每月流程](../../spec/evidence.md#前瞻驗證-h1)），在這台都改量容器內的可用記憶體：`docker run --rm --network none alpine grep MemAvailable /proc/meminfo`。2026-11-22 量到約 5.0 GiB（#953 決定 [7073872883](https://github.com/YiCheng0608/stock-lab/issues/953#issuecomment-7073872883)）。
+**記憶體門檻看容器，不看主機**：主機 8 GB，OrbStack 的 VM 占 5.86 GiB，主機端的空閒最多約 4.7 GiB。文件寫「空閒記憶體 ≥ 5 GB」的地方（研究工具、[月報的每月流程](../../spec/evidence.md#前瞻驗證-h1)），在這台都改量容器內的可用記憶體：`docker run --rm --network none alpine grep MemAvailable /proc/meminfo`。2026-11-22 量到約 5.0 GiB（#953 決定 [7073872883](https://github.com/YiCheng0608/stock-lab/issues/953#issuecomment-7073872883)）。門檻在這台是 **MemAvailable ≥ 4.8 GiB（5,033,165 kB）**，不是 5 GiB（#1006 統籌承諾 [7108278163](https://github.com/YiCheng0608/stock-lab/issues/1006#issuecomment-7108278163)）：
+
+- **量到的基線**：VM 的 MemTotal 6,139,564 kB；#986 量到 5.00～5.01 GiB、#1000 4.86～4.92 GiB、#1008 4.85～4.88 GiB（起跑前只有 api、scheduler、web 在跑），5 GiB 常等不到；#1000 的探索段、#1008 的 `--coverage-only` 都是一次性放寬到 4.8 GiB 起跑。
+- **用量**：研究容器上限 `--memory 4g --memory-swap 4g`，這台實測峰值 #1000 探索段 1.97 GB、#1008 `--coverage-only` 1.44 GB，都沒有被殺；4.8 GiB 扣掉 4 GiB 的上限還留約 0.8 GiB 給正式容器。
+- **其他條件不變**：容器上限、探索段與 `--coverage-only` 加 `--oom-score-adj 1000`、驗證段不加、同時只跑一個研究工具、時段，照 [RESEARCH_DB「研究工具的耗時與記憶體」](../RESEARCH_DB.md#研究工具的耗時與記憶體)與[第 2 步的工具](../../spec/evidence.md#第-2-步的工具)。
 
 ## 跟 Windows 不一樣的地方
 

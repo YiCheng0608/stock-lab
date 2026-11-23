@@ -608,7 +608,7 @@ MSYS_NO_PATHCONV=1 docker run -d --name t<issue>-gen --network none --memory 1g 
 
 **建議的跑法**：
 
-- **都可以和回補同時跑**：起跑前在容器裡看 `grep MemAvailable /proc/meminfo` ≥ 5 GiB（看實際用量，不用各容器上限加總）。合成上界最大是 3.85 GB（`round6_research` 驗證段＋已用段），真實規模最大約 2.5 GB。
+- **都可以和回補同時跑**：起跑前在容器裡看 `grep MemAvailable /proc/meminfo` ≥ 5 GiB（看實際用量，不用各容器上限加總；macOS 主機的門檻見 [macos.md「記憶體門檻看容器，不看主機」](platform/macos.md#主機需求)）。合成上界最大是 3.85 GB（`round6_research` 驗證段＋已用段），真實規模最大約 2.5 GB。
 - **探索段與 `--coverage-only`**：`--memory 4g --memory-swap 4g --oom-score-adj 1000`。這兩種中途被殺不留紀錄檔，可以直接重跑，所以 VM 真的不夠時讓核心先殺它，不殺回補或正式容器。
 - **驗證段**：`--memory 4g --memory-swap 4g`，**不加** `--oom-score-adj 1000`。驗證段讀資料前就寫「開始」紀錄，開始後被殺也算跑過一次、不能重跑（[第 2 步的工具](../spec/evidence.md#第-2-步的工具)）。不加時，VM 不夠時核心先殺用量最大的程序：驗證段約 1.9 GB（合成上界），回補約 2.4 GiB，被殺的會是可以從 manifest 接續的回補。`round6_research` 的驗證段例外：真實規模約 2.5 GB，比回補大，同時跑時被殺的可能是它。跑的期間不 build image、不部署（build 後的 SBOM 掃描約 5 GB）。真的因為技術原因被殺時，照[第 2 步的工具](../spec/evidence.md#第-2-步的工具)驗證段的規則，在 Issue 留言，由統籌處理那一筆紀錄。
 - 單次都不到 25 分鐘，不碰台北 21:00～23:30。工具本身在 21:30～23:30 拒絕起跑，但不會中途停，所以 21:00 以後不要開始。
