@@ -21,13 +21,20 @@ from test_period_backfill import factory  # noqa: F401  (fixture)
 from worker import bounded_http, monthly_revenue, quarterly_fundamentals, sources
 from worker import period_backfill as pb
 
-# One byte every BYTE_SECONDS; a finite body takes BODY_BYTES × BYTE_SECONDS.
+# One byte every BYTE_SECONDS; a body of n bytes takes n × BYTE_SECONDS.
 BYTE_SECONDS = 0.05
+# What a loaded runner adds to a timed wait before the waiting thread runs
+# again (#995).  The checks hold the code to its own bounds (the attempt's
+# limit, CLOSE_SECONDS, the deadline) plus this, never to how fast the
+# runner is: with 8 workers on 2 cores an abandoned attempt took up to
+# 0.45 s of CLOSE_SECONDS to close and the step's DB writes up to 2.8 s,
+# while no attempt ended later than 0.55 s before the deadline.
+SLACK = 0.3
 NOW = datetime(2026, 11, 6, 4, 0)  # inside 2026Q3's and 2026-10's windows
 
 
 class Drip(BaseHTTPRequestHandler):
-    body_bytes = 10_000  # "forever" unless a test makes it finite
+    body_bytes = 200  # 10 s: longer than any limit here, unless a test sets it
     stop = threading.Event()
 
     def _drip(self) -> None:
@@ -58,7 +65,7 @@ class Drip(BaseHTTPRequestHandler):
 @pytest.fixture
 def drip():
     Drip.stop = threading.Event()
-    Drip.body_bytes = 10_000
+    Drip.body_bytes = 200
     server = ThreadingHTTPServer(("127.0.0.1", 0), Drip)
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -73,20 +80,38 @@ def drip():
 
 @pytest.fixture
 def timed(monkeypatch):
-    """Every bounded attempt's limit and how long it took."""
+    """Every bounded attempt: its URL, limit, start and end (``time.monotonic``)."""
 
-    attempts: list[tuple[float, float]] = []
+    attempts: list[tuple[str, float, float, float]] = []
     real = bounded_http.request
 
-    def spy(*args, limit_seconds, **kwargs):
+    def spy(method, url, *, limit_seconds, **kwargs):
         began = time.monotonic()
         try:
-            return real(*args, limit_seconds=limit_seconds, **kwargs)
+            return real(method, url, limit_seconds=limit_seconds, **kwargs)
         finally:
-            attempts.append((limit_seconds, time.monotonic() - began))
+            attempts.append((url, limit_seconds, began, time.monotonic()))
 
     monkeypatch.setattr(bounded_http, "request", spy)
     return attempts
+
+
+@pytest.fixture
+def waits(monkeypatch):
+    """Every retry wait taken: when it began (``time.monotonic``) and how long."""
+
+    taken: list[tuple[float, float]] = []
+    real = bounded_http.retry_wait
+
+    def spy(url, delay, deadline, cause, sleep):
+        def timed_sleep(seconds):
+            taken.append((time.monotonic(), seconds))
+            sleep(seconds)
+
+        return real(url, delay, deadline, cause, timed_sleep)
+
+    monkeypatch.setattr(bounded_http, "retry_wait", spy)
+    return taken
 
 
 def test_a_dripping_body_outlasts_httpx_timeouts_but_not_the_attempt_limit(drip):
@@ -100,7 +125,8 @@ def test_a_dripping_body_outlasts_httpx_timeouts_but_not_the_attempt_limit(drip)
     began = time.monotonic()
     with pytest.raises(bounded_http.AttemptTimeout, match="attempt over 0.5 s"):
         bounded_http.request("GET", f"{drip}/page", limit_seconds=0.5)
-    assert time.monotonic() - began < 0.5 + 0.4
+    # The limit, then at most the wait for the abandoned attempt to close.
+    assert time.monotonic() - began < 0.5 + bounded_http.CLOSE_SECONDS + SLACK
 
 
 def test_a_bounded_attempt_returns_the_body_it_read_in_time(drip):
@@ -220,6 +246,7 @@ def test_a_retry_wait_past_the_deadline_is_not_taken():
 def test_the_step_stays_within_its_budget_on_a_dripping_source(
     drip,
     timed,
+    waits,
     factory,  # noqa: F811  (the fixture imported above)
     monkeypatch,
     frozen_utcnow,
@@ -234,6 +261,7 @@ def test_the_step_stays_within_its_budget_on_a_dripping_source(
         drip + "/{market}/t21sc03_{year}_{month}_{page}.html",
     )
     budget, attempt = 2.0, 0.5
+    close = bounded_http.CLOSE_SECONDS
     began = time.monotonic()
     result = pb.run_period_backfill(
         today=date(2026, 11, 6),
@@ -241,34 +269,52 @@ def test_the_step_stays_within_its_budget_on_a_dripping_source(
         budget_seconds=budget,
         attempt_seconds=attempt,
     )
-    elapsed = time.monotonic() - began
 
-    # The documented limit (SCHEDULING): the budget, plus writing what was read.
-    assert elapsed < budget + 1.0, elapsed
+    # The documented limit (SCHEDULING): no HTTP after the deadline, the
+    # step's budget after it began.  The DB writes after the last page are
+    # not bounded (on a loaded runner they took up to 2.8 s, #995).
     assert timed, "the real fetchers were used"
-    for limit, took in timed:
+    # The step began before its first request, so its deadline is no later.
+    first_request = min(start for _url, _limit, start, _end in timed)
+    deadline = first_request + budget
+    for url, limit, start, end in timed:
+        assert "/ajax_t163sb04" in url, url  # the revenue sends nothing (below)
         assert limit <= attempt
-        assert took < limit + 0.4, (limit, took)
-    assert sum(took for _limit, took in timed) <= budget + 0.4
+        # Each attempt started with its limit and the time to close it
+        # before the deadline, and ended within them.
+        assert start + limit + close <= deadline + SLACK, (start, limit, deadline)
+        assert end - start <= limit + close + SLACK, (limit, end - start)
+    # Every retry wait taken was to end before the deadline.
+    for at, seconds in waits:
+        assert at + seconds <= deadline + SLACK, (at, seconds, deadline)
     assert result["status"] == "partial"
     assert result["fundamentals"]["status"] == "partial"
     # The first market-quarter's tries ran into the budget.
     assert re.search(
         "retry exhausted|deadline reached", result["fundamentals"]["warnings"][0]
     )
-    # What was left of the step's budget when the fundamentals began: just
-    # under 2 s, or 2 itself on a coarse clock (Windows, about 15.6 ms; review
-    # of PR #541).
+    # What was left of the step's budget when the fundamentals began: at most
+    # the budget (2 itself on a coarse clock: Windows, about 15.6 ms; review
+    # of PR #541), less at most the time to their first request (0.001 for
+    # the 6 digits of ``:g``).
     left = re.fullmatch(
         r"time budget ([0-9.]+) s used up before 2026Q2:otc",
         result["fundamentals"]["aborted"],
     )
-    assert left and 1.5 < float(left.group(1)) <= budget
+    assert left, result["fundamentals"]["aborted"]
+    assert budget - (first_request - began) - 0.001 <= float(left.group(1)) <= budget
     # The revenue gets what the fundamentals left, under the second kept for
-    # closing an attempt: its first page sends nothing (the deadline is
-    # reached) and the next one is over budget.
-    assert re.fullmatch(
-        r"time budget [0-9.]+ s used up before 2026-09:sii:[01]",
+    # closing an attempt, so it sends nothing: its first page reaches the
+    # deadline and the next one is over budget.  On a loaded runner the
+    # fundamentals' writes can use it all (#995), and then the first one is.
+    revenue = re.fullmatch(
+        r"time budget ([0-9.e-]+) s used up before 2026-09:sii:([01])",
         result["revenue"]["aborted"],
     )
-    assert all("deadline reached" in w for w in result["revenue"]["warnings"])
+    assert revenue, result["revenue"]["aborted"]
+    assert float(revenue.group(1)) < close
+    warnings = result["revenue"].get("warnings", [])
+    if revenue.group(2) == "1":
+        assert len(warnings) == 1 and "deadline reached" in warnings[0], warnings
+    else:
+        assert warnings == []
