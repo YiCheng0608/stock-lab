@@ -62,7 +62,8 @@ SINCE = date(2026, 11, 20)
 
 
 def test_x4_is_the_frozen_entry():
-    assert set(tool.WATCHES) == {"X4", "H2", "H2-product", "F2", "P2"}  # P2: #990
+    # P2: #990, A1: #1013
+    assert set(tool.WATCHES) == {"X4", "H2", "H2-product", "F2", "P2", "A1"}
     entry = tool.WATCHES["X4"]
     assert entry == {
         "kind": "前瞻觀察",
@@ -177,6 +178,7 @@ def test_h2_product_is_x2_frozen_in_the_product():
         "H2",
         "F2",
         "P2",
+        "A1",
     ]
     # 已進產品 on 輸給基準: the coordinator proposes delisting in #1
     note = tool.KIND_NOTES["已進產品"]

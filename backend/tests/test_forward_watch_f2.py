@@ -58,7 +58,7 @@ FIRST_SIGNAL = date(2026, 11, 23)
 
 
 def test_f2_is_the_frozen_entry():
-    assert list(tool.WATCHES) == ["X4", "H2", "H2-product", "F2", "P2"]
+    assert list(tool.WATCHES) == ["X4", "H2", "H2-product", "F2", "P2", "A1"]
     assert tool.WATCHES["F2"] == {
         "kind": "前瞻觀察",
         "source": "round10_research",
