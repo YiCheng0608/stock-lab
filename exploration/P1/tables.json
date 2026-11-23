@@ -1,0 +1,465 @@
+{
+  "tool": "round15_research",
+  "version": 1,
+  "design": "984",
+  "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+  "label": "每季申報窗口開始日（3/1、4/15、7/15、10/15），`eps_season_3y`（對應的那一季在過去 3 年各年 4 季 EPS 裡的平均名次）大者先取 20 檔，持有到法定期限收盤，窗口之間留現金",
+  "direction": "事件：盈餘季節性",
+  "parameters": {
+    "engine": "events",
+    "rule": "window",
+    "keys": [
+      [
+        "eps_season_3y",
+        "high"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": "deadline",
+    "start": [
+      "date",
+      "2016-04-15"
+    ]
+  },
+  "hypothesis": "P1",
+  "engine": "events",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2016-04-15",
+    "first_session": "2016-04-18",
+    "last_session": "2019-12-31",
+    "days": 913,
+    "signal_days": 15,
+    "event_days": 15
+  },
+  "prerequisites": {
+    "days": 913,
+    "min_days": 500,
+    "delisted": 57,
+    "ok": true
+  },
+  "coverage": {
+    "windows": [
+      {
+        "signal_date": "2016-04-15",
+        "quarter": "2016-03-31",
+        "sale_date": "2016-05-16",
+        "members": 441,
+        "valued": 411,
+        "missing": 30,
+        "names": 20,
+        "days": 20
+      },
+      {
+        "signal_date": "2016-07-15",
+        "quarter": "2016-06-30",
+        "sale_date": "2016-08-15",
+        "members": 401,
+        "valued": 380,
+        "missing": 21,
+        "names": 20,
+        "days": 21
+      },
+      {
+        "signal_date": "2016-10-17",
+        "quarter": "2016-09-30",
+        "sale_date": "2016-11-14",
+        "members": 371,
+        "valued": 344,
+        "missing": 27,
+        "names": 20,
+        "days": 20
+      },
+      {
+        "signal_date": "2017-03-01",
+        "quarter": "2016-12-31",
+        "sale_date": "2017-03-31",
+        "members": 543,
+        "valued": 511,
+        "missing": 32,
+        "names": 20,
+        "days": 22
+      },
+      {
+        "signal_date": "2017-04-17",
+        "quarter": "2017-03-31",
+        "sale_date": "2017-05-15",
+        "members": 524,
+        "valued": 498,
+        "missing": 26,
+        "names": 20,
+        "days": 19
+      },
+      {
+        "signal_date": "2017-07-17",
+        "quarter": "2017-06-30",
+        "sale_date": "2017-08-14",
+        "members": 421,
+        "valued": 402,
+        "missing": 19,
+        "names": 20,
+        "days": 20
+      },
+      {
+        "signal_date": "2017-10-16",
+        "quarter": "2017-09-30",
+        "sale_date": "2017-11-14",
+        "members": 483,
+        "valued": 463,
+        "missing": 20,
+        "names": 20,
+        "days": 21
+      },
+      {
+        "signal_date": "2018-03-01",
+        "quarter": "2017-12-31",
+        "sale_date": "2018-04-02",
+        "members": 474,
+        "valued": 449,
+        "missing": 25,
+        "names": 20,
+        "days": 23
+      },
+      {
+        "signal_date": "2018-04-16",
+        "quarter": "2018-03-31",
+        "sale_date": "2018-05-15",
+        "members": 517,
+        "valued": 501,
+        "missing": 16,
+        "names": 20,
+        "days": 20
+      },
+      {
+        "signal_date": "2018-07-16",
+        "quarter": "2018-06-30",
+        "sale_date": "2018-08-14",
+        "members": 446,
+        "valued": 437,
+        "missing": 9,
+        "names": 20,
+        "days": 21
+      },
+      {
+        "signal_date": "2018-10-15",
+        "quarter": "2018-09-30",
+        "sale_date": "2018-11-14",
+        "members": 398,
+        "valued": 386,
+        "missing": 12,
+        "names": 20,
+        "days": 22
+      },
+      {
+        "signal_date": "2019-03-04",
+        "quarter": "2018-12-31",
+        "sale_date": "2019-04-01",
+        "members": 423,
+        "valued": 403,
+        "missing": 20,
+        "names": 20,
+        "days": 20
+      },
+      {
+        "signal_date": "2019-04-15",
+        "quarter": "2019-03-31",
+        "sale_date": "2019-05-15",
+        "members": 469,
+        "valued": 456,
+        "missing": 13,
+        "names": 20,
+        "days": 21
+      },
+      {
+        "signal_date": "2019-07-15",
+        "quarter": "2019-06-30",
+        "sale_date": "2019-08-14",
+        "members": 385,
+        "valued": 375,
+        "missing": 10,
+        "names": 20,
+        "days": 21
+      },
+      {
+        "signal_date": "2019-10-15",
+        "quarter": "2019-09-30",
+        "sale_date": "2019-11-14",
+        "members": 412,
+        "valued": 397,
+        "missing": 15,
+        "names": 20,
+        "days": 22
+      }
+    ]
+  },
+  "seconds": {
+    "plan": 1.9193947540188674,
+    "eps_season_3y": 0.8814399989496451,
+    "industries": 0.10361962695606053
+  },
+  "overlap": {},
+  "excess": {
+    "population": {
+      "days": 913,
+      "mean": 0.00010830254742105282,
+      "annual": 0.02729224195010531,
+      "t": 1.083717416858024
+    },
+    "taiex": {
+      "days": 913,
+      "mean": -0.000626392977081066,
+      "annual": -0.15785103022442865,
+      "t": -2.4787745493407956
+    }
+  },
+  "absolute": {
+    "days": 913,
+    "mean": -0.0002452518483145252
+  },
+  "curves": {
+    "P1": {
+      "days": 913,
+      "total": -0.2136556507249101,
+      "annual": -0.06418984731256427,
+      "volatility": 0.09508085864327948,
+      "max_drawdown": -0.3768844403174889,
+      "invested": 0.32675984159150745,
+      "turnover": 4.140197152245345
+    },
+    "population": {
+      "days": 913,
+      "total": -0.2870207216016252,
+      "annual": -0.08914909217342182,
+      "volatility": 0.09207115341519334,
+      "max_drawdown": -0.2967641052985315,
+      "invested": 0.329047931214057,
+      "turnover": 4.123079299075004
+    },
+    "taiex": {
+      "days": 913,
+      "total": 0.37891979554939526,
+      "annual": 0.0927343612510958,
+      "volatility": 0.12099869694483109,
+      "max_drawdown": -0.16622960230549577,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 300,
+    "won": 115,
+    "rate": 0.38333333333333336,
+    "unsold": 0
+  },
+  "counts": {
+    "P1": {
+      "bought": 300,
+      "sale_held": 1
+    },
+    "population": {
+      "bought": 6703,
+      "limit_down": 4,
+      "sale_held": 7,
+      "limit_up": 5,
+      "unsold": 5
+    }
+  },
+  "unsold_share": 0.0,
+  "windows": [
+    {
+      "signal_date": "2016-04-15",
+      "quarter": "2016-03-31",
+      "sale_date": "2016-05-16",
+      "members": 441,
+      "valued": 411,
+      "missing": 30,
+      "names": 20,
+      "days": 20
+    },
+    {
+      "signal_date": "2016-07-15",
+      "quarter": "2016-06-30",
+      "sale_date": "2016-08-15",
+      "members": 401,
+      "valued": 380,
+      "missing": 21,
+      "names": 20,
+      "days": 21
+    },
+    {
+      "signal_date": "2016-10-17",
+      "quarter": "2016-09-30",
+      "sale_date": "2016-11-14",
+      "members": 371,
+      "valued": 344,
+      "missing": 27,
+      "names": 20,
+      "days": 20
+    },
+    {
+      "signal_date": "2017-03-01",
+      "quarter": "2016-12-31",
+      "sale_date": "2017-03-31",
+      "members": 543,
+      "valued": 511,
+      "missing": 32,
+      "names": 20,
+      "days": 22
+    },
+    {
+      "signal_date": "2017-04-17",
+      "quarter": "2017-03-31",
+      "sale_date": "2017-05-15",
+      "members": 524,
+      "valued": 498,
+      "missing": 26,
+      "names": 20,
+      "days": 19
+    },
+    {
+      "signal_date": "2017-07-17",
+      "quarter": "2017-06-30",
+      "sale_date": "2017-08-14",
+      "members": 421,
+      "valued": 402,
+      "missing": 19,
+      "names": 20,
+      "days": 20
+    },
+    {
+      "signal_date": "2017-10-16",
+      "quarter": "2017-09-30",
+      "sale_date": "2017-11-14",
+      "members": 483,
+      "valued": 463,
+      "missing": 20,
+      "names": 20,
+      "days": 21
+    },
+    {
+      "signal_date": "2018-03-01",
+      "quarter": "2017-12-31",
+      "sale_date": "2018-04-02",
+      "members": 474,
+      "valued": 449,
+      "missing": 25,
+      "names": 20,
+      "days": 23
+    },
+    {
+      "signal_date": "2018-04-16",
+      "quarter": "2018-03-31",
+      "sale_date": "2018-05-15",
+      "members": 517,
+      "valued": 501,
+      "missing": 16,
+      "names": 20,
+      "days": 20
+    },
+    {
+      "signal_date": "2018-07-16",
+      "quarter": "2018-06-30",
+      "sale_date": "2018-08-14",
+      "members": 446,
+      "valued": 437,
+      "missing": 9,
+      "names": 20,
+      "days": 21
+    },
+    {
+      "signal_date": "2018-10-15",
+      "quarter": "2018-09-30",
+      "sale_date": "2018-11-14",
+      "members": 398,
+      "valued": 386,
+      "missing": 12,
+      "names": 20,
+      "days": 22
+    },
+    {
+      "signal_date": "2019-03-04",
+      "quarter": "2018-12-31",
+      "sale_date": "2019-04-01",
+      "members": 423,
+      "valued": 403,
+      "missing": 20,
+      "names": 20,
+      "days": 20
+    },
+    {
+      "signal_date": "2019-04-15",
+      "quarter": "2019-03-31",
+      "sale_date": "2019-05-15",
+      "members": 469,
+      "valued": 456,
+      "missing": 13,
+      "names": 20,
+      "days": 21
+    },
+    {
+      "signal_date": "2019-07-15",
+      "quarter": "2019-06-30",
+      "sale_date": "2019-08-14",
+      "members": 385,
+      "valued": 375,
+      "missing": 10,
+      "names": 20,
+      "days": 21
+    },
+    {
+      "signal_date": "2019-10-15",
+      "quarter": "2019-09-30",
+      "sale_date": "2019-11-14",
+      "members": 412,
+      "valued": 397,
+      "missing": 15,
+      "names": 20,
+      "days": 22
+    }
+  ],
+  "window_excess": {
+    "days": 313,
+    "mean": 0.00030965918626515873,
+    "annual": 0.07803411493882,
+    "t": 1.0631176783573149
+  },
+  "window_days": 313,
+  "industries": {
+    "windows": 15,
+    "names": 300,
+    "counts": {
+      "Electronic Parts": 41,
+      "Semiconductor": 32,
+      "Financial": 28,
+      "Computer and Peripherals": 24,
+      "Other Electronics": 21,
+      "Optoelectronics": 20,
+      "Communications": 17,
+      "Textile": 14,
+      "Food": 11,
+      "Electrical Machinery": 11,
+      "Other": 10,
+      "Construction": 10,
+      "Rubber": 8,
+      "Automobile": 8,
+      "Cultural Innovation": 7,
+      "Biotechnology": 7,
+      "Shipping": 6,
+      "Wholesale and Retail": 4,
+      "Electrical Cable": 3,
+      "Information Service": 3,
+      "Electronic Distribution": 3,
+      "Cement": 2,
+      "Chemical": 2,
+      "Paper": 2,
+      "Iron and Steel": 2,
+      "Plastic": 2,
+      "（不在成員表）": 1,
+      "Glass": 1
+    }
+  },
+  "min_t": 2.0
+}
