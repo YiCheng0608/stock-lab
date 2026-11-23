@@ -242,8 +242,8 @@ function HeatRow({ item, open, onOpen }: { item: ThemeHeatItem; open: boolean; o
           <HeatExtremes item={item} />
         </p>
         <p className="board-row-meta">
-          <span>5 日 <GroupReturn label="5 日超額" value={item.raw.excess_5d} /></span>
-          <span>20 日 <GroupReturn label="20 日超額" value={item.raw.excess_20d} /></span>
+          <span>5 日 <GroupReturn label="5 日" value={item.raw.excess_5d} /></span>
+          <span>20 日 <GroupReturn label="20 日" value={item.raw.excess_20d} /></span>
         </p>
         <span className="board-row-score"><span>熱度</span> <b>{formatHeat(item.heat)}</b></span>
         <button type="button" className="btn btn-ghost board-row-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>六分項 {open ? '▾' : '▸'}</button>
@@ -253,8 +253,8 @@ function HeatRow({ item, open, onOpen }: { item: ThemeHeatItem; open: boolean; o
         <div className="board-row-detail-body">
           <dl className="board-components">
             {HEAT_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd><ComponentBar label={component.label} value={item.components[component.key]} /></dd></div>)}
-            <div><dt>新聞（則）</dt><dd>{heatNewsItems(item)}</dd></div>
             <div><dt>成員（檔）</dt><dd>{formatMembers(item.eligible_members, item.member_count)}</dd></div>
+            <div className="heat-news-count"><dt>新聞（則）</dt><dd>{heatNewsItems(item)}</dd></div>
           </dl>
           <Link className="text-link" to={themeDetailPath(item.theme_id)}>族群詳情 →</Link>
         </div>

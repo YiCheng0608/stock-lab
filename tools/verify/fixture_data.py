@@ -2517,6 +2517,13 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items[].display_name",
             ["示範 AI 伺服器", "示範先進封裝"],
         ),
+        # The 熱度 tab (#1017): the hand-set rows of T (HEAT_PLAN).
+        ("theme-heat", "meta.trading_date", D),
+        ("theme-heat", "meta.news_status", "available"),
+        ("theme-heat", "meta.not_a_signal", "不是買賣訊號"),
+        ("theme-heat", "items[].theme_id", [AI_SERVER_ID, PACKAGING_ID]),
+        ("theme-heat", "items[].heat", [0.82, 0.18]),
+        ("theme-heat", "items[].components.institutional_ratio", [1.0, None]),
         (f"themes/{TOP_THEME}", "members_total", 3),
         # The delisted 9205 and the moved 9206 left these groups (LIFECYCLE).
         (f"themes/{BIOTECH_ID}", "members_total", 1),

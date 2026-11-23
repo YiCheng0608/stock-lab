@@ -2,3 +2,5 @@
    Colors and sizes come from styles/tokens.css (docs/DESIGN_SYSTEM.md). */
 .heat-not-signal,
 .heat-news-note { white-space: nowrap; }
+/* The two windows' counts are a phrase, wider than a component cell: a row of their own. */
+.heat-list .heat-news-count { grid-column: 1 / -1; }
