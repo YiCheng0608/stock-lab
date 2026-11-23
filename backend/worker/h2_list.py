@@ -1,9 +1,9 @@
 """Store a trading day's H2 list (Issue #881).
 
 The daily's ``h2_list`` step (after ``mainstream``) calls ``run_h2_list``: it
-computes and writes ``h2_runs`` / ``h2_items`` for the day through
-``app.h2_list.compute_h2``.  Rerunning a date replaces its list.  A failure is
-a warning: one ``warning:`` line on stderr, which ``worker.job`` writes into
+computes and writes the day's ``h2`` run and items of ``strategy_list_runs`` /
+``strategy_list_items`` (#1014) through ``app.h2_list.compute_h2``.  Rerunning
+a date replaces its list.  A failure is a warning: one ``warning:`` line on stderr, which ``worker.job`` writes into
 the daily's log, and a ``failed`` result the daily keeps on the step row only
 (``schedule_runs.NON_BLOCKING_STEPS``), so the today list, the run's status and
 the exit code do not change.  A failed computation commits nothing: the

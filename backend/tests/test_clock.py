@@ -107,7 +107,7 @@ def test_every_datetime_column_default_calls_utcnow_at_write_time() -> None:
                 assert getattr(default.arg, "__wrapped__", None) is utcnow, name
                 seen.append(name)
     # models.py: 32 column defaults (monthly_revenues.collected_at since #530; one fewer since #629 dropped theme_suggestions;
-    # mainstream_runs.computed_at since #768; h2_runs.computed_at since #881) and
+    # mainstream_runs.computed_at since #768; h2_runs.computed_at since #881, strategy_list_runs.computed_at since #1014) and
     # the onupdate of ingestion_runs.updated_at and events.updated_at (#476).
     assert len(seen) == 34
 
