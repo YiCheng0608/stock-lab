@@ -470,7 +470,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 `tools/research/explore_research.py`（#703，設計在統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)）。X1～X8 寫在 `explore_research.HYPOTHESES`，判定是 `explore_research.explore_judge`；沒有改參數、起日或 cutoff 的旗標。只讀（`mode=ro`＋`query_only`），拒絕的情況同[出場規則研究](#出場規則研究)（正式 DB、台北 21:30～23:30、可用記憶體不足）。
 
-**跑法只有一種**：研究 volume（[研究 DB](../ops/RESEARCH_DB.md#建研究-db)，`stock.db` 旁有研究標記 `research-db.json`）直接掛在 `/research`，**不掛在 `/data`、不設研究用的 `STOCK_DATA_DIR`**。image 預設 `STOCK_DATA_DIR=/data`，DB 在它底下會被當成正式 DB 拒絕；`/research/stock.db` 不在底下，所以不被拒絕。DB 以唯讀開，驗證段的紀錄檔固定寫在研究 volume 的 `/research/explore-ledger.json`。volume 不可加 `:ro`：探索段與驗證段都在讀資料之前確認紀錄檔寫得進去，寫不進就拒絕（exit 2，[`explore_research.ledger_write_problem`](../../tools/research/explore_research.py)，六支工具共用，#899）；`--coverage-only` 不寫紀錄檔，不檢查。不要把 DB 複製到別處再跑：紀錄檔會跟著副本走，副本一刪就擋不住第二次；驗證段沒有研究標記就拒絕（探索段與 `--coverage-only` 不要求）。
+**跑法只有一種**：研究 volume（[研究 DB](../ops/RESEARCH_DB.md#建研究-db)，`stock.db` 旁有研究標記 `research-db.json`）直接掛在 `/research`，**不掛在 `/data`、不設研究用的 `STOCK_DATA_DIR`**。image 預設 `STOCK_DATA_DIR=/data`，DB 在它底下會被當成正式 DB 拒絕；`/research/stock.db` 不在底下，所以不被拒絕。DB 以唯讀開，驗證段的紀錄檔固定寫在研究 volume 的 `/research/explore-ledger.json`。volume 不可加 `:ro`：探索段與驗證段都在讀資料之前確認紀錄檔寫得進去，寫不進就拒絕（exit 2，[`explore_research.ledger_write_problem`](../../tools/research/explore_research.py)，各研究工具共用，#899）；`--coverage-only` 不寫紀錄檔，不檢查。不要把 DB 複製到別處再跑：紀錄檔會跟著副本走，副本一刪就擋不住第二次；驗證段沒有研究標記就拒絕（探索段與 `--coverage-only` 不要求）。
 
 ```bash
 # 換值：IMG＝含 #703 的 backend image；O＝主機上的輸出目錄；T、GIT_RO 同 docs/WORKFLOW.md（工具 commit 要讀 .git，沒掛記 unknown）
@@ -981,6 +981,48 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | 版本 | 任務 | 改了什麼 |
 | --- | --- | --- |
 | 1 | #978 | 第一版；沒有人用它對回補資料跑過 |
+
+**第十五輪的假設**（[第十五輪：P1～P3](#第十五輪p1p3)）：`tools/research/round15_research.py`（[#984](https://github.com/YiCheng0608/stock-lab/issues/984)）。P1～P3 寫在 `round15_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round14_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（P1 的產業分布讀成員表，有 `--members`，同 `round13_research`）。P1、P2 走 X7 的事件日帳戶（`explore_research.simulate_events`），P3 走組合引擎（`portfolio_research.simulate`，K＝20）；母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`explore_judge`、單季值的差法（`feature_evidence._quarter_eps` 本身，`round15_research.single_quarter` 把一季以前的累計數當成它的季報傳進去）、季報的法定期限與事件日（`round14_research.quarter_events`，P1 的賣出日與 P2 的事件日）、成員表（`mainstream_research.read_members`／`build_context`／`group_members`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；P2 和 K2、X4，P3 和 Z4 的重疊，名單用 `round14_research.eps_turn`（K2 的條件，以雜湊取前 20 名）、`round14_research.x4_names`（`explore_research._rank`）、`round8_research.rank`（各自現行版本的定義），比例與摘要用 `round10_research`（`overlap_share`、`overlap_summary`），P3 名單的 `overnight_20` 用 `round8_research.overnight_20`。`simulate_events` 不必改：P1 的賣出日沒有新名單（`picks` 沒有那一天），舊名單照 `dues` 在賣出日收盤賣，錢留到下一個買進日。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round14_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進、成員表的 sha256 不是 #779 的）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）。成員表預設讀 DB 旁的
+# research/industry_members/industry_members_v1.json（同 mainstream_research）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round15_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **一份 panel**：`round15_research.load` 用 `explore_research.load_context` 讀一份 panel（含成交金額、季報 EPS 與月營收），P2 的季報其他欄位另讀 `fundamental_snapshots` 的 `data_json`（`announcement_date` 到該段最後一天的每一列，不只 EPS 有值的列；數字照 `worker.sources.parse_number` 讀）與 `instruments.status`，成員表經 `mainstream_research.build_context` 建在同一個 market 上，Z4 的 `round8_research.Context` 也建在同一個 `explore_research.Context` 上。
+- **算法**：照[第十五輪：P1～P3](#第十五輪p1p3)與[第十五輪實作釋義](#第十五輪實作釋義)。
+  - P1：買進日是 `round15_research.buy_events`（3/1、4/15、7/15、10/15，取法同 `round14_research.quarter_events`：當天或之後第一個週一～週五的交易日，週六補班日跳過；對應前一年 Q4、當年 Q1、Q2、Q3），賣出日是同一季的法定期限（`round14_research.quarter_events`）。`round15_research.eps_season_3y`：`announcement_date` ≤ T、EPS 有值的季報列（`evidence_lib._load_quarters`）中，F−1、F−2、F−3 年各 4 季的單季 EPS 先取到小數第 6 位（`EPS_DIGITS`，[#984 決定 7095896595](https://github.com/YiCheng0608/stock-lab/issues/984#issuecomment-7095896595)），再由小到大排 1～4（取整後相等的是同值，取平均名次），取第 q 季的名次，三年平均。退化的判準：12 個單季值（F−1、F−2、F−3 年各 4 季；`announcement_date` ≤ T、EPS 有值的列，照 `feature_evidence._quarter_eps` 的差法）中任一個缺時缺值、排最後；名單不足 20 檔時餘額留現金。`eps_season_3y` 大者先（`portfolio_research.ranking_key`，同分以 `sha256("<T>:<instrument_id>")`），取前 20 名。帳戶照 X7：買進日 T+1 開盤每檔帳戶現金的 1／20，賣出日收盤賣；賣出日沒有新名單，兩邊都留現金到下一個買進日；順延同「X7 的金額與順延」（順延到下一個買進日之前賣掉的，錢也留到那一天）；母體同一個帳戶規則、同一組事件日。段內第一個買進日之前沒有淨值，窗口跨出段末時以段末收盤計。另列（只列出、不判定）：每個窗口的母體檔次、有值的檔數、名單檔數與窗口內的交易日數；只算窗口日：窗口日是買進日的 T+1 到賣出日（段內）的交易日，超額是這些日子的每日組合報酬 − 每日母體報酬；只列出、不判定；名單的產業分布（`mainstream_research.group_members`，一檔屬於多個產業時各算一次，不在成員表的另列；成員表到 2024-09-30，之後的窗口不列，已用段整段不列）。`explore.json` 的 P1 列有 `window_excess`、`windows`、`window_days`、`invested`、`unsold_share`。
+  - P2：事件日是 `round14_research.quarter_events`（同 K2）。`round15_research.margins_up`：最新一季看 `announcement_date` ≤ T 的全部季報列（和 K2 不同，EPS 是 null 的列也算，[#984 決定 7095896595](https://github.com/YiCheng0608/stock-lab/issues/984#issuecomment-7095896595)）；`營業收入`、`營業毛利（毛損）淨額`（沒有這一欄時用 `營業毛利（毛損）`）、`營業利益（損失）`、`本期淨利（淨損）` 的單季值照同一個差法（`round15_research.single_quarter`），三率是單季毛利、營業利益、本期淨利各除以單季營收，q 對 q−1、q 對 q−4 都要嚴格較高。不符合的原因依序判：最新一季、格式、欄位缺、營收、比較，每檔只算第一個。退化的判準：最新一季（`announcement_date` ≤ T 的季報列中期末最晚的一季，EPS 是 null 的列也算，和 K2 不同）不是事件日對應的那一季、q、q−1、q−4 與算單季要用的前一季中任一列的 `report_format` 不是 `general`（`report_format` 是 null 的列算欄位缺）、任一列不在或四個欄位任一欄缺（毛利先用 `營業毛利（毛損）淨額`，沒有這一欄時用 `營業毛利（毛損）`），或任一季的單季營收 ≤ 0 時，不符合；6 個比較中任一個不是嚴格較高（含相等）時也不符合；符合的不足 20 檔時餘額留現金。以雜湊取前 20 名；帳戶照 X7、K2（T+1 開盤每檔 1／20，下一個事件日 T′ 收盤賣，T′ 的新名單在 T′+1 開盤買，順延同「X7 的金額與順延」），母體同一個帳戶規則、同一組事件日，段內第一個事件日之前沒有淨值。對照基準：當天母體去掉「缺 `margins_up` 任一所需欄位（事件日對應的那一季的 q、q−1、q−4 與算單季要用的前一季，任一列不在或四個欄位任一欄缺；不看是不是最新一季、不看 `report_format`、不看營收 ≤ 0）的 `delisted`／`transferred` 標的」，同一個帳戶規則、同一組事件日；列 P2 對它的超額與 t，只列出、不判定（判定仍只比母體）。報告開頭寫存活者偏差的方向與對照基準在哪裡：
+    - 存活者偏差（P2）：下市股的季報只有 EPS，沒有 `margins_up` 的四個欄位，期間內下市公司的季幾乎都不符合，會排除之後下市的公司，偏差方向對假設有利。對照基準（母體去掉當天缺欄位的下市、轉板股）的超額與 t 在 `P2/summary.md`「數字」表的「超額（對對照基準，只列出）」列與 `explore.md` 的「只列出、不判定」
+
+    另列（只列出、不判定）：每次調倉的母體檔次、符合的檔數、名單檔數、買進那天收盤的投入比例，以及平均；和 K2、X4 的重疊：P2 與 K2（`round14_research` 第 1 版的 `HYPOTHESES["K2"]`，同一個 T 算）每個事件日名單的重疊比例：|P2 的名單 ∩ K2 的名單| ÷ P2 當天的名單檔數；P2 或 K2 當天沒有名單的事件日不計。只列出、不判定；P2 與 X4（`explore_research` 第 2 版的 `HYPOTHESES["X4"]`，同一個 T 算）每個事件日名單的重疊比例：|P2 的名單 ∩ X4 的前 20 名| ÷ P2 當天的名單檔數；P2 或 X4 當天沒有名單的事件日不計。只列出、不判定。`explore.json` 的 P2 列有 `reference_excess`、`overlap_k2`、`overlap_x4`、`names`、`invested`、`unsold_share`。
+  - P3：`round15_research.nr_ratio_20_240`，這一檔自己的日線（還原價），日間反轉＝`open[i] > close[i−1]` 且 `close[i] < open[i]`（兩邊都嚴格，開盤等於收盤的鎖死根不算），f20 數 at−19…at、f240 數 at−259…at−20（各自的前綴計數，同一份 panel 算一次）。退化的判準：at < 260、at−260…at 的 261 根中任一根停牌、需要的開盤（at−259…at）或收盤（at−260…at）缺值或 ≤ 0，或 f240＝0 時缺值、排最後。大者先（`portfolio_research.ranking_key`），取前 20 名，每日 20 份子帳戶（`simulate`），母體也是 K＝20。另列（只列出、不判定）：和 Z4 的重疊：P3 與 Z4（`round8_research` 第 1 版的 `HYPOTHESES["Z4"]`，同一個 T 算）每日名單的重疊比例：|P3 的名單 ∩ Z4 的前 20 名| ÷ P3 當天的名單檔數；P3 或 Z4 當天沒有名單的日子不計。只列出、不判定；名單的平均 `overnight_20`（每天名單中有值的檔的平均，依年與全段）。`explore.json` 的 P3 列有 `overlap_z4`、`overnight_20`、`invested`、`unsold_share`。
+  - 漲跌幅依日期：`exit_research.daily_limit`（2015-05-29 以前 ±7%、2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），表算進 `definitions_sha256`。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.332（t < 3.332 判「前瞻觀察」，沒有 t 下限），寫死、不在執行時重算，算進 `definitions_sha256`。
+- **探索**：`python tools/research/round15_research.py --db /research/stock.db --segment exploration --hypotheses <P1,P2,P3 或其中幾個> --out <目錄> [--members <成員表>] [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）。
+- **驗證**：`python tools/research/round15_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--members <成員表>] [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `984`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27。**讀取的起點**：三段都從副本起點讀（`LOAD_FROM`，同 `round10_research`～`round14_research`；規則 `LOAD_RULE` 算進 `definitions_sha256`），只讀到該段的最後一天。判「通過」的另跑已用段，寫在 `<代號>/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以（照樣載入整份 panel，K2、X4、Z4 的名單會讀 T 與 T 以前的資料）。各假設用自己的訊號日；缺值比例的分母是母體檔次；每個訊號日都數。
+  - P1：每個窗口一列：買進日、對應的季、賣出日、母體檔次、有 `eps_season_3y` 的檔數、因缺單季值而缺值的檔數與比例、名單檔數、窗口內的交易日數。
+  - P2：每個事件日一列：對應的季、母體檔次、符合 `margins_up` 的檔數、名單檔數、最新一季不是對應的那一季、`report_format` 不是 `general`、欄位缺（與比例）、單季營收 ≤ 0、比較不成立、毛利用備用欄名的檔數，以及母體裡的下市、轉板股檔次與其中缺所需欄位的檔次（對照基準去掉的）；另依年列同樣的下市、轉板股檔次。2013 年各季的欄名：期末在 2013 年的列，依季與 `report_format` 列列數、四個欄位（含毛利的備用欄名）各有幾列，與出現過的欄名。
+  - P3：依年列日數、母體檔次、有 `nr_ratio_20_240` 的檔次與缺值比例（另分 at < 260、停牌、開盤或收盤缺值或 ≤ 0、f240＝0，f240＝0 另列檔次）。
+  - 耗時：總耗時、載入耗時（另列 panel、季報其他欄位與標的狀態、成員表）、2013 年欄名的讀取、峰值記憶體、讀到的日線根數，以及每個假設的排序與覆蓋耗時和特徵的計算時間（`eps_season_3y`、`margins_up`、`reference`（對照基準的缺欄位判斷）、`k2_order`、`x4_order`（同一個 T 算 K2、X4，各段要用來算重疊；`--coverage-only` 只計時、不算重疊）、`nr_ratio_20_240`、`z4_order`（同 `k2_order`））。
+  - 有明顯斷點，或缺值比例有異常的年份或欄位，或 2013 年的欄名讀不到四個欄位，或 P1 有窗口一檔都沒有值時，先在工具單提問、不跑探索段。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round15_research"`、`"round": 15`。代號不重疊，各工具互不擋；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」，接著是本輪 3 個、累計 58 個、探索段與驗證段的門檻、引擎、P2 的存活者偏差與對照基準在哪裡、P1～P3 的限制；驗證段另寫前瞻觀察的條件（t < 3.332，沒有 t 下限）；總表每個假設列方向、日數（有淨值的交易日）、對加權指數的超額與 t（第一個列）、對母體的超額與 t、絕對報酬與判定；總表下另列 P2 對對照基準的超額與 t、P1 只算窗口日的超額與 t、P2 每次調倉的名單檔數、P2 和 K2、X4 與 P3 和 Z4 的重疊、P3 名單的平均 `overnight_20`、各假設的平均投入比例與期末未賣的比例。
+  - `explore.json`：同上的總表（每個假設另有 `engine`，與上面各假設列出的欄位），另有 `tool`、`design`（`984`）、`validation_min_t`、`engines`、`definitions_sha256`、`members_sha256`、工具 commit、副本資訊與先決條件。
+  - `<代號>/summary.md`（開頭列退化的判準與限制，P2 另在最前面寫存活者偏差；「數字」表 P2 另有對對照基準的超額、P1 另有只算窗口日的超額；P1 另有「每個窗口」與「名單的產業分布」兩節，P2 另有「和 K2 的重疊」「和 X4 的重疊」「每次調倉」三節，P3 另有「和 Z4 的重疊」與「名單的平均 `overnight_20`」兩節；資料覆蓋同 `--coverage-only` 的表）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的名單；P1 有 `quarter`、`eps_season_3y`、`ranks`，P2 有 `quarter` 與三率，P3 有 `nr_ratio_20_240`、`f20`、`f240`、`overnight_20`）、`trades.csv`。
+  - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
+- **耗時與記憶體**（[#984 AC-4](https://github.com/YiCheng0608/stock-lab/issues/984)，研究 DB 到 2019-12-31 的 499 萬根，這台 macOS 主機的 OrbStack）：`--coverage-only` 445 秒（載入 403 秒，其中 panel 394 秒、季報其他欄位與標的狀態 6 秒、成員表 3 秒；2013 年的欄名不到 1 秒）、峰值 1.59 GB，其中 `eps_season_3y` 0.7 秒、`margins_up` 1.4 秒、對照基準的缺欄位判斷不到 0.1 秒、K2 的名單 0.1 秒、X4 的名單 0.9 秒、`nr_ratio_20_240` 10.7 秒、Z4 的名單 15.2 秒。估一次探索段（P1～P3）約 10～14 分鐘、峰值約 2～2.5 GB（載入約 7 分鐘、排序與覆蓋約 0.7 分鐘、三個假設各兩次模擬（P2 另有對照基準一次）約 2～6 分鐘，P3 的母體每天買、K＝20 最重）。驗證段與已用段也從副本起點讀，比探索段大，估峰值約 2.5～3.3 GB。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
+- 文件與程式用同一套說法：P1～P3 的退化判準、重疊比例、對照基準、只算窗口日與存活者偏差的說明是 `round15_research` 的 `DEGENERATE`、`OVERLAP_NOTE`（`coverage.md` 的說明句 `COVERAGE_NOTES` 引用同一份 `DEGENERATE`），本段逐字照抄，`backend/tests/test_round15_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round15_research` 的版本**：`round15_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（P1～P3 的定義、P1 的 4 個買進日與對應的會計季、4 個賣出日（`round14_research.DEADLINES`）、過去 3 年、名次 1～4 同值取平均、12 個單季值缺一就缺值、大者先、N 20、持有到期限收盤與窗口之間的現金；P2 的四個欄位名（含毛利的備用欄名）、`report_format`＝`general`、6 個比較都要嚴格較高、單季營收 ≤ 0 不符合、季報列的讀法與數字的讀法、「最新一季必須是對應的那一季」、對照基準的規則與 `delisted`／`transferred`、雜湊取 N 20、持有到下一個事件日；P3 的日間反轉、20 根與 240 根的窗口、缺值的規則、大者先、N 20、K 20；三個共用的雜湊、排序、起日、事件日的取法、單季值的差法與 `feature_evidence` 的版本、K2、X4、Z4 的定義、分段、兩段的門檻、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #984 | 第一版；沒有人用它對回補資料跑過 |
 
 #### 實作釋義
 
@@ -3326,6 +3368,8 @@ P1～P3 都用[假設登記表](#假設登記表)（買前 N 名、持有 K 天�
 - **P2 的事件日與持有**：照 X7 的帳戶規則與[第十四輪實作釋義](#第十四輪實作釋義)的「K2 的賣出時點」「K2 的事件日碰上週六補班日」。驗證段第一個事件日是 2020-03-31（2019 年報的期限），同 K2。
 - **P2 的對照基準**：「當天缺 `margins_up` 任一所需欄位」照第 3 點的欄位缺判斷（不看是不是事件日對應的那一季、不看營收 ≤ 0）；下市、轉板＝標的的 `status` 是 `delisted` 或 `transferred`。只影響只列出的那條對照，判定仍只比母體。
 - **重疊比例只列出**：分母是本假設當天的名單檔數；本假設或對照的假設當天沒有名單的日子不計入平均，同 F2、L3、J1、J4、U1～U3、K1～K3。K2、X4、Z4 的名單用 `round14_research`、`explore_research`、`round8_research` 現行版本的定義在同一個 T 算，不另寫一份。
+- **P1 的同值**（[#984 決定 7095896595](https://github.com/YiCheng0608/stock-lab/issues/984#issuecomment-7095896595)）：P1 第 3 點的「同值取平均名次」，同值是單季 EPS 取到小數第 6 位之後相等。單季 EPS 是同一年的累計數相減，浮點數會帶出誤差（累計 0.30、0.70、1.00、1.30 相減得 0.3、0.39999999999999997、0.30000000000000004、0.30000000000000004），先取整再比大小、判同值，名次是 2、4、2、2。EPS 是兩位小數，真的不同的兩季至少差 0.01，不會被併成同值。`feature_evidence._quarter_eps` 不改。
+- **P2 的最新一季**（[#984 決定 7095896595](https://github.com/YiCheng0608/stock-lab/issues/984#issuecomment-7095896595)）：P2 第 3 點的「最新一季不是這個事件日對應的那一季（同 K2 第 3 點）」，最新一季是 `announcement_date` ≤ T 的全部季報列中期末最晚的一季，EPS 是 null 的列也算，和 K2 只看 EPS 有值的列不同（那是 `round14_research` 的實作，不在登記段）。兩種讀法只在 q 那一季的列四欄都在、EPS 卻是 null 時結果不同，這時 P2 照算。K2 的重疊比例照舊用 K2 自己的規則。
 
 ## 隔夜美股條件研究
 
