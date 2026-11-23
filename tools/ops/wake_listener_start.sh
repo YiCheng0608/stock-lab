@@ -7,10 +7,12 @@
 # a listener left by an earlier coordinator wakes the new one: it is kept, not replaced.
 #
 # The listener runs in the background (nohup) and outlives this shell and the tool call
-# that ran it, but not the Orca terminal of the session that started it: closing a
-# terminal ends all its processes (seen 2026-10-29, with PowerShell's Start-Process too).
-# So a coordinator that closed its predecessor's terminal runs this again
-# (docs/ops/MONITOR.md).
+# that ran it. On Windows it does not outlive the Orca terminal of the session that
+# started it: closing a terminal ends all its processes (seen 2026-10-29, with
+# PowerShell's Start-Process too). On macOS it does: it is left to launchd (PPID 1) and
+# runs until a reboot or a kill (#997). So a coordinator that closed its predecessor's
+# terminal runs this again, after take_over.sh's relisten waited for the old listener
+# to end or stopped it as this checkout's (docs/ops/MONITOR.md).
 # The token file's path is written here, not in the coordinator's command: a command
 # naming it is stopped by the agent guard (AGENTS.md).
 #

@@ -70,10 +70,12 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 - **回答與 exit code**：`/wake` 回 `sent`、`not_idle`、`prompt_blocked`（#720）、`send_failed`、`no_heartbeat`、`nothing_pending`；`http_wake.sh` 對 `sent` exit 0、`not_idle` exit 3、`prompt_blocked` exit 4，其他（含 listener 沒在跑、401、429）exit 1，monitor 記失敗的喚醒，10 分鐘後再試，事件留在佇列。每個請求在主機 `<資料目錄>/logs/wake-listener.log` 記一列。
 - **token**：`STOCK_WAKE_TOKEN` 只寫在發佈 checkout 根目錄那份由使用者自己建立的認證檔（`.env`，[容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)），至少 32 字元、不含空白；容器經 `env_file` 拿到它，listener 以 `--token-file` 讀同一個檔、只取這一列。由使用者產生並寫入（例如 `python -c "import secrets; print(secrets.token_urlsafe(32))"`），agent 不產生、不讀；換 token 後重建 scheduler 容器，並結束 listener 後重跑 `wake_listener_start.sh`。
 
-**啟動**（使用者決定，#338）：listener 只負責喚醒統籌，所以由統籌 session 啟動，不在主機另外安裝成開機啟動的服務。統籌接手時（`take_over.sh` 會跑，關掉舊統籌 terminal 後再跑一次）、每次處理佇列時跑 `bash tools/ops/wake_listener_start.sh`（[`wake_listener_start.sh`](../../tools/ops/wake_listener_start.sh)），可重複執行：
+**啟動**（使用者決定，#338）：listener 只負責喚醒統籌，所以由統籌 session 啟動，不在主機另外安裝成開機啟動的服務。統籌接手時（`take_over.sh` 會跑，關掉舊統籌 terminal 後再跑一次，見下面「生命週期」）、每次處理佇列時跑 `bash tools/ops/wake_listener_start.sh`（[`wake_listener_start.sh`](../../tools/ops/wake_listener_start.sh)），可重複執行：
 
 - 先 `GET /health`（不需 token，只回 `{"result": "ok", "service": "stock-lab-wake"}`）：有回應就 exit 0、不另起；port 沒有人聽才在背景啟動並等到 `/health` 回應，印出停止它的命令：Windows 是 `Stop-Process -Id (Get-NetTCPConnection -LocalPort 47338 -State Listen).OwningProcess`（不印 pid：Git Bash 的 pid 不是 Windows 的，拿去 `Stop-Process` 會停錯程序），macOS 是 `kill $(lsof -t -nP -iTCP:47338 -sTCP:LISTEN)`；port 被別的程序占用（回應不是 listener 的）就 exit 2 並印出查占用者的命令；起不來（例如認證檔沒有 `STOCK_WAKE_TOKEN`）exit 1 並印出原因。`--status` 只回報、不啟動，`patrol.sh` 每次都印這一列。
 - 認證檔的路徑（發佈 checkout 根目錄那份）寫在腳本裡，不出現在統籌的命令裡（命令提到它會被 agent hook 擋下）；listener 的輸出附加到 `<資料目錄>/logs/wake-listener.out`。
-- **生命週期**：listener 在啟動它的 Bash 指令結束後繼續執行，但跟著啟動它的統籌 terminal 結束（Orca 關 terminal 時結束它底下所有程序，PowerShell 的 `Start-Process` 也一樣，2026-10-29 實測）。
-  - 換手時新統籌接手先跑腳本：舊統籌的 listener 還在就沿用，它每次喚醒前都重讀心跳檔，喚醒的是新統籌；收尾關掉舊 terminal 後舊 listener 跟著結束，所以新統籌關掉舊 terminal 後再跑一次腳本（[統籌手冊參考「接手腳本的步驟」](COORDINATOR_REFERENCE.md#接手腳本的步驟)）。
-  - 統籌 session 結束而沒有接手者時 listener 也結束：沒有統籌就沒有喚醒對象，monitor 記 `send_failed`、事件留在佇列，佇列等 60 分鐘後照常在 #1 留「請開統籌」。listener 留著（例如 terminal 還開著）也不會出錯：心跳指向已結束的 terminal 時 send 失敗，記 `send_failed`。
+- **生命週期**：listener 在啟動它的 Bash 指令結束後繼續執行；跟不跟著啟動它的統籌 terminal 結束，兩個主機不同：
+  - **Windows**：跟著 terminal 結束（Orca 關 terminal 時結束它底下所有程序，PowerShell 的 `Start-Process` 也一樣，2026-10-29 實測）。
+  - **macOS**：活過 terminal。`nohup … &` 啟動它的 shell 一結束，它就改掛 launchd（PPID 1），Orca 關 terminal 時不會結束它，要到重開機或有人停掉它（#997）。它一直跑啟動當時的 `wake_listener.py`，所以換手時由 `take_over.sh` 重啟，master 改了 listener 之後才會換新。重啟時從 `kill` 到新 listener 綁上埠約 30～40 秒沒有 listener（舊連線的 TIME_WAIT），這段時間的喚醒失敗、10 分鐘後再試，事件留在佇列。
+  - 換手時新統籌接手先跑腳本：舊統籌的 listener 還在就沿用，它每次喚醒前都重讀心跳檔，喚醒的是新統籌；收尾關掉舊 terminal 後，`take_over.sh` 等舊 listener 結束（Windows）或認出是本 checkout 的就停掉它（macOS），再跑一次腳本；怎麼認、認不出時怎麼辦見[統籌手冊參考「接手腳本的步驟」](COORDINATOR_REFERENCE.md#接手腳本的步驟)。
+  - 統籌 session 結束而沒有接手者時：Windows 的 listener 跟著結束，沒有統籌就沒有喚醒對象，monitor 記 `send_failed`、事件留在佇列，佇列等 60 分鐘後照常在 #1 留「請開統籌」。listener 留著（macOS，或 terminal 還開著）也不會出錯：心跳指向已結束的 terminal 時 send 失敗，記 `send_failed`。

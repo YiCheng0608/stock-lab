@@ -43,6 +43,7 @@
 | 檔名大小寫 | NTFS 不分 | APFS 預設也不分；`agent_guard.cjs` 比對記憶目錄時兩邊都不分大小寫 |
 | 容器連主機的 wake listener | Docker Desktop 把 `host.docker.internal` 代理到主機的 `127.0.0.1` | OrbStack 也一樣：2026-11-21 實測，容器連得到主機上只綁 `127.0.0.1` 的服務（[統籌事件 monitor](../MONITOR.md)）|
 | 停止 wake listener | `Stop-Process -Id (Get-NetTCPConnection -LocalPort 47338 -State Listen).OwningProcess` | `kill $(lsof -t -nP -iTCP:47338 -sTCP:LISTEN)`；`wake_listener_start.sh` 會依主機印出對的那一條 |
+| wake listener 的生命週期 | 跟著啟動它的統籌 terminal 結束；換手時 `take_over.sh` 等它結束再起新的 | 改掛 launchd、活過 terminal；換手時 `take_over.sh` 認出是本 checkout 的才停掉重起，認不出就停下（[統籌事件 monitor「生命週期」](../MONITOR.md)） |
 | Claude Code 的 scratchpad | `$TEMP/claude/<專案>/<session id>` | `/private/tmp/claude-<uid>/<專案>/<session id>`；`close_task.sh` 兩種都會清 |
 | dev 的 bind mount | 沒有檔案事件，api 與 web 靠輪詢 | OrbStack 有檔案事件；輪詢的設定留著也沒關係 |
 | 容器外的 venv | `.venv/Scripts/python.exe`，套件在 `.venv/Lib/site-packages`，`PYTHONPATH` 用 `;` 分隔 | `.venv/bin/python`，套件在 `.venv/lib/python3.12/site-packages`，`PYTHONPATH` 用 `:` 分隔 |
