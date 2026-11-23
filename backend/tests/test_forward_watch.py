@@ -1,6 +1,7 @@
 """tools/research/forward_watch.py: the frozen forward entries of X4 (#868), H2
-(#875) and H2 in the product (key H2-product, kind 已進產品 from 2026-11-21,
-#902; ``H2_PRODUCT_DIGESTS``).
+(#875), H2 in the product (key H2-product, kind 已進產品 from 2026-11-21,
+#902; ``H2_PRODUCT_DIGESTS``) and round 15's P2 (#990, the event-day engine,
+its own synthetic copy at the end; ``P2_DIGESTS``).
 
 X4's and X2's definitions are explore_research's (#867 and #864 ran them,
 ``definitions_sha256`` 600dc942…ebec63); an entry adds only the start
@@ -61,7 +62,7 @@ SINCE = date(2026, 11, 20)
 
 
 def test_x4_is_the_frozen_entry():
-    assert set(tool.WATCHES) == {"X4", "H2", "H2-product", "F2"}  # F2: #949
+    assert set(tool.WATCHES) == {"X4", "H2", "H2-product", "F2", "P2"}  # P2: #990
     entry = tool.WATCHES["X4"]
     assert entry == {
         "kind": "前瞻觀察",
@@ -170,7 +171,13 @@ def test_h2_product_is_x2_frozen_in_the_product():
     }
     assert tool.definition("H2-product") is er.HYPOTHESES["X2"]
     assert tool.source_problems("H2-product") == []
-    assert [tool.display(name) for name in tool.WATCHES] == ["X4", "H2", "H2", "F2"]
+    assert [tool.display(name) for name in tool.WATCHES] == [
+        "X4",
+        "H2",
+        "H2",
+        "F2",
+        "P2",
+    ]
     # 已進產品 on 輸給基準: the coordinator proposes delisting in #1
     note = tool.KIND_NOTES["已進產品"]
     assert "判到「輸給基準」由統籌在 #1 提案下架" in note
@@ -855,4 +862,478 @@ def test_the_entry_is_explore_researchs_own(x4_db, request, monkeypatch, name, r
     picks = read_csv(frozen_run / "picks.csv")
     assert [(row["signal_date"], row["symbol"]) for row in picks] == [
         (row["signal_date"], row["symbol"]) for row in result["_rows"]
+    ]
+
+
+# --- P2: round 15's event-day hypothesis (#990) ----------------------------------
+
+r10 = sys.modules.get("round10_research") or _tool("round10_research")
+r14 = sys.modules.get("round14_research") or _tool("round14_research")
+r15 = sys.modules.get("round15_research") or _tool("round15_research")
+ms = sys.modules.get("mainstream_research") or _tool("mainstream_research")
+im = sys.modules.get("industry_members") or _tool("industry_members")
+
+P2_SHA256 = "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e"
+P2_SINCE = date(2026, 11, 23)
+# 2026Q3's deadline 2026-11-14 is a Saturday: its event day 2026-11-16 is
+# before the start; 2026Q4's deadline 2027-03-31 is the first forward one.
+P2_BEFORE = date(2026, 11, 16)
+P2_FIRST = date(2027, 3, 31)
+# The tools' versions and definition hashes the five entries rest on (AC-1, AC-3)
+SOURCE_HASHES = {
+    "explore_research": (2, X4_SHA256),
+    "round10_research": (
+        1,
+        "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+    ),
+    "round14_research": (
+        1,
+        "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
+    ),
+    "round15_research": (1, P2_SHA256),
+}
+
+
+def test_p2_is_round15s_p2_frozen_as_forward_watch():
+    entry = tool.WATCHES["P2"]
+    assert entry == {
+        "kind": "前瞻觀察",
+        "source": "round15_research",
+        "source_version": 1,
+        "code": "P2",
+        "definitions_sha256": P2_SHA256,
+        "since": P2_SINCE,
+        "min_days": 60,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/986#issuecomment-7097870215"
+        ),
+    }
+    # the definition #986's exploration and validation ran: imported, not copied
+    assert tool.SOURCES["round15_research"] is r15
+    assert tool.definition("P2") is r15.HYPOTHESES["P2"]
+    assert tool.source_problems("P2") == []
+    assert tool.ENGINES["round15_research"] is tool.round15_events
+    assert tool.COVERAGE_LINES["round15_research"] is r15.coverage_lines
+    assert tool.PICK_FIELDS["round15_research"]("P2", {}) == r15.PICK_FIELDS["P2"]
+    assert tool.definition("P2") == {
+        "engine": "events",
+        "direction": "基本面：三率三升",
+        "label": "每季法定期限的事件日，`margins_up`（最新一季單季毛利率、營益率、淨利率都高於上一季，"
+        "也都高於去年同季）成立，以雜湊取 20 檔、不排序；持有到下一個事件日",
+        "rule": "quarterly",
+        "conditions": (("margins_up", "is", True),),
+        "order": "the hash only",
+        "short": "cash, not filled",
+        "top": 20,
+        "hold": "next_event",
+        "start": ("date", date(2014, 5, 15)),
+    }
+    assert tool.display("P2") == "P2" and tool.KIND_NOTES[entry["kind"]]
+
+
+@pytest.mark.parametrize("name", sorted(SOURCE_HASHES))
+def test_the_source_tools_versions_and_hashes_are_unchanged(name):
+    module = sys.modules.get(name) or _tool(name)
+    assert (module.VERSION, module.definitions_sha256()) == SOURCE_HASHES[name]
+
+
+def test_the_command_takes_p2_and_no_parameter(tmp_path):
+    choices = next(a for a in tool._parser()._actions if "--watch" in a.option_strings)
+    assert "P2" in choices.choices
+    base = ["--db", "x", "--out", str(tmp_path), "--watch", "P2"]
+    for extra in (["--since", "2026-11-14"], ["--top", "5"], ["--members", "x"]):
+        with pytest.raises(SystemExit) as stopped:
+            tool.main([*base, *extra])
+        assert stopped.value.code == 2
+
+
+def test_the_next_deadline():
+    sessions = [date(2026, 11, 20), date(2026, 11, 23), date(2026, 11, 24)]
+    assert tool.next_deadline(sessions, P2_SINCE, 2) == P2_FIRST
+    # a cutoff on the deadline: it is no signal yet, so it is still the next one
+    sessions = [date(2027, 3, 30), date(2027, 3, 31)]
+    assert tool.next_deadline(sessions, P2_SINCE, 1) == P2_FIRST
+    sessions = [date(2027, 3, 31), date(2027, 4, 1)]
+    assert tool.next_deadline(sessions, P2_SINCE, 1) == date(2027, 5, 15)
+    assert tool.next_deadline(sessions, date(2026, 11, 10), 0) == date(2026, 11, 14)
+
+
+# The synthetic copy: 2025-01-02 .. 2027-09-30, statements 2023～2027Q2.
+P2_STOCKS = range(1, 31)
+P2_UP = range(1, 25)  # margins rising every quarter: margins_up on every deadline
+P2_BANK = 25  # report_format bank: never margins_up
+P2_TRANSFERRED = 31  # EPS only, transferred: out of the reference
+P2_DELISTED = 32  # every field, delisted, its last bar 2026-06-30
+P2_IDS = (*P2_STOCKS, P2_TRANSFERRED, P2_DELISTED)
+P2_END = date(2027, 9, 30)
+
+
+def p2_days() -> list[date]:
+    out, day = [], date(2025, 1, 2)
+    while day <= P2_END:
+        if day.weekday() < 5:
+            out.append(day)
+        day += timedelta(days=1)
+    return out
+
+
+def p2_statements() -> list[dict]:
+    rows = []
+    deadlines = ((5, 15), (8, 14), (11, 14), (3, 31))
+    for i in P2_IDS:
+        k = 0
+        for year in range(2023, 2028):
+            totals = [0.0] * 4
+            eps = 0.0
+            for q in range(4):
+                if (year, q) > (2027, 1):  # 2027Q2 is the last announced
+                    break
+                k += 1
+                end = date(year, 3 * (q + 1), 31 if q in (0, 3) else 30)
+                month, day = deadlines[q]
+                due = date(year + (1 if q == 3 else 0), month, day)
+                margin = 0.2 + (0.002 * k + 0.0001 * i if i in P2_UP else 0.0)
+                own = (1000.0 + 10 * i, 1000.0 * margin, 500.0 * margin, 250.0 * margin)
+                totals = [a + b for a, b in zip(totals, own)]
+                eps += 1.0 + 0.1 * i
+                data: dict = {}
+                if i != P2_TRANSFERRED:
+                    data = {
+                        "report_format": "bank" if i == P2_BANK else "general",
+                        "營業收入": f"{totals[0]:,.0f}",
+                        "營業毛利（毛損）淨額": f"{totals[1]:.3f}",
+                        "營業利益（損失）": f"{totals[2]:.3f}",
+                        "本期淨利（淨損）": f"{totals[3]:.3f}",
+                    }
+                rows.append(
+                    {
+                        "instrument_id": i,
+                        "period_end": end,
+                        "fiscal_period": f"Q{q + 1}",
+                        "announcement_date": due,
+                        "eps": round(eps, 4),
+                        "data_json": data,
+                        "source": "test",
+                    }
+                )
+    return rows
+
+
+def p2_build(path: Path) -> Path:
+    engine = create_engine(f"sqlite:///{path}")
+    Base.metadata.create_all(engine)
+    days = p2_days()
+    status = {P2_TRANSFERRED: "transferred", P2_DELISTED: "delisted"}
+    with Session(engine) as db:
+        db.execute(
+            insert(Instrument),
+            [
+                {
+                    "id": i,
+                    "exchange": "TWSE" if i % 2 else "TPEx",
+                    "symbol": f"S{i}",
+                    "name": f"N{i}",
+                    "instrument_type": "stock",
+                    "status": status.get(i, "active"),
+                }
+                for i in P2_IDS
+            ]
+            + [
+                {
+                    "id": INDEX_ID,
+                    "exchange": "TWSE",
+                    "symbol": "TAIEX",
+                    "name": "加權指數",
+                    "instrument_type": "index",
+                    "status": "active",
+                }
+            ],
+        )
+        bars = []
+        for i in P2_IDS:
+            level = 50.0 + i
+            for t, day in enumerate(days):
+                if i == P2_DELISTED and day > date(2026, 6, 30):
+                    break
+                previous = level
+                level *= 1.0 + (i - 15) * 0.0001 + 0.02 * noise(i, t, "p2")
+                close = round(level, 4)
+                open_ = round(previous * (1 + 0.004 * noise(i, t, "p2o")), 4)
+                volume = 2_000_000 + 10_000 * i
+                bars.append(
+                    {
+                        "instrument_id": i,
+                        "trading_date": day,
+                        "open": open_,
+                        "high": round(max(open_, close) * 1.004, 4),
+                        "low": round(min(open_, close) * 0.996, 4),
+                        "close": close,
+                        "adj_close": close,
+                        "volume": volume,
+                        "turnover": close * volume,
+                        "turnover_status": "available",
+                        "source": "test",
+                        "is_suspended": False,
+                    }
+                )
+        for t, day in enumerate(days):
+            level = 22000.0 + 4 * t + 30 * noise(INDEX_ID, t, "p2")
+            bars.append(
+                {
+                    "instrument_id": INDEX_ID,
+                    "trading_date": day,
+                    "open": level,
+                    "high": level,
+                    "low": level,
+                    "close": level,
+                    "adj_close": level,
+                    "volume": 0,
+                    "turnover": 0.0,
+                    "turnover_status": "unknown",
+                    "source": "twse_index",
+                    "is_suspended": False,
+                }
+            )
+        db.execute(insert(MarketBar), bars)
+        db.execute(insert(FundamentalSnapshot), p2_statements())
+        db.commit()
+    engine.dispose()
+    return path
+
+
+def p2_write_members(folder: Path) -> Path:
+    """A #779-shaped member table beside the copy, for ``round15_research.load``
+    only (forward_watch does not read it)."""
+
+    day = p2_days()[0].isoformat()
+    label = im.GROUP_LABELS["TWSE"]["24"]
+    rows = sorted(
+        [day, "TWSE", "24", "", label, im.group_id(label), f"S{i}", f"N{i}",
+         im.retroactive("TWSE", "24", day)]
+        for i in range(1, 9)
+    )  # fmt: skip
+    target = folder.joinpath(*ms.MEMBERS_DIR, ms.MEMBERS_NAME)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(im.table_bytes(rows, "2025-01", "2025-01"))
+    return target
+
+
+@pytest.fixture(scope="module")
+def p2_db(tmp_path_factory) -> Path:
+    return p2_build(tmp_path_factory.mktemp("p2") / "stock.db")
+
+
+def p2_watch(db: Path, out: Path, *extra: str) -> int:
+    return watch(db, out, *extra, name="P2")
+
+
+def in_one_process(run):
+    saved = {key: os.environ.get(key) for key in APP_PATHS}
+    try:
+        return run()
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+# P2's forward outputs on ``p2_db`` (written by the commit that added the
+# entry, #990): a change of the definition, the engine or the report fails here.
+P2_DIGESTS = {
+    "summary.md": "ef0a4de0c6f9e2dcea0368cb2b06bffdfdec6dbf19cab91ba5e4e5f0ab40525d",
+    "tables.json": "4474db0dd8d4f3068e137b6f9e6cee16043c614c60b71823a19851f70efe9557",
+    "equity.csv": "873905911157d3a1ce0f19aa17fd68e159f0a3b337815d18beefe5b11245fe8b",
+    "picks.csv": "40302fdd061454e913e78366ebdc198405767f797a82a182cd42ff1cf08d9280",
+    "trades.csv": "80315bf58e644e2e0f6ca8e8a6887db196a5afc3520aa979436753667d2d7b8a",
+}
+
+
+@pytest.fixture(scope="module")
+def p2_run(p2_db, tmp_path_factory):
+    out = tmp_path_factory.mktemp("p2_frozen") / "out"
+    patch = pytest.MonkeyPatch()
+    no_window(patch)
+    try:
+        assert p2_watch(p2_db, out) == 0
+    finally:
+        patch.undo()
+    return out
+
+
+def test_p2_output_is_frozen(p2_run):
+    assert digests(p2_run) == P2_DIGESTS
+
+
+def test_p2_buys_only_event_days_from_the_start(p2_run):
+    days = p2_days()
+    tables = read_json(p2_run / "tables.json")
+    assert (tables["since"], tables["first_signal"]) == (
+        P2_SINCE.isoformat(),
+        P2_FIRST.isoformat(),
+    )
+    # 2027-03-31, 2027-05-17 (5/15 a Saturday), 2027-08-16 (8/14 a Saturday)
+    signals = ["2027-03-31", "2027-05-17", "2027-08-16"]
+    assert tables["signal_days"] == 3
+    assert [e["signal_date"] for e in tables["rebalances"]] == signals
+    picks = read_csv(p2_run / "picks.csv")
+    assert sorted({row["signal_date"] for row in picks}) == signals
+    # 24 qualify, the hash takes 20 (the bank, the flat ones and the EPS-only never)
+    assert [e["hits"] for e in tables["rebalances"]] == [24, 24, 24]
+    assert {len([r for r in picks if r["signal_date"] == d]) for d in signals} == {20}
+    assert not {row["symbol"] for row in picks} & {"S25", "S26", "S31", "S32"}
+    equity = read_csv(p2_run / "equity.csv")
+    assert equity[0]["date"] == days[days.index(P2_FIRST) + 1].isoformat()
+    assert equity[-1]["date"] == P2_END.isoformat()
+    trades = read_csv(p2_run / "trades.csv")
+    assert min(row["bought"] for row in trades) == equity[0]["date"]
+    assert tables["days"] == len(equity) >= 60 and tables["verdict"] != "樣本不足"
+    # the reference (P2 第 7 點): listed, not judged
+    assert tables["excess"]["reference"]["days"] == tables["days"]
+    summary = (p2_run / "summary.md").read_text(encoding="utf-8")
+    assert summary.splitlines()[0].startswith("# P2 前瞻觀察的前瞻紀錄")
+    assert "| 超額（對對照基準，只列出） |" in summary
+    assert "下一個法定期限 2027-11-14" in summary  # a Sunday: its event day 11-15
+    assert tables["next_deadline"] == "2027-11-14"
+
+
+def test_p2_an_event_day_before_the_start_is_not_bought(p2_db, p2_run, tmp_path):
+    """The same copy from a start before 2026-11-16 buys that event day's
+    list; the frozen start does not, nor puts it in front."""
+
+    patch = pytest.MonkeyPatch()
+    no_window(patch)
+    try:
+        earlier = in_one_process(
+            lambda: tool.run_watch(
+                p2_db, "P2", tmp_path / "earlier", since=date(2026, 11, 10)
+            )
+        )
+    finally:
+        patch.undo()
+    assert earlier["days"] > read_json(p2_run / "tables.json")["days"]
+    tables = read_json(tmp_path / "earlier" / "tables.json")
+    assert tables["first_signal"] == P2_BEFORE.isoformat()
+    before = [r for r in read_csv(tmp_path / "earlier" / "picks.csv")]
+    assert {r["signal_date"] for r in before} >= {P2_BEFORE.isoformat()}
+    frozen = read_csv(p2_run / "picks.csv")
+    assert min(r["signal_date"] for r in frozen) == P2_FIRST.isoformat()
+    assert min(r["bought"] for r in read_csv(p2_run / "trades.csv")) > (
+        P2_FIRST.isoformat()
+    )
+
+
+def test_p2_more_days_at_the_end_change_no_earlier_number(p2_db, tmp_path, monkeypatch):
+    no_window(monkeypatch)
+    cut = date(2027, 6, 30)
+    short = edited(
+        p2_db,
+        tmp_path,
+        "short",
+        ("delete from market_bars where trading_date > ?", (cut.isoformat(),)),
+        (
+            "delete from fundamental_snapshots where announcement_date > ?",
+            (cut.isoformat(),),
+        ),
+    )
+    first, again, longer = tmp_path / "first", tmp_path / "again", tmp_path / "longer"
+    assert p2_watch(short, first) == 0
+    assert p2_watch(p2_db, again, "--cutoff", cut.isoformat()) == 0
+    assert p2_watch(p2_db, longer) == 0
+    assert normalized(again, copy=False) == normalized(first, copy=False)
+    base = read_json(first / "tables.json")
+    assert base["signal_days"] == 2 and base["next_deadline"] == "2027-08-14"
+    for name in ("equity.csv", "picks.csv"):
+        rows, more = read_csv(first / name), read_csv(longer / name)
+        assert len(more) > len(rows) and more[: len(rows)] == rows
+
+
+@pytest.mark.parametrize("cut", [date(2026, 11, 24), P2_FIRST])
+def test_p2_without_an_event_day_after_the_start(p2_db, tmp_path, monkeypatch, cut):
+    """樣本不足 and the next event day; a cutoff on the event day is no signal
+    yet (its T+1 is not in the copy)."""
+
+    no_window(monkeypatch)
+    out = tmp_path / "out"
+    assert p2_watch(p2_db, out, "--cutoff", cut.isoformat()) == 0
+    tables = read_json(out / "tables.json")
+    assert (tables["days"], tables["signal_days"], tables["verdict"]) == (
+        0,
+        0,
+        "樣本不足",
+    )
+    assert tables["first_signal"] is None and tables["next_deadline"] == "2027-03-31"
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    assert "樣本不足（起日後還沒有事件日）" in summary
+    assert "下一個事件日 2027-03-31" in summary
+    assert read_csv(out / "picks.csv") == [] and read_csv(out / "trades.csv") == []
+
+
+def test_p2_short_of_60_days_lists_numbers_and_no_verdict(p2_db, tmp_path, monkeypatch):
+    no_window(monkeypatch)
+    days = p2_days()
+    cut = days[days.index(P2_FIRST) + 30]
+    out = tmp_path / "out"
+    assert p2_watch(p2_db, out, "--cutoff", cut.isoformat()) == 0
+    tables = read_json(out / "tables.json")
+    assert (tables["days"], tables["signal_days"], tables["verdict"]) == (
+        30,
+        1,
+        "樣本不足",
+    )
+    assert tables["excess"]["population"]["mean"] is not None
+    assert tables["excess"]["reference"]["mean"] is not None
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    assert "樣本不足（累積 30／60 日）" in summary and "數字不是判定" in summary
+    assert "起日後還沒有事件日" not in summary
+
+
+def test_p2_a_changed_source_is_refused(p2_db, tmp_path, monkeypatch, capsys):
+    no_window(monkeypatch)
+    changed = {**r15.HYPOTHESES, "P2": {**r15.HYPOTHESES["P2"], "top": 10}}
+    monkeypatch.setattr(r15, "HYPOTHESES", changed)
+    out = tmp_path / "out"
+    assert p2_watch(p2_db, out) == 2
+    refused = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["refused"]
+    assert any("definitions_sha256" in problem for problem in refused)
+    assert not out.exists()
+
+
+def test_p2_loads_as_round15s_load_and_runs_its_own_engine(p2_db, p2_run, tmp_path):
+    """forward_watch's context (no member table, #990 決定 7098585515) and
+    ``round15_research.load`` with the table give P2 the same event days,
+    ``margins_up`` lists, reference and account; the frozen run's equity and
+    picks are round15_research's own on that segment."""
+
+    p2_write_members(p2_db.parent)
+    members = ms.members_path(p2_db)
+    days = p2_days()
+    loaded = in_one_process(
+        lambda: r15.load(p2_db, members, r15.LOAD_FROM, P2_END, tmp_path / "a")
+    )
+    built = in_one_process(lambda: tool.round15_context(p2_db, P2_END, tmp_path / "b"))
+    assert loaded.groups is not None and built.groups is None
+    assert built.panel.sessions == loaded.panel.sessions == days
+    assert built.statements == loaded.statements and built.statuses == loaded.statuses
+    events = r14.quarter_events(days)
+    assert r14.quarter_events(built.panel.sessions) == events
+    spec = r15.HYPOTHESES["P2"]
+    first, last = days.index(P2_FIRST) + 1, len(days) - 1
+    plans = [r15.plan_p2(ctx, spec, first, last) for ctx in (loaded, built)]
+    for key in ("picks", "population", "reference", "dues", "rows", "rebalances"):
+        assert getattr(plans[0], key) == getattr(plans[1], key), key
+    assert plans[0].reference != plans[0].population  # S31 is out of it
+    mine, population, reference = r15.engines(loaded, "P2", plans[0], first, last)
+    equity = read_csv(p2_run / "equity.csv")
+    assert [row["date"] for row in equity] == [
+        d.isoformat() for d in days[first : last + 1]
+    ]
+    assert [row["P2"] for row in equity] == [f"{v:.8f}" for v in mine.equity]
+    assert [row["population"] for row in equity] == [
+        f"{v:.8f}" for v in population.equity
+    ]
+    picks = read_csv(p2_run / "picks.csv")
+    assert [(r["signal_date"], r["symbol"]) for r in picks] == [
+        (r["signal_date"], r["symbol"]) for r in plans[0].rows
     ]

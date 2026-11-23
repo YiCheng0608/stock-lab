@@ -10,7 +10,8 @@ on the product, #875); the third H2 again, in the product from 2026-11-21
 (key ``H2-product``, kind ``已進產品``, #902; the old row stays and runs on,
 and the reports name both H2); the fourth round 10's F2
 (round10_research 第 1 版, #944 validation 7072993427, kind ``前瞻觀察`` from
-2026-11-22, #949).  Nothing here is a command-line option: ``WATCHES`` holds each
+2026-11-22, #949); the fifth round 15's P2 (round15_research 第 1 版, #986
+validation 7097870215, kind ``前瞻觀察`` from 2026-11-23, #990).  Nothing here is a command-line option: ``WATCHES`` holds each
 object's frozen entry, its definition is the one its own tool ran (imported,
 not copied, and refused when that tool's ``definitions_sha256`` is not the
 frozen one), and the golden test of its output fails on any change.
@@ -23,7 +24,17 @@ day's whole population (``evidence_lib.universe``), TAIEX only listed.  The
 bars before ``since`` are read for the features only, as far back as the
 source tool reads a later segment: ``WARMUP_CALENDAR_DAYS`` for
 explore_research, the copy from ``LOAD_FROM`` for round10_research (F2's
-``vol_720`` needs 721 bars).  The verdict is
+``vol_720`` needs 721 bars) and round15_research.
+
+P2 trades on event days (``round14_research.quarter_events``, the four
+statutory deadlines) on X7's one account (``explore_research.simulate_events``,
+held to the next event day), not on every session: its signal dates are the
+event days from the first session on or after ``since`` to the session before
+the cutoff (an event day before ``since`` is not bought, its list is not put
+in front), the equity starts the session after the first of them, and until
+there is one the report says ``樣本不足（起日後還沒有事件日）`` and the next
+statutory deadline.  Its reference population (P2 第 7 點) is listed, not
+judged.  The verdict is
 ``portfolio_research.forward_judge`` on every session to the cutoff with
 ``min_days`` 60: before 60 sessions it is ``樣本不足`` and the numbers are no
 verdict.  What follows a verdict is the kind's (``KIND_NOTES``): only a
@@ -52,6 +63,8 @@ import evidence_lib as lib  # noqa: E402
 import explore_research as er  # noqa: E402
 import portfolio_research as pr  # noqa: E402
 import round10_research as r10  # noqa: E402
+import round14_research as r14  # noqa: E402
+import round15_research as r15  # noqa: E402
 
 VERSION = 1
 DESIGN = "868"
@@ -145,8 +158,27 @@ WATCHES: dict[str, dict[str, Any]] = {
             "https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7072993427"
         ),
     },
+    # Round 15's P2 was judged 前瞻觀察 on its validation (#986 7097870215,
+    # 決定 7097039382): round15_research 第 1 版's definition, followed from
+    # the day the validation was written to the ledger (finished_at
+    # 2026-11-23T10:21:58Z, #990).  Its first event day from then on is
+    # 2027-03-31 (2026Q4's deadline); 2026-11-16's (2026Q3) is before the start.
+    "P2": {
+        "kind": WATCH,
+        "source": "round15_research",
+        "source_version": 1,
+        "code": "P2",
+        "definitions_sha256": (
+            "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e"
+        ),
+        "since": date(2026, 11, 23),
+        "min_days": MIN_DAYS,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/986#issuecomment-7097870215"
+        ),
+    },
 }
-SOURCES = {"explore_research": er, "round10_research": r10}
+SOURCES = {"explore_research": er, "round10_research": r10, "round15_research": r15}
 
 
 def display(name: str) -> str:
@@ -305,19 +337,119 @@ def round10_portfolio(
     return _simulated(run, code, spec, planned, ctx.quote, first, last)
 
 
+def round15_context(db: Path, end: date, raw_dir: Path) -> r15.Context:
+    """``round15_research.load`` without the member table: the same panel
+    from ``LOAD_FROM`` (``explore_research.load_context``), P2's statements and
+    the instruments' status.  The table (#779) is only P1's industries, and it
+    lies beside the research DB, not the copy (#990)."""
+
+    base = er.load_context(db, r15.LOAD_FROM, end, raw_dir)
+    return r15.Context(
+        base,
+        r15.load_statements(db, base.market.panel.series, end),
+        r15.load_statuses(db),
+    )
+
+
+def next_deadline(sessions: list[date], since: date, last: int) -> date:
+    """The first statutory deadline (``round14_research.DEADLINES``) on or
+    after ``since`` and after the last session that can be a signal date
+    (``last − 1``): the next event day is the first Monday～Friday session on
+    or after it."""
+
+    after = sessions[last - 1] if last >= 1 else None
+    year = since.year
+    while True:
+        for month, day, _end_month, _offset in r14.DEADLINES:
+            deadline = date(year, month, day)
+            if deadline >= since and (after is None or deadline > after):
+                return deadline
+        year += 1
+
+
+def round15_events(
+    db: Path, entry: dict[str, Any], since: date, cutoff: date | None, out: Path
+) -> dict[str, Any]:
+    """A round15_research event-day hypothesis (P2) forward: the copy read
+    from ``LOAD_FROM``, the event days of ``round14_research.quarter_events``
+    from ``since`` on, ``plan_p2`` (``margins_up``, 20 by the hash), and
+    ``round15_research.engines``: X7's one account for it, the population and
+    the reference, each held to the next event day."""
+
+    code = entry["code"]
+    spec = r15.HYPOTHESES[code]
+    if spec["engine"] != r15.EVENTS or spec["rule"] != "quarterly":
+        raise SystemExit(f"{code} is not a quarterly event-day hypothesis")
+    latest = pr.copy_facts(db)["latest"]
+    end = cutoff or (date.fromisoformat(latest) if latest else since)
+    ctx = round15_context(db, end, out / RAW_DIR_NAME)
+    panel = ctx.panel
+    sessions = panel.sessions
+    last, _signals = _signal_window(sessions, since, cutoff)
+    events = [
+        at
+        for at, _quarter in r14.quarter_events(sessions)
+        if at < last and sessions[at] >= since
+    ]
+    run = _empty_run(panel, last, events)
+    run["next_deadline"] = next_deadline(sessions, since, last)
+    run["reference_returns"] = []
+    run["overlaps"] = {key: r10.overlap_summary({}) for key in ("P2_K2", "P2_X4")}
+    run["rebalances"] = []
+    if not events:
+        return run
+    first = events[0] + 1
+    planned = r15.planner(code)(ctx, spec, first, last)
+    mine, population, reference = r15.engines(ctx, code, planned, first, last)
+    for event in planned.rebalances:
+        s = sessions.index(date.fromisoformat(event["signal_date"])) + 1
+        event["invested"] = mine.invested[s - first] if s <= last else None
+    run.update(
+        {
+            "dates": sessions[first : last + 1],
+            "rows": planned.rows,
+            "positions": mine.positions,
+            "equity": (mine.equity, population.equity),
+            "returns": (
+                pr.daily_returns(mine.equity),
+                pr.daily_returns(population.equity),
+            ),
+            "reference_returns": pr.daily_returns(reference.equity),
+            "taiex": er._taiex(panel, first, last),
+            "invested": (mine.invested, population.invested),
+            "turnover": (er._turnover(mine), er._turnover(population)),
+            "counts": {code: dict(mine.counts), POPULATION: dict(population.counts)},
+            "coverage": planned.coverage,
+            "win": er.win_rate(mine),
+            "overlaps": {
+                key: r10.overlap_summary(by_year)
+                for key, by_year in planned.overlap.items()
+            },
+            "rebalances": planned.rebalances,
+        }
+    )
+    return run
+
+
 ENGINES: dict[str, Callable[..., dict[str, Any]]] = {
     "explore_research": explore_daily,
     "round10_research": round10_portfolio,
+    "round15_research": round15_events,
 }
 # The source's columns of picks.csv and lines of 資料覆蓋 (each its own tool's)
 PICK_FIELDS: dict[str, Callable[[str, dict[str, Any]], tuple[str, ...]]] = {
     "explore_research": lambda code, spec: er.used_features(spec),
     "round10_research": lambda code, spec: r10.PICK_FIELDS[code],
+    "round15_research": lambda code, spec: r15.PICK_FIELDS[code],
 }
 COVERAGE_LINES: dict[str, Callable[[str, dict[str, Any]], list[str]]] = {
     "explore_research": er.coverage_lines,
     "round10_research": r10.portfolio_coverage_lines,
+    "round15_research": r15.coverage_lines,
 }
+
+
+REFERENCE = "reference"
 
 
 # --- the run ---------------------------------------------------------------------
@@ -330,6 +462,10 @@ def study(run: dict[str, Any], name: str, min_days: int) -> dict[str, Any]:
         TAIEX: pr.excess_metrics([a - b for a, b in zip(mine, taiex) if b is not None]),
         POPULATION: pr.excess_metrics([a - b for a, b in zip(mine, others)]),
     }
+    if "reference_returns" in run:  # P2 第 7 點: listed, not judged
+        excess[REFERENCE] = pr.excess_metrics(
+            [a - b for a, b in zip(mine, run["reference_returns"])]
+        )
     curves = {
         TAIEX: pr.curve_metrics([v for v in taiex if v is not None], [1.0], [0.0]),
         name: pr.curve_metrics(mine, run["invested"][0], run["turnover"][0]),
@@ -407,6 +543,10 @@ def run_watch(
     }
     if "overlap" in run:  # F2 第 6 點: its list's overlap with H2's, listed only
         result["overlap"] = run["overlap"]
+    if "next_deadline" in run:  # the event-day engine (P2)
+        result["next_deadline"] = run["next_deadline"].isoformat()
+        result["overlaps"] = run["overlaps"]  # P2 第 6 點: K2's and X4's, listed only
+        result["rebalances"] = run["rebalances"]
     result["elapsed_seconds"] = time.monotonic() - started
     result["peak_memory_gb"] = lib._load("backtest_research").peak_memory_gb()
     write_outputs(out, result, run)
@@ -437,13 +577,46 @@ def markdown(result: dict[str, Any]) -> str:
     name, entry, spec = display(result["watch"]), result["entry"], result["definition"]
     days, threshold = result["days"], result["min_days"]
     e, a = result["excess"], result["absolute"]
-    if result["verdict"] == "樣本不足":
+    events = "next_deadline" in result  # the event-day engine (P2)
+    if events and not result["signal_days"]:
+        verdict = (
+            f"**樣本不足（起日後還沒有事件日）**：累積 {days}／{threshold} 日，下一個事件日 "
+            f"{result['next_deadline']}（法定期限；當天或之後的第一個週一～週五交易日），"
+            f"數字不是判定，滿 {threshold} 日才判定"
+        )
+    elif result["verdict"] == "樣本不足":
         verdict = (
             f"**樣本不足（累積 {days}／{threshold} 日）**：數字不是判定，滿 {threshold} 日"
             "才判定"
         )
     else:
         verdict = f"**{result['verdict']}**（累積 {days} 日，`forward_judge`）"
+    if events:
+        hold = ""  # the label says it: 持有到下一個事件日
+        trading = (
+            "- 進出與成本：事件日 T 收盤後選名單，T+1 開盤買（+5 bps、手續費 0.1425%），"
+            "下一個事件日收盤賣（−5 bps、手續費、證交稅 0.3%），一個帳戶（X7，"
+            "`explore_research.simulate_events`）；基準是同一帳戶規則、同一組事件日的全部母體"
+        )
+        window = (
+            f"- 窗口：前瞻起日 {result['since']}（之前的資料只當暖機，起日以前的事件日不買），"
+            f"第一個事件日 {result['first_signal'] or '—'}（事件日 {result['signal_days']} 個），"
+            f"下一個法定期限 {result['next_deadline']}；有淨值的交易日 "
+            f"{result['first_session'] or '—'}～{result['last_session'] or '—'}，"
+            f"cutoff {result['cutoff'] or '—'}"
+        )
+    else:
+        hold = f"、K＝{spec['hold']}"
+        trading = (
+            "- 進出與成本同「前瞻驗證 H1」：T+1 開盤買（+5 bps、手續費 0.1425%），成交那根算第 1 根、"
+            f"第 {spec['hold']} 根收盤賣（−5 bps、手續費、證交稅 0.3%），{spec['hold']} 份子帳戶輪替；"
+            "基準是同一引擎的每日全部母體"
+        )
+        window = (
+            f"- 窗口：前瞻起日 {result['since']}（之前的資料只當暖機），第一個訊號日 "
+            f"{result['first_signal'] or '—'}；有淨值的交易日 {result['first_session'] or '—'}"
+            f"～{result['last_session'] or '—'}，cutoff {result['cutoff'] or '—'}"
+        )
     lines = [
         f"# {name} {entry['kind']}的前瞻紀錄（forward_watch 第 {result['version']} 版，"
         f"#{result['design']}）",
@@ -455,16 +628,12 @@ def markdown(result: dict[str, Any]) -> str:
         f"累積 {days} 日",
         f"- 判定：{verdict}；{result['note']}",
         f"- 定義：{entry['source']} 第 {entry['source_version']} 版的 {entry['code']}"
-        f"（{spec['label']}；N＝{spec['top']}、K＝{spec['hold']}），定義雜湊 "
+        f"（{spec['label']}；N＝{spec['top']}{hold}），定義雜湊 "
         f"`{entry['definitions_sha256']}`；登記 {entry['registered']}",
-        f"- 窗口：前瞻起日 {result['since']}（之前的資料只當暖機），第一個訊號日 "
-        f"{result['first_signal'] or '—'}；有淨值的交易日 {result['first_session'] or '—'}"
-        f"～{result['last_session'] or '—'}，cutoff {result['cutoff'] or '—'}",
+        window,
         f"- 副本：最新交易日 {result['copy']['latest']}，alembic `{result['copy']['alembic']}`，"
         f"檔案時間 {result['copy']['mtime']}",
-        "- 進出與成本同「前瞻驗證 H1」：T+1 開盤買（+5 bps、手續費 0.1425%），成交那根算第 1 根、"
-        f"第 {spec['hold']} 根收盤賣（−5 bps、手續費、證交稅 0.3%），{spec['hold']} 份子帳戶輪替；"
-        "基準是同一引擎的每日全部母體",
+        trading,
         f"- 判定表（由上往下）：樣本不足（< {threshold} 日）→ 通過（超額日均 > 0 且 t ≥ 2）"
         "→ 輸給基準（< 0 且 t ≤ −2）→ 方向一致但不顯著（> 0）→ 沒有優勢",
         f"- 耗時 {result.get('elapsed_seconds', 0):.0f} 秒，峰值記憶體 "
@@ -479,6 +648,15 @@ def markdown(result: dict[str, Any]) -> str:
         f"| {_pct(e[TAIEX]['annual'])} | {_t(e[TAIEX]['t'])} |",
         f"| 超額（對母體） | {e[POPULATION]['days']} | {_pct(e[POPULATION]['mean'], 3)} "
         f"| {_pct(e[POPULATION]['annual'])} | {_t(e[POPULATION]['t'])} |",
+        *(
+            [
+                f"| 超額（對對照基準，只列出） | {e[REFERENCE]['days']} "
+                f"| {_pct(e[REFERENCE]['mean'], 3)} | {_pct(e[REFERENCE]['annual'])} "
+                f"| {_t(e[REFERENCE]['t'])} |"
+            ]
+            if REFERENCE in e
+            else []
+        ),
         f"| 絕對報酬（扣成本，只列出） | {a['days']} | {_pct(a['mean'], 3)} "
         f"| {_pct(None if a['mean'] is None else a['mean'] * pr.TRADING_DAYS)} | — |",
         "",
@@ -521,6 +699,20 @@ def markdown(result: dict[str, Any]) -> str:
             f"前瞻起日至今平均：{_pct(o['mean'], 1)}（{o['days']:,} 個訊號日）。",
             "",
         ]
+    if events:
+        lines += [
+            f"{r15.OVERLAP_NOTE['P2_reference']}。",
+            "",
+            "## 名單的重疊（只列出）",
+            "",
+        ]
+        for key in ("P2_K2", "P2_X4"):
+            o = result["overlaps"][key]
+            lines += [
+                f"- {r15.OVERLAP_NOTE[key]}。前瞻起日至今平均：{_pct(o['mean'], 1)}"
+                f"（{o['days']:,} 個事件日）。",
+            ]
+        lines.append("")
     if result["coverage"]:
         coverage = COVERAGE_LINES[entry["source"]](entry["code"], result["coverage"])
         lines += ["## 資料覆蓋", "", *coverage, ""]
