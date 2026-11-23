@@ -124,9 +124,14 @@ SINGLE_QUARTER = (
 BUY_DAYS = ((3, 1, 12, -1), (4, 15, 3, 0), (7, 15, 6, 0), (10, 15, 9, 0))
 SEASON_YEARS = 3  # F − 1, F − 2, F − 3
 RANK_RULE = (
-    "each year's 4 single-quarter EPS ranked 1..4 from the smallest, equal "
-    "values the average rank; the mean of quarter q's 3 ranks"
+    "each year's 4 single-quarter EPS, rounded to EPS_DIGITS decimals, ranked "
+    "1..4 from the smallest, equal values the average rank; the mean of "
+    "quarter q's 3 ranks"
 )
+# #984 決定 7095896595: a single quarter is a difference of cumulative figures
+# (0.70 - 0.30 = 0.39999999999999997), so it is rounded before the ranks and
+# the ties are told; EPS has 2 decimals, so different quarters stay different.
+EPS_DIGITS = 6
 SEASON_MISSING = "any of the 12 single-quarter values missing: missing, ranked last"
 WINDOW_RULE = (
     "one account (X7): bought at the buy day's T+1 open, sold at the close of "
@@ -248,8 +253,9 @@ DEGENERATE = {
     "P1": "12 個單季值（F−1、F−2、F−3 年各 4 季；`announcement_date` ≤ T、EPS 有值的列，"
     "照 `feature_evidence._quarter_eps` 的差法）中任一個缺時缺值、排最後；"
     "名單不足 20 檔時餘額留現金",
-    "P2": "最新一季（`announcement_date` ≤ T 的季報列中期末最晚的一季）不是事件日對應的那一季、"
-    "q、q−1、q−4 與算單季要用的前一季中任一列的 `report_format` 不是 `general`、"
+    "P2": "最新一季（`announcement_date` ≤ T 的季報列中期末最晚的一季，EPS 是 null 的列也算，和 K2 不同）"
+    "不是事件日對應的那一季、q、q−1、q−4 與算單季要用的前一季中任一列的 `report_format` 不是 `general`"
+    "（`report_format` 是 null 的列算欄位缺）、"
     "任一列不在或四個欄位任一欄缺（毛利先用 `營業毛利（毛損）淨額`，沒有這一欄時用 `營業毛利（毛損）`），"
     "或任一季的單季營收 ≤ 0 時，不符合；6 個比較中任一個不是嚴格較高（含相等）時也不符合；"
     "符合的不足 20 檔時餘額留現金",
@@ -300,6 +306,7 @@ def definitions() -> dict[str, Any]:
                 "buy_days": BUY_DAYS,
                 "years": SEASON_YEARS,
                 "rank": RANK_RULE,
+                "digits": EPS_DIGITS,
                 "missing": SEASON_MISSING,
                 "window": WINDOW_RULE,
                 "window_days": WINDOW_DAYS,
@@ -621,7 +628,8 @@ def _average_rank(values: list[float], at: int) -> float:
 
 def eps_season_3y(item: lib.Series, day: date, quarter: date) -> Season:
     """P1 第 3、4 點: the mean of quarter q's ranks among the 4 single-quarter
-    EPS of each of F − 1 .. F − 3 (``announcement_date`` ≤ T)."""
+    EPS of each of F − 1 .. F − 3 (``announcement_date`` ≤ T), each rounded to
+    ``EPS_DIGITS`` decimals first (#984 決定 7095896595)."""
 
     cumulative = {end: eps for announced, end, eps in item.quarters if announced <= day}
     q = quarter.month // 3
@@ -637,7 +645,8 @@ def eps_season_3y(item: lib.Series, day: date, quarter: date) -> Season:
         values = [single_quarter(cumulative, end) for end in ends]
         if any(value is None for value in values):
             return Season(None)
-        ranks.append(_average_rank(values, q - 1))
+        rounded = [round(value, EPS_DIGITS) for value in values]
+        ranks.append(_average_rank(rounded, q - 1))
     return Season(statistics.fmean(ranks), tuple(ranks))
 
 

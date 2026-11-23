@@ -195,6 +195,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         ),
         (tool, "SEASON_YEARS", 2),
         (tool, "RANK_RULE", "ties by the hash"),
+        (tool, "EPS_DIGITS", 4),
         (tool, "SEASON_MISSING", "a missing quarter ranked 4"),
         (tool, "WINDOW_RULE", "held to the next buy day"),
         (tool, "WINDOW_DAYS", "the sessions from T"),
@@ -560,6 +561,46 @@ def test_eps_season_3y_by_hand():
     assert got.ranks == (2.0, 2.5, 4.0)
 
 
+def test_eps_season_3y_ties_the_single_quarters_rounded_to_6_decimals():
+    """#984 決定 7095896595: cumulative 0.30, 0.70, 1.00, 1.30 are the single
+    quarters 0.3, 0.39999999999999997, 0.30000000000000004, 0.30000000000000004;
+    rounded to 6 decimals they are 0.3, 0.4, 0.3, 0.3: ranks 2, 4, 2, 2."""
+
+    cum = {date(2016, 3, 31): 0.30, date(2016, 6, 30): 0.70,
+           date(2016, 9, 30): 1.00, date(2016, 12, 31): 1.30}  # fmt: skip
+    raw = [tool.single_quarter(cum, end) for end in sorted(cum)]
+    assert raw[1] != 0.4 and raw[2] != raw[0]  # the floats themselves differ
+    rows = []
+    for year in (2014, 2015, 2016):
+        dues = [
+            date(year, 5, 15),
+            date(year, 8, 14),
+            date(year, 11, 14),
+            date(year + 1, 3, 31),
+        ]
+        ends = [
+            date(year, 3, 31),
+            date(year, 6, 30),
+            date(year, 9, 30),
+            date(year, 12, 31),
+        ]
+        rows += [
+            (due, end, value)
+            for due, end, value in zip(dues, ends, (0.30, 0.70, 1.00, 1.30))
+        ]
+    item = eps_item(rows)
+    for buy, quarter, rank in (
+        (date(2017, 4, 17), date(2017, 3, 31), 2.0),
+        (date(2017, 7, 17), date(2017, 6, 30), 4.0),
+        (date(2017, 10, 16), date(2017, 9, 30), 2.0),
+    ):
+        got = tool.eps_season_3y(item, buy, quarter)
+        assert got.ranks == (rank,) * 3 and got.value == rank, quarter
+    got = tool.eps_season_3y(eps_item([*rows, *cumulative(2013, [1, 1, 1, 1])]),
+                             date(2017, 3, 1), date(2016, 12, 31))  # fmt: skip
+    assert got.ranks == (2.0, 2.0, 2.5)  # Q4 of 2015, 2014; 2013's four equal: 2.5
+
+
 def test_eps_season_3y_is_missing_without_any_of_the_12_or_before_its_announcement():
     full = [*cumulative(2016, [1, 3, 2, 4]), *cumulative(2015, [2, 2, 1, 3]),
             *cumulative(2014, [5, 1, 2, 3])]  # fmt: skip
@@ -915,6 +956,37 @@ def test_the_reference_takes_out_only_delisted_or_transferred_missing_a_field(
     }
     year = planned.coverage["2016"]
     assert (year["delisted"], year["delisted_missing"], year["hits"]) == (9, 6, 6)
+
+
+def test_k2_names_are_round14s_k2_list_on_the_same_t(monkeypatch):
+    """P2 第 8 點: ``k2_names`` is K2's list (``round14_research.plan_k2``'s
+    picks) on the same T, not another selection."""
+
+    sessions = weekdays(date(2017, 1, 2), 120)  # 2017-05-15 is an event day
+    day, quarter = date(2017, 5, 15), date(2017, 3, 31)
+    turn = [
+        (date(2016, 5, 15), date(2016, 3, 31), -0.5),
+        (date(2017, 5, 15), quarter, 0.4),
+    ]
+    flat = [
+        (date(2016, 5, 15), date(2016, 3, 31), 0.5),
+        (date(2017, 5, 15), quarter, 0.4),
+    ]
+    items = {}
+    for i in range(1, 31):
+        item = make_item([10.0], instrument_id=i, dates=[day])
+        item.quarters = turn if i <= 25 else flat  # 25 turn: more than 20
+        items[i] = item
+    members = [(items[i], 0) for i in items]
+    monkeypatch.setattr(lib, "universe", lambda panel, d, lots: members)
+    monkeypatch.setattr(r14, "x4_names", lambda ctx, d, m: set())
+    ctx = SimpleNamespace(
+        panel=SimpleNamespace(sessions=sessions, symbols={}), seconds=Counter()
+    )
+    at = sessions.index(day)
+    planned = r14.plan_k2(ctx, r14.HYPOTHESES["K2"], at + 1, at + 5)
+    mine = tool.k2_names(ctx, day, members, quarter)
+    assert mine == set(planned.picks[at + 1]) and len(mine) == 20
 
 
 def test_fields_missing_is_point_3s_field_case_on_the_deadlines_quarter():
