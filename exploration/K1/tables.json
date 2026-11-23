@@ -1,0 +1,363 @@
+{
+  "tool": "round14_research",
+  "version": 1,
+  "design": "978",
+  "definitions_sha256": "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
+  "label": "T 日是現金股利除息交易日、之前 3 年沒有配現金、上市已滿 3 年（`div_initiation`），T 日那一份子帳戶等權買進當天的事件",
+  "direction": "事件：開始配息",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "event_list",
+    "conditions": [
+      [
+        "div_initiation",
+        "is",
+        true
+      ]
+    ],
+    "order": "the hash only",
+    "short": "cash, not filled",
+    "weight": "1/n",
+    "benchmark": "the population on the event days only",
+    "top": 20,
+    "hold": 240,
+    "start": [
+      "date",
+      "2010-12-02"
+    ]
+  },
+  "hypothesis": "K1",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2010-12-02",
+    "first_session": "2010-12-03",
+    "last_session": "2019-12-31",
+    "days": 2235,
+    "signal_days": 2235,
+    "event_days": 127
+  },
+  "prerequisites": {
+    "days": 2235,
+    "min_days": 500,
+    "delisted": 111,
+    "ok": true
+  },
+  "coverage": {
+    "2010": {
+      "days": 22,
+      "members": 12076,
+      "events": 0,
+      "event_days": 0,
+      "capped_days": 0,
+      "max_events": 0,
+      "candidates": 1,
+      "paid": 1,
+      "null": 0,
+      "null_only": 0,
+      "young": 0,
+      "invested_sum": 0.0,
+      "invested_days": 21
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "events": 35,
+      "event_days": 29,
+      "capped_days": 0,
+      "max_events": 2,
+      "candidates": 416,
+      "paid": 364,
+      "null": 0,
+      "null_only": 0,
+      "young": 39,
+      "invested_sum": 12.129166666666663,
+      "invested_days": 247
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "events": 7,
+      "event_days": 6,
+      "capped_days": 0,
+      "max_events": 2,
+      "candidates": 269,
+      "paid": 252,
+      "null": 0,
+      "null_only": 0,
+      "young": 23,
+      "invested_sum": 19.445833333333304,
+      "invested_days": 250
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "events": 10,
+      "event_days": 8,
+      "capped_days": 0,
+      "max_events": 3,
+      "candidates": 365,
+      "paid": 346,
+      "null": 0,
+      "null_only": 0,
+      "young": 41,
+      "invested_sum": 6.516666666666665,
+      "invested_days": 246
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "events": 19,
+      "event_days": 17,
+      "capped_days": 0,
+      "max_events": 2,
+      "candidates": 434,
+      "paid": 407,
+      "null": 0,
+      "null_only": 0,
+      "young": 35,
+      "invested_sum": 12.062499999999977,
+      "invested_days": 248
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "events": 16,
+      "event_days": 14,
+      "capped_days": 0,
+      "max_events": 2,
+      "candidates": 337,
+      "paid": 316,
+      "null": 0,
+      "null_only": 0,
+      "young": 21,
+      "invested_sum": 15.67916666666671,
+      "invested_days": 244
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "events": 14,
+      "event_days": 13,
+      "capped_days": 0,
+      "max_events": 2,
+      "candidates": 346,
+      "paid": 328,
+      "null": 0,
+      "null_only": 0,
+      "young": 19,
+      "invested_sum": 13.125000000000043,
+      "invested_days": 244
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "events": 11,
+      "event_days": 10,
+      "capped_days": 0,
+      "max_events": 2,
+      "candidates": 359,
+      "paid": 340,
+      "null": 0,
+      "null_only": 0,
+      "young": 18,
+      "invested_sum": 12.220833333333259,
+      "invested_days": 246
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "events": 22,
+      "event_days": 17,
+      "capped_days": 0,
+      "max_events": 3,
+      "candidates": 364,
+      "paid": 337,
+      "null": 0,
+      "null_only": 0,
+      "young": 15,
+      "invested_sum": 13.458333333333302,
+      "invested_days": 247
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "events": 13,
+      "event_days": 13,
+      "capped_days": 0,
+      "max_events": 1,
+      "candidates": 363,
+      "paid": 343,
+      "null": 0,
+      "null_only": 0,
+      "young": 16,
+      "invested_sum": 14.633333333333388,
+      "invested_days": 242
+    }
+  },
+  "seconds": {
+    "plan": 10.927313306980068,
+    "div_initiation": 2.218181297124829,
+    "cash_div_ex": 0.009475057071540505
+  },
+  "overlap": {
+    "days": 127,
+    "mean": 0.44881889763779526,
+    "years": {
+      "2011": {
+        "days": 29,
+        "mean": 0.5172413793103449
+      },
+      "2012": {
+        "days": 6,
+        "mean": 0.6666666666666666
+      },
+      "2013": {
+        "days": 8,
+        "mean": 0.625
+      },
+      "2014": {
+        "days": 17,
+        "mean": 0.23529411764705882
+      },
+      "2015": {
+        "days": 14,
+        "mean": 0.5
+      },
+      "2016": {
+        "days": 13,
+        "mean": 0.23076923076923078
+      },
+      "2017": {
+        "days": 10,
+        "mean": 0.2
+      },
+      "2018": {
+        "days": 17,
+        "mean": 0.7058823529411765
+      },
+      "2019": {
+        "days": 13,
+        "mean": 0.38461538461538464
+      }
+    }
+  },
+  "events": {
+    "days": 127,
+    "mean": 1.1574803149606299,
+    "years": {
+      "2011": {
+        "days": 29,
+        "mean": 1.206896551724138
+      },
+      "2012": {
+        "days": 6,
+        "mean": 1.1666666666666667
+      },
+      "2013": {
+        "days": 8,
+        "mean": 1.25
+      },
+      "2014": {
+        "days": 17,
+        "mean": 1.1176470588235294
+      },
+      "2015": {
+        "days": 14,
+        "mean": 1.1428571428571428
+      },
+      "2016": {
+        "days": 13,
+        "mean": 1.0769230769230769
+      },
+      "2017": {
+        "days": 10,
+        "mean": 1.1
+      },
+      "2018": {
+        "days": 17,
+        "mean": 1.2941176470588236
+      },
+      "2019": {
+        "days": 13,
+        "mean": 1.0
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2235,
+      "mean": -1.523220572860139e-05,
+      "annual": -0.0038385158436075504,
+      "t": -1.9363611259398334
+    },
+    "taiex": {
+      "days": 2235,
+      "mean": -0.00020030722522872339,
+      "annual": -0.050477420757638294,
+      "t": -1.1280433272521326
+    }
+  },
+  "absolute": {
+    "days": 2235,
+    "mean": -1.0492311222529306e-05
+  },
+  "curves": {
+    "K1": {
+      "days": 2235,
+      "total": -0.023960504956721196,
+      "annual": -0.002730744020302933,
+      "volatility": 0.013446389752521187,
+      "max_drawdown": -0.0465802187667258,
+      "invested": 0.054969497927820715,
+      "turnover": 0.06037905607582865
+    },
+    "population": {
+      "days": 2235,
+      "total": 0.01007256964649006,
+      "annual": 0.0011306562542787724,
+      "volatility": 0.011351961345201398,
+      "max_drawdown": -0.032437732371560446,
+      "invested": 0.05517637235745492,
+      "turnover": 0.06018797063189463
+    },
+    "taiex": {
+      "days": 2235,
+      "total": 0.39732837008212174,
+      "annual": 0.03844296144332415,
+      "volatility": 0.14198915874230594,
+      "max_drawdown": -0.27467729501878124,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 147,
+    "won": 48,
+    "rate": 0.32653061224489793,
+    "unsold": 15
+  },
+  "counts": {
+    "K1": {
+      "bought": 147,
+      "sale_held": 2,
+      "unsold": 15
+    },
+    "population": {
+      "bought": 57755,
+      "limit_up": 41,
+      "not_tradable": 15,
+      "limit_down": 25,
+      "sale_held": 702,
+      "unsold": 5997
+    }
+  },
+  "unsold_share": 0.10204081632653061,
+  "fill_days": {
+    "days": 127,
+    "min_days": 60
+  },
+  "min_t": 2.0
+}

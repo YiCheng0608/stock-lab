@@ -1,0 +1,613 @@
+{
+  "tool": "round14_research",
+  "version": 1,
+  "design": "978",
+  "registration_commit": "50528962",
+  "segment": "exploration",
+  "round": 14,
+  "round_size": 3,
+  "cumulative": 55,
+  "validation_min_t": 3.317,
+  "definitions_sha256": "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
+  "engines": {
+    "portfolio_research": "simulate",
+    "explore_research": "simulate_events"
+  },
+  "tool_commit": "c679209d1f6b1ee42f7bc5f52be60ae687561794",
+  "command": "python tools/research/round14_research.py --db /research/stock.db --segment exploration --hypotheses K1,K2,K3 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "K1",
+    "K2",
+    "K3"
+  ],
+  "hypotheses": {
+    "K1": {
+      "engine": "portfolio",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 2235,
+      "taiex_excess": {
+        "days": 2235,
+        "mean": -0.00020030722522872339,
+        "annual": -0.050477420757638294,
+        "t": -1.1280433272521326
+      },
+      "excess": {
+        "days": 2235,
+        "mean": -1.523220572860139e-05,
+        "annual": -0.0038385158436075504,
+        "t": -1.9363611259398334
+      },
+      "absolute_mean": -1.0492311222529306e-05,
+      "prerequisites": {
+        "days": 2235,
+        "min_days": 500,
+        "delisted": 111,
+        "ok": true
+      },
+      "overlap_j3": {
+        "days": 127,
+        "mean": 0.44881889763779526
+      },
+      "events": {
+        "days": 127,
+        "mean": 1.1574803149606299
+      },
+      "invested": 0.054969497927820715,
+      "unsold_share": 0.10204081632653061,
+      "fill_days": {
+        "days": 127,
+        "min_days": 60
+      },
+      "coverage": {
+        "2010": {
+          "days": 22,
+          "members": 12076,
+          "events": 0,
+          "event_days": 0,
+          "capped_days": 0,
+          "max_events": 0,
+          "candidates": 1,
+          "paid": 1,
+          "null": 0,
+          "null_only": 0,
+          "young": 0,
+          "invested_sum": 0.0,
+          "invested_days": 21
+        },
+        "2011": {
+          "days": 247,
+          "members": 117840,
+          "events": 35,
+          "event_days": 29,
+          "capped_days": 0,
+          "max_events": 2,
+          "candidates": 416,
+          "paid": 364,
+          "null": 0,
+          "null_only": 0,
+          "young": 39,
+          "invested_sum": 12.129166666666663,
+          "invested_days": 247
+        },
+        "2012": {
+          "days": 250,
+          "members": 99281,
+          "events": 7,
+          "event_days": 6,
+          "capped_days": 0,
+          "max_events": 2,
+          "candidates": 269,
+          "paid": 252,
+          "null": 0,
+          "null_only": 0,
+          "young": 23,
+          "invested_sum": 19.445833333333304,
+          "invested_days": 250
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "events": 10,
+          "event_days": 8,
+          "capped_days": 0,
+          "max_events": 3,
+          "candidates": 365,
+          "paid": 346,
+          "null": 0,
+          "null_only": 0,
+          "young": 41,
+          "invested_sum": 6.516666666666665,
+          "invested_days": 246
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "events": 19,
+          "event_days": 17,
+          "capped_days": 0,
+          "max_events": 2,
+          "candidates": 434,
+          "paid": 407,
+          "null": 0,
+          "null_only": 0,
+          "young": 35,
+          "invested_sum": 12.062499999999977,
+          "invested_days": 248
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "events": 16,
+          "event_days": 14,
+          "capped_days": 0,
+          "max_events": 2,
+          "candidates": 337,
+          "paid": 316,
+          "null": 0,
+          "null_only": 0,
+          "young": 21,
+          "invested_sum": 15.67916666666671,
+          "invested_days": 244
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "events": 14,
+          "event_days": 13,
+          "capped_days": 0,
+          "max_events": 2,
+          "candidates": 346,
+          "paid": 328,
+          "null": 0,
+          "null_only": 0,
+          "young": 19,
+          "invested_sum": 13.125000000000043,
+          "invested_days": 244
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "events": 11,
+          "event_days": 10,
+          "capped_days": 0,
+          "max_events": 2,
+          "candidates": 359,
+          "paid": 340,
+          "null": 0,
+          "null_only": 0,
+          "young": 18,
+          "invested_sum": 12.220833333333259,
+          "invested_days": 246
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "events": 22,
+          "event_days": 17,
+          "capped_days": 0,
+          "max_events": 3,
+          "candidates": 364,
+          "paid": 337,
+          "null": 0,
+          "null_only": 0,
+          "young": 15,
+          "invested_sum": 13.458333333333302,
+          "invested_days": 247
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "events": 13,
+          "event_days": 13,
+          "capped_days": 0,
+          "max_events": 1,
+          "candidates": 363,
+          "paid": 343,
+          "null": 0,
+          "null_only": 0,
+          "young": 16,
+          "invested_sum": 14.633333333333388,
+          "invested_days": 242
+        }
+      }
+    },
+    "K2": {
+      "engine": "events",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1384,
+      "taiex_excess": {
+        "days": 1384,
+        "mean": 0.00028018131996243893,
+        "annual": 0.07060569263053461,
+        "t": 1.0358167403760292
+      },
+      "excess": {
+        "days": 1384,
+        "mean": 0.0003222142158919977,
+        "annual": 0.08119798240478343,
+        "t": 1.8153532275477544
+      },
+      "absolute_mean": 0.000530684195477301,
+      "prerequisites": {
+        "days": 1384,
+        "min_days": 500,
+        "delisted": 79,
+        "ok": true
+      },
+      "overlap_x4": {
+        "days": 23,
+        "mean": 0.11315789473684211
+      },
+      "hits": {
+        "days": 23,
+        "mean": 19.956521739130434
+      },
+      "invested": 0.9790324937542826,
+      "unsold_share": 0.04357298474945534,
+      "coverage": {
+        "2014": {
+          "days": 3,
+          "members": 1401,
+          "stale": 65,
+          "no_single": 9,
+          "hits": 145,
+          "events": [
+            {
+              "signal_date": "2014-05-15",
+              "quarter": "2014-03-31",
+              "members": 525,
+              "hits": 54,
+              "stale": 16,
+              "no_single": 4,
+              "names": 20
+            },
+            {
+              "signal_date": "2014-08-14",
+              "quarter": "2014-06-30",
+              "members": 509,
+              "hits": 54,
+              "stale": 34,
+              "no_single": 4,
+              "names": 20
+            },
+            {
+              "signal_date": "2014-11-14",
+              "quarter": "2014-09-30",
+              "members": 367,
+              "hits": 37,
+              "stale": 15,
+              "no_single": 1,
+              "names": 20
+            }
+          ]
+        },
+        "2015": {
+          "days": 4,
+          "members": 1763,
+          "stale": 65,
+          "no_single": 18,
+          "hits": 132,
+          "events": [
+            {
+              "signal_date": "2015-03-31",
+              "quarter": "2014-12-31",
+              "members": 473,
+              "hits": 44,
+              "stale": 2,
+              "no_single": 3,
+              "names": 20
+            },
+            {
+              "signal_date": "2015-05-15",
+              "quarter": "2015-03-31",
+              "members": 466,
+              "hits": 42,
+              "stale": 16,
+              "no_single": 5,
+              "names": 20
+            },
+            {
+              "signal_date": "2015-08-14",
+              "quarter": "2015-06-30",
+              "members": 372,
+              "hits": 27,
+              "stale": 31,
+              "no_single": 4,
+              "names": 20
+            },
+            {
+              "signal_date": "2015-11-16",
+              "quarter": "2015-09-30",
+              "members": 452,
+              "hits": 19,
+              "stale": 16,
+              "no_single": 6,
+              "names": 19
+            }
+          ]
+        },
+        "2016": {
+          "days": 4,
+          "members": 1637,
+          "stale": 57,
+          "no_single": 13,
+          "hits": 140,
+          "events": [
+            {
+              "signal_date": "2016-03-31",
+              "quarter": "2015-12-31",
+              "members": 479,
+              "hits": 37,
+              "stale": 2,
+              "no_single": 7,
+              "names": 20
+            },
+            {
+              "signal_date": "2016-05-16",
+              "quarter": "2016-03-31",
+              "members": 361,
+              "hits": 21,
+              "stale": 15,
+              "no_single": 2,
+              "names": 20
+            },
+            {
+              "signal_date": "2016-08-15",
+              "quarter": "2016-06-30",
+              "members": 461,
+              "hits": 50,
+              "stale": 26,
+              "no_single": 3,
+              "names": 20
+            },
+            {
+              "signal_date": "2016-11-14",
+              "quarter": "2016-09-30",
+              "members": 336,
+              "hits": 32,
+              "stale": 14,
+              "no_single": 1,
+              "names": 20
+            }
+          ]
+        },
+        "2017": {
+          "days": 4,
+          "members": 1912,
+          "stale": 64,
+          "no_single": 9,
+          "hits": 229,
+          "events": [
+            {
+              "signal_date": "2017-03-31",
+              "quarter": "2016-12-31",
+              "members": 502,
+              "hits": 75,
+              "stale": 2,
+              "no_single": 5,
+              "names": 20
+            },
+            {
+              "signal_date": "2017-05-15",
+              "quarter": "2017-03-31",
+              "members": 427,
+              "hits": 43,
+              "stale": 16,
+              "no_single": 0,
+              "names": 20
+            },
+            {
+              "signal_date": "2017-08-14",
+              "quarter": "2017-06-30",
+              "members": 471,
+              "hits": 51,
+              "stale": 29,
+              "no_single": 3,
+              "names": 20
+            },
+            {
+              "signal_date": "2017-11-14",
+              "quarter": "2017-09-30",
+              "members": 512,
+              "hits": 60,
+              "stale": 17,
+              "no_single": 1,
+              "names": 20
+            }
+          ]
+        },
+        "2018": {
+          "days": 4,
+          "members": 1700,
+          "stale": 58,
+          "no_single": 13,
+          "hits": 159,
+          "events": [
+            {
+              "signal_date": "2018-04-02",
+              "quarter": "2017-12-31",
+              "members": 500,
+              "hits": 48,
+              "stale": 1,
+              "no_single": 2,
+              "names": 20
+            },
+            {
+              "signal_date": "2018-05-15",
+              "quarter": "2018-03-31",
+              "members": 442,
+              "hits": 60,
+              "stale": 16,
+              "no_single": 3,
+              "names": 20
+            },
+            {
+              "signal_date": "2018-08-14",
+              "quarter": "2018-06-30",
+              "members": 416,
+              "hits": 27,
+              "stale": 26,
+              "no_single": 6,
+              "names": 20
+            },
+            {
+              "signal_date": "2018-11-14",
+              "quarter": "2018-09-30",
+              "members": 342,
+              "hits": 24,
+              "stale": 15,
+              "no_single": 2,
+              "names": 20
+            }
+          ]
+        },
+        "2019": {
+          "days": 4,
+          "members": 1774,
+          "stale": 59,
+          "no_single": 17,
+          "hits": 145,
+          "events": [
+            {
+              "signal_date": "2019-04-01",
+              "quarter": "2018-12-31",
+              "members": 449,
+              "hits": 37,
+              "stale": 0,
+              "no_single": 6,
+              "names": 20
+            },
+            {
+              "signal_date": "2019-05-15",
+              "quarter": "2019-03-31",
+              "members": 451,
+              "hits": 45,
+              "stale": 16,
+              "no_single": 6,
+              "names": 20
+            },
+            {
+              "signal_date": "2019-08-14",
+              "quarter": "2019-06-30",
+              "members": 435,
+              "hits": 34,
+              "stale": 28,
+              "no_single": 5,
+              "names": 20
+            },
+            {
+              "signal_date": "2019-11-14",
+              "quarter": "2019-09-30",
+              "members": 439,
+              "hits": 29,
+              "stale": 15,
+              "no_single": 0,
+              "names": 20
+            }
+          ]
+        }
+      }
+    },
+    "K3": {
+      "engine": "portfolio",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 947,
+      "taiex_excess": {
+        "days": 947,
+        "mean": 5.1759564033839854e-05,
+        "annual": 0.013043410136527643,
+        "t": 0.29159040001711983
+      },
+      "excess": {
+        "days": 947,
+        "mean": 3.4761024528692006e-05,
+        "annual": 0.008759778181230386,
+        "t": 0.26060806110471374
+      },
+      "absolute_mean": 0.0004721071496000988,
+      "prerequisites": {
+        "days": 947,
+        "min_days": 500,
+        "delisted": 60,
+        "ok": true
+      },
+      "overlap_u1": {
+        "days": 947,
+        "mean": 0.08023551925955966
+      },
+      "hits": {
+        "days": 947,
+        "mean": 16.970432946145724
+      },
+      "invested": 0.730465188315469,
+      "unsold_share": 0.1631676853574276,
+      "coverage": {
+        "2016": {
+          "days": 213,
+          "members": 83183,
+          "missing": {
+            "inst_sell_5q": 1884,
+            "short": 1851,
+            "market_gap": 33
+          },
+          "hits": 3117,
+          "min_hits": 8,
+          "max_hits": 24,
+          "short_days": 201,
+          "zero_days": 0
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "inst_sell_5q": 1515,
+            "short": 1515
+          },
+          "hits": 3393,
+          "min_hits": 7,
+          "max_hits": 24,
+          "short_days": 223,
+          "zero_days": 0
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "inst_sell_5q": 1387,
+            "short": 1387
+          },
+          "hits": 4157,
+          "min_hits": 11,
+          "max_hits": 25,
+          "short_days": 199,
+          "zero_days": 0
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "inst_sell_5q": 2051,
+            "short": 2051
+          },
+          "hits": 5404,
+          "min_hits": 11,
+          "max_hits": 38,
+          "short_days": 89,
+          "zero_days": 0
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 477.31116972499876,
+  "peak_memory_gb": 1.5999984741210938
+}

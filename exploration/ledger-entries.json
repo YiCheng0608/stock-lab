@@ -1,0 +1,43 @@
+{
+  "entries": [
+    {
+      "hypothesis": "K1",
+      "tool": "round14_research",
+      "round": 14,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-23T06:19:00+00:00",
+      "report_sha256": "e8d8d8f9a0f09b6c304cfb4ebdae70ee48dc6ecbbc4acfee794addebab67cb33",
+      "tool_commit": "c679209d1f6b1ee42f7bc5f52be60ae687561794",
+      "definitions_sha256": "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "K2",
+      "tool": "round14_research",
+      "round": 14,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-23T06:19:00+00:00",
+      "report_sha256": "e8d8d8f9a0f09b6c304cfb4ebdae70ee48dc6ecbbc4acfee794addebab67cb33",
+      "tool_commit": "c679209d1f6b1ee42f7bc5f52be60ae687561794",
+      "definitions_sha256": "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "K3",
+      "tool": "round14_research",
+      "round": 14,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-23T06:19:00+00:00",
+      "report_sha256": "e8d8d8f9a0f09b6c304cfb4ebdae70ee48dc6ecbbc4acfee794addebab67cb33",
+      "tool_commit": "c679209d1f6b1ee42f7bc5f52be60ae687561794",
+      "definitions_sha256": "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
+      "verdict": "沒有通過（探索段）"
+    }
+  ]
+}

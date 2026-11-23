@@ -1,0 +1,224 @@
+{
+  "tool": "round14_research",
+  "version": 1,
+  "design": "978",
+  "definitions_sha256": "3c8cf489dd99778e71d29215b1bd7e8b8d63607c902500c9e9ac122bbe0a0044",
+  "label": "`inst_sell_5q`（外資＋投信最近 5 個 60 根區塊每一塊的淨買超合計都 < 0）成立，以雜湊取 20 檔、不排序",
+  "direction": "籌碼：法人持續賣超",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "conditions": [
+      [
+        "inst_sell_5q",
+        "is",
+        true
+      ]
+    ],
+    "order": "the hash only",
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": 120,
+    "start": [
+      "session",
+      "2014-12-01",
+      300
+    ]
+  },
+  "hypothesis": "K3",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2016-02-24",
+    "first_session": "2016-02-25",
+    "last_session": "2019-12-31",
+    "days": 947,
+    "signal_days": 947,
+    "event_days": 0
+  },
+  "prerequisites": {
+    "days": 947,
+    "min_days": 500,
+    "delisted": 60,
+    "ok": true
+  },
+  "coverage": {
+    "2016": {
+      "days": 213,
+      "members": 83183,
+      "missing": {
+        "inst_sell_5q": 1884,
+        "short": 1851,
+        "market_gap": 33
+      },
+      "hits": 3117,
+      "min_hits": 8,
+      "max_hits": 24,
+      "short_days": 201,
+      "zero_days": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "missing": {
+        "inst_sell_5q": 1515,
+        "short": 1515
+      },
+      "hits": 3393,
+      "min_hits": 7,
+      "max_hits": 24,
+      "short_days": 223,
+      "zero_days": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "missing": {
+        "inst_sell_5q": 1387,
+        "short": 1387
+      },
+      "hits": 4157,
+      "min_hits": 11,
+      "max_hits": 25,
+      "short_days": 199,
+      "zero_days": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "missing": {
+        "inst_sell_5q": 2051,
+        "short": 2051
+      },
+      "hits": 5404,
+      "min_hits": 11,
+      "max_hits": 38,
+      "short_days": 89,
+      "zero_days": 0
+    }
+  },
+  "seconds": {
+    "plan": 15.088020443014102,
+    "inst_sell_5q": 8.75301927071996,
+    "u1_order": 2.3758170513319783
+  },
+  "overlap": {
+    "days": 947,
+    "mean": 0.08023551925955966,
+    "years": {
+      "2016": {
+        "days": 213,
+        "mean": 0.12726455150363927
+      },
+      "2017": {
+        "days": 246,
+        "mean": 0.06994735425651759
+      },
+      "2018": {
+        "days": 247,
+        "mean": 0.060098968405614094
+      },
+      "2019": {
+        "days": 241,
+        "mean": 0.06980992915036438
+      }
+    }
+  },
+  "hits": {
+    "days": 947,
+    "mean": 16.970432946145724,
+    "years": {
+      "2016": {
+        "days": 213,
+        "mean": 14.633802816901408
+      },
+      "2017": {
+        "days": 246,
+        "mean": 13.792682926829269
+      },
+      "2018": {
+        "days": 247,
+        "mean": 16.829959514170042
+      },
+      "2019": {
+        "days": 241,
+        "mean": 22.42323651452282
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 947,
+      "mean": 3.4761024528692006e-05,
+      "annual": 0.008759778181230386,
+      "t": 0.26060806110471374
+    },
+    "taiex": {
+      "days": 947,
+      "mean": 5.1759564033839854e-05,
+      "annual": 0.013043410136527643,
+      "t": 0.29159040001711983
+    }
+  },
+  "absolute": {
+    "days": 947,
+    "mean": 0.0004721071496000988
+  },
+  "curves": {
+    "K3": {
+      "days": 947,
+      "total": 0.5248600878122454,
+      "annual": 0.11881464039993794,
+      "volatility": 0.11528347270283783,
+      "max_drawdown": -0.1963430469429006,
+      "invested": 0.730465188315469,
+      "turnover": 1.6679777690797921
+    },
+    "population": {
+      "days": 947,
+      "total": 0.457258173222967,
+      "annual": 0.10539534781161985,
+      "volatility": 0.14069428615989957,
+      "max_drawdown": -0.2675905106352394,
+      "invested": 0.9273549703949692,
+      "turnover": 2.061228440193668
+    },
+    "taiex": {
+      "days": 947,
+      "total": 0.4484296486962238,
+      "annual": 0.10360932248826771,
+      "volatility": 0.12078454938281766,
+      "max_drawdown": -0.16622960230549555,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 15052,
+    "won": 8989,
+    "rate": 0.5971963858623439,
+    "unsold": 2456
+  },
+  "counts": {
+    "K3": {
+      "bought": 15052,
+      "not_tradable": 5,
+      "limit_up": 18,
+      "sale_held": 109,
+      "limit_down": 33,
+      "unsold": 2456
+    },
+    "population": {
+      "bought": 408866,
+      "limit_up": 212,
+      "not_tradable": 167,
+      "sale_held": 2905,
+      "limit_down": 138,
+      "unsold": 52897
+    }
+  },
+  "unsold_share": 0.1631676853574276,
+  "min_t": 2.0
+}
