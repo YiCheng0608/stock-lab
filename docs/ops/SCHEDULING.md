@@ -143,16 +143,20 @@ daily 在主流族群前 20 之後，另算一份「H2 名單」（`explore_rese
   - 日線：只算交易日（當天有 `stock` 日線的日子）上的日線，「最近 240 根」是這種日線的根數，停牌沒日線的日子不算。
   - 還原：每筆公司行動各自算因子（`worker.pipeline._corporate_action_factor`），只取 T 以前（含）的；沒有參考價的，用該日前最近一根 > 0 的收盤補。不用 mainstream 的 `_action_factor_by_bar`。
   - 研究工具的 `bar_exclusions.json` 不搬進產品：三段 code_reuse 只在 DB 存有舊公司日線時才生效。正式 DB 的 stock 日線從 2024-09-30 起，那三檔沒有舊公司日線（#881 AC-4 查過）；上櫃 2007 那段也早於正式 DB。只有在研究 DB 這類更早的歷史上重算舊日期，才可能和研究工具不同。
-- **存放**：`h2_runs`（每個交易日、每個版本一列：`definitions_sha256` 記研究定義的雜湊 `600dc942…ebec63`，`status` 是 `computed` 或 `zero`，`universe_count` 是母體檔數，`config_json` 是參數）與 `h2_items`（每檔一列：名次、`high_gap_240`、T 的原始收盤）。同一天重算時整份換掉；算失敗時不寫入，前一份留著。T 不是交易日（沒有 `stock` 日線）時算失敗。
+- **存放**：通用的策略名單表（[#1014](https://github.com/YiCheng0608/stock-lab/issues/1014)，`app.strategy_lists`；migration 0035 把 0034 的 `h2_runs`／`h2_items` 搬進來並刪掉舊表，降級時反向搬回），H2 的 `strategy` 是 `h2`。之後的策略名單（X4 等）寫同一組表，每個策略只給「算一天」與「欄位轉成 API」兩個函式，登記在 `strategy_lists.strategies()`。
+  - `strategy_list_runs`：每個交易日、策略、版本一列（唯一鍵 `trading_date`＋`strategy`＋`version`）。`definitions_sha256` 記定義的雜湊（H2 是研究定義 `600dc942…ebec63`），`status` 是 `computed` 或 `zero`，`universe_count` 是母體檔數，`item_count` 是名單檔數，`config_json` 是參數，`computed_at` 是 UTC 寫入時間。
+  - `strategy_list_items`：每檔一列（`run_id`、`trading_date`、`instrument_id`、`strategy`、`version`、`rank`、`close` 是 T 的原始收盤；唯一鍵 `trading_date`＋`instrument_id`＋`strategy`＋`version`）。策略自己的值放 `values_json`，H2 是 `{"high_gap_240": <值或 null>}`。
+  - 同一天重算時整份換掉；算失敗時不寫入，前一份留著。T 不是交易日（沒有 `stock` 日線）時算失敗。
+  - 降級到 0034 只搬回 `h2` 的列；別的策略的名單 0034 沒有地方放，跟著新表刪掉。
 - **誰寫**：daily 的 h2_list 步驟（`worker.h2_list.run_h2_list`），只算 daily 的目標日。catchup 只跑 collect，它補抓的日子沒有 H2 名單，`/api/h2?date=` 對那些日子回 `missing`；主流族群前 20 也一樣。要補時照下面的「重算」逐日跑。
-- **讀取**：`GET /api/h2?date=`，沒給日期時取最新一份。
+- **讀取**：`GET /api/h2?date=`，沒給日期時取最新一份；`GET /api/strategy-lists/h2?date=` 回一樣的內容（#1014，不認得的策略回 404）。前端仍讀 `/api/h2`。
   - 回傳 `status`、`trading_date`、`version`、`definitions_sha256`、`window`、`computed_at`、`universe_count` 與 `items`。
   - 每檔有 `rank`、`instrument`（`id`、`exchange`、`symbol`、`name`、`instrument_type`）、`high_gap_240`（缺值為 null）、`close`（T 的原始收盤）、`market`、`recent_closes`，以及 `today_list`。
   - `today_list` 在讀取時才查當天的今日名單（名次、`entry_type`、`score_version`），不在今日名單是 null，不寫進表。
   - `market`（T 的收盤與漲跌）與 `recent_closes`（近 30 個交易日的原始收盤，畫走勢線）也在讀取時才算，不寫進表，寫法同 `/api/mainstream`（`market_change.adjacent_change`、`candidate_view.recent_closes`；[#882](https://github.com/YiCheng0608/stock-lab/issues/882)）。
   - 那天沒有算時 `status` 是 `missing`、`items` 是空的；母體是空的那天是 `zero`。
   - 不附進場區、停損與目標。
-- **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.h2_list as h; print(h.run_h2_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天：catchup 補抓的日子、migration 0034 降級後再升回時，舊日期都要逐日跑。
+- **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.h2_list as h; print(h.run_h2_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天：catchup 補抓的日子、migration 0034 降級後再升回時，舊日期都要逐日跑（0035 的升降級會搬列，不必重算）。
 - **實測**（2026-11-21，正式 DB 副本，2026-11-20）：計算 8.2～9.6 秒，母體 586 檔（有值 584）；`/api/h2` 讀取 0.01 秒。2026-11-13 在研究 DB 上，研究工具與本模組的 20 檔逐檔相同。
 
 ## 重跑與回補
