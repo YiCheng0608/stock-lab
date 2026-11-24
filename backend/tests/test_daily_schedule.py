@@ -81,6 +81,7 @@ class Steps:
             "indicators": {"status": "not_configured", "reason": "fixture"},
             "mainstream": {"status": "success", "records": 4},
             "h2_list": {"status": "success", "records": 20},
+            "theme_heat": {"status": "success", "records": 23},
             "x4_list": {"status": "success", "records": 20},
             "plan_tracking": {"status": "success", "records": 0},
             "strategy_levels": {"status": "success", "records": 6},
@@ -123,6 +124,7 @@ class Steps:
         monkeypatch.setattr(schedule_runs, "_indicator_step", make("indicators"))
         monkeypatch.setattr(schedule_runs, "_mainstream_step", make("mainstream"))
         monkeypatch.setattr(schedule_runs, "_h2_list_step", make("h2_list"))
+        monkeypatch.setattr(schedule_runs, "_theme_heat_step", make("theme_heat"))
         monkeypatch.setattr(schedule_runs, "_x4_list_step", make("x4_list"))
         monkeypatch.setattr(schedule_runs, "_plan_tracking_step", make("plan_tracking"))
         monkeypatch.setattr(
@@ -180,6 +182,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -202,6 +205,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators": ("not_configured", None),
         "mainstream": ("success", 4),
         "h2_list": ("success", 20),
+        "theme_heat": ("success", 23),
         "x4_list": ("success", 20),
         "plan_tracking": ("success", 0),
         "strategy_levels": ("success", 6),
@@ -225,6 +229,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -269,6 +274,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "indicators": "skipped",
         "mainstream": "skipped",
         "h2_list": "skipped",
+        "theme_heat": "skipped",
         "x4_list": "skipped",
         "plan_tracking": "skipped",
         "strategy_levels": "skipped",
@@ -289,6 +295,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -327,6 +334,7 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -373,6 +381,7 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -400,6 +409,7 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -614,7 +624,7 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
             "candidate_notes",
             "period_backfill",
         )
-    ] == [11, 12, 13, 14, 9]
+    ] == [12, 13, 14, 15, 10]
 
 
 @pytest.mark.parametrize(
@@ -873,6 +883,7 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -1375,6 +1386,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -1771,6 +1783,7 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "indicators",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "period_backfill",
         "x4_list",
         "plan_tracking",
@@ -2237,7 +2250,7 @@ def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
     rows, by_run = runs(database)
     assert (rows[0].started_at, rows[0].finished_at) == (first, first)
     logged = by_run[rows[0].id]
-    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 15
+    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 16
     assert {(step.started_at, step.finished_at) for step in logged.values()} == {
         (first, first)
     }

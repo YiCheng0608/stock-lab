@@ -186,6 +186,15 @@ daily 在 H2 名單之後，另算一份「X4 名單」（頁面分頁名「盈�
   - 2026-11-20 的名單和同一份副本 `forward_watch.py --watch X4` 的 `picks.csv` 逐筆相同（`picks.csv` 只有這一天：訊號日的下一個交易日要在資料裡）。
   - 2026-11-20 與 2026-11-23 的名單和研究工具本身（`explore_research.load_context`＋`_rank`）逐筆相同，`eps_yield_raw`、`revenue_yoy` 差 0。
 
+## 題材熱度
+
+daily 在 H2 名單之後、X4 名單之前算當天的題材熱度（`theme_heat_v1`，[#1017](https://github.com/YiCheng0608/stock-lab/issues/1017)）。公式、缺資料與存放見[規格](../spec/theme_heat.md)；熱度不是買賣訊號，今日名單與其他名單都不讀它。
+
+- **誰寫**：daily 的 theme_heat 步驟（`worker.theme_heat.run_theme_heat`），只算 daily 的目標日，只讀已存的日線、籌碼、新聞與題材成員。失敗是不阻擋的步驟（`NON_BLOCKING_STEPS`）：stderr 一行 `warning:`，step 列記 `failed`，run 狀態與結束碼不變，那天不寫入、之前算的留著。T 不是交易日（沒有 TAIEX 日線）時算失敗。
+- **存放**：`theme_heat_runs` 與 `theme_heat_scores`（[欄位](../spec/theme_heat.md#存放與讀取)）。同一天重算時整份換掉。
+- **讀取**：`GET /api/theme-heat?date=`；族群頁的「熱度」分頁讀它。
+- **重算與回算**：`python -m worker.cli theme-heat --date <日>` 算一天；`--since <起日> [--until <迄日>]` 逐個交易日重算，每天用那天有效的成員（不回溯），`--weekly` 再印每週最後一個交易日的排名（[CLI](CLI.md#現有-worker-cli)）。catchup 補抓的日子、migration 0036 降級後再升回時用它補。新聞分項以最早一次新聞收集 run（2026-10-18）為準，前 20 日窗口整段在它之後才有值；23:00 的法人重抓會改寫 T 的籌碼，當晚存的熱度可能和之後重算不同（[限制](../spec/theme_heat.md#限制)）；初版題材的成員從 2026-01-01 起有效，之前的日子沒有題材上榜（`status=zero`）。
+
 ## 重跑與回補
 
 - **手動重跑**：見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)「不經排程執行一次」，或直接 `python -m worker.cli daily --date YYYY-MM-DD`。已完成的日期加 `-Force`／`--force` 才會再跑各步驟。

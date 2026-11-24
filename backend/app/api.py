@@ -48,7 +48,9 @@ from .domain import (
     NON_SECURITY_TYPES,
     signal_confidence_semantics,
 )
+from .ai_candidates import candidate_row
 from .h2_list import h2_list
+from .theme_heat import theme_heat as stored_theme_heat
 from .latest_rows import ranked_ids
 from .mainstream import mainstream_list
 from .level_semantics import build_level_semantics, canonical_evidence
@@ -1201,17 +1203,10 @@ def _candidate_instrument(
     on the written exchange).
     """
 
-    exact = next((row for row in rows if row[0] == written), None)
-    if exact is not None and exact[2] == "active":
-        return written, exact[1], "listed"
-    active = [row for row in rows if row[2] == "active"]
-    if len(active) == 1:
-        return active[0][0], active[0][1], "listed"
-    if exact is not None:
-        return written, exact[1], _master_listing(exact[2])
-    if len(rows) == 1:
-        return rows[0][0], rows[0][1], _master_listing(rows[0][2])
-    return None
+    row = candidate_row(rows, written, 2)
+    if row is None:
+        return None
+    return row[0], row[1], "listed" if row[2] == "active" else _master_listing(row[2])
 
 
 def _latest_emerging_names(db: Session, codes: set[str]) -> dict[str, str]:
@@ -2831,6 +2826,18 @@ def strategy_list(
         raise HTTPException(
             status_code=404, detail=f"unknown strategy: {strategy}"
         ) from None
+
+
+@router.get("/theme-heat")
+def theme_heat(
+    date_: date | None = Query(default=None, alias="date"),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Stored theme heat (theme_heat_v1, #1017) of the latest day on or before ``date``.
+
+    Not a buy or sell signal (docs/spec/theme_heat.md).
+    """
+    return stored_theme_heat(db, date_)
 
 
 def _news_symbol_filter(instrument: Instrument):

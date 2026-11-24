@@ -833,6 +833,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0035_strategy_lists', CURRENT_TIMESTAMP)"
         )
     )
+    # 0036 only adds theme_heat_runs / theme_heat_scores (#1017), made by
+    # create_all with their indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0036_theme_heat', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

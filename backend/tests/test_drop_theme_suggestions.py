@@ -27,6 +27,8 @@ LATER_TABLES = {
     "mainstream_items",
     "strategy_list_runs",
     "strategy_list_items",
+    "theme_heat_runs",
+    "theme_heat_scores",
 }
 LATER_INDEXES = {
     "ix_preopen_news_checks_list_date",
@@ -40,6 +42,10 @@ LATER_INDEXES = {
     "ix_strategy_list_items_run_id",
     "ix_strategy_list_items_trading_date",
     "ix_strategy_list_items_instrument_id",
+    "ix_theme_heat_runs_trading_date",
+    "ix_theme_heat_scores_run_id",
+    "ix_theme_heat_scores_trading_date",
+    "ix_theme_heat_scores_group_id",
 }
 INDEXES = (
     "ix_theme_suggestions_last_news_date",

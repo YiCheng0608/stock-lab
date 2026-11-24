@@ -25,13 +25,17 @@ import {
   memberQuery,
   memberTableNote,
   memberTableRows,
+  heatComponentExtremes,
+  heatNewsItems,
+  heatNewsNote,
   parseBoard,
+  parseThemeTab,
   qualityLabel,
   relativeReturn,
   themeBoardPath,
   trendHasEnoughPoints,
 } from './themeBoards'
-import { EMPTY_MESSAGES, boardItem, emptyBoard, industryBoard, membersPage, newsItems, themeBoard, themeDetail, trend } from './themeBoards.fixtures'
+import { EMPTY_MESSAGES, boardItem, emptyBoard, heatItem, heatResponse, industryBoard, membersPage, newsItems, themeBoard, themeDetail, trend } from './themeBoards.fixtures'
 import { HotGroupsSection, ThemeDetailView, ThemeNewsList, ThemesBoardView } from './ThemeViews'
 
 // Standalone regression module (no browser, no server, no network) for the group boards (#179): /themes with the
@@ -355,3 +359,32 @@ const todayTheme = render(<HotGroupsSection board="theme" onBoardChange={noop} d
 check(todayTheme.includes('id="today-board-tab-theme" aria-selected="true"') && todayTheme.includes('href="/themes?board=theme">完整排行 →') && todayTheme.includes('CoWoS 先進封裝'), 'theme tab and its full-ranking link')
 const todayEmpty = render(<HotGroupsSection board="industry" onBoardChange={noop} data={emptyBoard('industry', 'no_ranked_groups')} loading={false} error={null} />)
 check(todayEmpty.includes(EMPTY_MESSAGES.no_ranked_groups) && !todayEmpty.includes('hot-group-row'), 'today empty board shows empty_message')
+
+// ---- theme heat tab (theme_heat_v1, #1017): rows like the boards, six components, 「不是買賣訊號」 ----
+check(parseThemeTab('heat') === 'heat' && parseThemeTab('theme') === 'theme' && parseThemeTab(null) === 'industry' && parseThemeTab('etf') === 'industry', 'heat tab parses; others are parseBoard')
+check(boardPagePath('heat') === '/themes?board=heat', 'heat tab path')
+check(JSON.stringify(heatComponentExtremes(heatItem().components).map((e) => [e.key, e.value])) === JSON.stringify([['excess_5d', 1], ['news', 0.25]]), 'highest and lowest of the six')
+check(heatComponentExtremes(heatResponse().items[2].components).length === 0, 'no components: no extremes')
+check(heatNewsItems(heatItem()) === '近 3 日 6／前 20 日 19' && heatNewsItems(heatResponse().items[2]) === '—', 'news counts, 「—」 without the component')
+check(heatNewsNote('available') === null && heatNewsNote('no_news_run') === '新聞無資料（當日沒有新聞收集）' && heatNewsNote('history_short')!.startsWith('新聞無資料'), 'news note only when the day has no news component')
+const heatView = (data = heatResponse(), search = '') => render(<ThemesBoardView board="heat" onBoardChange={noop} search={search} onSearchChange={noop} data={undefined} loading={false} error={null} heat={{ data, loading: false, error: null }} />)
+const heatMarkup = heatView()
+check(heatMarkup.includes('id="board-tab-heat" aria-selected="true"') && heatMarkup.includes('>熱度</button>') && heatMarkup.includes('id="board-panel-heat"'), 'heat tab selected')
+check(heatMarkup.includes('不是買賣訊號') && heatMarkup.includes('共 3 個') && heatMarkup.includes('資料 2026/09/08'), 'not a signal, count and date')
+check(!heatMarkup.includes('新聞無資料'), 'a day with news says nothing about it')
+check(count(heatMarkup, 'data-theme-id=') === 3 && heatMarkup.indexOf('theme-memory') < heatMarkup.indexOf('theme-abf-substrate') && heatMarkup.indexOf('theme-abf-substrate') < heatMarkup.indexOf('theme-leadframe'), 'rows in API order')
+const heatRow = (id: string) => heatMarkup.slice(heatMarkup.indexOf(`data-theme-id="${id}"`), heatMarkup.indexOf('</li>', heatMarkup.indexOf(`data-theme-id="${id}"`)))
+const memory = heatRow('theme-memory')
+for (const text of ['#1', '記憶體', '熱度', '94', '5 日超額 <b>100</b>', '新聞 <b>25</b>', '+3.21%', '-1.23%', '近 3 日 6／前 20 日 19', '6／6', '六分項']) check(memory.includes(text), `heat row shows ${text}: ${memory}`)
+for (const label of ['5 日超額', '20 日超額', '成交金額', '法人', '廣度', '新聞']) check(memory.includes(`<dt>${label}</dt>`), `component ${label} in the details`)
+check(heatRow('theme-abf-substrate').includes('法人 無資料'), 'a missing component is no data, not 0')
+const leadframe = heatRow('theme-leadframe')
+check(leadframe.includes('成員不足') && leadframe.includes('未排名') && leadframe.includes('六分項無資料') && leadframe.includes('0／2'), `unranked theme: ${leadframe}`)
+check(heatView(heatResponse({ news_status: 'no_news_run' })).includes('新聞無資料（當日沒有新聞收集）'), 'no news run is said on the toolbar')
+check(heatView(heatResponse({ empty_reason: 'not_computed', theme_count: 0 }, [])).includes('題材熱度尚未計算'), 'not computed yet')
+check(heatView(heatResponse({ empty_reason: 'no_theme', theme_count: 0 }, [])).includes('當日沒有題材'), 'a computed day without a theme')
+check(heatMarkup.includes('<summary>說明</summary>') && heatMarkup.includes('熱度 0–100，依熱度排名；六分項為') && heatMarkup.includes('「—」表示該項無資料'), 'the 說明 fold states the units and the blank')
+const heatSearched = heatView(heatResponse(), 'abf')
+check(heatSearched.includes('符合 1／共 3 個') && count(heatSearched, 'data-theme-id=') === 1, 'search filters the heat rows')
+const heatLoading = render(<ThemesBoardView board="heat" onBoardChange={noop} search="" onSearchChange={noop} data={undefined} loading={false} error={null} heat={{ data: undefined, loading: true, error: null }} />)
+check(heatLoading.includes('題材熱度載入中'), 'heat loading')

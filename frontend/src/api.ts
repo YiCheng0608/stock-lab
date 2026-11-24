@@ -25,6 +25,7 @@ import type {
   StockDirectoryRow,
   ThemeBoard,
   ThemeBoardResponse,
+  ThemeHeatResponse,
   ThemeDetail,
   ThemeMembersResponse,
   Paginated,
@@ -234,6 +235,8 @@ export const getNewsDetail = (newsId: string) =>
 export const getThemeBoard = (board: ThemeBoard, limit = THEME_BOARD_LIMIT) =>
   get<ThemeBoardResponse>(themeBoardPath(board, limit))
 
+
+export const getThemeHeat = () => get<ThemeHeatResponse>('/theme-heat')
 
 export const getTheme = (id: string) => get<ThemeDetail>(`/themes/${encodeURIComponent(id)}`)
 export const getThemeMembers = (id: string, params: PageParams & { sort?: string } = {}) =>
