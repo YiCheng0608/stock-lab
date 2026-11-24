@@ -181,6 +181,7 @@ daily 在 H2 名單之後，另算一份「X4 名單」（頁面分頁名「盈�
   - 那天沒有算時 `status` 是 `missing`、`items` 是空的。名單是空的那天是 `zero`，`zero_reason` 分兩種：`universe_empty`（母體是空的，`universe_count` 0）與 `none_passed`（母體有股票，但沒有一檔通過兩個條件）；其他狀態的 `zero_reason` 是 null。
   - 不附進場區、停損與目標。
 - **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.x4_list as x; print(x.run_x4_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天，近 60 日回補（#1021）也逐日跑。
+- **實測**（2026-11-24，正式 DB 副本，最新交易日 2026-11-23）：算一天 2.7～3.6 秒、峰值 0.08 GB；2026-11-23 母體 588 檔、通過兩個條件 346 檔、名單 20 檔。2026-11-20 與 2026-11-23 的名單和研究工具（`forward_watch.py --watch X4` 的 `picks.csv`、`explore_research._rank`）逐筆相同。
 
 ## 重跑與回補
 
