@@ -1,7 +1,8 @@
 """tools/research/forward_watch.py: the frozen forward entries of X4 (#868), H2
 (#875), H2 in the product (key H2-product, kind 已進產品 from 2026-11-21,
-#902; ``H2_PRODUCT_DIGESTS``) and round 15's P2 (#990, the event-day engine,
-its own synthetic copy at the end; ``P2_DIGESTS``).
+#902; ``H2_PRODUCT_DIGESTS``), round 15's P2 (#990, the event-day engine,
+its own synthetic copy at the end; ``P2_DIGESTS``) and X4 on the today page
+(key X4-product, kind 已進產品 from 2026-11-24, #1019; ``X4_PRODUCT_DIGESTS``).
 
 X4's and X2's definitions are explore_research's (#867 and #864 ran them,
 ``definitions_sha256`` 600dc942…ebec63); an entry adds only the start
@@ -62,8 +63,16 @@ SINCE = date(2026, 11, 20)
 
 
 def test_x4_is_the_frozen_entry():
-    # P2: #990, A1: #1013
-    assert set(tool.WATCHES) == {"X4", "H2", "H2-product", "F2", "P2", "A1"}
+    # P2: #990, A1: #1013, X4-product: #1019
+    assert set(tool.WATCHES) == {
+        "X4",
+        "H2",
+        "H2-product",
+        "F2",
+        "P2",
+        "A1",
+        "X4-product",
+    }
     entry = tool.WATCHES["X4"]
     assert entry == {
         "kind": "前瞻觀察",
@@ -137,6 +146,12 @@ def test_h2_is_x2_frozen_as_passed():
         "通過驗證",
     )
     assert set(tool.KIND_NOTES) == {"前瞻觀察", "已進產品", "通過驗證"}
+    # 前瞻觀察 may still go on a page, by the user's decision (#1 7106346106, #1019)
+    assert tool.KIND_NOTES["前瞻觀察"] == (
+        "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；"
+        "不改成「通過」；放上頁面另由使用者決定"
+    )
+    assert "不進產品" not in tool.KIND_NOTES["前瞻觀察"]
     assert "在 #1 的進產品提案補一則" in tool.KIND_NOTES["通過驗證"]
     assert "不是下架提案" in tool.KIND_NOTES["通過驗證"]
 
@@ -179,11 +194,47 @@ def test_h2_product_is_x2_frozen_in_the_product():
         "F2",
         "P2",
         "A1",
+        "X4",
     ]
     # 已進產品 on 輸給基準: the coordinator proposes delisting in #1
     note = tool.KIND_NOTES["已進產品"]
     assert "判到「輸給基準」由統籌在 #1 提案下架" in note
     assert "滿 60 日起每月判一次" in note and "其餘判定只列出" in note
+
+
+X4_PRODUCT_SINCE = date(2026, 11, 24)
+
+
+def test_x4_product_is_x4_frozen_on_the_page():
+    """X4 on the today page as 盈餘殖利率前 20 (#1 7106346106, D5 of 7114503228;
+    #1019): X4's frozen definition again, a row of its own under the key
+    X4-product, the kind 已進產品 and the start the tab's go-live day; the X4
+    row stays 前瞻觀察 and the reports name both X4."""
+
+    entry = tool.WATCHES["X4-product"]
+    assert entry == {
+        "kind": "已進產品",
+        "source": "explore_research",
+        "source_version": 2,
+        "code": "X4",
+        "definitions_sha256": X4_SHA256,
+        "since": X4_PRODUCT_SINCE,
+        "min_days": 60,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228"
+        ),
+    }
+    # only the kind, the start and the registration differ from the X4 row
+    old = tool.WATCHES["X4"]
+    assert old["kind"] == "前瞻觀察"
+    assert {key for key in entry if entry[key] != old[key]} == {
+        "kind",
+        "since",
+        "registered",
+    }
+    assert tool.definition("X4-product") is er.HYPOTHESES["X4"]
+    assert tool.source_problems("X4-product") == []
+    assert tool.display("X4-product") == "X4"
 
 
 def test_the_command_has_no_parameter_flags(tmp_path):
@@ -217,6 +268,8 @@ def test_the_command_has_no_parameter_flags(tmp_path):
         ("H2", "HYPOTHESES", None, "definitions_sha256"),
         ("H2-product", "VERSION", 3, "version 3"),
         ("H2-product", "HYPOTHESES", None, "definitions_sha256"),
+        ("X4-product", "VERSION", 3, "version 3"),
+        ("X4-product", "HYPOTHESES", None, "definitions_sha256"),
     ],
 )
 def test_a_changed_source_is_refused(
@@ -503,10 +556,12 @@ def digests(out: Path) -> dict[str, str]:
 
 # X4's forward outputs on ``x4_db`` (written by the commit that added the
 # entry, #868): a change of the definition, the engine, the costs or the report
-# fails here and is a new entry, not an edit.
+# fails here and is a new entry, not an edit.  #1019 changed only the 前瞻觀察
+# note (KIND_NOTES, #1 7106346106) in summary.md and tables.json, here and in
+# P2_DIGESTS, F2_DIGESTS and A1_DIGESTS; the equity, picks and trades are the same.
 X4_DIGESTS = {
-    "summary.md": "27718a529f3c35901860978a576ffbbb43bc77c6e3665161878e4838091c89fc",
-    "tables.json": "6746b7855019bcd4134fe24bb7943c2d7ee7ef1f216bfc1dbb73cf3d9bf6be94",
+    "summary.md": "36fe29ea582571c541a9baa0b1453f14ec00cb8dafa3c21a52e2a7fa19ce62e7",
+    "tables.json": "7dd58b0f47f51dd93c00fe99abe6338bbd9c5fe38fab68eed64957a9d86e9e6e",
     "equity.csv": "61bc84993909e0543ca8280b79b7331a4d95c151a2b2141b1b0d05324e0cacb6",
     "picks.csv": "c328cf53fb255292338d0b8f08182346d61273b9518e54c338cf18961d0b14a6",
     "trades.csv": "7f57b3c8b6526f7d530e1a0ffc9fc0b84f38a939ff5c3ca64370dfaf793dc230",
@@ -708,6 +763,72 @@ def test_h2_product_reports_h2_in_the_product(h2_product_run, h2_run):
     assert picks == [row for row in old if row["signal_date"] >= "2026-11-23"]
 
 
+# X4-product's forward outputs on ``x4_db`` (written by the commit that added
+# the entry, #1019): as X4_DIGESTS, a change is a new entry, not an edit.
+X4_PRODUCT_DIGESTS = {
+    "summary.md": "80932a608a60228cd88c8fa44c16637fe68e6314f451e11852e6bf9c1d264074",
+    "tables.json": "6a6de56ca3374bc81ca20f7e5e7ebe46c3b23953f639e39690be476bccf4ed9b",
+    "equity.csv": "59b88e64ca958d86de0f8c2470a354e5e66290ec702575cd4e1a93254cdf969c",
+    "picks.csv": "bba110dd37c9fa0c5d2236044cf9b674dc5a7635683a7f6e23293586c435937f",
+    "trades.csv": "0d1b275e89512a2d1b697fc62086ed9931b0b53c6393e61f3884bc88c5b1aaae",
+}
+
+
+@pytest.fixture(scope="module")
+def x4_product_run(x4_db, tmp_path_factory):
+    out = tmp_path_factory.mktemp("x4-product") / "out"
+    patch = pytest.MonkeyPatch()
+    no_window(patch)
+    try:
+        assert watch(x4_db, out, name="X4-product") == 0
+    finally:
+        patch.undo()
+    return out
+
+
+def test_x4_product_output_is_frozen(x4_product_run):
+    assert digests(x4_product_run) == X4_PRODUCT_DIGESTS
+
+
+def test_x4_product_reports_x4_on_the_page(x4_product_run, frozen_run):
+    tables = read_json(x4_product_run / "tables.json")
+    days = trading_days()
+    after = [day for day in days if day >= X4_PRODUCT_SINCE]
+    assert tables["days"] == len(after) - 1
+    # the key is the entry run; every name in the report is the code X4
+    assert (tables["watch"], tables["kind"], tables["min_days"]) == (
+        "X4-product",
+        "已進產品",
+        60,
+    )
+    assert tables["since"] == "2026-11-24"
+    assert tables["first_signal"] == after[0].isoformat()
+    assert set(tables["counts"]) == {"X4", "population"}
+    assert set(tables["curves"]) == {"taiex", "X4", "population"}
+    summary = (x4_product_run / "summary.md").read_text(encoding="utf-8").splitlines()
+    assert summary[0] == "# X4 已進產品的前瞻紀錄（forward_watch 第 1 版，#868）"
+    named = [line for line in summary if "X4-product" in line]
+    assert len(named) == 1 and named[0].startswith("- 重現：")
+    first = [line for line in summary if line.startswith("- ")][:4]
+    assert first[0].startswith("- 對加權指數超額（只列出）")
+    assert first[2].startswith("- 判定：")
+    assert "判到「輸給基準」由統籌在 #1 提案下架" in first[2]
+    assert first[3].startswith("- 定義：explore_research 第 2 版的 X4")
+    assert X4_SHA256 in first[3] and "issuecomment-7114503228" in first[3]
+    assert read_csv(x4_product_run / "equity.csv")[0].keys() == {
+        "date",
+        "X4",
+        "population",
+        "taiex_close",
+    }
+    # the same X4 as the 前瞻觀察 row: its picks from the later start are that row's
+    old = read_csv(frozen_run / "picks.csv")
+    picks = read_csv(x4_product_run / "picks.csv")
+    assert picks and picks == [
+        row for row in old if row["signal_date"] >= after[0].isoformat()
+    ]
+
+
 # --- causality and the start ------------------------------------------------------
 
 
@@ -826,7 +947,12 @@ def test_the_command_refuses_production(x4_db, tmp_path, monkeypatch, capsys):
 
 @pytest.mark.parametrize(
     ("name", "run"),
-    [("X4", "frozen_run"), ("H2", "h2_run"), ("H2-product", "h2_product_run")],
+    [
+        ("X4", "frozen_run"),
+        ("H2", "h2_run"),
+        ("H2-product", "h2_product_run"),
+        ("X4-product", "x4_product_run"),
+    ],
 )
 def test_the_entry_is_explore_researchs_own(x4_db, request, monkeypatch, name, run):
     """explore_research's own run of the code on a segment from the start gives
@@ -1144,8 +1270,8 @@ def in_one_process(run):
 # P2's forward outputs on ``p2_db`` (written by the commit that added the
 # entry, #990): a change of the definition, the engine or the report fails here.
 P2_DIGESTS = {
-    "summary.md": "ef0a4de0c6f9e2dcea0368cb2b06bffdfdec6dbf19cab91ba5e4e5f0ab40525d",
-    "tables.json": "4474db0dd8d4f3068e137b6f9e6cee16043c614c60b71823a19851f70efe9557",
+    "summary.md": "1ff4fd6854ad46dda33e8de8313e093d791ed71281600d63dc8b21ea596676bd",
+    "tables.json": "a5b1ada2e6c39a2afc2fc7af8743ea3213d22eff6fb4c5d14137d5b1e3905f4b",
     "equity.csv": "873905911157d3a1ce0f19aa17fd68e159f0a3b337815d18beefe5b11245fe8b",
     "picks.csv": "40302fdd061454e913e78366ebdc198405767f797a82a182cd42ff1cf08d9280",
     "trades.csv": "80315bf58e644e2e0f6ca8e8a6887db196a5afc3520aa979436753667d2d7b8a",

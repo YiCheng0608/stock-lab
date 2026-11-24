@@ -789,8 +789,8 @@ OWNERS: dict[str, tuple[str, str]] = {
 def today_shots(run: Run) -> list[Shot]:
     # The market page (/market, Issue 549) was split off the today page and is checked with it (features/today.md);
     # the page's second list, 主流族群前 20, is its own shot (?list=mainstream, Issue 769), and so is its
-    # third, 接近年高前 20 (?list=h2, Issue 882).
-    return [TODAY, TODAY_MAINSTREAM, TODAY_H2, MARKET, MARKET_TPEX, MARKET_TX]
+    # third, 接近年高前 20 (?list=h2, Issue 882), and its fourth, 盈餘殖利率前 20 (?list=x4, #1019).
+    return [TODAY, TODAY_MAINSTREAM, TODAY_H2, TODAY_X4, MARKET, MARKET_TPEX, MARKET_TX]
 
 
 def news_shots(run: Run) -> list[Shot]:
@@ -2348,9 +2348,12 @@ def mainstream_row_lines(
 
 @dataclass(frozen=True)
 class ScreenList:
-    """One of the today page's lists without price levels (T26 主流族群前 20, T27 接近年高前 20):
-    the shot, its API file, the title, the empty-state titles, the definition and a row's lines,
-    and the words that must not be on it. ``label`` names it in the messages."""
+    """One of the today page's lists without price levels (T26 主流族群前 20, T27 接近年高前 20,
+    T28 盈餘殖利率前 20): the shot, its API path, the title, the empty-state titles (``zero``, or
+    by the payload's ``zero_reason`` when it has a key here), the definition and a row's lines,
+    and the words that must not be on it. ``label`` names it in the messages; ``file`` is the
+    saved API file (``<api>.json`` without it); ``head_badge`` is a badge closing the head line,
+    after the count (and the only line after the title in an empty state)."""
 
     shot: Shot
     api: str
@@ -2360,14 +2363,16 @@ class ScreenList:
     row_lines: Callable[[dict, dict, str | None], list[str]]
     words: tuple[str, ...]
     label: str
+    file: str | None = None
+    head_badge: str | None = None
 
 
 def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
-    """The checks T26 and T27 share (frontend ScreenList.tsx): the head, the definition, each
+    """The checks T26, T27 and T28 share (frontend ScreenList.tsx): the head, the definition, each
     row's lines, 「今日名單 #n」, no price-level word or rule level line, and the 390 close column.
     Returns the empty state's summary, or (badge, rows, marks)."""
 
-    payload = run.get(spec.api, f"{spec.api}.json")
+    payload = run.get(spec.api, spec.file or f"{spec.api}.json")
     text = run.text(spec.shot)
     items = payload.get("items") or []
     found = [n for n, line in enumerate(text.lines) if line == spec.title]
@@ -2375,10 +2380,22 @@ def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
     expect(len(found) >= 2, f"缺標題 `{spec.title}`（分頁之外的整行）")
     i = found[-1]
     status = payload.get("status")
-    if status != "computed" or not items:
-        title = spec.empty.get(
-            "missing" if status == "missing" else "zero", spec.empty["zero"]
+    if spec.head_badge:
+        head = text.lines[i + 1 : i + 4]
+        expect(
+            spec.head_badge in head,
+            f"`{spec.title}` 標題列沒有 `{spec.head_badge}`：{head}",
         )
+    if status != "computed" or not items:
+        reason = payload.get("zero_reason")
+        key = (
+            "missing"
+            if status == "missing"
+            else reason
+            if isinstance(reason, str) and reason in spec.empty
+            else "zero"
+        )
+        title = spec.empty.get(key, spec.empty["zero"])
         expect(
             text.has(title),
             f"{spec.api}.json {status}、items {len(items)}，缺 `{title}`",
@@ -2396,6 +2413,12 @@ def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
         text.after(i, k) == count_line,
         f"`{spec.title}` 後第 {k} 行是 {text.after(i, k)!r}，預期 `{count_line}`",
     )
+    if spec.head_badge:
+        expect(
+            text.after(i, k + 1) == spec.head_badge,
+            f"`{count_line}` 後是 {text.after(i, k + 1)!r}，預期 `{spec.head_badge}`",
+        )
+        k += 1
     definition = spec.definition(payload)
     expect(
         text.after(i, k + 1) == definition,
@@ -2422,7 +2445,15 @@ def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
     # The list and the chart beside it, up to the hot groups under them.
     end = text.find("熱門族群", i)
     after = text.lines[i : end if end > i else len(text.lines)]
-    words = sorted({word for line in after for word in spec.words if word in line})
+    words = sorted(
+        {
+            word
+            for line in after
+            if line != spec.head_badge
+            for word in spec.words
+            if word in line
+        }
+    )
     expect(not words, f"{spec.label}出現點位用詞 {words}")
     expect(
         not any(line.startswith(CHART_LEVELS_LINE) for line in after),
@@ -2542,6 +2573,115 @@ def t27(run: Run) -> str:
     return (
         f"{badge}、`{len(run.get('h2', 'h2.json').get('items') or [])} 檔`、定義行；{rows} 列的名次、"
         f"距一年高點與 `今日名單 #n` {marks} 行 = h2.json；沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
+    )
+
+
+# ---- T28: 盈餘殖利率前 20, the today page's fourth list (#1019; UI_COPY_SPEC §10, decisions #1 7106346106, 7114503228) ----
+# Mirrors frontend/src/candidates/x4.ts (x4Definition, x4LineParts, x4State, X4_WATCH_BADGE) and X4Views.tsx's
+# line structure: change them together.
+TODAY_X4 = Shot("today-x4", "/?list=x4")
+X4_TITLE = "盈餘殖利率前 20"
+X4_WATCH_BADGE = "前瞻觀察（未通過驗證）"
+X4_EMPTY = {
+    "missing": "尚無盈餘殖利率名單",
+    "zero": "當日沒有股票進入母體",
+    "none_passed": "當日沒有月營收年增與 EPS 年增都為正的股票",
+}
+# x4.ts X4_MIN_AVERAGE_LOTS, X4_PERIOD_SESSIONS: not in the API.
+X4_MIN_AVERAGE_LOTS = 1000
+X4_PERIOD_SESSIONS = 60
+# Only the head badge names the research status (decisions #1 7106346106): no research code, numbers or t.
+X4_LEVEL_WORDS = MAINSTREAM_LEVEL_WORDS + (
+    "持有",
+    "回測",
+    "t 值",
+    "X4",
+    "H2",
+    "研究",
+    "勝率",
+    "驗證",
+)
+
+
+def x4_definition(payload: dict) -> str:
+    universe = payload.get("universe_count")
+    count = f"母體 {universe:,} 檔，" if isinstance(universe, int) else ""
+    return (
+        "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）"
+        f"最高的 {payload['list_size']} 檔；{count}20 日均量 {X4_MIN_AVERAGE_LOTS:,} 張以上的上市櫃股票；"
+        f"以入選後 {X4_PERIOD_SESSIONS} 個交易日為觀察期"
+    )
+
+
+def x4_number(value: float | None, digits: int = 2) -> str:
+    """x4.ts x4YieldText / epsText: fixed decimals, no sign on a rise, — without a value."""
+
+    if value is None:
+        return "—"
+    rounded = round(value, digits)
+    return f"{0.0 if rounded == 0 else rounded:.{digits}f}"
+
+
+def x4_figures(item: dict) -> str:
+    """x4.ts x4LineText: 「盈餘殖利率 12.34% · 營收年增（10 月）+25.10% · 2026Q3 EPS 3.21（去年同季 2.10）」."""
+
+    raw = item.get("eps_yield_raw")
+    yield_text = "—" if raw is None else f"{x4_number(raw * 100)}%"
+    month = item.get("revenue_month")
+    revenue = f"營收年增（{int(month[5:7])} 月）" if month else "營收年增 "
+    quarter = item.get("quarter_eps")
+    eps = (
+        f"{quarter['quarter']} EPS {x4_number(quarter.get('eps'))}"
+        f"（去年同季 {x4_number(quarter.get('year_before_eps'))}）"
+        if quarter
+        else "EPS —"
+    )
+    return f"盈餘殖利率 {yield_text} · {revenue}{signed_percent(item.get('revenue_yoy'))} · {eps}"
+
+
+def x4_row_lines(item: dict, payload: dict, other_day: str | None = None) -> list[str]:
+    """A row's first lines: the title (no group part), the figures line, then 「今日名單 #n」 when
+    it is on the today list (dated when the today list is of another day)."""
+
+    instrument = item["instrument"]
+    market = EXCHANGE_LABELS.get(instrument["exchange"], "市場待核實")
+    lines = [
+        f"#{item['rank']} {instrument['symbol']} {instrument['name']} {market}",
+        x4_figures(item),
+    ]
+    if item.get("today_list"):
+        mark = f"今日名單 #{item['today_list']['rank']}"
+        lines.append(f"{slash(other_day)} {mark}" if other_day else mark)
+    return lines
+
+
+X4_LIST = ScreenList(
+    shot=TODAY_X4,
+    api="strategy-lists/x4",
+    title=X4_TITLE,
+    empty=X4_EMPTY,
+    definition=x4_definition,
+    row_lines=x4_row_lines,
+    words=X4_LEVEL_WORDS,
+    label="第四份名單",
+    file="x4.json",
+    head_badge=X4_WATCH_BADGE,
+)
+
+
+@check("today", "T28")
+def t28(run: Run) -> str:
+    """#1019: ?list=x4 shows x4.json: the head and its warning badge, the definition, each row's lines, no price
+    level or research word besides the badge."""
+
+    result = screen_list(run, X4_LIST)
+    if isinstance(result, str):
+        return result
+    badge, rows, marks = result
+    return (
+        f"{badge}、`{len(run.get('strategy-lists/x4', 'x4.json').get('items') or [])} 檔`、"
+        f"`{X4_WATCH_BADGE}`、定義行；{rows} 列的名次、盈餘殖利率、營收年增與 EPS、`今日名單 #n` {marks} 行 = x4.json；"
+        "沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
     )
 
 

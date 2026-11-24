@@ -2102,6 +2102,86 @@ def _h2_item_rows() -> list[dict[str, Any]]:
     ]
 
 
+# ---- X4 名單 (explore_research_v2_X4, #1016; the page is #1019) ----
+# Hand-set values of T over the H2 universe (_h2_plan: the same universe rule), not computed from
+# the fixture's revenues and statements: the page shows what the API returns, and the
+# computation is locked by backend/tests/test_x4_list.py. Four of the seven members pass both
+# filters (fewer than 20: the head writes 4 檔); each yield is its quarter's EPS × 4 over T's
+# close, so the rows read as the definition says. 9202 had a loss a year before, 9103's latest
+# revenue month is the one before the others'. /api/strategy-lists/x4 reads the stored rows.
+# symbol -> (revenue_yoy, revenue month, quarter end, quarter EPS, EPS a year before)
+X4_PLAN: dict[str, tuple[float, date, date, float, float]] = {
+    "9201": (0.2512, date(2026, 10, 1), date(2026, 9, 30), 3.21, 2.1),
+    "9202": (0.0845, date(2026, 10, 1), date(2026, 9, 30), 1.06, -0.5),
+    "9101": (0.1203, date(2026, 10, 1), date(2026, 9, 30), 2.48, 1.97),
+    "9103": (0.0312, date(2026, 9, 1), date(2026, 9, 30), 0.92, 0.88),
+}
+X4_RUN_ID = 2
+
+
+def _x4_plan() -> tuple[list[tuple[int, dict[str, Any], float]], int]:
+    _h2_items, universe = _h2_plan()
+    ids = {
+        symbol: instrument_id
+        for instrument_id, _exchange, symbol, *_rest in _INSTRUMENTS
+    }
+    members = []
+    for symbol, (yoy, month, end, eps, before) in X4_PLAN.items():
+        close = SERIES[symbol][-1]["close"]
+        values = {
+            "eps_yield_raw": eps * 4 / close,
+            "revenue_yoy": yoy,
+            "revenue_month": month.isoformat(),
+            "quarter_end": end.isoformat(),
+            "quarter_eps": eps,
+            "quarter_eps_year_before": before,
+        }
+        members.append((ids[symbol], values, close))
+    members.sort(key=lambda row: -row[1]["eps_yield_raw"])
+    return members, universe
+
+
+def _x4_run_rows() -> list[dict[str, Any]]:
+    from app.x4_list import DEFINITIONS_SHA256, X4_CONFIG, X4_VERSION
+
+    items, universe = _x4_plan()
+    return [
+        {
+            "id": X4_RUN_ID,
+            "trading_date": T,
+            "strategy": "x4",
+            "version": X4_VERSION,
+            "definitions_sha256": DEFINITIONS_SHA256,
+            "status": "computed",
+            "universe_count": universe,
+            "item_count": len(items),
+            "config_json": dict(X4_CONFIG),
+            "computed_at": _at(T, 10, 7),
+        }
+    ]
+
+
+def _x4_item_rows() -> list[dict[str, Any]]:
+    from app.x4_list import X4_VERSION
+
+    items, _universe = _x4_plan()
+    first = len(_h2_plan()[0]) + 1
+    return [
+        {
+            "id": first + rank - 1,
+            "run_id": X4_RUN_ID,
+            "trading_date": T,
+            "instrument_id": instrument_id,
+            "strategy": "x4",
+            "version": X4_VERSION,
+            "rank": rank,
+            "close": close,
+            "values_json": values,
+        }
+        for rank, (instrument_id, values, close) in enumerate(items, start=1)
+    ]
+
+
 # ---- theme heat (Issue #1017): hand-set rows of T, not computed from the fixture ----
 
 # group id -> (rank, heat, quality, available weight, percentiles, raw values, news counts)
@@ -2208,9 +2288,9 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "candidate_llm_notes": _candidate_note_rows(),
     "mainstream_runs": _mainstream_run_rows(),
     "mainstream_items": _mainstream_item_rows(),
-    # H2 in the common strategy list tables (#1014).
-    "strategy_list_runs": _h2_run_rows(),
-    "strategy_list_items": _h2_item_rows(),
+    # H2 and X4 in the common strategy list tables (#1014, #1016).
+    "strategy_list_runs": _h2_run_rows() + _x4_run_rows(),
+    "strategy_list_items": _h2_item_rows() + _x4_item_rows(),
     "theme_heat_runs": _theme_heat_run_rows(),
     "theme_heat_scores": _theme_heat_score_rows(),
     "tracking_plans": _tracking_plan_rows(),
@@ -2476,6 +2556,28 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         # The page's close, change and sparkline are read at request time (#882).
         ("h2", "items.0.market.change_status", "known"),
         ("h2", "items.0.recent_closes.closes", 30),
+        # 盈餘殖利率前 20 (#1019): the stored run of T (_x4_run_rows), the four passing
+        # members by eps_yield_raw (X4_PLAN); fewer than 20, nothing fills it.
+        ("strategy-lists/x4", "status", "computed"),
+        ("strategy-lists/x4", "zero_reason", None),
+        ("strategy-lists/x4", "trading_date", D),
+        ("strategy-lists/x4", "universe_count", 7),
+        ("strategy-lists/x4", "item_count", 4),
+        (
+            "strategy-lists/x4",
+            "items[].instrument.symbol",
+            ["9201", "9202", "9103", "9101"],
+        ),
+        ("strategy-lists/x4", "items[].today_list.rank", [3, None, 2, 1]),
+        (
+            "strategy-lists/x4",
+            "items[].revenue_month",
+            ["2026-10", "2026-10", "2026-09", "2026-10"],
+        ),
+        ("strategy-lists/x4", "items.1.quarter_eps.quarter", "2026Q3"),
+        ("strategy-lists/x4", "items.1.quarter_eps.year_before_eps", -0.5),
+        ("strategy-lists/x4", "items.0.market.change_status", "known"),
+        ("strategy-lists/x4", "items.0.recent_closes.closes", 30),
     ],
     "news": [
         ("news?category=domestic&limit=20", "items", 4),

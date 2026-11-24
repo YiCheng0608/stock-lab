@@ -2,6 +2,9 @@
    list's .candidate-row classes (rank block, title line, sparkline, close column, 盤後終端 and the row's K-line card);
    only what differs is here. This file loads before styles.css, so its rules carry the extra .mainstream-row class. */
 .today-list-tabs { margin-top: var(--space-4); }
+/* Four tabs (#1019) do not fit 390px: one line that scrolls sideways instead of wrapping the last tab. */
+.tabs.today-list-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.today-list-tabs .tab { flex: none; white-space: nowrap; }
 .today-list-tabs + [role="tabpanel"] > .candidates-section > .candidates-head { margin-top: var(--space-2); }
 
 /* The groups are what this list is about: the title wraps instead of ending in an ellipsis (the today list's cuts the
@@ -23,6 +26,9 @@ a.mainstream-today-mark:hover { border-color: var(--color-primary); color: var(-
 /* Of another day than the today list shown (review 6893655832): plain text, not a link. */
 .mainstream-today-mark-other { color: var(--color-text-muted); }
 .candidate-row.mainstream-row .mainstream-row-figures { max-width: none; }
+/* 盈餘殖利率前 20 (#1019): three figures joined by 「 · 」; each stays whole, so a narrow row breaks between them. */
+.x4-figure { white-space: nowrap; }
+.x4-watch-badge { white-space: nowrap; }
 
 @media (min-width: 1280px) {
   /* Beside the chart: title on the first line, the return line, then the sparkline left and the close right. */
