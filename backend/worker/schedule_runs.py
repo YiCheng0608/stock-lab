@@ -879,29 +879,20 @@ def run_daily_job(
         ("h2_list", 8, lambda: _h2_list_step(target)),
         # The theme heat (#1017): on the bars, chips and news alone.
         ("theme_heat", 9, lambda: _theme_heat_step(target)),
-        # Before the LLM notes, which can take long; the sequence only orders
-        # the step rows (rows are found by step name).
-        ("plan_tracking", 10, lambda: _plan_tracking_step(target)),
-        ("strategy_levels", 11, lambda: _strategy_levels_step(target)),
-        # After strategy_levels, whose rows the tiers read (#476).
-        ("action_tiers", 12, lambda: _action_tiers_step(target)),
-        ("candidate_notes", 13, lambda: _candidate_note_step(target)),
-        # Last: it reads nothing the others write, and no other step waits on it.
-        ("period_backfill", 14, lambda: _period_backfill_step(target)),
         # Before x4_list (#1016): a month or quarter it writes during its
         # window can be available on T (announcement_date = the fetch date
         # while the deadline is ahead), and the research tool reading the
         # same T later sees it; x4_list must see it too.  It waits on nothing.
-        ("period_backfill", 9, lambda: _period_backfill_step(target)),
+        ("period_backfill", 10, lambda: _period_backfill_step(target)),
         # The X4 list (#1016): bars, monthly revenues and quarterly EPS alone.
-        ("x4_list", 10, lambda: _x4_list_step(target)),
+        ("x4_list", 11, lambda: _x4_list_step(target)),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
-        ("plan_tracking", 11, lambda: _plan_tracking_step(target)),
-        ("strategy_levels", 12, lambda: _strategy_levels_step(target)),
+        ("plan_tracking", 12, lambda: _plan_tracking_step(target)),
+        ("strategy_levels", 13, lambda: _strategy_levels_step(target)),
         # After strategy_levels, whose rows the tiers read (#476).
-        ("action_tiers", 13, lambda: _action_tiers_step(target)),
-        ("candidate_notes", 14, lambda: _candidate_note_step(target)),
+        ("action_tiers", 14, lambda: _action_tiers_step(target)),
+        ("candidate_notes", 15, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
