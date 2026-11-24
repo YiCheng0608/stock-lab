@@ -16,7 +16,7 @@ import {
 import { Sparkline } from './CandidateViews'
 import { todayListMark } from './mainstream'
 
-// The rows of the today page's lists without price levels (主流族群前 20 #769, 接近年高前 20 #882; DESIGN_SYSTEM §5
+// The rows of the today page's lists without price levels (主流族群前 20 #769, 接近年高前 20 #882, 盈餘殖利率前 20 #1019; DESIGN_SYSTEM §5
 // 候選列表): each the rank, the stock and its market, a list's own line with 「今日名單 #n」, the sparkline and the close
 // with its change on the right; the K-line card beside the list from 1280px, under the row below that. No entry
 // sentence, price ladder, RR, total score or AI button. The rows carry .mainstream-row, whose layout both lists share
@@ -30,7 +30,7 @@ export type ScreenItem = {
   today_list: MainstreamTodayList | null
 }
 
-export type ScreenKind = 'mainstream' | 'h2'
+export type ScreenKind = 'mainstream' | 'h2' | 'x4'
 
 type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
 

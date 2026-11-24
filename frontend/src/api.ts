@@ -6,6 +6,7 @@ import type {
   Dashboard,
   MainstreamResponse,
   H2Response,
+  X4Response,
   DataDate,
   ActionSummary,
   ActionsResponse,
@@ -114,6 +115,8 @@ export const getCandidates = (date?: string, limit?: number) => get<CandidatesRe
 export const getMainstream = (date?: string) => get<MainstreamResponse>(`/mainstream${queryString({ date })}`)
 // 接近年高前 20 (#881/#882): the latest stored H2 list without a date.
 export const getH2 = (date?: string) => get<H2Response>(`/h2${queryString({ date })}`)
+// 盈餘殖利率前 20 (#1016/#1019): the latest stored X4 list without a date.
+export const getX4 = (date?: string) => get<X4Response>(`/strategy-lists/x4${queryString({ date })}`)
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)

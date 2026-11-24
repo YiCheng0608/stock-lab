@@ -1825,3 +1825,42 @@ export type H2Response = {
   universe_count: number | null
   items: H2Item[]
 }
+
+// 盈餘殖利率前 20 (/api/strategy-lists/x4, #1016/#1019): the stored X4 list of a session, no price levels.
+export type X4QuarterEps = {
+  // 「2026Q3」, the latest quarter's own (not cumulative) EPS and the same quarter's a year earlier.
+  quarter: string
+  period_end: string
+  eps: number | null
+  year_before_eps: number | null
+}
+
+export type X4Item = {
+  rank: number
+  instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
+  // The quarter's own EPS × 4 over the date's close.
+  eps_yield_raw: number | null
+  revenue_yoy: number | null
+  // 「2026-10」: the month revenue_yoy is of.
+  revenue_month: string | null
+  quarter_eps: X4QuarterEps | null
+  close: number | null
+  market: CandidateMarket
+  recent_closes: CandidateRecentCloses
+  today_list: MainstreamTodayList | null
+}
+
+export type X4Response = {
+  status: 'computed' | 'zero' | 'missing' | string
+  // On zero: universe_empty (no member) or none_passed (members, none passing both filters); null otherwise.
+  zero_reason: 'universe_empty' | 'none_passed' | string | null
+  trading_date: string | null
+  version: string
+  definitions_sha256: string
+  list_size: number
+  computed_at: string | null
+  // null on missing.
+  universe_count: number | null
+  item_count: number | null
+  items: X4Item[]
+}

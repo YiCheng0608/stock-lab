@@ -87,6 +87,7 @@ TREE = {
     "candidates/MainstreamViews.tsx": (
         "import { CandidatesSection } from './CandidateViews'\n"
         "import { H2Section } from './H2Views'\n"
+        "import { X4Section } from './X4Views'\n"
         "import { mainstreamState } from './mainstream'\n"
         "import { ScreenList } from './ScreenList'\n"
     ),
@@ -96,6 +97,11 @@ TREE = {
         "import { h2State } from './h2'\nimport { ScreenList } from './ScreenList'\n"
     ),
     "candidates/h2.ts": "export const h2State = 1\n",
+    # #1019: the fourth list (盈餘殖利率前 20) and its copy.
+    "candidates/X4Views.tsx": (
+        "import { x4State } from './x4'\nimport { ScreenList } from './ScreenList'\n"
+    ),
+    "candidates/x4.ts": "export const x4State = 1\n",
     "candidates/ScreenList.tsx": "import { Sparkline } from './CandidateViews'\n",
     "candidates/MainstreamChart.tsx": (
         "import { StockBarsChart } from '../stock/StockBarsChart'\n"
@@ -165,6 +171,12 @@ def test_the_second_today_list_verifies_the_today_page(importers):
 def test_the_third_today_list_verifies_the_today_page(importers):
     # Issue 882: its view is listed; its copy and the shared rows reach the page through it.
     for name in ("H2Views.tsx", "h2.ts", "ScreenList.tsx"):
+        assert plan(FE + "candidates/" + name, importers=importers).pages == ["today"]
+
+
+def test_the_fourth_today_list_verifies_the_today_page(importers):
+    # #1019: its view is listed; its copy reaches the page through it.
+    for name in ("X4Views.tsx", "x4.ts"):
         assert plan(FE + "candidates/" + name, importers=importers).pages == ["today"]
 
 

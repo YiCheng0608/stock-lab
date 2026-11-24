@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import type { CandidateItem, CandidateLiquidity, H2Item, H2Response, MainstreamItem, MainstreamResponse, PreopenNews } from '../types'
+import type { CandidateItem, CandidateLiquidity, H2Item, H2Response, X4Item, X4Response, MainstreamItem, MainstreamResponse, PreopenNews } from '../types'
 import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
@@ -34,12 +34,15 @@ import { OVERNIGHT_US_CLOSED, OVERNIGHT_US_PENDING, overnightUsView } from './ca
 import { PageDateContext } from '../components/pageDate'
 import { removedCopyIn } from '../removedCopy.fixtures'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
-import { MainstreamList, MainstreamSection, TodayListsSection, mainstreamQueryOptions } from './MainstreamViews'
+import { MainstreamList, MainstreamSection, TodayListsSection, mainstreamQueryOptions, revealTab, tabEdges } from './MainstreamViews'
 import { TODAY_LISTS, mainstreamGroupsText, mainstreamReturnText, mainstreamState, signedPercent, todayListKind, todayListMark, todayListPickPath, todayListSearch } from './mainstream'
 import { mainstreamItem, mainstreamResponse, missingMainstream, zeroMainstream } from './mainstream.fixtures'
 import { H2List, H2Section, h2QueryOptions } from './H2Views'
 import { h2Definition, h2GapText, h2State } from './h2'
 import { h2Response, missingH2, zeroH2 } from './h2.fixtures'
+import { X4List, X4Section, x4QueryOptions } from './X4Views'
+import { X4_WATCH_BADGE, x4Definition, x4LineText, x4State, x4YieldText } from './x4'
+import { missingX4, x4Response, zeroX4 } from './x4.fixtures'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 // scripts/ci-test.cjs runs this module under Node (the frontend ships no Node typings): the stylesheet check reads a file.
 declare const require: (id: string) => unknown
@@ -480,13 +483,13 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   // The switch and the address: ?list=mainstream opens the second list (a reload stays on it); anything else is 今日名單.
   check(todayListKind(new URLSearchParams('')) === 'today' && todayListKind(new URLSearchParams('list=mainstream')) === 'mainstream' && todayListKind(new URLSearchParams('list=other')) === 'today', 'only ?list=mainstream opens the second list')
   check(todayListSearch(new URLSearchParams('list=mainstream&pick=2330&x=1'), 'today').toString() === 'x=1' && todayListSearch(new URLSearchParams('x=1'), 'mainstream').toString() === 'x=1&list=mainstream', 'the tabs write the list to the address and drop a pick')
-  check(JSON.stringify(TODAY_LISTS.map((list) => list.label)) === JSON.stringify(['今日名單', '主流族群前 20', '接近年高前 20']), 'three tabs, 今日名單 first (Issue 882)')
+  check(JSON.stringify(TODAY_LISTS.map((list) => list.label)) === JSON.stringify(['今日名單', '主流族群前 20', '接近年高前 20', '盈餘殖利率前 20']), 'four tabs, 今日名單 first (Issue 882, Issue 1019)')
   const atToday = renderAt('/', <TodayListsSection today={today} />)
   check(tabOf(atToday, '今日名單').includes('aria-selected="true"') && tabOf(atToday, '主流族群前 20').includes('aria-selected="false"'), 'without ?list the page is on 今日名單')
   check(atToday.includes('id="candidates-title"') && !atToday.includes('mainstream-title') && atToday.indexOf('role="tablist"') < atToday.indexOf('id="candidates-title"'), 'the switch above the today list; the second list not rendered')
   check(atToday.includes('id="today-list-panel-today"') && atToday.includes('aria-labelledby="today-list-tab-today"'), 'the panel is labelled by its tab')
   // The today list itself does not change: the same page text as before the switch, after the two tab labels.
-  check(plain(atToday) === '今日名單主流族群前 20接近年高前 20' + plain(render(<CandidatesSection data={listResponse()} loading={false} error={null} />)), 'the today list keeps its page text (page_checks T5–T8, T13)')
+  check(plain(atToday) === '今日名單主流族群前 20接近年高前 20盈餘殖利率前 20' + plain(render(<CandidatesSection data={listResponse()} loading={false} error={null} />)), 'the today list keeps its page text (page_checks T5–T8, T13)')
   const atMainstream = renderAt('/?list=mainstream', <TodayListsSection today={today} />, withMainstream(mainstreamResponse()))
   check(tabOf(atMainstream, '主流族群前 20').includes('aria-selected="true"') && tabOf(atMainstream, '今日名單').includes('aria-selected="false"'), '?list=mainstream selects the second tab')
   check(atMainstream.includes('id="mainstream-title"') && !atMainstream.includes('candidates-title') && atMainstream.includes('id="today-list-panel-mainstream"'), '?list=mainstream shows the second list instead of the today list')
@@ -698,5 +701,131 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   check(h2State({ ...h2Response(), items: [] }).kind === 'zero', 'computed with no rows reads as zero, not an empty list')
   check(plain(render(<H2Section data={undefined} loading error={null} />)).includes('接近年高前 20 載入中…'), 'loading')
   const failed = plain(render(<H2Section data={undefined} loading={false} error={new Error('API 500: boom')} />))
+  check(failed.includes('資料暫時無法載入') && failed.includes('API 500: boom'), `a failed load gives its reason: ${failed}`)
+}
+
+// ---- 盈餘殖利率前 20 (#1019; UI_COPY_SPEC §10, decisions #1 7106346106, 7114503228): the fourth tab, its rows and states ----
+{
+  const renderAt = (location: string, element: ReactElement, client = new QueryClient()) =>
+    renderToStaticMarkup(<QueryClientProvider client={client}><StaticRouter location={location}>{element}</StaticRouter></QueryClientProvider>)
+  const withX4 = (data: X4Response) => {
+    const client = new QueryClient()
+    client.setQueryData(['x4', 'latest'], data)
+    return client
+  }
+  const plain = (markup: string) => markup.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&')
+  const inner = (markup: string, start: string, end: string) => plain(slice(markup, start, end).replace(/^[^>]*>/, ''))
+  const today = { data: listResponse(), loading: false, error: null }
+  const tabOf = (markup: string, label: string) => markup.match(new RegExp(`<button[^>]*role="tab"[^>]*>${label}</button>`))?.[0] ?? ''
+  const tabs = (markup: string) => [...markup.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)].map((match) => match[1])
+
+  // Four tabs in order, the same on every list; ?list=x4 opens the fourth (a reload stays on it).
+  check(JSON.stringify(TODAY_LISTS.map((list) => [list.id, list.label])) === JSON.stringify([['today', '今日名單'], ['mainstream', '主流族群前 20'], ['h2', '接近年高前 20'], ['x4', '盈餘殖利率前 20']]), 'four lists, the fourth 盈餘殖利率前 20')
+  check(todayListKind(new URLSearchParams('list=x4')) === 'x4' && todayListKind(new URLSearchParams('list=X4')) === 'today' && todayListKind(new URLSearchParams('list=x5')) === 'today', 'only ?list=x4 opens the fourth list')
+  check(todayListSearch(new URLSearchParams('list=h2&pick=2330&x=1'), 'x4').toString() === 'list=x4&x=1' && todayListSearch(new URLSearchParams('list=x4'), 'today').toString() === '' && todayListSearch(new URLSearchParams('list=x4'), 'mainstream').toString() === 'list=mainstream' && todayListSearch(new URLSearchParams('list=x4'), 'h2').toString() === 'list=h2', 'the tabs write ?list=x4, and switch from it to the other three')
+  const atX4 = renderAt('/?list=x4', <TodayListsSection today={today} />, withX4(x4Response()))
+  check(tabOf(atX4, '盈餘殖利率前 20').includes('aria-selected="true"') && ['今日名單', '主流族群前 20', '接近年高前 20'].every((label) => tabOf(atX4, label).includes('aria-selected="false"')), '?list=x4 selects the fourth tab')
+  check(atX4.includes('id="x4-title"') && !atX4.includes('candidates-title') && !atX4.includes('mainstream-title') && !atX4.includes('h2-title') && atX4.includes('id="today-list-panel-x4"') && atX4.includes('aria-labelledby="today-list-tab-x4"'), '?list=x4 shows the fourth list in its own panel')
+  check(renderAt('/?list=x4', <TodayListsSection today={today} />).includes('盈餘殖利率前 20 載入中…'), 'the fourth list loads on its own')
+  for (const location of ['/', '/?list=mainstream', '/?list=h2', '/?list=x4']) {
+    const page = renderAt(location, <TodayListsSection today={today} />, withX4(x4Response()))
+    check(JSON.stringify(tabs(page)) === JSON.stringify(['今日名單', '主流族群前 20', '接近年高前 20', '盈餘殖利率前 20']), `${location}: the four tabs carry their names only: ${tabs(page).join('|')}`)
+    check(location === '/?list=x4' ? count(page, X4_WATCH_BADGE) === 1 : !page.includes(X4_WATCH_BADGE) && !page.includes('x4-title'), `${location}: the watch badge on the fourth list's head only`)
+  }
+  // 390px: the strip scrolls sideways; the selected tab is scrolled into it, never cut at the edge.
+  const strip = (scrollWidth: number) => ({ scrollWidth, clientWidth: 358, scrollLeft: 0, getBoundingClientRect: () => ({ left: 16, right: 374 }) })
+  const tabIn = (parent: ReturnType<typeof strip>, left: number, right: number) => ({ parentElement: parent, getBoundingClientRect: () => ({ left, right }) }) as unknown as Element
+  const narrow = strip(420)
+  revealTab(tabIn(narrow, 330, 436))
+  check(narrow.scrollLeft === 62, `the fourth tab is scrolled in: ${narrow.scrollLeft}`)
+  const back = { ...strip(420), scrollLeft: 62 }
+  revealTab(tabIn(back, -40, 40))
+  check(back.scrollLeft === 6, `a tab left of the strip is scrolled back: ${back.scrollLeft}`)
+  const fits = strip(358)
+  revealTab(tabIn(fits, 330, 436))
+  revealTab(null)
+  check(fits.scrollLeft === 0, 'a strip that fits does not scroll')
+  // The scrolled-out side fades, so the strip reads as scrollable without a scrollbar (review 7120958871).
+  check(JSON.stringify(tabEdges({ scrollLeft: 62, scrollWidth: 420, clientWidth: 358 })) === '{"left":true,"right":false}' && JSON.stringify(tabEdges({ scrollLeft: 0, scrollWidth: 420, clientWidth: 358 })) === '{"left":false,"right":true}' && JSON.stringify(tabEdges({ scrollLeft: 0, scrollWidth: 358, clientWidth: 358 })) === '{"left":false,"right":false}', 'the faded sides follow the scroll')
+  // The strip clips both axes: a tab keeps inside it (whole 2px underline, focus ring inside), and the sides fade.
+  const tabsCss = (require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }).readFileSync(`${__dirname}/../styles/mainstream.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  const tabRule = (selector: string) => { const at = tabsCss.indexOf(`${selector} {`); return at < 0 ? '' : tabsCss.slice(at, tabsCss.indexOf('}', at)) }
+  check(/overflow-x: auto/.test(tabRule('.tabs.today-list-tabs')) && /margin-bottom: 0/.test(tabRule('.today-list-tabs .tab')) && /outline-offset: -2px/.test(tabRule('.today-list-tabs .tab:focus-visible')), `the tabs stay inside the scrolling strip: ${tabRule('.today-list-tabs .tab')}`)
+  check(/mask-image/.test(tabRule('.today-list-tabs.tabs-more-left')) && /mask-image/.test(tabRule('.today-list-tabs.tabs-more-right')) && /mask-image/.test(tabRule('.today-list-tabs.tabs-more-left.tabs-more-right')), 'a side with tabs scrolled out fades')
+  // /api/strategy-lists/x4 only on ?list=x4.
+  const requests: string[] = []
+  for (const kind of ['today', 'mainstream', 'h2', 'x4'] as const) {
+    const observer = new QueryObserver(new QueryClient(), x4QueryOptions(kind, () => { requests.push(kind); return Promise.resolve(x4Response()) }))
+    observer.subscribe(() => undefined)()
+  }
+  check(JSON.stringify(requests) === JSON.stringify(['x4']), `only the fourth list requests /api/strategy-lists/x4: ${requests.join(',')}`)
+  const enabledAt = (location: string, key: string) => {
+    const client = new QueryClient()
+    renderAt(location, <TodayListsSection today={today} />, client)
+    return (client.getQueryCache().find({ queryKey: [key, 'latest'] })?.options as { enabled?: unknown } | undefined)?.enabled
+  }
+  check(enabledAt('/', 'x4') === false && enabledAt('/?list=h2', 'x4') === false && enabledAt('/?list=x4', 'x4') === true && enabledAt('/?list=x4', 'h2') === false && enabledAt('/?list=x4', 'mainstream') === false, 'the section queries x4 only on ?list=x4, and the others not there')
+
+  // computed: the head (title, date, count, then the warning badge, verbatim), the definition and the rows.
+  const computed = render(<X4Section data={x4Response()} loading={false} error={null} todayDate="2026-11-20" />)
+  const head = slice(computed, '<div class="candidates-head">', '</section>')
+  check(computed.includes('<h2 id="x4-title">盈餘殖利率前 20</h2>') && plain(computed).includes('2026/11/20') && plain(computed).includes('3 檔'), `the head: title, data date and count: ${plain(computed).slice(0, 60)}`)
+  check(computed.includes('<span class="badge badge-warning x4-watch-badge">前瞻觀察（未通過驗證）</span></span></div>') && X4_WATCH_BADGE === '前瞻觀察（未通過驗證）', `the warning badge last on the head line: ${slice(computed, 'board-dates', '</div>')}`)
+  check(head.indexOf('3 檔') < head.indexOf(X4_WATCH_BADGE), 'the badge after the count')
+  const headCount = (markup: string) => plain(slice(markup, 'class="board-dates"', '</div>'))
+  check(headCount(render(<X4Section data={x4Response({ items: x4Response().items.slice(0, 2), item_count: 2 })} loading={false} error={null} />)).includes('2 檔') && headCount(computed).includes('3 檔') && !headCount(computed).includes('20 檔'), `fewer than 20: the head writes the real count: ${headCount(computed)}`)
+  const definition = inner(computed, 'x4-definition', '</p>')
+  check(definition === '月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔（通過的不到 20 檔時只放那幾檔）；母體 586 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期', `the definition: ${definition}`)
+  check(x4Definition({ universe_count: 1234, list_size: 20 }).includes('母體 1,234 檔'), 'the universe comes from the API')
+  const xRow = (markup: string, rank: number) => slice(markup, `data-x4-rank="${rank}"`, '</li>')
+  const first = xRow(computed, 1)
+  const second = xRow(computed, 2)
+  check(inner(first, '<p class="candidate-row-title"', '</p>') === '#1 2330 台積電 上市' && inner(second, '<p class="candidate-row-title"', '</p>') === '#2 6274 台燿 上櫃', `the first line: rank, name and market: ${inner(first, '<p class="candidate-row-title"', '</p>')}`)
+  check(first.includes('href="/stocks/TWSE/2330"') && computed.includes('mainstream-row x4-row'), 'the stock links to its page; the row shares the list layout')
+  const figures = (row: string) => inner(row, '<p class="mainstream-return x4-figures"', '</p>')
+  check(figures(first) === '盈餘殖利率 12.34% · 營收年增（10 月）+25.10% · 2026Q3 EPS 3.21（去年同季 2.10）', `the figures line: ${figures(first)}`)
+  check(figures(second) === '盈餘殖利率 8.05% · 營收年增（9 月）+3.12% · 2026Q3 EPS 4.64（去年同季 -0.50）', `the month and a loss a year before: ${figures(second)}`)
+  check(count(first, 'class="x4-figure"') === 3, 'three whole runs, so a narrow row breaks at 「 · 」')
+  check(!/mainstream-return-value[^"]*tone-/.test(computed), 'no figure is red or green')
+  check(x4LineText({ eps_yield_raw: null, revenue_yoy: null, revenue_month: null, quarter_eps: null }) === '盈餘殖利率 — · 營收年增 — · EPS —', 'missing values read 「—」, never 0')
+  check(x4YieldText(0.00004) === '0.00%' && x4YieldText(0.123456) === '12.35%', 'the yield helper rounds to two decimals, no sign')
+  check(plain(first).includes('收盤（元）1,045.00+1.23%') && first.includes('candidate-change tone-up') && second.includes('candidate-change tone-down') && plain(second).includes('230.50-0.86%'), `close and change from market: ${plain(first)}`)
+  check(first.includes('class="sparkline sparkline-up"') && second.includes('class="sparkline sparkline-down"'), 'the sparkline on recent_closes')
+  check(first.includes('<a class="badge badge-compact mainstream-today-mark" data-today-rank="3" href="/?pick=2330">今日名單 #3</a>') && !second.includes('mainstream-today-mark'), `「今日名單 #n」 on a today-list stock only: ${slice(first, 'mainstream-today-mark', '</a>')}`)
+  const otherDay = xRow(render(<X4Section data={x4Response()} loading={false} error={null} todayDate="2026-11-23" />), 1)
+  check(otherDay.includes('mainstream-today-mark-other') && plain(otherDay).includes('2026/11/20 今日名單 #3') && !otherDay.includes('pick='), "another day's today list: the mark is not a link")
+
+  // No price levels, research code, numbers or t; the one research word is the badge's own 「驗證」.
+  const LEVEL_CLASSES = ['price-ladder', 'candidate-entry', 'entry-plan', 'candidate-row-levels', 'candidate-row-rr', 'candidate-rr', 'level-entry', 'level-stop', 'level-target', 'candidate-ai-toggle', 'candidate-detail', 'score-bar']
+  const LEVEL_WORDS = ['進場', '停損', '目標', 'RR', '總分', '可買', '買進', '持有', '加入追蹤', '評分', 'X4', 'H2', '研究', '回測', '驗證', 't 值', 't=', '勝率', '報酬', '超額', '通過驗證']
+  for (const [label, markup] of [['computed', computed], ['switch', atX4]] as const) {
+    const section = plain(slice(markup, 'x4-title', '</section>')).replace(X4_WATCH_BADGE, '')
+    const classes = LEVEL_CLASSES.filter((name) => markup.includes(name))
+    const words = LEVEL_WORDS.filter((word) => section.includes(word))
+    check(section !== '' && classes.length === 0 && words.length === 0, `${label}: no price-level element or research word: ${classes.join(',')} ${words.join(',')}`)
+  }
+
+  // The chart: beside the list from 1280px, a row's own card below, none mounted at first.
+  const xCharts: string[] = []
+  const xSpy = (item: X4Item) => { xCharts.push(item.instrument.symbol); return <div data-test-chart={item.instrument.symbol} /> }
+  const xWide = render(<X4Section data={x4Response()} loading={false} error={null} renderChart={xSpy} wide todayDate="2026-11-20" />)
+  check(xWide.includes('class="candidates-terminal"') && xWide.includes('data-chart-rank="1"') && xCharts.join(',') === '2330', `from 1280px the first stock's chart is beside the list: ${xCharts.join(',')}`)
+  xCharts.length = 0
+  const xNarrow = render(<X4Section data={x4Response()} loading={false} error={null} renderChart={xSpy} todayDate="2026-11-20" />)
+  check(xCharts.length === 0 && xNarrow.includes('<div class="candidate-chart" id="x4-chart-1" hidden="">'), 'below 1280px no chart mounts until a row opens its card')
+  check(render(<X4List items={x4Response().items} renderChart={xSpy} initialChartRank={2} />).includes('data-test-chart="6274"') && xCharts.join(',') === '6274', 'an open row mounts its own card')
+
+  // missing, the two zeros, loading and a failed load; the badge stays on the head, the definition and count do not.
+  const missingText = plain(render(<X4Section data={missingX4()} loading={false} error={null} />))
+  check(x4State(missingX4()).kind === 'missing' && missingText === '盈餘殖利率前 20資料 2026/11/20前瞻觀察（未通過驗證）尚無盈餘殖利率名單2026/11/20 尚未產生盈餘殖利率名單', `missing: ${missingText}`)
+  check(plain(render(<X4Section data={missingX4(null)} loading={false} error={null} />)) === '盈餘殖利率前 20前瞻觀察（未通過驗證）尚無盈餘殖利率名單尚未產生盈餘殖利率名單', 'missing with no list at all: no date')
+  const emptyText = plain(render(<X4Section data={zeroX4('universe_empty')} loading={false} error={null} />))
+  check(emptyText === '盈餘殖利率前 20資料 2026/11/20前瞻觀察（未通過驗證）當日沒有股票進入母體沒有上市櫃股票的 20 日均量達 1,000 張，當日不產生名單', `zero, empty universe (H2's sentence): ${emptyText}`)
+  const zeroTitle = (data: X4Response) => { const state = x4State(data); return state.kind === 'list' ? null : state.title }
+  const noneText = plain(render(<X4Section data={zeroX4('none_passed')} loading={false} error={null} />))
+  check(noneText === '盈餘殖利率前 20資料 2026/11/20前瞻觀察（未通過驗證）當日沒有月營收年增與 EPS 年增都為正的股票母體 586 檔中沒有一檔同時通過兩個條件，當日不產生名單', `zero, none passed: ${noneText}`)
+  check(x4State({ ...x4Response(), items: [] }).kind === 'zero' && zeroTitle({ ...zeroX4('none_passed'), zero_reason: null }) === '當日沒有月營收年增與 EPS 年增都為正的股票' && zeroTitle({ ...zeroX4('universe_empty'), zero_reason: null }) === '當日沒有股票進入母體', 'computed with no rows reads as zero; without a reason the universe tells which')
+  check(plain(render(<X4Section data={undefined} loading error={null} />)).includes('盈餘殖利率前 20 載入中…'), 'loading')
+  const failed = plain(render(<X4Section data={undefined} loading={false} error={new Error('API 500: boom')} />))
   check(failed.includes('資料暫時無法載入') && failed.includes('API 500: boom'), `a failed load gives its reason: ${failed}`)
 }

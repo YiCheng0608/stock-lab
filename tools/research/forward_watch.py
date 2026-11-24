@@ -13,8 +13,10 @@ and the reports name both H2); the fourth round 10's F2
 2026-11-22, #949); the fifth round 15's P2 (round15_research 第 1 版, #986
 validation 7097870215, kind ``前瞻觀察`` from 2026-11-23, #990); the sixth
 round 17's A1 (round17_research 第 1 版, #1011 validation 7113410582, kind
-``前瞻觀察`` from 2026-11-24, #1013).  Nothing here is a command-line option:
-``WATCHES`` holds each object's frozen entry, its definition is the one its own tool ran (imported,
+``前瞻觀察`` from 2026-11-24, #1013); the seventh X4 again, on the today
+page from 2026-11-24 (key ``X4-product``, kind ``已進產品``, #1019; the old
+row stays and runs on, and the reports name both X4).  Nothing here is a
+command-line option: ``WATCHES`` holds each object's frozen entry, its definition is the one its own tool ran (imported,
 not copied, and refused when that tool's ``definitions_sha256`` is not the
 frozen one), and the golden test of its output fails on any change.
 
@@ -83,7 +85,7 @@ PRODUCT = "已進產品"
 PASSED = "通過驗證"  # #875 決定 7044311598: passed, the user not yet decided
 KIND_NOTES = {
     WATCH: "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；"
-    "之後的數字再好也不改成「通過」、不進產品",
+    "不改成「通過」；放上頁面另由使用者決定",
     PRODUCT: "已進產品的策略：滿 60 日起每月判一次，判到「輸給基準」由統籌在 #1 提案下架；"
     "其餘判定只列出",
     PASSED: "通過驗證、待使用者決定進不進產品的策略：只當紀錄，不判下架；判到「輸給基準」時由統籌"
@@ -198,6 +200,25 @@ WATCHES: dict[str, dict[str, Any]] = {
         "min_days": MIN_DAYS,
         "registered": (
             "https://github.com/YiCheng0608/stock-lab/issues/1011#issuecomment-7113410582"
+        ),
+    },
+    # The user put X4, still 前瞻觀察, on the today page as 盈餘殖利率前 20 with
+    # a way to take it off (#1 7106346106, D5 of 7114503228); its tab went live
+    # on 2026-11-24 (#1019).  The same frozen X4, followed from that day as a
+    # product strategy, as H2-product; the X4 row above stays, the code in the
+    # reports is still X4 (``display``).
+    "X4-product": {
+        "kind": PRODUCT,
+        "source": "explore_research",
+        "source_version": 2,
+        "code": "X4",
+        "definitions_sha256": (
+            "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63"
+        ),
+        "since": date(2026, 11, 24),
+        "min_days": MIN_DAYS,
+        "registered": (
+            "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228"
         ),
     },
 }
