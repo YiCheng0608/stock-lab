@@ -251,7 +251,7 @@ def test_the_fallback_moves_an_older_databases_rows(tmp_path, monkeypatch):
 
 
 def test_the_registry_has_h2():
-    assert set(strategy_lists.strategies()) == {"h2"}
+    assert set(strategy_lists.strategies()) == {"h2", "x4"}
     h2 = strategy_lists.strategy("h2")
     assert h2.version == "explore_research_v2_X2"
     with pytest.raises(strategy_lists.UnknownStrategy):

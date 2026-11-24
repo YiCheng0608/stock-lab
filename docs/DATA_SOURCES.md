@@ -695,7 +695,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 
 ### 月營收
 
-個股頁財務分頁的「月營收」表讀 `monthly_revenues`，每家公司每月一列（唯一鍵 `(instrument_id, revenue_month)`，`revenue_month` 存該月 1 日）；不納入策略與評分（[#530](https://github.com/YiCheng0608/stock-lab/issues/530)，實作在 [`worker/monthly_revenue.py`](../backend/worker/monthly_revenue.py)）。
+個股頁財務分頁的「月營收」表讀 `monthly_revenues`，每家公司每月一列（唯一鍵 `(instrument_id, revenue_month)`，`revenue_month` 存該月 1 日）；不納入訊號策略與評分，X4 名單讀它（[#1016](https://github.com/YiCheng0608/stock-lab/issues/1016)）（[#530](https://github.com/YiCheng0608/stock-lab/issues/530)，實作在 [`worker/monthly_revenue.py`](../backend/worker/monthly_revenue.py)）。
 
 - **欄位與單位**：`revenue`（當月營收）、`prior_year_revenue`（去年當月營收）、`cumulative_revenue`（當月累計營收）是千元；`yoy` 是來源的「去年同月增減(%)」，不自己重算：快照是全精度，MOPS 頁截斷到小數 2 位（2330 115/09 為 54.6486 → `54.64`）。上月營收、上月比較、去年累計、前期比較、備註存 `data_json`。來源是空白（上月或去年同月為 0）時存 NULL，不補 0。
 - **每日快照**：collect 抓 `t187ap05_L`、`mopsfin_t187ap05_O`，各 1 個請求。兩份都只有一個月（`資料年月`），整份共用一個 `出表日期`；例如 2026-11-06 抓到的仍是 10/17 出表的 9 月表，10 月要等申報期限 11/10 之後才換。可得日用出表日期，`data_json.announcement_basis = release_date`。列的 `資料年月` 不一致、同一代號兩次、出表日期讀不到或不在該月之後時整份不寫；出表日期晚於收集日的列略過（回補舊日期時不讀今天的表）。取得、解析或寫入失敗是非核心 warning（`TWSE monthly revenue unavailable`／`TPEx …`），collect 仍為 `success`，各交易所分開寫，一邊失敗不影響另一邊。
