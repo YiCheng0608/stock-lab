@@ -6,6 +6,8 @@ import type { H2Item, H2Response } from '../types'
 import { formatDate } from './candidates'
 import { H2_GAP_LEAD, h2Definition, h2GapText, h2State } from './h2'
 import { H2_TITLE, type TodayListKind } from './mainstream'
+import { RecentPicksList, RecentViewChips } from './RecentPicksViews'
+import type { RecentView } from './recentPicks'
 import { ScreenList, errorReason } from './ScreenList'
 
 // 接近年高前 20 (the H2 list, #882; UI_COPY_SPEC §10 接近年高前 20): the today page's third list, laid out as
@@ -29,8 +31,12 @@ export function H2List({ items, listDate = null, todayDate = null, renderChart, 
 }
 
 // todayDate: the date of the today list the page shows (the latest); 「今日名單 #n」 links to it only on the same date.
-export function H2Section({ data, loading, error, renderChart, wide = false, todayDate = null }: { data: H2Response | undefined; loading: boolean; error: unknown; renderChart?: (item: H2Item) => ReactNode; wide?: boolean; todayDate?: string | null }) {
+// view: 「當天」 or 「近 60 日入選過」 (#1021, the page's ?view=recent); the chips show once the API has a stored list in
+// the window.
+export function H2Section({ data, loading, error, renderChart, wide = false, todayDate = null, view = 'today', onViewChange }: { data: H2Response | undefined; loading: boolean; error: unknown; renderChart?: (item: H2Item) => ReactNode; wide?: boolean; todayDate?: string | null; view?: RecentView; onViewChange?: (view: RecentView) => void }) {
   const state = data ? h2State(data) : null
+  const recent = data?.status !== 'missing' && data?.recent_picks && data.recent_picks.days > 0 ? data.recent_picks : null
+  const shown = recent ? view : 'today'
   return (
     <section className="candidates-section h2-section" aria-labelledby="h2-title">
       <div className="candidates-head">
@@ -40,15 +46,18 @@ export function H2Section({ data, loading, error, renderChart, wide = false, tod
         )}
       </div>
       {data && state?.kind === 'list' && <p className="small-note mainstream-definition h2-definition">{h2Definition(data)}</p>}
+      {recent && !loading && !error && <RecentViewChips view={shown} onChange={onViewChange ?? (() => undefined)} counts={{ today: state?.kind === 'list' ? state.items.length : 0, recent: recent.items.length }} />}
       {loading
         ? <Skeleton lines={4} label={`${H2_TITLE} 載入中…`} />
         : error
           ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
           : !state || !data
             ? null
-            : state.kind === 'list'
-              ? <H2List items={state.items} listDate={data.trading_date} todayDate={todayDate} renderChart={renderChart} wide={wide} />
-              : <Card><EmptyState title={state.title} reason={state.text} /></Card>}
+            : shown === 'recent' && recent
+              ? <RecentPicksList kind="h2" picks={recent} />
+              : state.kind === 'list'
+                ? <H2List items={state.items} listDate={data.trading_date} todayDate={todayDate} renderChart={renderChart} wide={wide} />
+                : <Card><EmptyState title={state.title} reason={state.text} /></Card>}
     </section>
   )
 }

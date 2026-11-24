@@ -2,6 +2,15 @@
    list's .candidate-row classes (rank block, title line, sparkline, close column, 盤後終端 and the row's K-line card);
    only what differs is here. This file loads before styles.css, so its rules carry the extra .mainstream-row class. */
 .today-list-tabs { margin-top: var(--space-4); }
+/* Four tabs (#1019) do not fit 390px: one line that scrolls sideways instead of wrapping the last tab. The strip
+   clips both axes, so a tab must not reach past it: no -1px bottom margin (the 2px underline stays whole) and the
+   focus ring inside the tab. A side with tabs scrolled out fades (revealTab sets the classes). */
+.tabs.today-list-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.today-list-tabs .tab { flex: none; white-space: nowrap; margin-bottom: 0; }
+.today-list-tabs .tab:focus-visible { outline-offset: -2px; }
+.today-list-tabs.tabs-more-left { mask-image: linear-gradient(to right, transparent, var(--color-text) 32px); }
+.today-list-tabs.tabs-more-right { mask-image: linear-gradient(to left, transparent, var(--color-text) 32px); }
+.today-list-tabs.tabs-more-left.tabs-more-right { mask-image: linear-gradient(to right, transparent, var(--color-text) 32px, var(--color-text) calc(100% - 32px), transparent); }
 .today-list-tabs + [role="tabpanel"] > .candidates-section > .candidates-head { margin-top: var(--space-2); }
 
 /* The groups are what this list is about: the title wraps instead of ending in an ellipsis (the today list's cuts the
@@ -23,6 +32,9 @@ a.mainstream-today-mark:hover { border-color: var(--color-primary); color: var(-
 /* Of another day than the today list shown (review 6893655832): plain text, not a link. */
 .mainstream-today-mark-other { color: var(--color-text-muted); }
 .candidate-row.mainstream-row .mainstream-row-figures { max-width: none; }
+/* 盈餘殖利率前 20 (#1019): three figures joined by 「 · 」; each stays whole, so a narrow row breaks between them. */
+.x4-figure { white-space: nowrap; }
+.x4-watch-badge { white-space: nowrap; }
 
 @media (min-width: 1280px) {
   /* Beside the chart: title on the first line, the return line, then the sparkline left and the close right. */
@@ -40,3 +52,13 @@ a.mainstream-today-mark:hover { border-color: var(--color-primary); color: var(-
   .candidate-row.mainstream-row .candidate-row-nums > div { justify-items: end; }
   .today-list-tabs { margin-top: var(--space-3); }
 }
+
+/* 「當天」「近 60 日入選過」 (#1021): the chips under the head (or the definition), then in the second view the window
+   line and rows of the stock and 「入選 k 次 · 首次 · 最近」 with 「今日未入選」; no rank, close or chart column. */
+.recent-view-chips { margin: 0 0 var(--space-3); }
+.recent-picks-window { margin: 0 0 var(--space-2); }
+.candidate-row.recent-pick-row > .candidate-row-main { grid-template-columns: minmax(0, 1fr); }
+.candidate-row.recent-pick-row .candidate-row-title { white-space: normal; }
+.recent-pick-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.recent-pick-text { font-variant-numeric: tabular-nums; }
+.recent-not-today { color: var(--color-text-muted); white-space: nowrap; }

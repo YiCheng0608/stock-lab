@@ -153,14 +153,19 @@ daily 在主流族群前 20 之後，另算一份「H2 名單」（`explore_rese
   - 同一天重算時整份換掉；算失敗時不寫入，前一份留著。T 不是交易日（沒有 `stock` 日線）時算失敗。
   - 降級到 0034 只搬回 `h2` 的列；別的策略的名單 0034 沒有地方放，跟著新表刪掉。
 - **誰寫**：daily 的 h2_list 步驟（`worker.h2_list.run_h2_list`），只算 daily 的目標日。catchup 只跑 collect，它補抓的日子沒有 H2 名單，`/api/h2?date=` 對那些日子回 `missing`；主流族群前 20 也一樣。要補時照下面的「重算」逐日跑。
-- **讀取**：`GET /api/h2?date=`，沒給日期時取最新一份；`GET /api/strategy-lists/h2?date=` 回一樣的內容（#1014，不認得的策略回 404）。前端仍讀 `/api/h2`。
+- **讀取**：`GET /api/h2?date=`，沒給日期時取最新一份；`GET /api/strategy-lists/h2?date=` 回一樣的內容（#1014，不認得的策略回 404），另加 `recent_picks`（下面「近 60 日入選」，#1021）。前端從 #1021 起讀 `/api/strategy-lists/h2`；`/api/h2` 的回應不變。
   - 回傳 `status`、`trading_date`、`version`、`definitions_sha256`、`window`、`computed_at`、`universe_count` 與 `items`。
   - 每檔有 `rank`、`instrument`（`id`、`exchange`、`symbol`、`name`、`instrument_type`）、`high_gap_240`（缺值為 null）、`close`（T 的原始收盤）、`market`、`recent_closes`，以及 `today_list`。
   - `today_list` 在讀取時才查當天的今日名單（名次、`entry_type`、`score_version`），不在今日名單是 null，不寫進表。
   - `market`（T 的收盤與漲跌）與 `recent_closes`（近 30 個交易日的原始收盤，畫走勢線）也在讀取時才算，不寫進表，寫法同 `/api/mainstream`（`market_change.adjacent_change`、`candidate_view.recent_closes`；[#882](https://github.com/YiCheng0608/stock-lab/issues/882)）。
   - 那天沒有算時 `status` 是 `missing`、`items` 是空的；母體是空的那天是 `zero`。
   - 不附進場區、停損與目標。
-- **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.h2_list as h; print(h.run_h2_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天：catchup 補抓的日子、migration 0034 降級後再升回時，舊日期都要逐日跑（0035 的升降級會搬列，不必重算）。
+- **近 60 日入選**（[#1021](https://github.com/YiCheng0608/stock-lab/issues/1021)，`app.strategy_lists.recent_picks`；每個策略都有，X4 也是）：研究測的是每天買一份、每份抱 60 個交易日，帳上是近 60 個交易日名單的聯集，所以 `/api/strategy-lists/{strategy}` 另回 `recent_picks`，在讀取時算、不寫進表。
+  - 窗口：到這份名單的日期（含）為止最近 60 個交易日（有 `stock` 日線的日子，同上面「日線」的口徑），只讀同策略、同版本存下的名單。
+  - `recent_picks`：`sessions`（60）、`days`（窗口內有存名單的天數，回補前會少於 60）、`since`（其中最早一天）與 `items`。每檔 `instrument`、`count`（入選天數）、`first_date`、`last_date`（窗口內第一次與最後一次）、`today_rank`（這份名單的名次，不在是 null）；依 `count` 多者先、`last_date` 晚者先、代號排。這份名單的每檔另有 `recent_picks`（`count`、`first_date`、`last_date`）。那天沒有名單（`missing`）時是 null。
+  - 只陳述哪天入選、入選幾次，不算權重或部位。
+- **重算**：在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.h2_list as h; print(h.run_h2_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天：catchup 補抓的日子、migration 0034 降級後再升回時，舊日期都要逐日跑（0035 的升降級會搬列，不必重算）。
+- **回補**（#1021）：`python -m worker.cli strategy-lists backfill [--strategy h2|x4|all] [--sessions 60] [--until YYYY-MM-DD] [--force]`（[CLI](CLI.md#現有-worker-cli)）把最近 60 個交易日的名單由舊到新逐日寫進表（每天一個 commit，同 daily 的那一步）。已有名單的日子不重算（daily 存下的名單不被改寫），重跑只補還沒有的日子；`--force` 才整段重算。某天算不出來就記在 `failed`、接著算下一天，`status` 是 `failed`（exit 1）。起跑時持有[維護模式](#維護模式)，台北 21:15～23:30 拒絕起跑（exit 75）；正式 DB 也避開偶數整點。
 - **實測**（2026-11-21，正式 DB 副本，2026-11-20）：計算 8.2～9.6 秒，母體 586 檔（有值 584）；`/api/h2` 讀取 0.01 秒。2026-11-13 在研究 DB 上，研究工具與本模組的 20 檔逐檔相同。
 
 ## X4 名單
@@ -182,7 +187,8 @@ daily 在 H2 名單之後，另算一份「X4 名單」（頁面分頁名「盈�
   - 每檔有 `rank`、`instrument`（`id`、`exchange`、`symbol`、`name`、`instrument_type`）、`eps_yield_raw`、`revenue_yoy`、`revenue_month`（`YYYY-MM`）、`quarter_eps`（`quarter` 如 `2026Q3`、`period_end`、`eps` 是單季 EPS、`year_before_eps` 是去年同季）、`close`（T 的原始收盤）、`market`、`recent_closes` 與 `today_list`；後三個在讀取時才算，寫法同 [H2 名單](#h2-名單)的「讀取」。
   - 那天沒有算時 `status` 是 `missing`、`items` 是空的。名單是空的那天是 `zero`，`zero_reason` 分兩種：`universe_empty`（母體是空的，`universe_count` 0）與 `none_passed`（母體有股票，但沒有一檔通過兩個條件）；其他狀態的 `zero_reason` 是 null。
   - 不附進場區、停損與目標。
-- **重算**：目前沒有 CLI。在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.x4_list as x; print(x.run_x4_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天，近 60 日回補（#1021）也逐日跑。重算舊日期讀的是現在的 DB：之後重編的 EPS、更正過的月營收（#543）、之後才補寫但可得日較早的列都會讀到，所以結果可能和當天 daily 存下的不同；研究工具在同一份 DB 上算也一樣，金樣不受影響。
+- **近 60 日入選與回補**：同 [H2 名單](#h2-名單)的「近 60 日入選」與「回補」（`--strategy x4`）。
+- **重算**：在 api 或 scheduler 容器裡跑 `python -c 'import datetime, worker.x4_list as x; print(x.run_x4_list(datetime.date(2026, 11, 20)))'`（日期換成要重算的那天）。一次只算一天；近 60 日回補用上面的 `strategy-lists backfill`，已存的日子不重寫。重算舊日期讀的是現在的 DB：之後重編的 EPS、更正過的月營收（#543）、之後才補寫但可得日較早的列都會讀到，所以結果可能和當天 daily 存下的不同；研究工具在同一份 DB 上算也一樣，金樣不受影響。
 - **限制**：同一檔、同一期末、同一 `announcement_date` 有兩列季報（`fiscal_period` 不同）且 EPS 不同時，產品與研究工具都只照 `announcement_date`、`period_end` 排序取後者，兩邊可能取到不同列。2026-11-24 的正式 DB 副本上是 0 組。
 - **實測**（2026-11-24，正式 DB 副本，最新交易日 2026-11-23）：算一天 2.7～3.6 秒、峰值 0.08 GB；2026-11-23 母體 588 檔、通過兩個條件 346 檔、名單 20 檔。
   - 2026-11-20 的名單和同一份副本 `forward_watch.py --watch X4` 的 `picks.csv` 逐筆相同（`picks.csv` 只有這一天：訊號日的下一個交易日要在資料裡）。
@@ -298,7 +304,7 @@ daily 的 evaluate 步驟（`pipeline.evaluate`）照 [Tracking 口徑](../spec/
 
 回補、回測、`init-db` 這類長時間寫 DB 的作業期間，以維護模式取代停 scheduler（#468）：daily 與 news 不執行，看門狗與[事件 monitor](MONITOR.md) 照常跑，統籌照樣收得到 Issue／PR 留言與 CI 的事件。#468 以前停 scheduler 會連 monitor 一起停：2026-11-04 技術回測前停了 scheduler，回測結束就 `start` 的那一步放在統籌 session 的背景指令裡，換手時跟著消失；回測又在 04:52 被 OOM 結束，scheduler 一直停到 05:15 部署時才起來，約 7.5 小時沒有 monitor、看門狗與 news（[#468 決定](https://github.com/YiCheng0608/stock-lab/issues/468#issuecomment-6646001167)）。所以恢復不靠任何 session：作業自己開關，作業死掉由 serve 解除。
 
-- **作業自己持有**：`backfill`、`backtest`、`events backfill`、`fundamentals backfill`、`revenue backfill`、`instruments repair --apply` 起跑時自己開維護模式，正常結束、例外或 SIGTERM（`docker stop`）都在 `finally` 關掉（[`MaintenanceHold`](../../backend/worker/job.py)）。直接照平常跑，不必先停 scheduler，例如 `docker compose -p <P> exec scheduler python -m worker.cli backtest --start-date … --end-date …`；`exec scheduler` 或 `compose run api` 都一樣，標記檔在同一個 volume。起跑時 stderr 會提示：**預估會跨過 21:30 時，請改在 23:30 後開始**（21:30 的 daily 會被跳過，要等解除才補跑）。
+- **作業自己持有**：`backfill`、`backtest`、`events backfill`、`fundamentals backfill`、`revenue backfill`、`instruments repair --apply`、`strategy-lists backfill`（#1021） 起跑時自己開維護模式，正常結束、例外或 SIGTERM（`docker stop`）都在 `finally` 關掉（[`MaintenanceHold`](../../backend/worker/job.py)）。直接照平常跑，不必先停 scheduler，例如 `docker compose -p <P> exec scheduler python -m worker.cli backtest --start-date … --end-date …`；`exec scheduler` 或 `compose run api` 都一樣，標記檔在同一個 volume。起跑時 stderr 會提示：**預估會跨過 21:30 時，請改在 23:30 後開始**（21:30 的 daily 會被跳過，要等解除才補跑）。
 - **標記檔**：`/data/locks/maintenance`（JSON）。作業持有時記 owner（命令、容器 hostname、PID、token）、開始時間與心跳時間，作業期間每 60 秒更新心跳。取得、心跳、解除、逾時與手動 `on`／`off` 都在 `/data/locks/maintenance.lock` 的 flock 下進行：兩個作業同時起跑只有一個取得，心跳也不會讓 serve 剛解除的標記檔復活。
 - **拒絕起跑**（exit 75，stderr 寫出原因）：有開啟前就在跑的 daily／news／us job 或開盤前檢查（`running_jobs`，preopen 自 #755 起列入；等它結束再跑），維護模式由另一個仍有心跳的作業持有（一次只跑一個回補或回測），或維護模式是手動開的（部署中：`deploy.sh` 會在作業還在跑時把它關掉，所以等部署完成再跑）。其餘情況自動開，不拒絕。
 - **心跳逾時**：作業被 SIGKILL 或 OOM 結束時 `finally` 不會執行。serve 每分鐘檢查一次，心跳超過 10 分鐘沒更新就視為 owner 已死：刪掉標記檔、恢復 daily 與 news，在 `docker logs` 記 `serve maintenance_expired`，在 `maintenance.log` 記一筆 `expired`，看門狗據此在 #1 留言 `maintenance_expired`（[排程看門狗](WATCHDOG.md)）。作業沒有跑完，回補以相同參數重跑即從 manifest 續做。下一個回補或回測遇到心跳已停的標記檔會直接接手（記 `took_over_from`）。反過來，作業還活著卻失去維護模式時（主機睡眠或 VM 暫停後 serve 先醒、判定逾時；或心跳寫不進去），心跳執行緒會在一個週期內發現，記 `lost`，以 SIGUSR1 讓主執行緒丟出 `MaintenanceLost`，作業以 exit 70 結束，不和接著開跑的 daily 並行寫 DB。

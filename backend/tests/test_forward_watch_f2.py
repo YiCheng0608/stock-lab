@@ -58,7 +58,15 @@ FIRST_SIGNAL = date(2026, 11, 23)
 
 
 def test_f2_is_the_frozen_entry():
-    assert list(tool.WATCHES) == ["X4", "H2", "H2-product", "F2", "P2", "A1"]
+    assert list(tool.WATCHES) == [
+        "X4",
+        "H2",
+        "H2-product",
+        "F2",
+        "P2",
+        "A1",
+        "X4-product",
+    ]
     assert tool.WATCHES["F2"] == {
         "kind": "前瞻觀察",
         "source": "round10_research",
@@ -355,8 +363,8 @@ def digests(out: Path) -> dict[str, str]:
 # entry, #949): a change of the definition, the engine, the costs or the report
 # fails here and is a new entry, not an edit.
 F2_DIGESTS = {
-    "summary.md": "c625a70378c47e7bc381582e3685c02ac504e9adb6fbce6c216a83c0a0e7123a",
-    "tables.json": "956df2a4d9ffaf4790fad8696ccd141d85e99f7e98c3ed96255e05b4514a25d6",
+    "summary.md": "3d9682faf5ad6517b4b94903411837ea7952f320c18f790f6d38e9c1abd1ac20",
+    "tables.json": "248d3b6a6f1d5738b3f0661476f8ac1076ed41afe80443e4c0c2fe76c1138a5f",
     "equity.csv": "423cfe3463b238bfc14f3b9c8abb0cfed8d703f4d81fdb1e0cf3e140df140f06",
     "picks.csv": "f4d27f2582cb36b2d99973add2f5c2c8bcf61b5fa09c275847b53000cf5a92fc",
     "trades.csv": "fed8b9cc5f5e7ffb6e34de4afcf2fa31f271af6636bfd61add049d7eeba88b9d",

@@ -6,6 +6,7 @@ import type {
   Dashboard,
   MainstreamResponse,
   H2Response,
+  X4Response,
   DataDate,
   ActionSummary,
   ActionsResponse,
@@ -112,8 +113,11 @@ export const getDataDate = () => get<DataDate>('/data-date')
 export const getCandidates = (date?: string, limit?: number) => get<CandidatesResponse>(candidatesPath(date, limit))
 // 主流族群前 20 (#768): the latest stored list without a date.
 export const getMainstream = (date?: string) => get<MainstreamResponse>(`/mainstream${queryString({ date })}`)
-// 接近年高前 20 (#881/#882): the latest stored H2 list without a date.
-export const getH2 = (date?: string) => get<H2Response>(`/h2${queryString({ date })}`)
+// 接近年高前 20 (#881/#882): the latest stored H2 list without a date; /api/strategy-lists/h2 is /api/h2 with the
+// recent_picks of 「近 60 日入選過」 (#1021).
+export const getH2 = (date?: string) => get<H2Response>(`/strategy-lists/h2${queryString({ date })}`)
+// 盈餘殖利率前 20 (#1016/#1019): the latest stored X4 list without a date.
+export const getX4 = (date?: string) => get<X4Response>(`/strategy-lists/x4${queryString({ date })}`)
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)

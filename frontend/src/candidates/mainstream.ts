@@ -1,42 +1,48 @@
 import type { MainstreamItem, MainstreamResponse } from '../types'
 import { formatDate } from './candidates'
+import { VIEW_PARAM } from './recentPicks'
 
 // 主流族群前 20 (mainstream_v1, #768/#769): the second list beside the today list on the today page. A screen, not a
 // strategy: each row has its groups, its W-session strength, the close and the sparkline, and no price levels (no entry
 // sentence, price ladder, RR or total score; decision #1 6891614350). Copy follows UI_COPY_SPEC §10 主流族群前 20.
 
-// The page's three lists (#882 adds 接近年高前 20, the H2 list; h2.ts).
-export type TodayListKind = 'today' | 'mainstream' | 'h2'
+// The page's four lists (#882 adds 接近年高前 20, the H2 list, h2.ts; #1019 盈餘殖利率前 20, the X4 list, x4.ts).
+export type TodayListKind = 'today' | 'mainstream' | 'h2' | 'x4'
 
 export const LIST_PARAM = 'list'
 export const MAINSTREAM_LIST = 'mainstream'
 export const H2_LIST = 'h2'
+export const X4_LIST = 'x4'
 // The today list row the page opens on (「今日名單 #n」 on a mainstream row links to it): the stock's symbol.
 export const PICK_PARAM = 'pick'
 
 export const TODAY_LIST_TITLE = '今日名單'
 export const MAINSTREAM_TITLE = '主流族群前 20'
 export const H2_TITLE = '接近年高前 20'
+export const X4_TITLE = '盈餘殖利率前 20'
 export const TODAY_LISTS: ReadonlyArray<{ id: TodayListKind; label: string }> = [
   { id: 'today', label: TODAY_LIST_TITLE },
   { id: 'mainstream', label: MAINSTREAM_TITLE },
   { id: 'h2', label: H2_TITLE },
+  { id: 'x4', label: X4_TITLE },
 ]
 
-// The list the page shows: 今日名單 unless the address says ?list=mainstream or ?list=h2 (a reload stays on it); an
-// unknown value shows 今日名單 (#882 decision 7048604437).
+// The list the page shows: 今日名單 unless the address says ?list=mainstream, ?list=h2 or ?list=x4 (a reload stays on
+// it); an unknown value shows 今日名單 (#882 decision 7048604437).
 export function todayListKind(search: URLSearchParams): TodayListKind {
   const value = search.get(LIST_PARAM)
-  return value === MAINSTREAM_LIST ? 'mainstream' : value === H2_LIST ? 'h2' : 'today'
+  return value === MAINSTREAM_LIST ? 'mainstream' : value === H2_LIST ? 'h2' : value === X4_LIST ? 'x4' : 'today'
 }
 
-// The address of another list: ?list=mainstream or ?list=h2, or nothing for the today list (its default). A pick is dropped,
-// so switching back by the tab starts the today list from its default row.
+// The address of another list: ?list=mainstream, ?list=h2 or ?list=x4, or nothing for the today list (its default). A pick is dropped,
+// so switching back by the tab starts the today list from its default row; so is ?view=recent (#1021): a list opens on 當天.
 export function todayListSearch(search: URLSearchParams, kind: TodayListKind): URLSearchParams {
   const next = new URLSearchParams(search)
   next.delete(PICK_PARAM)
+  next.delete(VIEW_PARAM)
   if (kind === 'mainstream') next.set(LIST_PARAM, MAINSTREAM_LIST)
   else if (kind === 'h2') next.set(LIST_PARAM, H2_LIST)
+  else if (kind === 'x4') next.set(LIST_PARAM, X4_LIST)
   else next.delete(LIST_PARAM)
   return next
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
@@ -9,6 +9,8 @@ import '../styles/mainstream.css'
 import { formatDate } from './candidates'
 import { CandidatesSection } from './CandidateViews'
 import { H2Section, h2QueryOptions } from './H2Views'
+import { X4Section, x4QueryOptions } from './X4Views'
+import { recentView, recentViewSearch, type RecentView } from './recentPicks'
 import {
   MAINSTREAM_TITLE,
   PICK_PARAM,
@@ -23,9 +25,9 @@ import {
 } from './mainstream'
 import { ScreenList, errorReason, type ScreenItem } from './ScreenList'
 
-// The today page's lists (#769, #882; DESIGN_SYSTEM §5 候選列表, UI_COPY_SPEC §10 主流族群前 20 and 接近年高前 20): a
-// three-tab switch 「今日名單｜主流族群前 20｜接近年高前 20」 above the list, the same at every width. The address
-// carries ?list=mainstream or ?list=h2, so a reload stays on it; without it the page shows 今日名單, whose rows, order
+// The today page's lists (#769, #882, #1019; DESIGN_SYSTEM §5 候選列表, UI_COPY_SPEC §10 主流族群前 20, 接近年高前 20 and
+// 盈餘殖利率前 20): a four-tab switch 「今日名單｜主流族群前 20｜接近年高前 20｜盈餘殖利率前 20」 above the list, the same
+// at every width. The address carries ?list=mainstream, ?list=h2 or ?list=x4, so a reload stays on it; without it the page shows 今日名單, whose rows, order
 // and lines do not change (page_checks T5–T8, T13).
 
 const LISTS_ID = 'today-list'
@@ -36,7 +38,7 @@ export { MainstreamChart } from './MainstreamChart'
 export type TodayListsProps = {
   today: { data: CandidatesResponse | undefined; loading: boolean; error: unknown }
   renderChart?: (item: CandidateItem) => ReactNode
-  // The K-line card of 主流族群前 20 and 接近年高前 20 (no rule level lines): it reads the stock only.
+  // The K-line card of 主流族群前 20, 接近年高前 20 and 盈餘殖利率前 20 (no rule level lines): it reads the stock only.
   renderMainstreamChart?: (item: ScreenItem) => ReactNode
   wide?: boolean
 }
@@ -46,13 +48,52 @@ export function mainstreamQueryOptions(kind: TodayListKind, fetch: () => Promise
   return { queryKey: ['mainstream', 'latest'] as const, queryFn: fetch, enabled: kind === 'mainstream' }
 }
 
+// The tabs scroll sideways when they do not fit (390px, #1019): the selected one, also when opened from the address
+// (?list=x4), is scrolled into the strip so it is never cut at the edge. Only the strip scrolls, not the page.
+export function revealTab(tab: Element | null) {
+  const strip = tab?.parentElement
+  if (!tab || !strip || strip.scrollWidth <= strip.clientWidth) return
+  const box = tab.getBoundingClientRect()
+  const view = strip.getBoundingClientRect()
+  if (box.right > view.right) strip.scrollLeft += box.right - view.right
+  else if (box.left < view.left) strip.scrollLeft -= view.left - box.left
+}
+
+type StripLike = { scrollLeft: number; scrollWidth: number; clientWidth: number }
+
+// Which sides of the strip have tabs scrolled out: they fade there (styles/mainstream.css), so the strip reads as
+// scrollable without a scrollbar.
+export function tabEdges(strip: StripLike): { left: boolean; right: boolean } {
+  return { left: strip.scrollLeft > 0, right: strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1 }
+}
+
+function markEdges(strip: HTMLElement) {
+  const edges = tabEdges(strip)
+  strip.classList.toggle('tabs-more-left', edges.left)
+  strip.classList.toggle('tabs-more-right', edges.right)
+}
+
 export function TodayListsSection({ today, renderChart, renderMainstreamChart, wide = false }: TodayListsProps) {
   const [search, setSearch] = useSearchParams()
   const kind = todayListKind(search)
   const mainstream = useQuery(mainstreamQueryOptions(kind))
   const h2 = useQuery(h2QueryOptions(kind))
+  const x4 = useQuery(x4QueryOptions(kind))
   const change = (next: TodayListKind) => setSearch(todayListSearch(search, next))
+  const view = recentView(search)
+  const changeView = (next: RecentView) => setSearch(recentViewSearch(search, next), { replace: true })
   const todayDate = today.data?.trading_date ?? null
+  useEffect(() => {
+    const tab = document.getElementById(tabId(LISTS_ID, kind))
+    revealTab(tab)
+    const strip = tab?.parentElement
+    if (!strip) return
+    const update = () => markEdges(strip)
+    update()
+    strip.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => { strip.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
+  }, [kind])
   return (
     <div className="today-lists">
       <Tabs items={TODAY_LISTS} value={kind} onChange={change} label="名單" idPrefix={LISTS_ID} className="tabs-compact today-list-tabs" />
@@ -61,7 +102,9 @@ export function TodayListsSection({ today, renderChart, renderMainstreamChart, w
           ? <CandidatesSection data={today.data} loading={today.loading} error={today.error} renderChart={renderChart} wide={wide} pick={search.get(PICK_PARAM)} />
           : kind === 'mainstream'
             ? <MainstreamSection data={mainstream.data} loading={mainstream.isLoading} error={mainstream.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />
-            : <H2Section data={h2.data} loading={h2.isLoading} error={h2.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />}
+            : kind === 'h2'
+              ? <H2Section data={h2.data} loading={h2.isLoading} error={h2.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} view={view} onViewChange={changeView} />
+              : <X4Section data={x4.data} loading={x4.isLoading} error={x4.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} view={view} onViewChange={changeView} />}
       </div>
     </div>
   )

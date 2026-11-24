@@ -84,7 +84,15 @@ SOURCE_HASHES = {
 
 
 def test_a1_is_round17s_a1_frozen_as_forward_watch():
-    assert list(tool.WATCHES) == ["X4", "H2", "H2-product", "F2", "P2", "A1"]
+    assert list(tool.WATCHES) == [
+        "X4",
+        "H2",
+        "H2-product",
+        "F2",
+        "P2",
+        "A1",
+        "X4-product",
+    ]
     entry = tool.WATCHES["A1"]
     assert entry == {
         "kind": "前瞻觀察",
@@ -435,8 +443,8 @@ def digests(out: Path) -> dict[str, str]:
 # A1's forward outputs on ``a1_db`` (written by the commit that added the
 # entry, #1013): a change of the definition, the engine or the report fails here.
 A1_DIGESTS = {
-    "summary.md": "bb262d98ff009f0516ffe4622f8500bb7bd359feabb1c08e2c1be262b129af3c",
-    "tables.json": "7d532fc0da9f3b83f2de7740655bfa4bcc6e3c19d68107d9ce179331030bb9ad",
+    "summary.md": "b36aee88482e453a7529cbc2c8f0004b40779962fd249f02800924dd04420cd8",
+    "tables.json": "d6df0dcf3e489f3eda2da9c981757f425e9ddbc2882003b7ac950a6ace7fb120",
     "equity.csv": "39d84c2dce620095224b01830c67754459f1cd7de58c34489010e06feb88931c",
     "picks.csv": "682811f9e366786ecb9b1c3c508a90aea3ce7e02c8fe98a1e7d00518183ae166",
     "trades.csv": "16f8f7a09c985498dc579583376643a3d67c04f2079eae1903bad879df4f831c",

@@ -614,6 +614,11 @@ def test_today_shots_include_the_market_page():
         ("today-mainstream", "/?list=mainstream", (1280, 390)),
         # And its third (Issue 882).
         ("today-h2", "/?list=h2", (1280, 390)),
+        # And its fourth (#1019).
+        ("today-x4", "/?list=x4", (1280, 390)),
+        # 近 60 日入選過 of the third and fourth (#1021), selected through ?view=.
+        ("today-h2-recent", "/?list=h2&view=recent", (1280, 390)),
+        ("today-x4-recent", "/?list=x4&view=recent", (1280, 390)),
         ("market", "/market", (1280, 390)),
         ("market-tpex", "/market?index=tpex", (1280,)),
         ("market-tx", "/market?index=tx", (1280,)),
@@ -3747,7 +3752,7 @@ def _t27_run(tmp_path, page=T27_PAGE, payload=None, rows=None, today_day="2026-1
         }
     }
     payloads = {
-        "h2": _h2() if payload is None else payload,
+        "strategy-lists/h2": _h2() if payload is None else payload,
         "dashboard": {"as_of": "2026-10-16T17:30:00+08:00"},
         "candidates": {"trading_date": today_day},
     }
@@ -3841,3 +3846,331 @@ def test_t27_marks_of_another_days_today_list_carry_the_date(tmp_path):
     )
     with pytest.raises(page_checks.Fail, match="第 1 列是"):
         page_checks.t27(_t27_run(tmp_path, today_day="2026-10-19"))
+
+
+# ---- T28: 盈餘殖利率前 20, the today page's fourth list (#1019) ----
+
+
+def _x4(status="computed", items=None, zero_reason=None):
+    if items is None:
+        items = [
+            {
+                "rank": 1,
+                "instrument": {
+                    "exchange": "TWSE",
+                    "symbol": "9101",
+                    "name": "示範晶圓",
+                },
+                "eps_yield_raw": 0.123449,
+                "revenue_yoy": 0.251,
+                "revenue_month": "2026-10",
+                "quarter_eps": {
+                    "quarter": "2026Q3",
+                    "period_end": "2026-09-30",
+                    "eps": 3.21,
+                    "year_before_eps": 2.1,
+                },
+                "today_list": {"rank": 1},
+            },
+            {
+                "rank": 2,
+                "instrument": {
+                    "exchange": "TPEx",
+                    "symbol": "9202",
+                    "name": "示範板卡",
+                },
+                "eps_yield_raw": 0.0805,
+                "revenue_yoy": 0.0312,
+                "revenue_month": "2026-09",
+                "quarter_eps": {
+                    "quarter": "2026Q3",
+                    "period_end": "2026-09-30",
+                    "eps": 1.06,
+                    "year_before_eps": -0.5,
+                },
+                "today_list": None,
+            },
+        ]
+    return {
+        "status": status,
+        "zero_reason": zero_reason,
+        "trading_date": "2026-10-16",
+        "list_size": 20,
+        "universe_count": None if status == "missing" else 1586,
+        "items": items if status == "computed" else [],
+    }
+
+
+T28_DEFINITION = (
+    "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔（通過的不到 20 檔時只放那幾檔）；"
+    "母體 1,586 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期"
+)
+T28_ROWS = (
+    "#1 9101 示範晶圓 上市\n"
+    "盈餘殖利率 12.34% · 營收年增（10 月）+25.10% · 2026Q3 EPS 3.21（去年同季 2.10）\n"
+    "今日名單 #1\n收盤（元）\n360.00\n+1.20%\n"
+    "#2 9202 示範板卡 上櫃\n"
+    "盈餘殖利率 8.05% · 營收年增（9 月）+3.12% · 2026Q3 EPS 1.06（去年同季 -0.50）\n"
+    "收盤（元）\n50.00\n-0.40%\n"
+)
+T28_TABS = "今日名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n接近年高前 20\n盈餘殖利率前 20\n"
+T28_PAGE = (
+    T28_TABS
+    + "盈餘殖利率前 20\n2 檔\n前瞻觀察（未通過驗證）\n"
+    + T28_DEFINITION
+    + "\n"
+    + T28_ROWS
+    + T26_CARD
+    + "熱門族群\n#1\n"
+)
+
+
+def _t28_run(tmp_path, page=T28_PAGE, payload=None, rows=None, today_day="2026-10-16"):
+    metas = {
+        "today-x4": {
+            1280: {"width": 1280, "ready": True},
+            390: {
+                "width": 390,
+                "ready": True,
+                "candidateRows": [T26_ROW_METRICS[0]] * 2 if rows is None else rows,
+            },
+        }
+    }
+    payloads = {
+        "strategy-lists/x4": _x4() if payload is None else payload,
+        "dashboard": {"as_of": "2026-10-16T17:30:00+08:00"},
+        "candidates": {"trading_date": today_day},
+    }
+    return FakeRun(tmp_path, payloads, {"today-x4-1280": page}, metas=metas)
+
+
+def test_t28_passes_on_the_lines_x4_json_gives(tmp_path):
+    assert page_checks.t28(_t28_run(tmp_path)) == (
+        "`盈餘殖利率前 20` 與頁面同日 2026/10/16，不另標、`2 檔`、`前瞻觀察（未通過驗證）`、定義行；"
+        "2 列的名次、盈餘殖利率、營收年增與 EPS、`今日名單 #n` 1 行 = x4.json；"
+        "沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
+    )
+
+
+def test_t28_mirrors_the_frontend_helpers():
+    # x4.ts x4Definition without a universe; x4LineText with every value missing.
+    assert page_checks.x4_definition({"list_size": 20, "universe_count": None}) == (
+        "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔（通過的不到 20 檔時只放那幾檔）；"
+        "20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期"
+    )
+    assert page_checks.x4_figures({}) == "盈餘殖利率 — · 營收年增 — · EPS —"
+    assert page_checks.x4_number(-0.004) == "0.00"
+
+
+@pytest.mark.parametrize(
+    ("page", "message"),
+    [
+        # The badge missing, moved before the count, or a research word besides it.
+        (T28_PAGE.replace("前瞻觀察（未通過驗證）\n", ""), "標題列沒有"),
+        (
+            T28_PAGE.replace(
+                "2 檔\n前瞻觀察（未通過驗證）\n", "前瞻觀察（未通過驗證）\n2 檔\n"
+            ),
+            "預期 `2 檔`",
+        ),
+        (
+            T28_PAGE.replace(
+                "收盤（元）\n360.00", "X4 回測 t 值 3.1\n收盤（元）\n360.00"
+            ),
+            "X4",
+        ),
+        (
+            T28_PAGE.replace("收盤（元）\n50.00", "已通過驗證\n收盤（元）\n50.00"),
+            "驗證",
+        ),
+        (
+            T28_PAGE.replace("收盤（元）\n360.00", "停損 300\n收盤（元）\n360.00"),
+            "停損",
+        ),
+        (T28_PAGE.replace("最近 130 根日線", "規則價位線：三條虛線"), "規則價位線"),
+        # A figure rounded, signed or missing its month or quarter.
+        (T28_PAGE.replace("盈餘殖利率 12.34%", "盈餘殖利率 +12.34%"), "第 1 列是"),
+        (T28_PAGE.replace("營收年增（9 月）", "營收年增"), "第 2 列是"),
+        (T28_PAGE.replace("（去年同季 -0.50）", "（去年同季 -0.5）"), "第 2 列是"),
+        (T28_PAGE.replace("今日名單 #1\n", ""), "第 1 列是"),
+        (T28_PAGE.replace("母體 1,586 檔", "母體 1586 檔"), "定義行是"),
+        (T28_PAGE.replace("2 檔\n", "20 檔\n"), "預期 `2 檔`"),
+    ],
+)
+def test_t28_fails(tmp_path, page, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t28(_t28_run(tmp_path, page))
+
+
+def test_t28_zero_without_a_reason_reads_the_universe(tmp_path):
+    # x4.ts x4State: no zero_reason and members in the universe is none_passed.
+    line = "當日沒有月營收年增與 EPS 年增都為正的股票"
+    page = (
+        T28_TABS + "盈餘殖利率前 20\n前瞻觀察（未通過驗證）\n" + line + "\n熱門族群\n"
+    )
+    payload = _x4("zero")
+    assert payload["zero_reason"] is None and payload["universe_count"] == 1586
+    assert page_checks.t28(_t28_run(tmp_path, page, payload=payload)) == (
+        f"zero：顯示 `{line}`，沒有名次列"
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "line"),
+    [
+        ("missing", None, "尚無盈餘殖利率名單"),
+        ("zero", "universe_empty", "當日沒有股票進入母體"),
+        ("zero", "none_passed", "當日沒有月營收年增與 EPS 年增都為正的股票"),
+    ],
+)
+def test_t28_empty_states(tmp_path, status, reason, line):
+    page = (
+        T28_TABS + "盈餘殖利率前 20\n前瞻觀察（未通過驗證）\n" + line + "\n熱門族群\n"
+    )
+    payload = _x4(status, zero_reason=reason)
+    assert page_checks.t28(_t28_run(tmp_path, page, payload=payload)) == (
+        f"{status}：顯示 `{line}`，沒有名次列"
+    )
+    with pytest.raises(page_checks.Fail, match=f"缺 `{line}`"):
+        page_checks.t28(_t28_run(tmp_path, page.replace(line, "x"), payload=payload))
+    with pytest.raises(page_checks.Fail, match="標題列沒有"):
+        page_checks.t28(
+            _t28_run(
+                tmp_path, page.replace("前瞻觀察（未通過驗證）\n", ""), payload=payload
+            )
+        )
+
+
+# ---- T29: 近 60 日入選過 (#1021) ----
+
+
+def _recent(days=3, since="2026-10-14"):
+    def row(symbol, name, exchange, count, first, last, rank):
+        return {
+            "instrument": {"exchange": exchange, "symbol": symbol, "name": name},
+            "count": count,
+            "first_date": first,
+            "last_date": last,
+            "today_rank": rank,
+        }
+
+    return {
+        "sessions": 60,
+        "days": days,
+        "since": since,
+        # Out of order: the page sorts them (recentPickRows).
+        "items": [
+            row("9206", "示範轉市", "TPEx", 2, "2026-10-14", "2026-10-15", None),
+            row("9101", "示範晶圓", "TWSE", 3, "2026-10-14", "2026-10-16", 1),
+            row("9202", "示範板卡", "TPEx", 2, "2026-10-15", "2026-10-16", 2),
+        ],
+    }
+
+
+T29_ROWS = (
+    "9101 示範晶圓 上市\n入選 3 次 · 首次 10/14 · 最近 10/16\n"
+    "9202 示範板卡 上櫃\n入選 2 次 · 首次 10/15 · 最近 10/16\n"
+    "9206 示範轉市 上櫃\n入選 2 次 · 首次 10/14 · 最近 10/15\n今日未入選\n"
+)
+
+
+def _t29_page(title, head, rows=T29_ROWS, window="近 3 個交易日（名單從 10/14 起）"):
+    return (
+        f"今日名單\n主流族群前 20\n接近年高前 20\n盈餘殖利率前 20\n{title}\n{head}"
+        f"當天\n近 60 日入選過 3 檔\n{window}\n{rows}熱門族群\n#1\n"
+    )
+
+
+def _t29_run(tmp_path, h2_page=None, x4_page=None, recent=None):
+    payloads = {
+        "strategy-lists/h2": {**_h2(), "recent_picks": recent or _recent()},
+        "strategy-lists/x4": {**_x4(), "recent_picks": recent or _recent()},
+    }
+    pages = {
+        "today-h2-recent-1280": h2_page or _t29_page("接近年高前 20", "3 檔\n"),
+        "today-x4-recent-1280": x4_page
+        or _t29_page("盈餘殖利率前 20", "2 檔\n前瞻觀察（未通過驗證）\n"),
+    }
+    return FakeRun(tmp_path, payloads, pages)
+
+
+def test_t29_passes_on_the_lines_recent_picks_gives(tmp_path):
+    assert page_checks.t29(_t29_run(tmp_path)) == (
+        "today-h2-recent：`近 60 日入選過 3 檔`、`近 3 個交易日（名單從 10/14 起）`、"
+        "3 列入選次數與日期 = h2.json、`今日未入選` 1 行；"
+        "today-x4-recent：`近 60 日入選過 3 檔`、`近 3 個交易日（名單從 10/14 起）`、"
+        "3 列入選次數與日期 = x4.json、`今日未入選` 1 行"
+    )
+
+
+def test_t29_mirrors_the_frontend_copy():
+    assert (
+        page_checks.recent_window_text({"sessions": 60, "days": 60, "since": "x"})
+        == "近 60 個交易日"
+    )
+    assert [
+        r["instrument"]["symbol"] for r in page_checks.recent_order(_recent()["items"])
+    ] == [
+        "9101",
+        "9202",
+        "9206",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("h2_page", "message"),
+    [
+        # The rows in the API's order, not the page's.
+        (
+            _t29_page(
+                "接近年高前 20",
+                "3 檔\n",
+                rows=T29_ROWS.split("9202")[0]
+                + "9206 示範轉市 上櫃\n入選 2 次 · 首次 10/14 · 最近 10/15\n今日未入選\n"
+                + "9202 示範板卡 上櫃\n入選 2 次 · 首次 10/15 · 最近 10/16\n",
+            ),
+            "列是",
+        ),
+        # 「今日未入選」 missing, a 60 the lists do not have, a position word, a rank.
+        (
+            _t29_page(
+                "接近年高前 20", "3 檔\n", rows=T29_ROWS.replace("今日未入選\n", "")
+            ),
+            "今日未入選",
+        ),
+        (
+            _t29_page("接近年高前 20", "3 檔\n", window="近 60 個交易日"),
+            "缺 `近 3 個交易日",
+        ),
+        (
+            _t29_page("接近年高前 20", "3 檔\n", rows=T29_ROWS + "持有中\n"),
+            "持有",
+        ),
+        (
+            _t29_page(
+                "接近年高前 20", "3 檔\n", rows="#1 9101 示範晶圓 上市\n" + T29_ROWS
+            ),
+            "名次列",
+        ),
+        (
+            _t29_page("接近年高前 20", "3 檔\n").replace(
+                "近 60 日入選過 3 檔", "近 60 日入選過"
+            ),
+            "選中的膠囊",
+        ),
+    ],
+)
+def test_t29_fails(tmp_path, h2_page, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t29(_t29_run(tmp_path, h2_page=h2_page))
+
+
+def test_t29_without_a_list_in_the_window(tmp_path):
+    page = "今日名單\n接近年高前 20\n接近年高前 20\n3 檔\n熱門族群\n"
+    run = _t29_run(
+        tmp_path,
+        h2_page=page,
+        x4_page=page.replace("接近年高前 20", "盈餘殖利率前 20"),
+        recent={"sessions": 60, "days": 0, "since": None, "items": []},
+    )
+    assert "沒有近 60 日的名單" in page_checks.t29(run)

@@ -789,8 +789,19 @@ OWNERS: dict[str, tuple[str, str]] = {
 def today_shots(run: Run) -> list[Shot]:
     # The market page (/market, Issue 549) was split off the today page and is checked with it (features/today.md);
     # the page's second list, 主流族群前 20, is its own shot (?list=mainstream, Issue 769), and so is its
-    # third, 接近年高前 20 (?list=h2, Issue 882).
-    return [TODAY, TODAY_MAINSTREAM, TODAY_H2, MARKET, MARKET_TPEX, MARKET_TX]
+    # third, 接近年高前 20 (?list=h2, Issue 882), and its fourth, 盈餘殖利率前 20 (?list=x4, #1019).
+    # 近 60 日入選過 of the third and fourth (?view=recent, #1021) are two more.
+    return [
+        TODAY,
+        TODAY_MAINSTREAM,
+        TODAY_H2,
+        TODAY_X4,
+        TODAY_H2_RECENT,
+        TODAY_X4_RECENT,
+        MARKET,
+        MARKET_TPEX,
+        MARKET_TX,
+    ]
 
 
 def news_shots(run: Run) -> list[Shot]:
@@ -2348,9 +2359,12 @@ def mainstream_row_lines(
 
 @dataclass(frozen=True)
 class ScreenList:
-    """One of the today page's lists without price levels (T26 主流族群前 20, T27 接近年高前 20):
-    the shot, its API file, the title, the empty-state titles, the definition and a row's lines,
-    and the words that must not be on it. ``label`` names it in the messages."""
+    """One of the today page's lists without price levels (T26 主流族群前 20, T27 接近年高前 20,
+    T28 盈餘殖利率前 20): the shot, its API path, the title, the empty-state titles (``zero``, or
+    by the payload's ``zero_reason`` when it has a key here), the definition and a row's lines,
+    and the words that must not be on it. ``label`` names it in the messages; ``file`` is the
+    saved API file (``<api>.json`` without it); ``head_badge`` is a badge closing the head line,
+    after the count (and the only line after the title in an empty state)."""
 
     shot: Shot
     api: str
@@ -2360,14 +2374,16 @@ class ScreenList:
     row_lines: Callable[[dict, dict, str | None], list[str]]
     words: tuple[str, ...]
     label: str
+    file: str | None = None
+    head_badge: str | None = None
 
 
 def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
-    """The checks T26 and T27 share (frontend ScreenList.tsx): the head, the definition, each
+    """The checks T26, T27 and T28 share (frontend ScreenList.tsx): the head, the definition, each
     row's lines, 「今日名單 #n」, no price-level word or rule level line, and the 390 close column.
     Returns the empty state's summary, or (badge, rows, marks)."""
 
-    payload = run.get(spec.api, f"{spec.api}.json")
+    payload = run.get(spec.api, spec.file or f"{spec.api}.json")
     text = run.text(spec.shot)
     items = payload.get("items") or []
     found = [n for n, line in enumerate(text.lines) if line == spec.title]
@@ -2375,10 +2391,26 @@ def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
     expect(len(found) >= 2, f"缺標題 `{spec.title}`（分頁之外的整行）")
     i = found[-1]
     status = payload.get("status")
-    if status != "computed" or not items:
-        title = spec.empty.get(
-            "missing" if status == "missing" else "zero", spec.empty["zero"]
+    if spec.head_badge:
+        head = text.lines[i + 1 : i + 4]
+        expect(
+            spec.head_badge in head,
+            f"`{spec.title}` 標題列沒有 `{spec.head_badge}`：{head}",
         )
+    if status != "computed" or not items:
+        reason = payload.get("zero_reason")
+        universe = payload.get("universe_count")
+        if reason is None and isinstance(universe, int) and universe > 0:
+            # x4.ts x4State: without a reason, members in the universe mean none passed.
+            reason = "none_passed"
+        key = (
+            "missing"
+            if status == "missing"
+            else reason
+            if isinstance(reason, str) and reason in spec.empty
+            else "zero"
+        )
+        title = spec.empty.get(key, spec.empty["zero"])
         expect(
             text.has(title),
             f"{spec.api}.json {status}、items {len(items)}，缺 `{title}`",
@@ -2396,6 +2428,12 @@ def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
         text.after(i, k) == count_line,
         f"`{spec.title}` 後第 {k} 行是 {text.after(i, k)!r}，預期 `{count_line}`",
     )
+    if spec.head_badge:
+        expect(
+            text.after(i, k + 1) == spec.head_badge,
+            f"`{count_line}` 後是 {text.after(i, k + 1)!r}，預期 `{spec.head_badge}`",
+        )
+        k += 1
     definition = spec.definition(payload)
     expect(
         text.after(i, k + 1) == definition,
@@ -2422,7 +2460,15 @@ def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
     # The list and the chart beside it, up to the hot groups under them.
     end = text.find("熱門族群", i)
     after = text.lines[i : end if end > i else len(text.lines)]
-    words = sorted({word for line in after for word in spec.words if word in line})
+    words = sorted(
+        {
+            word
+            for line in after
+            if line != spec.head_badge
+            for word in spec.words
+            if word in line
+        }
+    )
     expect(not words, f"{spec.label}出現點位用詞 {words}")
     expect(
         not any(line.startswith(CHART_LEVELS_LINE) for line in after),
@@ -2521,7 +2567,9 @@ def h2_row_lines(item: dict, payload: dict, other_day: str | None = None) -> lis
 
 H2_LIST = ScreenList(
     shot=TODAY_H2,
-    api="h2",
+    # The page reads /api/strategy-lists/h2 since #1021 (/api/h2 with recent_picks).
+    api="strategy-lists/h2",
+    file="h2.json",
     title=H2_TITLE,
     empty=H2_EMPTY,
     definition=h2_definition,
@@ -2540,8 +2588,227 @@ def t27(run: Run) -> str:
         return result
     badge, rows, marks = result
     return (
-        f"{badge}、`{len(run.get('h2', 'h2.json').get('items') or [])} 檔`、定義行；{rows} 列的名次、"
+        f"{badge}、`{len(run.get('strategy-lists/h2', 'h2.json').get('items') or [])} 檔`、定義行；{rows} 列的名次、"
         f"距一年高點與 `今日名單 #n` {marks} 行 = h2.json；沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
+    )
+
+
+# ---- T28: 盈餘殖利率前 20, the today page's fourth list (#1019; UI_COPY_SPEC §10, decisions #1 7106346106, 7114503228) ----
+# Mirrors frontend/src/candidates/x4.ts (x4Definition, x4LineParts, x4State, X4_WATCH_BADGE) and X4Views.tsx's
+# line structure: change them together.
+TODAY_X4 = Shot("today-x4", "/?list=x4")
+X4_TITLE = "盈餘殖利率前 20"
+X4_WATCH_BADGE = "前瞻觀察（未通過驗證）"
+X4_EMPTY = {
+    "missing": "尚無盈餘殖利率名單",
+    "zero": "當日沒有股票進入母體",
+    "none_passed": "當日沒有月營收年增與 EPS 年增都為正的股票",
+}
+# x4.ts X4_MIN_AVERAGE_LOTS, X4_PERIOD_SESSIONS: not in the API.
+X4_MIN_AVERAGE_LOTS = 1000
+X4_PERIOD_SESSIONS = 60
+# Only the head badge names the research status (decisions #1 7106346106): no research code, numbers or t.
+X4_LEVEL_WORDS = MAINSTREAM_LEVEL_WORDS + (
+    "持有",
+    "回測",
+    "t 值",
+    "X4",
+    "H2",
+    "研究",
+    "勝率",
+    "驗證",
+)
+
+
+def x4_definition(payload: dict) -> str:
+    universe = payload.get("universe_count")
+    count = f"母體 {universe:,} 檔，" if isinstance(universe, int) else ""
+    return (
+        "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）"
+        f"最高的 {payload['list_size']} 檔（通過的不到 {payload['list_size']} 檔時只放那幾檔）；{count}20 日均量 {X4_MIN_AVERAGE_LOTS:,} 張以上的上市櫃股票；"
+        f"以入選後 {X4_PERIOD_SESSIONS} 個交易日為觀察期"
+    )
+
+
+def x4_number(value: float | None, digits: int = 2) -> str:
+    """x4.ts x4YieldText / epsText: fixed decimals, no sign on a rise, — without a value."""
+
+    if value is None:
+        return "—"
+    rounded = round(value, digits)
+    return f"{0.0 if rounded == 0 else rounded:.{digits}f}"
+
+
+def x4_figures(item: dict) -> str:
+    """x4.ts x4LineText: 「盈餘殖利率 12.34% · 營收年增（10 月）+25.10% · 2026Q3 EPS 3.21（去年同季 2.10）」."""
+
+    raw = item.get("eps_yield_raw")
+    yield_text = "—" if raw is None else f"{x4_number(raw * 100)}%"
+    month = item.get("revenue_month")
+    revenue = f"營收年增（{int(month[5:7])} 月）" if month else "營收年增 "
+    quarter = item.get("quarter_eps")
+    eps = (
+        f"{quarter['quarter']} EPS {x4_number(quarter.get('eps'))}"
+        f"（去年同季 {x4_number(quarter.get('year_before_eps'))}）"
+        if quarter
+        else "EPS —"
+    )
+    return f"盈餘殖利率 {yield_text} · {revenue}{signed_percent(item.get('revenue_yoy'))} · {eps}"
+
+
+def x4_row_lines(item: dict, payload: dict, other_day: str | None = None) -> list[str]:
+    """A row's first lines: the title (no group part), the figures line, then 「今日名單 #n」 when
+    it is on the today list (dated when the today list is of another day)."""
+
+    instrument = item["instrument"]
+    market = EXCHANGE_LABELS.get(instrument["exchange"], "市場待核實")
+    lines = [
+        f"#{item['rank']} {instrument['symbol']} {instrument['name']} {market}",
+        x4_figures(item),
+    ]
+    if item.get("today_list"):
+        mark = f"今日名單 #{item['today_list']['rank']}"
+        lines.append(f"{slash(other_day)} {mark}" if other_day else mark)
+    return lines
+
+
+X4_LIST = ScreenList(
+    shot=TODAY_X4,
+    api="strategy-lists/x4",
+    title=X4_TITLE,
+    empty=X4_EMPTY,
+    definition=x4_definition,
+    row_lines=x4_row_lines,
+    words=X4_LEVEL_WORDS,
+    label="第四份名單",
+    file="x4.json",
+    head_badge=X4_WATCH_BADGE,
+)
+
+
+@check("today", "T28")
+def t28(run: Run) -> str:
+    """#1019: ?list=x4 shows x4.json: the head and its warning badge, the definition, each row's lines, no price
+    level or research word besides the badge."""
+
+    result = screen_list(run, X4_LIST)
+    if isinstance(result, str):
+        return result
+    badge, rows, marks = result
+    return (
+        f"{badge}、`{len(run.get('strategy-lists/x4', 'x4.json').get('items') or [])} 檔`、"
+        f"`{X4_WATCH_BADGE}`、定義行；{rows} 列的名次、盈餘殖利率、營收年增與 EPS、`今日名單 #n` {marks} 行 = x4.json；"
+        "沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
+    )
+
+
+# ---- T29: 近 60 日入選過 of 接近年高前 20 and 盈餘殖利率前 20 (#1021; UI_COPY_SPEC §10, decision #1 7114503228) ----
+# Mirrors frontend/src/candidates/recentPicks.ts (recentWindowText, recentPickText, recentPickRows, RECENT_NOT_TODAY)
+# and RecentPicksViews.tsx's line structure: change them together.
+TODAY_H2_RECENT = Shot("today-h2-recent", "/?list=h2&view=recent")
+TODAY_X4_RECENT = Shot("today-x4-recent", "/?list=x4&view=recent")
+RECENT_NOT_TODAY = "今日未入選"
+RECENT_LINE = re.compile(r"^入選 [0-9,]+ 次 · 首次 ")
+# Days listed and how often, nothing of a position or an order (#1021 scope 2).
+RECENT_WORDS = ("持有", "買進", "賣出", "該賣", "權重", "部位")
+
+
+def month_day(day: str | None) -> str:
+    return f"{day[5:7]}/{day[8:10]}" if day else "—"
+
+
+def recent_window_text(picks: dict) -> str:
+    if picks["days"] >= picks["sessions"]:
+        return f"近 {picks['sessions']} 個交易日"
+    return f"近 {picks['days']} 個交易日（名單從 {month_day(picks.get('since'))} 起）"
+
+
+def recent_row_lines(row: dict) -> list[str]:
+    instrument = row["instrument"]
+    market = EXCHANGE_LABELS.get(instrument["exchange"], "市場待核實")
+    lines = [
+        f"{instrument['symbol']} {instrument['name']} {market}",
+        f"入選 {row['count']} 次 · 首次 {month_day(row['first_date'])} · 最近 {month_day(row['last_date'])}",
+    ]
+    if row.get("today_rank") is None:
+        lines.append(RECENT_NOT_TODAY)
+    return lines
+
+
+def recent_order(rows: list[dict]) -> list[dict]:
+    """recentPickRows: the most often first, then the latest listed, then the symbol."""
+
+    rows = sorted(
+        rows,
+        key=lambda row: (row["instrument"]["symbol"], row["instrument"]["exchange"]),
+    )
+    rows.sort(key=lambda row: row["last_date"], reverse=True)
+    return sorted(rows, key=lambda row: -row["count"])
+
+
+def recent_view(run: Run, shot: Shot, api: str, file: str, title: str) -> str:
+    payload = run.get(api, file)
+    picks = payload.get("recent_picks")
+    text = run.text(shot)
+    found = [n for n, line in enumerate(text.lines) if line == title]
+    expect(len(found) >= 2, f"{shot.name} 缺標題 `{title}`（分頁之外的整行）")
+    i = found[-1]
+    if payload.get("status") == "missing" or not picks or not picks.get("days"):
+        expect(
+            text.find_where(lambda line: RECENT_LINE.match(line) is not None, i) < 0,
+            f"{api} 沒有近 60 日的名單卻有入選列",
+        )
+        return f"{shot.name}：沒有近 60 日的名單，沒有膠囊與入選列"
+    items = picks.get("items") or []
+    chip = f"近 60 日入選過 {len(items):,} 檔"
+    expect(text.find(chip, i) > i, f"{shot.name} 缺選中的膠囊 `{chip}`")
+    window = recent_window_text(picks)
+    w = text.find(window, i)
+    expect(w > i, f"{shot.name} 缺 `{window}`")
+    rows = [n for n, line in enumerate(text.lines) if n > w and RECENT_LINE.match(line)]
+    expect(
+        len(rows) == len(items),
+        f"{shot.name} 入選列 {len(rows)}，recent_picks.items {len(items)}",
+    )
+    for row, item in zip(rows, recent_order(items)):
+        want = recent_row_lines(item)
+        got = text.lines[row - 1 : row - 1 + len(want)]
+        expect(got == want, f"{shot.name} 列是 {got}，預期 {want}（{text.at(row)}）")
+    marks = text.count(lambda line: line == RECENT_NOT_TODAY)
+    off = sum(1 for item in items if item.get("today_rank") is None)
+    expect(
+        marks == off,
+        f"{shot.name} `{RECENT_NOT_TODAY}` {marks} 行，today_rank 為 null {off} 筆",
+    )
+    expect(
+        text.find_where(lambda line: CANDIDATE_ROW.match(line) is not None, i) < 0,
+        f"{shot.name} 近 60 日入選過仍有名次列",
+    )
+    end = text.find("熱門族群", i)
+    words = sorted(
+        {
+            word
+            for line in text.lines[i : end if end > i else len(text.lines)]
+            for word in RECENT_WORDS
+            if word in line
+        }
+    )
+    expect(not words, f"{shot.name} 出現 {'、'.join(words)}")
+    return f"{shot.name}：`{chip}`、`{window}`、{len(rows)} 列入選次數與日期 = {file}、`{RECENT_NOT_TODAY}` {marks} 行"
+
+
+@check("today", "T29")
+def t29(run: Run) -> str:
+    """#1021: ?list=h2&view=recent and ?list=x4&view=recent show recent_picks: the pressed chip, the window line,
+    each stock's 「入選 k 次 · 首次 · 最近」 in recentPickRows' order, 「今日未入選」 off the day's list, no
+    position word."""
+
+    return "；".join(
+        recent_view(run, shot, api, file, title)
+        for shot, api, file, title in (
+            (TODAY_H2_RECENT, "strategy-lists/h2", "h2.json", H2_TITLE),
+            (TODAY_X4_RECENT, "strategy-lists/x4", "x4.json", X4_TITLE),
+        )
     )
 
 

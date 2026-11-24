@@ -278,24 +278,25 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 **每月流程**（統籌）
 1. 每月第一個交易日之後的白天（不在台北 21:30～23:30），以 `copy_db.py` 複製唯讀副本到任務 volume（空閒記憶體 ≥ 5 GB）。
 2. 跑上面的命令（`--window forward`）。剛複製完時，容器看到的可用記憶體會被頁面快取吃掉（2026-11-14 試跑讀到 0.1 GB，被 `--min-free-gb 2` 擋下）。先在主機確認空閒 ≥ 5 GB，再加 `--min-free-gb 0`，與 #689 相同；試跑耗時 3 秒，峰值 0.2 GB。
-3. 對同一份副本，每個前瞻監測對象（[前瞻監測與下架](#前瞻監測與下架)的對象清單）各跑一次它的入口，`--watch` 給 `WATCHES` 的鍵，目前是 X4、H2、H2-product、F2、P2 與 A1（記憶體同上；F2、P2 與 A1 從副本的第一天讀起，比其他三個久，P2 在 2026-11-23 的副本上試跑 35 秒、峰值 0.32 GB，A1 的見 [#1013](https://github.com/YiCheng0608/stock-lab/issues/1013)）：
+3. 對同一份副本，每個前瞻監測對象（[前瞻監測與下架](#前瞻監測與下架)的對象清單）各跑一次它的入口，`--watch` 給 `WATCHES` 的鍵，目前是 X4、H2、H2-product、F2、P2、A1 與 X4-product（記憶體同上；F2、P2 與 A1 從副本的第一天讀起，比其他四個久，P2 在 2026-11-23 的副本上試跑 35 秒、峰值 0.32 GB，A1 的見 [#1013](https://github.com/YiCheng0608/stock-lab/issues/1013)）：
    - `python tools/research/forward_watch.py --db <副本> --watch X4 --out <目錄>/X4 --min-free-gb 0`
    - `python tools/research/forward_watch.py --db <副本> --watch H2 --out <目錄>/H2 --min-free-gb 0`
    - `python tools/research/forward_watch.py --db <副本> --watch H2-product --out <目錄>/H2-product --min-free-gb 0`
    - `python tools/research/forward_watch.py --db <副本> --watch F2 --out <目錄>/F2 --min-free-gb 0`
    - `python tools/research/forward_watch.py --db <副本> --watch P2 --out <目錄>/P2 --min-free-gb 0`
    - `python tools/research/forward_watch.py --db <副本> --watch A1 --out <目錄>/A1 --min-free-gb 0`
-4. 原始輸出：H1 推 `pr-assets/691` 的 `run-<YYYYMMDD>/`，前瞻監測對象推 `pr-assets/868` 的 `run-<YYYYMMDD>/<WATCHES 的鍵>/`（X4、H2、H2-product、F2、P2、A1 各一個子目錄，F2 的是 `pr-assets/868/run-<YYYYMMDD>/F2/`，P2 的是 `pr-assets/868/run-<YYYYMMDD>/P2/`，A1 的是 `pr-assets/868/run-<YYYYMMDD>/A1/`；兩列 H2 的代號相同，子目錄用鍵分開）。
+   - `python tools/research/forward_watch.py --db <副本> --watch X4-product --out <目錄>/X4-product --min-free-gb 0`
+4. 原始輸出：H1 推 `pr-assets/691` 的 `run-<YYYYMMDD>/`，前瞻監測對象推 `pr-assets/868` 的 `run-<YYYYMMDD>/<WATCHES 的鍵>/`（X4、H2、H2-product、F2、P2、A1、X4-product 各一個子目錄，F2 的是 `pr-assets/868/run-<YYYYMMDD>/F2/`，P2 的是 `pr-assets/868/run-<YYYYMMDD>/P2/`，A1 的是 `pr-assets/868/run-<YYYYMMDD>/A1/`；兩列 H2、兩列 X4 的代號各自相同，子目錄用鍵分開）。
 5. 在追蹤 Issue「H1 前瞻驗證月報」（[#699](https://github.com/YiCheng0608/stock-lab/issues/699)）留言，H1 與每個對象各一則：
    - **H1**：第一個列對加權指數的超額，再貼 `summary.md` 的判定與 pr-assets 連結。滿 250 日的那一則照常寫出判定，標明只當紀錄、不改 H1 成立與否，不另在 #1 回報。
-   - **前瞻監測對象**：第一行寫「`<代號>`（前瞻觀察，只當紀錄）」、「`<代號>`（通過驗證，只當紀錄）」或「`<代號>`（已進產品，監測）」，目前是「`X4`（前瞻觀察，只當紀錄）」、「`H2`（通過驗證，只當紀錄）」、「`H2`（已進產品，監測）」（鍵 `H2-product`）、「`F2`（前瞻觀察，只當紀錄）」、「`P2`（前瞻觀察，只當紀錄）」與「`A1`（前瞻觀察，只當紀錄）」（代號用 `summary.md` 第一行的，不寫鍵）；接著照 `summary.md` 開頭三行的順序貼：對加權指數的超額日均與 t、對母體的超額日均、t 與累積日數、判定，最後是 pr-assets 連結。F2 還沒有名單的月份（正式 DB 個股日線不足 721 根，見[前瞻監測與下架](#前瞻監測與下架)的對象清單），第一行之後加一句「本月沒有名單（`vol_720` 缺值 100%，個股日線不足 721 根）」，數字照列；第一次出現名單的那個月，寫明第一個有名單的訊號日（`picks.csv` 的第一列）。P2 與 A1 在起日後的第一個事件日（兩個都是 2027-03-31）以前，判定照 `summary.md` 寫「樣本不足（起日後還沒有事件日）」與下一個事件日，數字照列。未滿 60 日的判定寫「樣本不足（累積 X／60 日）」，數字照列、標明不是判定。判到「輸給基準」之後的動作依類別（[前瞻監測與下架](#前瞻監測與下架)的「判定之後」）：前瞻觀察只記錄，不在 #1 提案；通過驗證的對象，統籌在 #1 的進產品提案補一則（事實，不是下架提案）；已進產品的策略，統籌另在 #1 提案下架。
+   - **前瞻監測對象**：第一行寫「`<代號>`（前瞻觀察，只當紀錄）」、「`<代號>`（通過驗證，只當紀錄）」或「`<代號>`（已進產品，監測）」，目前是「`X4`（前瞻觀察，只當紀錄）」、「`H2`（通過驗證，只當紀錄）」、「`H2`（已進產品，監測）」（鍵 `H2-product`）、「`F2`（前瞻觀察，只當紀錄）」、「`P2`（前瞻觀察，只當紀錄）」、「`A1`（前瞻觀察，只當紀錄）」與「`X4`（已進產品，監測）」（鍵 `X4-product`）（代號用 `summary.md` 第一行的，不寫鍵）；接著照 `summary.md` 開頭三行的順序貼：對加權指數的超額日均與 t、對母體的超額日均、t 與累積日數、判定，最後是 pr-assets 連結。F2 還沒有名單的月份（正式 DB 個股日線不足 721 根，見[前瞻監測與下架](#前瞻監測與下架)的對象清單），第一行之後加一句「本月沒有名單（`vol_720` 缺值 100%，個股日線不足 721 根）」，數字照列；第一次出現名單的那個月，寫明第一個有名單的訊號日（`picks.csv` 的第一列）。P2 與 A1 在起日後的第一個事件日（兩個都是 2027-03-31）以前，判定照 `summary.md` 寫「樣本不足（起日後還沒有事件日）」與下一個事件日，數字照列。未滿 60 日的判定寫「樣本不足（累積 X／60 日）」，數字照列、標明不是判定。判到「輸給基準」之後的動作依類別（[前瞻監測與下架](#前瞻監測與下架)的「判定之後」）：前瞻觀察只記錄，不在 #1 提案；通過驗證的對象，統籌在 #1 的進產品提案補一則（事實，不是下架提案）；已進產品的策略，統籌另在 #1 提案下架。
 6. 刪副本並讀回。
 
 ## 新策略探索
 
 這一段回答：歷史回補（[#692](https://github.com/YiCheng0608/stock-lab/issues/692)）之後，怎麼在長歷史上找有優勢的策略而不自己騙自己（[#697](https://github.com/YiCheng0608/stock-lab/issues/697)，規則在統籌決定 [6873866312](https://github.com/YiCheng0608/stock-lab/issues/697#issuecomment-6873866312) 時固定，看回補資料前不改；依據使用者決定 [6872448519](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6872448519) 第 3 項；進產品的順序與中間結果由使用者決定 [6880114734](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880114734) 改版，[#721](https://github.com/YiCheng0608/stock-lab/issues/721)，同樣在看回補資料前寫死）。不再修補現行兩條進場規則；每個假設先登記、寫死，再依序過探索與驗證，通過就可以提案進產品。只產報告，不改產品。
 
-**標準**：扣成本後期望值為正，且探索、驗證兩段都贏過母體；勝率只列出。歷史上通過（探索段＋只跑一次的驗證段）就可以提案進產品，由使用者決定；前瞻不再是門檻，是進產品之後的持續監測，判到明顯輸給母體就提案下架（[前瞻監測與下架](#前瞻監測與下架)）。驗證段贏母體但不顯著的記「前瞻觀察」，只當紀錄，不算通過、不進產品。沒有通過的假設記「這個假設沒有通過」，不放寬標準、不回頭調參數。
+**標準**：扣成本後期望值為正，且探索、驗證兩段都贏過母體；勝率只列出。歷史上通過（探索段＋只跑一次的驗證段）就可以提案進產品，由使用者決定；前瞻不再是門檻，是進產品之後的持續監測，判到明顯輸給母體就提案下架（[前瞻監測與下架](#前瞻監測與下架)）。驗證段贏母體但不顯著的記「前瞻觀察」，只當紀錄，不算通過、不進產品（使用者決定放上頁面的例外見[流程](#流程)第 7 步）。沒有通過的假設記「這個假設沒有通過」，不放寬標準、不回頭調參數。
 
 **報告的順序**：新策略探索的報告、進產品的提案與前瞻監測的月報，第一個列對加權指數的超額；判定仍只比等權母體（使用者決定 [6880326933](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880326933) B，[#682](https://github.com/YiCheng0608/stock-lab/issues/682) 看到加權指數大幅領先等權母體，只贏等權母體的策略可能仍輸大盤）。
 
@@ -334,7 +335,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 | 驗證 | 驗證段反轉 | 超額日均 < 0 |
 | 驗證 | 沒有通過（驗證段） | 其餘（含 t 缺值） |
 
-- **前瞻觀察**（[#721](https://github.com/YiCheng0608/stock-lab/issues/721) 統籌決定 [6881176537](https://github.com/YiCheng0608/stock-lab/issues/721#issuecomment-6881176537)，依據使用者決定 [6880114734](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880114734) 第 1 項）：探索通過、驗證段贏母體但不顯著、扣成本後仍為正的假設，不丟掉，登記成前瞻觀察對象，每月和 H1 一起累積（[前瞻監測與下架](#前瞻監測與下架)）。它只當紀錄：不算通過、不跑已用段、不進產品，之後前瞻的數字再好也不改成「通過」。要求絕對報酬日均 > 0 是因為標準是扣成本後期望值為正，絕對報酬為負的假設前瞻再好也進不了產品。這張判定表也適用之後各輪登記的假設，不是 X1～X8 專用。
+- **前瞻觀察**（[#721](https://github.com/YiCheng0608/stock-lab/issues/721) 統籌決定 [6881176537](https://github.com/YiCheng0608/stock-lab/issues/721#issuecomment-6881176537)，依據使用者決定 [6880114734](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880114734) 第 1 項）：探索通過、驗證段贏母體但不顯著、扣成本後仍為正的假設，不丟掉，登記成前瞻觀察對象，每月和 H1 一起累積（[前瞻監測與下架](#前瞻監測與下架)）。它只當紀錄：不算通過、不跑已用段、不進產品（使用者決定放上頁面的例外見[流程](#流程)第 7 步），之後前瞻的數字再好也不改成「通過」。要求絕對報酬日均 > 0 是因為標準是扣成本後期望值為正，絕對報酬為負的假設前瞻再好也進不了產品。這張判定表也適用之後各輪登記的假設，不是 X1～X8 專用。
 - 「通過」的標準不變。
 
 勝率、回撤、換手、平均投入比例、對加權指數的超額、已用段的數字都列出，不參與判定；報告裡對加權指數的超額列在最前面（上面的「報告的順序」）。
@@ -428,7 +429,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 4. **驗證只跑一次**：那個假設的探索段報告公開之後，才跑它的驗證段（只跑探索通過的）；同一假設不跑第二次。
 5. **通過驗證** → 已用段列出（不判定）→ 登記成 `H<n>`（凍結 commit，前瞻監測用同一個代號）→ 提案進產品，由使用者決定（使用者決定 [6880114734](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880114734) 第 2 項，取代原本「前瞻通過才提案進產品」）。提案第一個列對加權指數的超額。
 6. **進產品之後**：前瞻改成持續監測，不是門檻；照[前瞻監測與下架](#前瞻監測與下架)每月監測，判到就提案下架。
-7. **驗證段判「前瞻觀察」**：登記成前瞻觀察對象，每月和 H1 一起累積，只當紀錄，停在這一步，不進產品。
+7. **驗證段判「前瞻觀察」**：登記成前瞻觀察對象，每月和 H1 一起累積，只當紀錄，停在這一步，不改成「通過」；放上頁面另由使用者決定（X4，[#1 7106346106](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7106346106)），放上頁面後照[前瞻監測與下架](#前瞻監測與下架)加一列「已進產品」。
 8. 其餘任何一步沒過：記錄「這個假設沒有通過」與數字，停在那一步。
 
 **點位**（使用者 [6880591509](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880591509)，統籌定案 [6880927520](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880927520)）：產品保留進場區、停損、目標價，但只顯示通過驗證的策略的點位。要進產品顯示點位的策略，點位（進場、停損、目標、持有上限）必須是登記的假設定義的一部分，和定義一起通過探索與驗證；登記之外另加或事後調的點位，不能顯示在通過的策略上。有點位的假設用[逐筆評估](#逐筆評估)判定；第一批是[第二輪：S1～S3、R1～R2](#第二輪s1s3r1r2)。
@@ -449,7 +450,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
   | 通過驗證（使用者還沒決定進不進產品） | 數字照列，不是判定 | 只記錄 | 只記錄；統籌在 #1 的進產品提案補一則，是和決定有關的事實，不是下架提案、不改建議 |
   | 已進產品 | 數字照列，不是判定 | 只列出 | 統籌在 #1 提案下架 |
 
-- **通過驗證的對象進產品之後**：舊列不改、不刪，每月照跑。使用者決定進產品時，統籌在產品上線那天另開單，在 `WATCHES` 加一列：類別「已進產品」、`since`＝進產品日，來源、代號與定義雜湊照舊；本表也往下加一列。`WATCHES` 的鍵不能和舊列重複（例如 `H2-product`），但月報與本表的**代號仍是 `H<n>`**，月報第一行寫「`H<n>`（已進產品，監測）」，同[流程](#流程)第 5 步「前瞻監測用同一個代號」。入口的輸出也用代號（`forward_watch.display`：鍵的第一個 `-` 之前）：`summary.md` 第一行是「`# H<n> 已進產品的前瞻紀錄（…）`」，曲線、成交計數與 `equity.csv` 的欄名都是 `H<n>`；只有 `tables.json` 的 `watch` 與重現命令寫鍵。下架判定的 60 日從進產品日起算。使用者決定不進產品時什麼都不加。
+- **通過驗證的對象進產品之後**：舊列不改、不刪，每月照跑。使用者決定進產品時，統籌在產品上線那天另開單，在 `WATCHES` 加一列：類別「已進產品」、`since`＝進產品日，來源、代號與定義雜湊照舊；本表也往下加一列。`WATCHES` 的鍵不能和舊列重複（例如 `H2-product`），但月報與本表的**代號仍是 `H<n>`**，月報第一行寫「`H<n>`（已進產品，監測）」，同[流程](#流程)第 5 步「前瞻監測用同一個代號」。入口的輸出也用代號（`forward_watch.display`：鍵的第一個 `-` 之前）：`summary.md` 第一行是「`# H<n> 已進產品的前瞻紀錄（…）`」，曲線、成交計數與 `equity.csv` 的欄名都是 `H<n>`；只有 `tables.json` 的 `watch` 與重現命令寫鍵。下架判定的 60 日從進產品日起算。使用者決定不進產品時什麼都不加。前瞻觀察的對象由使用者決定放上頁面時（X4 的「盈餘殖利率前 20」分頁，[#1 7106346106](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7106346106)、[7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228) D5，[#1019](https://github.com/YiCheng0608/stock-lab/issues/1019)）照同一做法：舊的前瞻觀察列不改，另加一列「已進產品」（鍵 `X4-product`、`since`＝上線日），代號仍是 `X4`，判到「輸給基準」由統籌在 #1 提案下架。
 
 **對象清單**（只往下加列；每一列的凍結入口寫在 `forward_watch.WATCHES`）
 
@@ -461,9 +462,10 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 | F2 | 前瞻觀察 | `round10_research` 第 1 版的 `HYPOTHESES["F2"]`（[第十輪](#第十輪f1f4)，N＝20、K＝60；組合引擎；正式 DB 的個股日線從 2024-09-30 起，`vol_720` 要 721 根，約 2027-08 以前每天沒有名單、全部留現金，那段的數字是「現金對母體」，只是紀錄，[#949 決定 7073263170](https://github.com/YiCheng0608/stock-lab/issues/949#issuecomment-7073263170)） | `453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9` | 2026-11-22 | 2026-11-22 起第一個交易日 | #944 驗證段 [7072993427](https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7072993427)，決定 [7073015041](https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7073015041)；[#949](https://github.com/YiCheng0608/stock-lab/issues/949) |
 | P2 | 前瞻觀察 | `round15_research` 第 1 版的 `HYPOTHESES["P2"]`（[第十五輪](#第十五輪p1p3)，N＝20、持有到下一個事件日；事件日調倉，X7 的帳戶 `explore_research.simulate_events`，事件日照 `round14_research.quarter_events`；對照基準只列出、不判定） | `dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e` | 2026-11-23 | 2027-03-31（起日後的第一個事件日，2026 年報的期限；2026Q3 的事件日 2026-11-16 在起日之前，不買、不拿來補前段） | #986 驗證段 [7097870215](https://github.com/YiCheng0608/stock-lab/issues/986#issuecomment-7097870215)，決定 [7097039382](https://github.com/YiCheng0608/stock-lab/issues/986#issuecomment-7097039382)；[#990](https://github.com/YiCheng0608/stock-lab/issues/990) |
 | A1 | 前瞻觀察 | `round17_research` 第 1 版的 `HYPOTHESES["A1"]`（[第十七輪](#第十七輪a1a3)，`net_issue` 小者先取 20 檔、持有到下一個事件日；事件日調倉，帳戶與事件日同 P2；對照基準（A1 第 8 點）只列出、不判定） | `505666ec2537fdb6b77086ce6b633bd6b58b4a61de8b7aa5f6213ef18d4c95df` | 2026-11-24（紀錄檔的 `finished_at` 2026-11-23T20:39:54Z，取台北日期，交易日的日曆；之前各列的 `finished_at` 在 UTC 與台北是同一天） | 2027-03-31（同 P2：2026Q3 的事件日 2026-11-16 在起日之前，不買、不拿來補前段） | #1011 驗證段 [7113410582](https://github.com/YiCheng0608/stock-lab/issues/1011#issuecomment-7113410582)；[#1013](https://github.com/YiCheng0608/stock-lab/issues/1013) |
+| X4 | 已進產品 | `explore_research` 第 2 版的 `HYPOTHESES["X4"]`（[第一輪](#第一輪x1x8)，N＝20、K＝60；`WATCHES` 的鍵 `X4-product`；仍是前瞻觀察的假設，放上頁面的是今日名單頁「盈餘殖利率前 20」分頁） | `600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63` | 2026-11-24（分頁上線日） | 2026-11-24 起第一個交易日 | 使用者決定放上頁面 [#1 7106346106](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7106346106)、加監測列 [#1 7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228)（D5）；[#1019](https://github.com/YiCheng0608/stock-lab/issues/1019) |
 
 **前瞻入口**：`tools/research/forward_watch.py`（[#868](https://github.com/YiCheng0608/stock-lab/issues/868)）
-- **凍結**：每個對象在 `WATCHES` 登記來源工具、代號、來源工具的版本與 `definitions_sha256`、前瞻起日、類別與 M＝60；命令列沒有改參數、起日或 M 的旗標。定義從來源工具 import，不另寫一份；來源工具的版本或 `definitions_sha256` 和登記的不同就拒絕（exit 2），所以來源工具改了定義，入口就停下來，要另登記新的對象。金樣測試（`backend/tests/test_forward_watch.py`，含 P2；F2 的在 `backend/tests/test_forward_watch_f2.py`，A1 的在 `backend/tests/test_forward_watch_a1.py`）鎖住五個輸出檔。
+- **凍結**：每個對象在 `WATCHES` 登記來源工具、代號、來源工具的版本與 `definitions_sha256`、前瞻起日、類別與 M＝60；命令列沒有改參數、起日或 M 的旗標。定義從來源工具 import，不另寫一份；來源工具的版本或 `definitions_sha256` 和登記的不同就拒絕（exit 2），所以來源工具改了定義，入口就停下來，要另登記新的對象。金樣測試（`backend/tests/test_forward_watch.py`，含 P2 與 X4-product；F2 的在 `backend/tests/test_forward_watch_f2.py`，A1 的在 `backend/tests/test_forward_watch_a1.py`）鎖住五個輸出檔。
 - **命令**：`python tools/research/forward_watch.py --db <副本> --watch <WATCHES 的鍵> --out <目錄> [--cutoff <日>] [--min-free-gb 2]`；只讀，拒絕的情況同[組合層級回測](#組合層級回測)（正式 DB、台北 21:30～23:30、可用記憶體不足）。
 - **窗口**：訊號日從前瞻起日（含）以後的第一個交易日起，到 cutoff（預設副本最新的交易日）的前一個交易日；T+1 起有淨值。起日以前的資料只當暖機，讀多遠照來源工具讀後段的規則：`explore_research` 的對象讀 730 個日曆日（同它的驗證段），`round10_research`、`round15_research` 與 `round17_research` 的對象從副本的第一天讀起（`LOAD_FROM`，F2 的 `vol_720` 要 721 根）；只供特徵使用，不進淨值與判定。`round15_research` 的載入用 `round15_research.load` 裡同樣的三個呼叫（日線、季報、標的狀態），不讀成員表：成員表只給 P1 的產業分布，月報的副本旁沒有它（[#990 決定 7098585515](https://github.com/YiCheng0608/stock-lab/issues/990#issuecomment-7098585515)），測試比對兩條路給 P2 的事件日、名單與對照基準相同。`round17_research` 的載入就用 `round17_research.load`（日線、A1 的季報與配股、標的狀態），它不讀成員表。
 - **事件日調倉（P2、A1）**：只有起日（含）以後、cutoff 之前的事件日（`round14_research.quarter_events`）是訊號日，起日以前的事件日不買，它的名單也不拿來補前段；第一個事件日的 T+1 起有淨值，持有到下一個事件日收盤（X7 的帳戶），母體與對照基準同一個帳戶規則、同一組事件日；名單與對照基準用來源工具自己的 `planner`、`engines`（P2 的 `plan_p2`、A1 的 `plan_a1`）。起日後還沒有事件日時（兩個都是 2027-03-31 以前），`summary.md` 的判定寫「樣本不足（起日後還沒有事件日）」與下一個事件日（法定期限，當天或之後的第一個週一～週五交易日），`tables.json` 的 `next_deadline` 是那個期限。引擎是因果的：在資料尾端多加日子，以前的日子的淨值與名單不變，同一個 cutoff 得到同一份輸出。
