@@ -33,6 +33,7 @@
 | 規則最早執行日 | 由 trading_calendar 步驟保存的官方休市表推算，不再依賴之後的日線 | — | [價位、ETF 與生命週期](spec/README.md#價位etf-與生命週期) |
 | 資料不足原因 | 策略判斷資料不足時，個股頁與行動摘要寫出原因句（上市未滿 60 日、停牌、官方無成交、官方行情表或法人／融資表未列、ETF 類別不適用等），狀態寫「資料不足，無法判斷」（只有 ETF 類別不適用時寫「不適用一般研究條件」）；策略總表的「差哪個條件」寫同主題的原因句，只有沒收到、可回補的缺口寫「待回補」 | [#511](https://github.com/YiCheng0608/stock-lab/issues/511)、[#524](https://github.com/YiCheng0608/stock-lab/issues/524) | [UI_COPY_SPEC §6.1](UI_COPY_SPEC.md#61-資料不足的原因句) |
 | 族群分層 | 族群分官方產業與版本化題材表兩層；題材表 23 個題材，2026-11-24 起新收的成員附 MOPS 等官方證據，由 `themes verify` 抓頁核對引文、題材詞與代號，每週維護 | [#1015](https://github.com/YiCheng0608/stock-lab/issues/1015) | [題材表](INDUSTRY_CLASSIFICATION.md#7-題材表) |
+| 新題材發現 | `daily` 的 theme_discovery 步驟每晚做量價共振分群（`theme_cluster_v1`，門檻可設定，存 `theme_cluster_runs`／`theme_cluster_members`）；題材表沒有的群交 `claude -p` 命名、提成員與 MOPS「主要經營業務」摘錄，證據過 `check_member` 核對才寫成待核實的候選題材（`theme_candidate`，不計分、不進榜），每晚最多 3 次呼叫；`theme-discovery --no-ai` 可重放某天的分群 | [#1018](https://github.com/YiCheng0608/stock-lab/issues/1018) | [排程：新題材發現](ops/SCHEDULING.md#新題材發現)、[候選題材](INDUSTRY_CLASSIFICATION.md#73-候選題材) |
 | 族群熱度 | `hot_group_v1` 對兩層各算一榜並有排名 API；催化劑依 MOPS 日期覆蓋計算（窗口全部核實才有值，沒有事件是 0，#453），值是有事件成員比例的同榜 percentile（#474） | — | [hot_group_v1](spec/hot_group.md) |
 | 技術回測與研究介面 | 已有技術回測及研究介面 | — | — |
 

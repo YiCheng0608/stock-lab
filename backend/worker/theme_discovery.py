@@ -220,9 +220,7 @@ def _open_groups(db: Session, day: date) -> dict[int, set[str]]:
     return groups
 
 
-def known_share(
-    item: Cluster, groups: dict[int, set[str]]
-) -> tuple[str | None, float]:
+def known_share(item: Cluster, groups: dict[int, set[str]]) -> tuple[str | None, float]:
     """The theme or candidate holding most of the cluster, and its share."""
 
     counts = Counter(
@@ -354,7 +352,8 @@ def cluster_input(
     existing: list[str],
 ) -> tuple[dict[str, Any], dict[str, Instrument], list[dict[str, Any]]]:
     members = sorted(
-        item.members, key=lambda member: (-member.member_mean_corr, member.instrument_id)
+        item.members,
+        key=lambda member: (-member.member_mean_corr, member.instrument_id),
     )[:MAX_MEMBERS]
     ids = [member.instrument_id for member in members]
     instruments = {
@@ -666,9 +665,7 @@ def _ai_step(
     call_limit: int,
 ) -> dict[str, Any]:
     selected = [
-        item
-        for item, decision in zip(clusters, decisions)
-        if decision["selected"]
+        item for item, decision in zip(clusters, decisions) if decision["selected"]
     ]
     if not selected:
         return {"status": "success", "calls": 0, "proposals": []}
@@ -727,7 +724,9 @@ def _ai_step(
 
     for item in selected:
         if calls >= allowed:
-            skipped.append({"cluster_no": item.cluster_no, "reason": "daily_call_limit"})
+            skipped.append(
+                {"cluster_no": item.cluster_no, "reason": "daily_call_limit"}
+            )
             continue
         calls += 1
         try:
@@ -858,4 +857,3 @@ def run_theme_discovery(
             "version": THEME_CLUSTER_VERSION,
             "error": error,
         }
-

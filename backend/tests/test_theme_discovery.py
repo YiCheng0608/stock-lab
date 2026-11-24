@@ -205,7 +205,9 @@ def _symbol(i: int) -> str:
 
 def _rows(factory, day=T):
     with factory() as db:
-        run = db.scalar(select(ThemeClusterRun).where(ThemeClusterRun.trading_date == day))
+        run = db.scalar(
+            select(ThemeClusterRun).where(ThemeClusterRun.trading_date == day)
+        )
         members = db.scalars(
             select(ThemeClusterMember)
             .where(ThemeClusterMember.theme_cluster_run_id == run.id)
@@ -259,7 +261,17 @@ def test_the_day_is_stored_with_its_thresholds_clusters_and_correlations(make):
         "min_cluster_size": 3,
     }
     clusters: dict[int, set[int]] = {}
-    for number, instrument_id, size, mean_corr, member_corr, excess, ratio, lots, *_ in shape:
+    for (
+        number,
+        instrument_id,
+        size,
+        mean_corr,
+        member_corr,
+        excess,
+        ratio,
+        lots,
+        *_,
+    ) in shape:
         clusters.setdefault(number, set()).add(instrument_id)
         assert mean_corr >= 0.45 and member_corr >= 0.45
         assert excess >= 0.10 and ratio >= 1.3 and lots >= 1000
@@ -437,7 +449,9 @@ class FakeClaude:
             "type": "result",
             "is_error": False,
             "structured_output": answer,
-            "modelUsage": {"claude-sonnet-test": {"inputTokens": 100, "outputTokens": 20}},
+            "modelUsage": {
+                "claude-sonnet-test": {"inputTokens": 100, "outputTokens": 20}
+            },
         }
         return CliResult(returncode=0, stdout=json.dumps(envelope), stderr="")
 
@@ -462,7 +476,9 @@ def _discover(make, claude, fetched=None, **kwargs):
 def _candidates(make):
     with make() as db:
         groups = db.scalars(
-            select(ThemeGroup).where(ThemeGroup.group_type == THEME_CANDIDATE_GROUP_TYPE)
+            select(ThemeGroup).where(
+                ThemeGroup.group_type == THEME_CANDIDATE_GROUP_TYPE
+            )
         ).all()
         members = db.scalars(
             select(GroupMembership).order_by(GroupMembership.instrument_id)
@@ -488,11 +504,16 @@ def test_a_verified_proposal_is_written_as_an_inactive_candidate(make, cli):
     assert first["status"] == "written"
     assert first["verified"] == [_symbol(i) for i in (1, 2, 3)]
     assert first["failed_members"] == [
-        {"symbol": _symbol(4), "errors": ["evidence[0].quote: not found in 主要經營業務"]}
+        {
+            "symbol": _symbol(4),
+            "errors": ["evidence[0].quote: not found in 主要經營業務"],
+        }
     ]
     assert result["ai"]["proposals"][1]["status"] == "not_theme"
     # The model gets the MOPS 主要經營業務 text of each member and no tools.
-    payload = json.loads(claude.prompts[0].split("<cluster>\n")[1].split("</cluster>")[0])
+    payload = json.loads(
+        claude.prompts[0].split("<cluster>\n")[1].split("</cluster>")[0]
+    )
     business = {m["symbol"]: m["main_business"] for m in payload["members"]}
     assert business[_symbol(1)] == f"1.{KEYWORD}之製造及銷售。2.其他電子零組件1。"
     assert claude.argv[0][claude.argv[0].index("--tools") + 1] == ""
@@ -517,7 +538,9 @@ def test_a_verified_proposal_is_written_as_an_inactive_candidate(make, cli):
     assert evidence["model"] == "claude-sonnet-test"
     assert evidence["prompt_version"] == "theme_discovery_v1"
     with make() as db:
-        run = db.scalar(select(IngestionRun).where(IngestionRun.run_type == "theme_discovery"))
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == "theme_discovery")
+        )
         meta = run.metadata_json
     assert run.status == "success" and run.records == 3
     assert meta["prompt_version"] == "theme_discovery_v1"
@@ -562,7 +585,9 @@ def test_an_invalid_answer_writes_nothing(make, cli, answer):
     assert result["ai"]["proposals"][0]["status"] == "failed"
     assert _candidates(make) == ([], [])
     with make() as db:
-        run = db.scalar(select(IngestionRun).where(IngestionRun.run_type == "theme_discovery"))
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == "theme_discovery")
+        )
     assert run.status == "failed" and "cluster 1" in run.error
 
 
@@ -579,7 +604,9 @@ def test_a_proposal_named_like_an_existing_theme_is_rejected(make, cli):
             )
         )
         db.commit()
-    claude = FakeClaude(_answer([_member(i) for i in (1, 2, 3)]), _answer([], is_theme=False))
+    claude = FakeClaude(
+        _answer([_member(i) for i in (1, 2, 3)]), _answer([], is_theme=False)
+    )
     result = _discover(make, claude)
     assert result["ai"]["proposals"][0]["reason"] == "existing_theme"
     assert _candidates(make)[0] == []
@@ -615,11 +642,17 @@ def test_known_clusters_are_not_sent_and_calls_are_capped_per_day(make, cli):
     limited = FakeClaude(_answer([], is_theme=False))
     result = _discover(make, limited, call_limit=2)
     assert len(limited.prompts) == 1
-    assert [s["reason"] for s in result["ai"]["skipped_clusters"]] == ["daily_call_limit"]
+    assert [s["reason"] for s in result["ai"]["skipped_clusters"]] == [
+        "daily_call_limit"
+    ]
 
 
-def test_without_the_cli_the_clusters_are_kept_and_nothing_is_written(make, monkeypatch):
-    monkeypatch.setattr(theme_discovery, "preflight", lambda: (None, "cli_not_found: claude"))
+def test_without_the_cli_the_clusters_are_kept_and_nothing_is_written(
+    make, monkeypatch
+):
+    monkeypatch.setattr(
+        theme_discovery, "preflight", lambda: (None, "cli_not_found: claude")
+    )
     result = theme_discovery.run_theme_discovery(T)
     assert result["status"] == "partial" and result["records"] == 2
     assert result["ai"]["reason"] == "cli_not_found: claude"
@@ -637,7 +670,9 @@ def test_no_ai_replays_the_clusters_only(make, monkeypatch):
 
 
 def test_the_daily_runs_the_step_without_changing_the_run(make, monkeypatch):
-    monkeypatch.setattr(theme_discovery, "preflight", lambda: (None, "cli_not_found: claude"))
+    monkeypatch.setattr(
+        theme_discovery, "preflight", lambda: (None, "cli_not_found: claude")
+    )
     steps = Steps(monkeypatch)
     monkeypatch.setattr(schedule_runs, "_theme_discovery_step", REAL_STEP)
     result = pipeline.run_daily(T)
@@ -751,4 +786,3 @@ def test_a_candidate_is_never_scored_ranked_or_read_as_a_theme(tmp_path):
             best = pipeline._best_group_for_signal(db, stock.id, SCORE_DATE)
             assert best is None or best.group_id != group_id
     engine.dispose()
-

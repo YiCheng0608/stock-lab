@@ -231,9 +231,7 @@ def cluster(screened: list[Screened], config: ClusterConfig) -> list[Cluster]:
                 members=tuple(
                     ClusterMember(
                         instrument_id=items[i].instrument_id,
-                        member_mean_corr=_mean(
-                            [corr[i][j] for j in members if j != i]
-                        ),
+                        member_mean_corr=_mean([corr[i][j] for j in members if j != i]),
                         excess_return_20d=items[i].excess_return_20d,
                         amount_ratio_5_20=items[i].amount_ratio_5_20,
                         average_lots_20d=items[i].average_lots_20d,

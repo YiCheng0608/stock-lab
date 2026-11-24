@@ -438,4 +438,3 @@ def write_theme_candidate(
         added.append(member["instrument_id"])
     db.flush()
     return {"group_id": group_id, "created": created, "added": added}
-

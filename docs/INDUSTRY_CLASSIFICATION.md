@@ -134,13 +134,13 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 **初版與回溯限制**：`2026.10.17` 收 12 個題材、77 筆成員，生效日統一為 2026-01-01，是人工回溯判定的起日；表版本日（2026-10-17）之前算出的題材榜含後見之明，不代表當時就能取得這份分類，這段期間的題材榜與回測不能當成當時可知的結果。`2026.11.24` 加 11 個題材（被動元件、導線架、封測、銅箔／銅箔基板、PCB、機器人、電源／BBU、軍工／無人機、ASIC／矽智財、矽晶圓、資安），成員取自 [#1003](https://github.com/YiCheng0608/stock-lab/issues/1003) 的草案、過[證據核對](#71-證據核對)才收；`valid_from` 是加入當天 2026-11-24，不回溯，所以這 11 個題材在 2026-11-24 前沒有分數。草案是看過去哪些股票一起漲擬的，成員名單本身仍帶後見之明，只是不再回填到過去的日期。
 
-**候選題材群組（保留）**：`group_type="theme_candidate"`（`active=false`、`name_status="pending_verification"`、成員 `role="candidate"`）保留給日後的人工核實流程，目前沒有程式產生；這類群組即使誤設為 active 也不計分、不進榜。
+**候選題材群組**：`group_type="theme_candidate"`（`active=false`、`name_status="pending_verification"`、成員 `role="candidate"`）由 daily 的新題材發現寫入，等統籌核對，產生方式與核對流程見 [7.3 候選題材](#73-候選題材)；這類群組即使誤設為 active 也不計分、不進榜。
 
 **欄位值域（現行）**
 
 | 欄位 | 值與意義 |
 | --- | --- |
-| `theme_groups.group_type` | `official_industry` 官方產業；`etf` ETF 類別；`instrument_theme` 舊 ETF 主題；`daily_hot_group` 新上市觀察；`theme` 題材表題材；`theme_candidate` 待核實候選題材（保留，目前不產生） |
+| `theme_groups.group_type` | `official_industry` 官方產業；`etf` ETF 類別；`instrument_theme` 舊 ETF 主題；`daily_hot_group` 新上市觀察；`theme` 題材表題材；`theme_candidate` 待核實候選題材（[7.3](#73-候選題材)） |
 | `theme_groups.name_status` | `pending` 名稱未對照；`official`／`verified`／`approved` 可顯示（`app.news.is_verified_theme`）；`pending_verification` 候選題材待核實 |
 | `group_memberships.role` | `member` 一般成員；`candidate` 候選題材的待核實成員 |
 
@@ -168,7 +168,7 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 每週一次，表的所有修改都走同一條路：
 
-1. **提案**：AI（本機 `claude -p`）提出新題材與成員，每筆成員附 B 類證據的 `url`、`title`、`quote`。提案的 Issue 或 PR 本文記模型與提示版本。AI 提案的程式由後續的單另做；在那之前由工程師或統籌照同樣格式手動提案。
+1. **提案**：AI（本機 `claude -p`）提出新題材與成員，每筆成員附 B 類證據的 `url`、`title`、`quote`。提案的 Issue 或 PR 本文記模型與提示版本。新題材的 AI 提案由 daily 自動寫成候選題材（[7.3](#73-候選題材)），統籌每週從候選題材挑；既有題材的新成員仍由工程師或統籌照同樣格式手動提案。
 2. **改表**：在任務 branch 改 `themes_v1.json`，`version` 改成當天（同一天第二次改用 `YYYY.MM.DD.N`）。
 3. **核對**：跑 `themes verify --since <當天> --save-dir <目錄>`（避開上面的 daily 時段），不過的成員刪掉不收，不改寫 `quote` 去湊頁面；存下來的頁面放 evidence 目錄並寫 `SHA256SUMS`。
 4. **review 與合併**：PR 附核對結果；統籌看 `relation`／`relevance`、`keywords` 的異動與證據來源後合併。合併後統籌在正式 DB 跑 `themes sync`（驗證失敗 exit 1 且不寫入），題材榜由下一次 analyze／daily 計分。
@@ -179,3 +179,18 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 - **新成員**：加進題材的 `members[]`，成員 `valid_from` 填加入當天。
 - **換掉成員**：在舊成員填 `valid_to`（最後一天），不刪列；同一檔之後要再收，改用較晚的 `valid_from`，sync 會把舊的開放期間關在新起日前一天。
 - **停用題材**：題材填 `valid_to`，成員跟著題材的期間結束；不從表刪除。題材熱度長期沒有、或產品已經不是公司的主要業務時停用。
+
+### 7.3 候選題材
+
+題材表以外、正在一起動的一群股票，由 daily 的 theme_discovery 步驟每晚找出來，寫成待核實的候選題材（[#1018](https://github.com/YiCheng0608/stock-lab/issues/1018)；分群的方法、門檻、AI 呼叫上限與重放見[排程「新題材發現」](ops/SCHEDULING.md#新題材發現)）。
+
+**產生方式**
+
+1. 量價共振分群存進 `theme_cluster_runs`／`theme_cluster_members`。
+2. 至少 3 檔、而且沒有一個現有題材或候選題材佔一半以上的群，交本機 `claude -p` 判斷是不是同一個題材；是的話回 `id`、`name`、`description`、`keywords` 與成員（只能從群內挑），每個成員附 `relation`、`relevance`，以及從程式附上的 MOPS「主要經營業務」逐字摘錄的 `quote`。模型與提示版本（`theme_discovery_v1`）記在 run 與每一列的 `source`。
+3. 每個成員以 [7.1 證據核對](#71-證據核對)的 `check_member` 核對：證據網址是該檔的 MOPS 公司基本資料，`quote` 要逐字出現在「主要經營業務」那一格、含 `keywords` 裡的詞，代號要是股票。沒過的成員不寫入；過的不到 3 檔、名稱或 id 和現有題材相同、或回應格式不對時，整個提案不寫入。
+4. 寫入 `theme_groups`：`id="candidate-<id>"`、`group_type="theme_candidate"`、`active=false`、`name_status="pending_verification"`、`display_category="候選題材"`、`definition_version` 與 `name_source` 記提示版本，`source` 是精簡 JSON（`kind="theme_discovery"`、`keywords`、`model`、`prompt_version`、分群 run 與群號）。成員 `role="candidate"`，`valid_from` 是那天（不回溯），`source` 記 `url`、`quote`、`relation`、`relevance` 與同樣的模型、提示版本。同一個 id 之後再出現時，只補上還沒有開放期間的成員。
+
+**不計分**：候選題材不進題材榜與族群分數（`_group_board` 回 `None`），今日名單的族群分項、主流族群前 20 與策略的族群確認也都不讀它；候選池只以「量價共振群」來源使用分群結果（[#1020](https://github.com/YiCheng0608/stock-lab/issues/1020)），不把候選題材當題材來源。這幾點由 `backend/tests/test_theme_discovery.py` 鎖住。
+
+**核對流程**：統籌每週一次看候選題材（`group_type="theme_candidate"` 的群組與成員 `source`）。要收的，照 [7.2 維護流程](#72-維護流程)把題材與成員寫進 `themes_v1.json`（`valid_from` 填收進表的那天、證據重跑 `themes verify`），合併後 `themes sync` 寫成 `theme` 群組；候選題材本身不改成 `theme`，也不刪。不收的留著，之後同一群再出現時因為已有候選題材佔多數，不會再送 AI。
