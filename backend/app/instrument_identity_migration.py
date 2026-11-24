@@ -49,7 +49,9 @@ _CHILDREN = {
     "trading_halts",
     "preopen_news_checks",
     "mainstream_items",
+    # An older database's H2 items, until 0035 moves them (#1014).
     "h2_items",
+    "strategy_list_items",
     "theme_cluster_members",
 }
 _TOKEN = re.compile(

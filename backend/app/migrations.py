@@ -813,20 +813,32 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0033_mainstream_lists', CURRENT_TIMESTAMP)"
         )
     )
-    # 0034 only adds h2_runs / h2_items (#881), made by create_all with their
-    # indexes.
+    # 0034 added h2_runs / h2_items (#881); 0035 below moves an older database's
+    # rows out of them, and create_all no longer makes them.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0034_h2_lists', CURRENT_TIMESTAMP)"
         )
     )
-    # 0035 only adds theme_cluster_runs / theme_cluster_members (#1018), made
+    # 0035 (#1014): create_all made strategy_list_runs / strategy_list_items; an
+    # older database's h2_runs / h2_items rows move into them as strategy h2 and
+    # the two tables are dropped (a database without them has nothing to move).
+    from .strategy_lists import move_h2_in
+
+    move_h2_in(connection)
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0035_strategy_lists', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0036 only adds theme_cluster_runs / theme_cluster_members (#1018), made
     # by create_all with their indexes.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0035_theme_clusters', CURRENT_TIMESTAMP)"
+            "VALUES ('0036_theme_clusters', CURRENT_TIMESTAMP)"
         )
     )
 

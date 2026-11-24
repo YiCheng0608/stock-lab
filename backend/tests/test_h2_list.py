@@ -9,7 +9,8 @@ flag, and a zero-volume bar with four equal prices), such a bar inside the
 window, days without a bar, a bar off the sessions, an ``ipo`` and an ``etf``,
 the 1,000-lot line, a split and a cash dividend in the window (one without a
 reference price), and a dividend after T.  AC-3 is the daily step, the API and
-migration 0034 (up and down).
+migration 0034 (up and down); the rows are in the strategy list tables since
+#1014 (migration 0035, ``test_strategy_lists``).
 """
 
 from __future__ import annotations
@@ -43,11 +44,11 @@ from app.models import (
     CandidateRun,
     CorporateAction,
     DailyCandidate,
-    H2Item,
-    H2Run,
     Instrument,
     MarketBar,
     Signal,
+    StrategyListItem,
+    StrategyListRun,
 )
 from test_daily_schedule import Steps, runs
 from worker.cli import DAILY_EXIT_CODES
@@ -466,12 +467,22 @@ def _real_h2(monkeypatch, **results):
 
 def _stored(make, day=T):
     with make() as db:
-        run = db.scalar(select(H2Run).where(H2Run.trading_date == day))
+        # The common strategy list tables since #1014, strategy h2.
+        run = db.scalar(
+            select(StrategyListRun).where(
+                StrategyListRun.trading_date == day, StrategyListRun.strategy == "h2"
+            )
+        )
         items = db.scalars(
-            select(H2Item).where(H2Item.h2_run_id == run.id).order_by(H2Item.rank)
+            select(StrategyListItem)
+            .where(StrategyListItem.run_id == run.id)
+            .order_by(StrategyListItem.rank)
         ).all()
         symbols = dict(db.execute(select(Instrument.id, Instrument.symbol)).all())
-        return run, [(symbols[item.instrument_id], item.high_gap_240) for item in items]
+        return run, [
+            (symbols[item.instrument_id], item.values_json["high_gap_240"])
+            for item in items
+        ]
 
 
 def test_the_daily_writes_the_day_after_mainstream(factory, monkeypatch, compared):
@@ -514,9 +525,11 @@ def test_a_rerun_of_the_day_replaces_it(factory):
     run, again = _stored(factory, day)
     assert "S1" not in [s for s, _ in again]
     with factory() as db:
-        assert db.scalar(select(func.count()).select_from(H2Run)) == 1
-        assert db.scalar(select(func.count()).select_from(H2Item)) == 20
-        assert {item.h2_run_id for item in db.scalars(select(H2Item))} == {run.id}
+        assert db.scalar(select(func.count()).select_from(StrategyListRun)) == 1
+        assert db.scalar(select(func.count()).select_from(StrategyListItem)) == 20
+        assert {item.run_id for item in db.scalars(select(StrategyListItem))} == {
+            run.id
+        }
 
 
 def test_a_failure_is_a_warning_and_keeps_the_run_and_the_previous_list(
@@ -538,14 +551,14 @@ def test_a_failure_is_a_warning_and_keeps_the_run_and_the_previous_list(
     assert by_run[rows[0].id]["h2_list"].status == "failed"
     assert rows[0].summary_json["steps"]["h2_list"] == "failed"
     with factory() as db:
-        assert db.scalar(select(func.count()).select_from(H2Item)) == 20
+        assert db.scalar(select(func.count()).select_from(StrategyListItem)) == 20
 
 
 def test_a_day_that_is_not_a_session_fails_without_writing(factory):
     result = run_h2_list(T + timedelta(days=1))  # a Saturday
     assert result["status"] == "failed" and "H2DataError" in result["error"]
     with factory() as db:
-        assert db.scalar(select(func.count()).select_from(H2Run)) == 0
+        assert db.scalar(select(func.count()).select_from(StrategyListRun)) == 0
 
 
 # --- AC-3: the API --------------------------------------------------------
@@ -742,7 +755,32 @@ def test_a_day_with_an_empty_universe_is_zero(factory):
     assert (body["status"], body["universe_count"], body["items"]) == ("zero", 0, [])
 
 
-# --- migration 0034 -------------------------------------------------------
+# --- migrations 0034 and 0035 ---------------------------------------------
+
+H2_TABLES = {"h2_runs", "h2_items"}
+LIST_TABLES = {"strategy_list_runs", "strategy_list_items"}
+# 0034's columns (the models are the strategy list tables since #1014).
+H2_RUN_COLUMNS = {
+    "id",
+    "trading_date",
+    "version",
+    "definitions_sha256",
+    "status",
+    "universe_count",
+    "item_count",
+    "config_json",
+    "computed_at",
+}
+H2_ITEM_COLUMNS = {
+    "id",
+    "h2_run_id",
+    "trading_date",
+    "instrument_id",
+    "version",
+    "rank",
+    "high_gap_240",
+    "close",
+}
 
 
 def _shape(path: Path) -> dict:
@@ -753,10 +791,8 @@ def _shape(path: Path) -> dict:
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-        out = {"tables": tables & {"h2_runs", "h2_items", "mainstream_runs"}}
-        for table in ("h2_runs", "h2_items"):
-            if table not in tables:
-                continue
+        out = {"tables": tables & (H2_TABLES | LIST_TABLES | {"mainstream_runs"})}
+        for table in sorted(out["tables"] - {"mainstream_runs"}):
             out[table] = {
                 "indexes": {
                     row[1]: [
@@ -780,13 +816,17 @@ def _shape(path: Path) -> dict:
             ).fetchall()
         if "schema_migrations" in tables:
             out["fallback"] = connection.execute(
-                "SELECT version FROM schema_migrations WHERE version = '0034_h2_lists'"
+                "SELECT version FROM schema_migrations "
+                "WHERE version IN ('0034_h2_lists', '0035_strategy_lists') "
+                "ORDER BY version"
             ).fetchall()
     return out
 
 
-def _check_head(shape: dict) -> None:
-    assert shape["tables"] == {"h2_runs", "h2_items", "mainstream_runs"}
+def _check_0034(shape: dict) -> None:
+    # 0001 makes the tables of the models, the strategy list ones among them, so
+    # a database made from nothing has them too; 0034 is about its own two.
+    assert shape["tables"] - LIST_TABLES == H2_TABLES | {"mainstream_runs"}
     runs_shape, items_shape = shape["h2_runs"], shape["h2_items"]
     assert runs_shape["indexes"]["ix_h2_runs_trading_date"] == ["trading_date"]
     assert ["trading_date", "version"] in runs_shape["indexes"].values()
@@ -800,10 +840,38 @@ def _check_head(shape: dict) -> None:
         "h2_run_id": "h2_runs",
         "instrument_id": "instruments",
     }
-    assert set(runs_shape["not_null"]) == {c.name for c in H2Run.__table__.columns}
+    assert set(runs_shape["not_null"]) == H2_RUN_COLUMNS
     assert all(runs_shape["not_null"].values())
-    assert set(items_shape["not_null"]) == {c.name for c in H2Item.__table__.columns}
+    assert set(items_shape["not_null"]) == H2_ITEM_COLUMNS
     assert {k for k, v in items_shape["not_null"].items() if not v} == {"high_gap_240"}
+
+
+def _check_head(shape: dict) -> None:
+    assert shape["tables"] == LIST_TABLES | {"mainstream_runs"}
+    runs_shape = shape["strategy_list_runs"]
+    items_shape = shape["strategy_list_items"]
+    assert runs_shape["indexes"]["ix_strategy_list_runs_trading_date"] == [
+        "trading_date"
+    ]
+    assert ["trading_date", "strategy", "version"] in runs_shape["indexes"].values()
+    for column in ("run_id", "trading_date", "instrument_id"):
+        assert items_shape["indexes"][f"ix_strategy_list_items_{column}"] == [column]
+    assert ["trading_date", "instrument_id", "strategy", "version"] in items_shape[
+        "indexes"
+    ].values()
+    assert runs_shape["foreign"] == {}
+    assert items_shape["foreign"] == {
+        "run_id": "strategy_list_runs",
+        "instrument_id": "instruments",
+    }
+    assert set(runs_shape["not_null"]) == {
+        c.name for c in StrategyListRun.__table__.columns
+    }
+    assert all(runs_shape["not_null"].values())
+    assert set(items_shape["not_null"]) == {
+        c.name for c in StrategyListItem.__table__.columns
+    }
+    assert all(items_shape["not_null"].values())
 
 
 def _alembic_config(engine):
@@ -818,7 +886,7 @@ def _alembic_config(engine):
 
 
 @pytest.mark.parametrize("entry", ["alembic", "fallback"])
-def test_the_upgrade_adds_the_two_tables(tmp_path, monkeypatch, entry):
+def test_the_upgrade_makes_the_strategy_list_tables(tmp_path, monkeypatch, entry):
     if entry == "alembic":
         pytest.importorskip("alembic")
     path = tmp_path / f"{entry}.db"
@@ -833,29 +901,27 @@ def test_the_upgrade_adds_the_two_tables(tmp_path, monkeypatch, entry):
     shape = _shape(path)
     _check_head(shape)
     if entry == "alembic":
-        # Later revisions move the head: 0034 is in the chain below it.
-        assert "0034_h2_lists" in REVISIONS
+        # Later revisions move the head: 0035 is in the chain below it.
+        assert "0035_strategy_lists" in REVISIONS
         assert shape["alembic"] == [(REVISIONS[-1],)]
     else:
-        assert shape["fallback"] == [("0034_h2_lists",)]
+        assert shape["fallback"] == [("0034_h2_lists",), ("0035_strategy_lists",)]
 
 
-def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
-    tmp_path,
-):
+def test_0034_down_drops_the_two_tables_and_up_makes_them_again(tmp_path):
     pytest.importorskip("alembic")
     from alembic import command
 
     path = tmp_path / "down.db"
     engine = create_engine(f"sqlite:///{path.as_posix()}")
     enable_sqlite_foreign_keys(engine)
-    # To 0034 itself, not the head: a later forward-only revision cannot go down.
+    # To 0034 itself, not the head: 0035 moves the tables (test_strategy_lists).
     config = _alembic_config(engine)
     try:
         command.upgrade(config, "0034_h2_lists")
         command.downgrade(config, "0033_mainstream_lists")
         down = _shape(path)
-        assert down["tables"] == {"mainstream_runs"}
+        assert down["tables"] - LIST_TABLES == {"mainstream_runs"}
         assert down["alembic"] == [("0033_mainstream_lists",)]
         with closing(sqlite3.connect(path)) as connection:
             assert not connection.execute(
@@ -865,5 +931,5 @@ def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
     finally:
         engine.dispose()
     again = _shape(path)
-    _check_head(again)
+    _check_0034(again)
     assert again["alembic"] == [("0034_h2_lists",)]

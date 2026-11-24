@@ -2070,6 +2070,7 @@ def _h2_run_rows() -> list[dict[str, Any]]:
         {
             "id": 1,
             "trading_date": T,
+            "strategy": "h2",
             "version": H2_VERSION,
             "definitions_sha256": DEFINITIONS_SHA256,
             "status": "computed",
@@ -2088,13 +2089,14 @@ def _h2_item_rows() -> list[dict[str, Any]]:
     return [
         {
             "id": rank,
-            "h2_run_id": 1,
+            "run_id": 1,
             "trading_date": T,
             "instrument_id": instrument_id,
+            "strategy": "h2",
             "version": H2_VERSION,
             "rank": rank,
-            "high_gap_240": value,
             "close": close,
+            "values_json": {"high_gap_240": value},
         }
         for rank, (instrument_id, value, close) in enumerate(items, start=1)
     ]
@@ -2128,8 +2130,9 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "candidate_llm_notes": _candidate_note_rows(),
     "mainstream_runs": _mainstream_run_rows(),
     "mainstream_items": _mainstream_item_rows(),
-    "h2_runs": _h2_run_rows(),
-    "h2_items": _h2_item_rows(),
+    # H2 in the common strategy list tables (#1014).
+    "strategy_list_runs": _h2_run_rows(),
+    "strategy_list_items": _h2_item_rows(),
     "tracking_plans": _tracking_plan_rows(),
     "tracking_plan_sessions": _tracking_plan_session_rows(),
     "portfolio_positions": _portfolio_rows(),

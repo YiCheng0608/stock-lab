@@ -39,7 +39,7 @@ CHILDREN = [
     "trading_halts",
     "preopen_news_checks",
     "mainstream_items",
-    "h2_items",
+    "strategy_list_items",
     "theme_cluster_members",
 ]
 HEAD = REVISIONS[-1]
@@ -231,7 +231,7 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                 "candidate_runs",
                 "raw_payloads",
                 "mainstream_runs",
-                "h2_runs",
+                "strategy_list_runs",
                 "theme_cluster_runs",
             }
             for table in Base.metadata.sorted_tables:
@@ -268,8 +268,8 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     values.update(candidate_run_id=11)
                 if table.name == "mainstream_items":
                     values.update(mainstream_run_id=11)
-                if table.name == "h2_items":
-                    values.update(h2_run_id=11)
+                if table.name == "strategy_list_items":
+                    values.update(run_id=11)
                 if table.name == "theme_cluster_members":
                     values.update(theme_cluster_run_id=11)
                 if table.name in {"no_trade_days", "monthly_revenues", "trading_halts"}:

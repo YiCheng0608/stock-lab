@@ -135,6 +135,7 @@ from .units import (
 from .strategies import REGISTRY
 from .signal_versions import product_signal, product_signal_ids
 from .strategy_board import strategy_board
+from .strategy_lists import UnknownStrategy, read_list
 from .stock_bars import (
     DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
     MAX_LIMIT as BARS_MAX_LIMIT,
@@ -2814,6 +2815,22 @@ def h2(
 ) -> dict[str, Any]:
     """Stored H2 list (explore_research v2 X2, #881); default is the latest list."""
     return h2_list(db, date_)
+
+
+@router.get("/strategy-lists/{strategy}")
+def strategy_list(
+    strategy: str,
+    date_: date | None = Query(default=None, alias="date"),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Stored list of a registered strategy (app.strategy_lists, #1014); default is
+    the latest list.  ``h2`` answers as ``/api/h2``; an unknown strategy is 404."""
+    try:
+        return read_list(db, strategy, date_)
+    except UnknownStrategy:
+        raise HTTPException(
+            status_code=404, detail=f"unknown strategy: {strategy}"
+        ) from None
 
 
 def _news_symbol_filter(instrument: Instrument):

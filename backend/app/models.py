@@ -1424,24 +1424,32 @@ class MainstreamItem(Base):
     group_ids_json: Mapped[list[str]] = mapped_column(JSON, default=list)
 
 
-class H2Run(Base):
-    """One trading day's H2 list of a definition version (Issue #881).
+class StrategyListRun(Base):
+    """One trading day's list of a strategy and definition version (Issue #1014).
 
-    H2 is ``explore_research`` version 2's X2, frozen (``app.h2_list``): the
-    common research universe by ``high_gap_240``, the first 20.  Written by the
-    daily's ``h2_list`` step; a rerun of the same date and version replaces
-    the run and its items.  ``status`` is ``computed`` or ``zero`` (an empty
-    universe).  ``definitions_sha256`` is the research definition's hash the
-    list was written against.  No price levels: the list is not a signal.
+    The common store of the strategy lists (``app.strategy_lists``): H2
+    (``strategy='h2'``, ``app.h2_list``, moved here from ``h2_runs`` by
+    migration 0035) and the lists added after it.  Written by the daily; a
+    rerun of the same date, strategy and version replaces the run and its
+    items.  ``status`` is ``computed`` or ``zero`` (an empty universe).
+    ``definitions_sha256`` is the definition's hash the list was written
+    against; ``config_json`` its parameters.  No price levels: a list is not a
+    signal.
     """
 
-    __tablename__ = "h2_runs"
+    __tablename__ = "strategy_list_runs"
     __table_args__ = (
-        UniqueConstraint("trading_date", "version", name="uq_h2_run_day_version"),
+        UniqueConstraint(
+            "trading_date",
+            "strategy",
+            "version",
+            name="uq_strategy_list_run_day_strategy_version",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     trading_date: Mapped[date] = mapped_column(Date, index=True)
+    strategy: Mapped[str] = mapped_column(String(40))
     version: Mapped[str] = mapped_column(String(40))
     definitions_sha256: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(20))
@@ -1451,28 +1459,32 @@ class H2Run(Base):
     computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
-class H2Item(Base):
-    """A ranked stock of one H2 run (Issue #881)."""
+class StrategyListItem(Base):
+    """A ranked stock of one strategy list run (Issue #1014)."""
 
-    __tablename__ = "h2_items"
+    __tablename__ = "strategy_list_items"
     __table_args__ = (
         UniqueConstraint(
-            "trading_date", "instrument_id", "version", name="uq_h2_item_day_version"
+            "trading_date",
+            "instrument_id",
+            "strategy",
+            "version",
+            name="uq_strategy_list_item_day_strategy_version",
         ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    h2_run_id: Mapped[int] = mapped_column(ForeignKey("h2_runs.id"), index=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("strategy_list_runs.id"), index=True)
     trading_date: Mapped[date] = mapped_column(Date, index=True)
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    strategy: Mapped[str] = mapped_column(String(40))
     version: Mapped[str] = mapped_column(String(40))
     rank: Mapped[int] = mapped_column(Integer)
-    # Adjusted close of T over the highest adjusted high of the last 240 bars,
-    # minus one; null when missing (a missing value still fills the 20 last,
-    # as the research ranking does).
-    high_gap_240: Mapped[float | None] = mapped_column(Float, nullable=True)
     # The raw close of T.
     close: Mapped[float] = mapped_column(Float)
+    # The strategy's own values of the stock, by name; H2's is
+    # {"high_gap_240": <float or null>} (app.h2_list).
+    values_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class ThemeClusterRun(Base):
