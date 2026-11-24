@@ -50,6 +50,7 @@ _CHILDREN = {
     "preopen_news_checks",
     "mainstream_items",
     "h2_items",
+    "theme_cluster_members",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"

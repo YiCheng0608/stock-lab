@@ -4,7 +4,9 @@ The table is a repo data file (``backend/data/themes/themes_v1.json``).  Every
 member carries public evidence, a relation, a relevance level and its own
 effective period.  This module only parses and validates the file; the DB sync
 lives in ``worker.themes``.  Validation is structural and never touches the
-DB, so unknown instruments are reported by the sync step.
+DB, so unknown instruments are reported by the sync step.  The one writer
+here is ``write_theme_candidate`` (Issue #1018): the inactive
+``theme_candidate`` groups ``worker.theme_discovery`` proposes.
 """
 
 from __future__ import annotations
@@ -15,7 +17,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from .config import PROJECT_ROOT
+from .models import GroupMembership, ThemeGroup
 
 THEME_TABLE_PATH = PROJECT_ROOT / "backend" / "data" / "themes" / "themes_v1.json"
 THEME_TABLE_SCHEMA_VERSION = "theme-table/v1"
@@ -319,3 +325,117 @@ def member_period(
 def split_instrument(value: str) -> tuple[str, str]:
     exchange, symbol = value.split(":", 1)
     return exchange, symbol
+
+
+# --- theme candidates (Issue #1018) ----------------------------------------
+
+THEME_CANDIDATE_GROUP_ID_PREFIX = "candidate-"
+THEME_CANDIDATE_ROLE = "candidate"
+THEME_CANDIDATE_CATEGORY = "候選題材"
+THEME_CANDIDATE_SOURCE_KIND = "theme_discovery"
+
+
+def theme_candidate_group_id(candidate_id: str) -> str:
+    return f"{THEME_CANDIDATE_GROUP_ID_PREFIX}{candidate_id}"
+
+
+def _compact_json(value: dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def write_theme_candidate(
+    db: Session,
+    *,
+    candidate_id: str,
+    name: str,
+    description: str,
+    keywords: list[str],
+    members: list[dict[str, Any]],
+    valid_from: date,
+    provenance: dict[str, Any],
+) -> dict[str, Any]:
+    """Write (or extend) an inactive ``theme_candidate`` group; no commit.
+
+    ``members`` are verified members: ``instrument_id``, ``relation``,
+    ``relevance``, ``url`` and ``quote``.  The group is ``active=False`` and
+    ``name_status="pending_verification"``; its members have
+    ``role="candidate"`` and start on ``valid_from`` (the day it was found,
+    never earlier).  A group already written for the same id keeps its name
+    and description; only members without an open candidate period are
+    added (an open period is never moved or reopened).  An id taken by a group of another type is refused.  ``provenance``
+    (model, prompt version, cluster run) is kept on the group's and every
+    membership's ``source`` JSON, which must fit ``String(500)``.
+    """
+
+    if not _THEME_ID.match(candidate_id) or len(candidate_id) > 40:
+        raise ThemeTableError([f"candidate id {candidate_id!r} is not kebab-case"])
+    group_id = theme_candidate_group_id(candidate_id)
+    group = db.get(ThemeGroup, group_id)
+    if group is not None and group.group_type != THEME_CANDIDATE_GROUP_TYPE:
+        raise ThemeTableError([f"{group_id}: taken by a {group.group_type} group"])
+    group_source = _compact_json(
+        {"kind": THEME_CANDIDATE_SOURCE_KIND, "keywords": keywords, **provenance}
+    )
+    if len(group_source) > MEMBERSHIP_SOURCE_MAX_LENGTH:
+        raise ThemeTableError([f"{group_id}: source exceeds 500 characters"])
+    created = group is None
+    if created:
+        group = ThemeGroup(
+            id=group_id,
+            name=name,
+            group_type=THEME_CANDIDATE_GROUP_TYPE,
+            definition_version=str(provenance.get("prompt_version"))[
+                :DEFINITION_VERSION_MAX_LENGTH
+            ],
+            source=group_source,
+            active=False,
+            display_name_zh=name,
+            display_description_zh=description,
+            display_category=THEME_CANDIDATE_CATEGORY,
+            name_source=f"llm:{provenance.get('prompt_version')}",
+            name_status=THEME_CANDIDATE_NAME_STATUS,
+        )
+        db.add(group)
+        db.flush()
+    open_members = set(
+        db.scalars(
+            select(GroupMembership.instrument_id).where(
+                GroupMembership.group_id == group_id,
+                GroupMembership.role == THEME_CANDIDATE_ROLE,
+                GroupMembership.valid_to.is_(None),
+            )
+        ).all()
+    )
+    added: list[int] = []
+    for member in members:
+        if member["instrument_id"] in open_members:
+            continue
+        source = _compact_json(
+            {
+                "kind": THEME_CANDIDATE_SOURCE_KIND,
+                "url": member["url"],
+                "quote": member["quote"],
+                "relation": member["relation"],
+                "relevance": member["relevance"],
+                **provenance,
+            }
+        )
+        if len(source) > MEMBERSHIP_SOURCE_MAX_LENGTH:
+            raise ThemeTableError(
+                [f"{group_id}: member {member['instrument_id']} source exceeds 500"]
+            )
+        db.add(
+            GroupMembership(
+                group_id=group_id,
+                instrument_id=member["instrument_id"],
+                role=THEME_CANDIDATE_ROLE,
+                confidence=1.0,
+                valid_from=valid_from,
+                valid_to=None,
+                source=source,
+            )
+        )
+        added.append(member["instrument_id"])
+    db.flush()
+    return {"group_id": group_id, "created": created, "added": added}
+

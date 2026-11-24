@@ -4,7 +4,7 @@ Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
 analyze -> evaluate -> candidates -> indicators -> mainstream -> h2_list ->
 plan_tracking -> strategy_levels -> action_tiers -> candidate_notes ->
-period_backfill).  catchup
+theme_discovery -> period_backfill).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -92,6 +92,7 @@ DAILY_STEPS = (
     "strategy_levels",
     "action_tiers",
     "candidate_notes",
+    "theme_discovery",
     "period_backfill",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
@@ -107,6 +108,7 @@ STEP_REQUIRES = {
     "strategy_levels": ("analyze",),
     "action_tiers": ("analyze",),
     "candidate_notes": ("candidates",),
+    "theme_discovery": (),
     "period_backfill": (),
 }
 # Steps whose failure is kept on the step row only: the run stays success, so
@@ -119,10 +121,13 @@ STEP_REQUIRES = {
 # signals got an earliest execution date (the watchdog checks that).  The
 # window backfill of the newest quarters and months (#536): a failure is a
 # non-core warning in the run's summary, as a failed fundamentals snapshot is.
+# The price-volume clusters and their theme candidates (#1018): research input
+# nothing else in the run reads; worker.cli theme-discovery --date redoes them.
 NON_BLOCKING_STEPS = frozenset(
     {
         "trading_calendar",
         "candidate_notes",
+        "theme_discovery",
         "strategy_levels",
         "action_tiers",
         "mainstream",
@@ -167,6 +172,8 @@ ACTION_TIERS_MODULE = "worker.action_tiers"
 ACTION_TIERS_FUNCTION = "run_action_tiers"
 MAINSTREAM_MODULE = "worker.mainstream"
 MAINSTREAM_FUNCTION = "run_mainstream"
+THEME_DISCOVERY_MODULE = "worker.theme_discovery"
+THEME_DISCOVERY_FUNCTION = "run_theme_discovery"
 H2_LIST_MODULE = "worker.h2_list"
 H2_LIST_FUNCTION = "run_h2_list"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
@@ -280,6 +287,11 @@ def _mainstream_step(target: date) -> dict[str, Any]:
 def _h2_list_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(H2_LIST_MODULE)
     return getattr(module, H2_LIST_FUNCTION)(target)
+
+
+def _theme_discovery_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(THEME_DISCOVERY_MODULE)
+    return getattr(module, THEME_DISCOVERY_FUNCTION)(target)
 
 
 def _trading_calendar_step(target: date) -> dict[str, Any]:
@@ -863,8 +875,11 @@ def run_daily_job(
         # After strategy_levels, whose rows the tiers read (#476).
         ("action_tiers", 11, lambda: _action_tiers_step(target)),
         ("candidate_notes", 12, lambda: _candidate_note_step(target)),
+        # The clusters and theme candidates (#1018): on the bars alone; after
+        # the notes, so its LLM calls never delay them.
+        ("theme_discovery", 13, lambda: _theme_discovery_step(target)),
         # Last: it reads nothing the others write, and no other step waits on it.
-        ("period_backfill", 13, lambda: _period_backfill_step(target)),
+        ("period_backfill", 14, lambda: _period_backfill_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
