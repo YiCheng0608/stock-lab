@@ -58,6 +58,20 @@ export function revealTab(tab: Element | null) {
   else if (box.left < view.left) strip.scrollLeft -= view.left - box.left
 }
 
+type StripLike = { scrollLeft: number; scrollWidth: number; clientWidth: number }
+
+// Which sides of the strip have tabs scrolled out: they fade there (styles/mainstream.css), so the strip reads as
+// scrollable without a scrollbar.
+export function tabEdges(strip: StripLike): { left: boolean; right: boolean } {
+  return { left: strip.scrollLeft > 0, right: strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1 }
+}
+
+function markEdges(strip: HTMLElement) {
+  const edges = tabEdges(strip)
+  strip.classList.toggle('tabs-more-left', edges.left)
+  strip.classList.toggle('tabs-more-right', edges.right)
+}
+
 export function TodayListsSection({ today, renderChart, renderMainstreamChart, wide = false }: TodayListsProps) {
   const [search, setSearch] = useSearchParams()
   const kind = todayListKind(search)
@@ -66,7 +80,17 @@ export function TodayListsSection({ today, renderChart, renderMainstreamChart, w
   const x4 = useQuery(x4QueryOptions(kind))
   const change = (next: TodayListKind) => setSearch(todayListSearch(search, next))
   const todayDate = today.data?.trading_date ?? null
-  useEffect(() => { revealTab(document.getElementById(tabId(LISTS_ID, kind))) }, [kind])
+  useEffect(() => {
+    const tab = document.getElementById(tabId(LISTS_ID, kind))
+    revealTab(tab)
+    const strip = tab?.parentElement
+    if (!strip) return
+    const update = () => markEdges(strip)
+    update()
+    strip.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => { strip.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
+  }, [kind])
   return (
     <div className="today-lists">
       <Tabs items={TODAY_LISTS} value={kind} onChange={change} label="名單" idPrefix={LISTS_ID} className="tabs-compact today-list-tabs" />

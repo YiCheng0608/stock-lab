@@ -2,9 +2,15 @@
    list's .candidate-row classes (rank block, title line, sparkline, close column, 盤後終端 and the row's K-line card);
    only what differs is here. This file loads before styles.css, so its rules carry the extra .mainstream-row class. */
 .today-list-tabs { margin-top: var(--space-4); }
-/* Four tabs (#1019) do not fit 390px: one line that scrolls sideways instead of wrapping the last tab. */
+/* Four tabs (#1019) do not fit 390px: one line that scrolls sideways instead of wrapping the last tab. The strip
+   clips both axes, so a tab must not reach past it: no -1px bottom margin (the 2px underline stays whole) and the
+   focus ring inside the tab. A side with tabs scrolled out fades (revealTab sets the classes). */
 .tabs.today-list-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-.today-list-tabs .tab { flex: none; white-space: nowrap; }
+.today-list-tabs .tab { flex: none; white-space: nowrap; margin-bottom: 0; }
+.today-list-tabs .tab:focus-visible { outline-offset: -2px; }
+.today-list-tabs.tabs-more-left { mask-image: linear-gradient(to right, transparent, var(--color-text) 32px); }
+.today-list-tabs.tabs-more-right { mask-image: linear-gradient(to left, transparent, var(--color-text) 32px); }
+.today-list-tabs.tabs-more-left.tabs-more-right { mask-image: linear-gradient(to right, transparent, var(--color-text) 32px, var(--color-text) calc(100% - 32px), transparent); }
 .today-list-tabs + [role="tabpanel"] > .candidates-section > .candidates-head { margin-top: var(--space-2); }
 
 /* The groups are what this list is about: the title wraps instead of ending in an ellipsis (the today list's cuts the

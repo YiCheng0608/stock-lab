@@ -34,7 +34,7 @@ import { OVERNIGHT_US_CLOSED, OVERNIGHT_US_PENDING, overnightUsView } from './ca
 import { PageDateContext } from '../components/pageDate'
 import { removedCopyIn } from '../removedCopy.fixtures'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
-import { MainstreamList, MainstreamSection, TodayListsSection, mainstreamQueryOptions, revealTab } from './MainstreamViews'
+import { MainstreamList, MainstreamSection, TodayListsSection, mainstreamQueryOptions, revealTab, tabEdges } from './MainstreamViews'
 import { TODAY_LISTS, mainstreamGroupsText, mainstreamReturnText, mainstreamState, signedPercent, todayListKind, todayListMark, todayListPickPath, todayListSearch } from './mainstream'
 import { mainstreamItem, mainstreamResponse, missingMainstream, zeroMainstream } from './mainstream.fixtures'
 import { H2List, H2Section, h2QueryOptions } from './H2Views'
@@ -745,6 +745,13 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   revealTab(tabIn(fits, 330, 436))
   revealTab(null)
   check(fits.scrollLeft === 0, 'a strip that fits does not scroll')
+  // The scrolled-out side fades, so the strip reads as scrollable without a scrollbar (review 7120958871).
+  check(JSON.stringify(tabEdges({ scrollLeft: 62, scrollWidth: 420, clientWidth: 358 })) === '{"left":true,"right":false}' && JSON.stringify(tabEdges({ scrollLeft: 0, scrollWidth: 420, clientWidth: 358 })) === '{"left":false,"right":true}' && JSON.stringify(tabEdges({ scrollLeft: 0, scrollWidth: 358, clientWidth: 358 })) === '{"left":false,"right":false}', 'the faded sides follow the scroll')
+  // The strip clips both axes: a tab keeps inside it (whole 2px underline, focus ring inside), and the sides fade.
+  const tabsCss = (require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }).readFileSync(`${__dirname}/../styles/mainstream.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  const tabRule = (selector: string) => { const at = tabsCss.indexOf(`${selector} {`); return at < 0 ? '' : tabsCss.slice(at, tabsCss.indexOf('}', at)) }
+  check(/overflow-x: auto/.test(tabRule('.tabs.today-list-tabs')) && /margin-bottom: 0/.test(tabRule('.today-list-tabs .tab')) && /outline-offset: -2px/.test(tabRule('.today-list-tabs .tab:focus-visible')), `the tabs stay inside the scrolling strip: ${tabRule('.today-list-tabs .tab')}`)
+  check(/mask-image/.test(tabRule('.today-list-tabs.tabs-more-left')) && /mask-image/.test(tabRule('.today-list-tabs.tabs-more-right')) && /mask-image/.test(tabRule('.today-list-tabs.tabs-more-left.tabs-more-right')), 'a side with tabs scrolled out fades')
   // /api/strategy-lists/x4 only on ?list=x4.
   const requests: string[] = []
   for (const kind of ['today', 'mainstream', 'h2', 'x4'] as const) {
@@ -768,7 +775,7 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   const headCount = (markup: string) => plain(slice(markup, 'class="board-dates"', '</div>'))
   check(headCount(render(<X4Section data={x4Response({ items: x4Response().items.slice(0, 2), item_count: 2 })} loading={false} error={null} />)).includes('2 檔') && headCount(computed).includes('3 檔') && !headCount(computed).includes('20 檔'), `fewer than 20: the head writes the real count: ${headCount(computed)}`)
   const definition = inner(computed, 'x4-definition', '</p>')
-  check(definition === '月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔；母體 586 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期', `the definition: ${definition}`)
+  check(definition === '月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔（通過的不到 20 檔時只放那幾檔）；母體 586 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期', `the definition: ${definition}`)
   check(x4Definition({ universe_count: 1234, list_size: 20 }).includes('母體 1,234 檔'), 'the universe comes from the API')
   const xRow = (markup: string, rank: number) => slice(markup, `data-x4-rank="${rank}"`, '</li>')
   const first = xRow(computed, 1)
@@ -790,7 +797,7 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
 
   // No price levels, research code, numbers or t; the one research word is the badge's own 「驗證」.
   const LEVEL_CLASSES = ['price-ladder', 'candidate-entry', 'entry-plan', 'candidate-row-levels', 'candidate-row-rr', 'candidate-rr', 'level-entry', 'level-stop', 'level-target', 'candidate-ai-toggle', 'candidate-detail', 'score-bar']
-  const LEVEL_WORDS = ['進場', '停損', '目標', 'RR', '總分', '可買', '買進', '持有', '加入追蹤', '評分', 'X4', 'H2', '研究', '回測', '驗證', 't 值', 't=', '勝率', '報酬', '超額', '通過']
+  const LEVEL_WORDS = ['進場', '停損', '目標', 'RR', '總分', '可買', '買進', '持有', '加入追蹤', '評分', 'X4', 'H2', '研究', '回測', '驗證', 't 值', 't=', '勝率', '報酬', '超額', '通過驗證']
   for (const [label, markup] of [['computed', computed], ['switch', atX4]] as const) {
     const section = plain(slice(markup, 'x4-title', '</section>')).replace(X4_WATCH_BADGE, '')
     const classes = LEVEL_CLASSES.filter((name) => markup.includes(name))

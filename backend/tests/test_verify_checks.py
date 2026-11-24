@@ -3899,7 +3899,7 @@ def _x4(status="computed", items=None, zero_reason=None):
 
 
 T28_DEFINITION = (
-    "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔；"
+    "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔（通過的不到 20 檔時只放那幾檔）；"
     "母體 1,586 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期"
 )
 T28_ROWS = (
@@ -3952,7 +3952,7 @@ def test_t28_passes_on_the_lines_x4_json_gives(tmp_path):
 def test_t28_mirrors_the_frontend_helpers():
     # x4.ts x4Definition without a universe; x4LineText with every value missing.
     assert page_checks.x4_definition({"list_size": 20, "universe_count": None}) == (
-        "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔；"
+        "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 20 檔（通過的不到 20 檔時只放那幾檔）；"
         "20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期"
     )
     assert page_checks.x4_figures({}) == "盈餘殖利率 — · 營收年增 — · EPS —"
@@ -3997,6 +3997,19 @@ def test_t28_mirrors_the_frontend_helpers():
 def test_t28_fails(tmp_path, page, message):
     with pytest.raises(page_checks.Fail, match=message):
         page_checks.t28(_t28_run(tmp_path, page))
+
+
+def test_t28_zero_without_a_reason_reads_the_universe(tmp_path):
+    # x4.ts x4State: no zero_reason and members in the universe is none_passed.
+    line = "當日沒有月營收年增與 EPS 年增都為正的股票"
+    page = (
+        T28_TABS + "盈餘殖利率前 20\n前瞻觀察（未通過驗證）\n" + line + "\n熱門族群\n"
+    )
+    payload = _x4("zero")
+    assert payload["zero_reason"] is None and payload["universe_count"] == 1586
+    assert page_checks.t28(_t28_run(tmp_path, page, payload=payload)) == (
+        f"zero：顯示 `{line}`，沒有名次列"
+    )
 
 
 @pytest.mark.parametrize(

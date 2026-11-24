@@ -57,7 +57,7 @@ export function x4LineText(item: Pick<X4Item, 'eps_yield_raw' | 'revenue_yoy' | 
 // The head's definition line: the universe from the API, the volume line and the period from the constants.
 export function x4Definition(data: Pick<X4Response, 'universe_count' | 'list_size'>): string {
   const universe = typeof data.universe_count === 'number' ? `母體 ${data.universe_count.toLocaleString()} 檔，` : ''
-  return `月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 ${data.list_size} 檔；${universe}20 日均量 ${X4_MIN_AVERAGE_LOTS.toLocaleString()} 張以上的上市櫃股票；以入選後 ${X4_PERIOD_SESSIONS} 個交易日為觀察期`
+  return `月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 ${data.list_size} 檔（通過的不到 ${data.list_size} 檔時只放那幾檔）；${universe}20 日均量 ${X4_MIN_AVERAGE_LOTS.toLocaleString()} 張以上的上市櫃股票；以入選後 ${X4_PERIOD_SESSIONS} 個交易日為觀察期`
 }
 
 export type X4State =

@@ -2388,6 +2388,10 @@ def screen_list(run: Run, spec: ScreenList) -> tuple[str, int, int] | str:
         )
     if status != "computed" or not items:
         reason = payload.get("zero_reason")
+        universe = payload.get("universe_count")
+        if reason is None and isinstance(universe, int) and universe > 0:
+            # x4.ts x4State: without a reason, members in the universe mean none passed.
+            reason = "none_passed"
         key = (
             "missing"
             if status == "missing"
@@ -2608,7 +2612,7 @@ def x4_definition(payload: dict) -> str:
     count = f"母體 {universe:,} 檔，" if isinstance(universe, int) else ""
     return (
         "月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）"
-        f"最高的 {payload['list_size']} 檔；{count}20 日均量 {X4_MIN_AVERAGE_LOTS:,} 張以上的上市櫃股票；"
+        f"最高的 {payload['list_size']} 檔（通過的不到 {payload['list_size']} 檔時只放那幾檔）；{count}20 日均量 {X4_MIN_AVERAGE_LOTS:,} 張以上的上市櫃股票；"
         f"以入選後 {X4_PERIOD_SESSIONS} 個交易日為觀察期"
     )
 
