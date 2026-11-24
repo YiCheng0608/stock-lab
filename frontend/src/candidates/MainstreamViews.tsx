@@ -10,6 +10,7 @@ import { formatDate } from './candidates'
 import { CandidatesSection } from './CandidateViews'
 import { H2Section, h2QueryOptions } from './H2Views'
 import { X4Section, x4QueryOptions } from './X4Views'
+import { recentView, recentViewSearch, type RecentView } from './recentPicks'
 import {
   MAINSTREAM_TITLE,
   PICK_PARAM,
@@ -79,6 +80,8 @@ export function TodayListsSection({ today, renderChart, renderMainstreamChart, w
   const h2 = useQuery(h2QueryOptions(kind))
   const x4 = useQuery(x4QueryOptions(kind))
   const change = (next: TodayListKind) => setSearch(todayListSearch(search, next))
+  const view = recentView(search)
+  const changeView = (next: RecentView) => setSearch(recentViewSearch(search, next), { replace: true })
   const todayDate = today.data?.trading_date ?? null
   useEffect(() => {
     const tab = document.getElementById(tabId(LISTS_ID, kind))
@@ -100,8 +103,8 @@ export function TodayListsSection({ today, renderChart, renderMainstreamChart, w
           : kind === 'mainstream'
             ? <MainstreamSection data={mainstream.data} loading={mainstream.isLoading} error={mainstream.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />
             : kind === 'h2'
-              ? <H2Section data={h2.data} loading={h2.isLoading} error={h2.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />
-              : <X4Section data={x4.data} loading={x4.isLoading} error={x4.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />}
+              ? <H2Section data={h2.data} loading={h2.isLoading} error={h2.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} view={view} onViewChange={changeView} />
+              : <X4Section data={x4.data} loading={x4.isLoading} error={x4.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} view={view} onViewChange={changeView} />}
       </div>
     </div>
   )

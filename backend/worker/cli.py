@@ -21,6 +21,8 @@ from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import notes_after_candidates, run_candidate_notes_batch
 from .candidates import run_candidates
 from .theme_heat import run_theme_heat, run_theme_heat_range
+from .h2_list import backfill_h2
+from .x4_list import backfill_x4
 from .chip_provenance import run_fill_provenance
 from .chip_revisions import run_fill_short_balance, run_revise_institutional
 from .corporate_action_sync import (
@@ -159,6 +161,8 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "instruments repair --apply"
     if args.command == "chips" and args.chips_command == "short-balance" and args.apply:
         return "chips short-balance --apply"
+    if args.command == "strategy-lists" and args.strategy_lists_command == "backfill":
+        return "strategy-lists backfill"
     return None
 
 
@@ -167,7 +171,7 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
 # maintenance mode it holds never makes a daily skip.  ``chips short-balance``
 # also stops between captures from 21:25 (chip_revisions).
 DAILY_WINDOW = (time(21, 15), time(23, 30))
-DAILY_WINDOW_REFUSED = {"chips short-balance --apply"}
+DAILY_WINDOW_REFUSED = {"chips short-balance --apply", "strategy-lists backfill"}
 
 
 def in_daily_window(moment: datetime | None = None) -> bool:
@@ -341,6 +345,31 @@ def main() -> None:
         "--weekly",
         action="store_true",
         help="輸出每週最後一個交易日的排名（題材 id 與熱度）",
+    )
+    lists_parser = subparsers.add_parser(
+        "strategy-lists", help="策略名單（接近年高前 20、盈餘殖利率前 20；#1014）"
+    )
+    lists_subparsers = lists_parser.add_subparsers(
+        dest="strategy_lists_command", required=True
+    )
+    lists_backfill_parser = lists_subparsers.add_parser(
+        "backfill",
+        help="逐日回補最近 N 個交易日的名單（「近 60 日入選過」，#1021）；已存的日子不重寫",
+    )
+    lists_backfill_parser.add_argument(
+        "--strategy",
+        choices=("h2", "x4", "all"),
+        default="all",
+        help="h2、x4 或 all（預設，依序 h2、x4）",
+    )
+    lists_backfill_parser.add_argument(
+        "--sessions", type=int, default=60, help="交易日數（預設 60）"
+    )
+    lists_backfill_parser.add_argument(
+        "--until", help="YYYY-MM-DD 最後一個交易日；未指定使用 DB 最新的 stock 日線日"
+    )
+    lists_backfill_parser.add_argument(
+        "--force", action="store_true", help="已存的日子也重算改寫"
     )
     discovery_parser = subparsers.add_parser(
         "theme-discovery",
@@ -950,6 +979,19 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             result = run_theme_heat(parse_date(args.run_date))
         else:
             parser.error("theme-heat 要 --date 或 --since")
+    elif args.command == "strategy-lists" and args.strategy_lists_command == "backfill":
+        if args.sessions < 1:
+            parser.error("strategy-lists backfill 的 --sessions 要 ≥ 1")
+        runners = {"h2": backfill_h2, "x4": backfill_x4}
+        keys = ("h2", "x4") if args.strategy == "all" else (args.strategy,)
+        until = parse_date(args.until)
+        runs = [runners[key](until, args.sessions, force=args.force) for key in keys]
+        result = {
+            "status": "success"
+            if all(run["status"] == "success" for run in runs)
+            else "failed",
+            "strategies": runs,
+        }
     elif args.command == "theme-discovery":
         result = run_theme_discovery(
             date.fromisoformat(args.run_date), ai=not args.no_ai
@@ -1115,6 +1157,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         "news-project",
         "theme-heat",
         "theme-discovery",
+        "strategy-lists",
     } and result.get("status") not in {
         "success",
         "no_data",

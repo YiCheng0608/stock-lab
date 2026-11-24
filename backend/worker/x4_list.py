@@ -8,6 +8,10 @@ the daily's log, and a ``failed`` result the daily keeps on the step row only
 (``schedule_runs.NON_BLOCKING_STEPS``), so the today list, the run's status and
 the exit code do not change.  A failed computation commits nothing: the
 date's previous list, if any, stays.
+
+``backfill_x4`` writes the lists of the last 60 sessions day by day for
+the page's 「近 60 日入選過」 (#1021; ``worker.cli strategy-lists``): the days
+already stored are kept unless forced, so a rerun writes only what is missing.
 """
 
 from __future__ import annotations
@@ -16,7 +20,8 @@ import sys
 from datetime import date
 from typing import Any
 
-from app.x4_list import X4_VERSION, compute_x4
+from app.x4_list import X4, X4_VERSION, compute_x4
+from app.strategy_lists import RECENT_SESSIONS, backfill, latest_session
 from worker import pipeline
 
 
@@ -48,3 +53,16 @@ def run_x4_list(target: date) -> dict[str, Any]:
             "version": X4_VERSION,
             "error": error,
         }
+
+
+def backfill_x4(
+    until: date | None = None, sessions: int = RECENT_SESSIONS, *, force: bool = False
+) -> dict[str, Any]:
+    """The last ``sessions`` sessions' lists to ``until`` (the latest session
+    when None), old to new; ``app.strategy_lists.backfill``."""
+
+    with pipeline.SessionLocal() as db:
+        until = until or latest_session(db)
+        if until is None:
+            return {"status": "failed", "strategy": X4.key, "error": "no session"}
+        return backfill(db, X4, until, sessions, force=force)

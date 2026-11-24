@@ -95,13 +95,18 @@ TREE = {
     # Issue 882: the third list (接近年高前 20), its copy and the rows both lists share.
     "candidates/H2Views.tsx": (
         "import { h2State } from './h2'\nimport { ScreenList } from './ScreenList'\n"
+        "import { RecentPicksList } from './RecentPicksViews'\n"
     ),
     "candidates/h2.ts": "export const h2State = 1\n",
     # #1019: the fourth list (盈餘殖利率前 20) and its copy.
     "candidates/X4Views.tsx": (
         "import { x4State } from './x4'\nimport { ScreenList } from './ScreenList'\n"
+        "import { RecentPicksList } from './RecentPicksViews'\n"
     ),
     "candidates/x4.ts": "export const x4State = 1\n",
+    # #1021: 近 60 日入選過 of the third and fourth lists.
+    "candidates/RecentPicksViews.tsx": "import { recentPickRows } from './recentPicks'\n",
+    "candidates/recentPicks.ts": "export const recentPickRows = 1\n",
     "candidates/ScreenList.tsx": "import { Sparkline } from './CandidateViews'\n",
     "candidates/MainstreamChart.tsx": (
         "import { StockBarsChart } from '../stock/StockBarsChart'\n"

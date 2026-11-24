@@ -52,3 +52,13 @@ a.mainstream-today-mark:hover { border-color: var(--color-primary); color: var(-
   .candidate-row.mainstream-row .candidate-row-nums > div { justify-items: end; }
   .today-list-tabs { margin-top: var(--space-3); }
 }
+
+/* 「當天」「近 60 日入選過」 (#1021): the chips under the head (or the definition), then in the second view the window
+   line and rows of the stock and 「入選 k 次 · 首次 · 最近」 with 「今日未入選」; no rank, close or chart column. */
+.recent-view-chips { margin: 0 0 var(--space-3); }
+.recent-picks-window { margin: 0 0 var(--space-2); }
+.candidate-row.recent-pick-row > .candidate-row-main { grid-template-columns: minmax(0, 1fr); }
+.candidate-row.recent-pick-row .candidate-row-title { white-space: normal; }
+.recent-pick-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.recent-pick-text { font-variant-numeric: tabular-nums; }
+.recent-not-today { color: var(--color-text-muted); white-space: nowrap; }

@@ -2182,6 +2182,69 @@ def _x4_item_rows() -> list[dict[str, Any]]:
     ]
 
 
+# ---- 近 60 日入選過 (#1021): two earlier stored lists of each strategy ----
+# Hand-set runs on EARLIER_LIST_DAYS (the fifth and second sessions before T), so recent_picks has
+# three stored lists of 60 sessions (the page writes 「近 3 個交易日（名單從 MM/DD 起）」): T's first
+# stock in all three, its second in the later one, and one stock off T's list (RECENT_EXTRA) in both,
+# so it reads 「今日未入選」 and sorts after T's second (the same count, listed earlier).
+EARLIER_LIST_DAYS = (SESSIONS[-6], SESSIONS[-3])
+RECENT_EXTRA = {"h2": "9206", "x4": "9102"}
+EARLIER_RUN_ID = 10
+
+
+def _earlier_lists() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    from app.h2_list import DEFINITIONS_SHA256, H2_CONFIG, H2_VERSION
+    from app.x4_list import X4_CONFIG, X4_VERSION
+
+    ids = {symbol: instrument_id for instrument_id, _e, symbol, *_rest in _INSTRUMENTS}
+    closes = {symbol: bars[-1]["close"] for symbol, bars in SERIES.items() if bars}
+    by_id = {instrument_id: symbol for symbol, instrument_id in ids.items()}
+    h2_ids = [instrument_id for instrument_id, _v, _c in _h2_plan()[0]]
+    x4_ids = [instrument_id for instrument_id, _v, _c in _x4_plan()[0]]
+    plans = (
+        ("h2", H2_VERSION, H2_CONFIG, h2_ids, {"high_gap_240": -0.05}),
+        ("x4", X4_VERSION, X4_CONFIG, x4_ids, dict(_x4_plan()[0][0][1])),
+    )
+    runs: list[dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
+    next_item = len(_h2_plan()[0]) + len(_x4_plan()[0]) + 1
+    for key, version, config, today_ids, values in plans:
+        extra = ids[RECENT_EXTRA[key]]
+        for n, day in enumerate(EARLIER_LIST_DAYS):
+            listed = [today_ids[0], extra] + ([today_ids[1]] if n == 1 else [])
+            run_id = EARLIER_RUN_ID + len(runs)
+            runs.append(
+                {
+                    "id": run_id,
+                    "trading_date": day,
+                    "strategy": key,
+                    "version": version,
+                    "definitions_sha256": DEFINITIONS_SHA256,
+                    "status": "computed",
+                    "universe_count": 7,
+                    "item_count": len(listed),
+                    "config_json": dict(config),
+                    "computed_at": _at(day, 10, 6),
+                }
+            )
+            for rank, instrument_id in enumerate(listed, start=1):
+                items.append(
+                    {
+                        "id": next_item,
+                        "run_id": run_id,
+                        "trading_date": day,
+                        "instrument_id": instrument_id,
+                        "strategy": key,
+                        "version": version,
+                        "rank": rank,
+                        "close": closes.get(by_id[instrument_id]),
+                        "values_json": dict(values),
+                    }
+                )
+                next_item += 1
+    return runs, items
+
+
 # ---- theme heat (Issue #1017): hand-set rows of T, not computed from the fixture ----
 
 # group id -> (rank, heat, quality, available weight, percentiles, raw values, news counts)
@@ -2289,8 +2352,8 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "mainstream_runs": _mainstream_run_rows(),
     "mainstream_items": _mainstream_item_rows(),
     # H2 and X4 in the common strategy list tables (#1014, #1016).
-    "strategy_list_runs": _h2_run_rows() + _x4_run_rows(),
-    "strategy_list_items": _h2_item_rows() + _x4_item_rows(),
+    "strategy_list_runs": _h2_run_rows() + _x4_run_rows() + _earlier_lists()[0],
+    "strategy_list_items": _h2_item_rows() + _x4_item_rows() + _earlier_lists()[1],
     "theme_heat_runs": _theme_heat_run_rows(),
     "theme_heat_scores": _theme_heat_score_rows(),
     "tracking_plans": _tracking_plan_rows(),
@@ -2561,6 +2624,25 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         # The page's close, change and sparkline are read at request time (#882).
         ("h2", "items.0.market.change_status", "known"),
         ("h2", "items.0.recent_closes.closes", 30),
+        # 近 60 日入選過 (#1021): T's list and the two earlier ones (_earlier_lists); /api/h2
+        # is the same without recent_picks.
+        ("strategy-lists/h2", "recent_picks.days", 3),
+        ("strategy-lists/h2", "recent_picks.since", EARLIER_LIST_DAYS[0].isoformat()),
+        (
+            "strategy-lists/h2",
+            "recent_picks.items[].instrument.symbol",
+            ["9101", "9201", "9206", "9102", "9103", "9202", "9203", "9204"],
+        ),
+        (
+            "strategy-lists/h2",
+            "recent_picks.items[].count",
+            [3, 2, 2, 1, 1, 1, 1, 1],
+        ),
+        (
+            "strategy-lists/h2",
+            "recent_picks.items[].today_rank",
+            [1, 2, None, 4, 3, 5, 6, 7],
+        ),
         # 盈餘殖利率前 20 (#1019): the stored run of T (_x4_run_rows), the four passing
         # members by eps_yield_raw (X4_PLAN); fewer than 20, nothing fills it.
         ("strategy-lists/x4", "status", "computed"),
@@ -2574,6 +2656,15 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             ["9201", "9202", "9103", "9101"],
         ),
         ("strategy-lists/x4", "items[].today_list.rank", [3, None, 2, 1]),
+        # 近 60 日入選過 (#1021): T's list and the two earlier ones (_earlier_lists).
+        ("strategy-lists/x4", "recent_picks.days", 3),
+        (
+            "strategy-lists/x4",
+            "recent_picks.items[].instrument.symbol",
+            ["9201", "9202", "9102", "9101", "9103"],
+        ),
+        ("strategy-lists/x4", "recent_picks.items[].count", [3, 2, 2, 1, 1]),
+        ("strategy-lists/x4", "recent_picks.items[].today_rank", [1, 2, None, 4, 3]),
         (
             "strategy-lists/x4",
             "items[].revenue_month",

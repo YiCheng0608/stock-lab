@@ -5,6 +5,8 @@ import { Badge, Card, DateBadge, EmptyState, Skeleton } from '../components/ui'
 import type { X4Item, X4Response } from '../types'
 import { formatDate } from './candidates'
 import { X4_TITLE, type TodayListKind } from './mainstream'
+import { RecentPicksList, RecentViewChips } from './RecentPicksViews'
+import type { RecentView } from './recentPicks'
 import { ScreenList, errorReason } from './ScreenList'
 import { X4_WATCH_BADGE, x4Definition, x4LineParts, x4State } from './x4'
 
@@ -41,8 +43,12 @@ export function X4List({ items, listDate = null, todayDate = null, renderChart, 
 }
 
 // todayDate: the date of the today list the page shows (the latest); 「今日名單 #n」 links to it only on the same date.
-export function X4Section({ data, loading, error, renderChart, wide = false, todayDate = null }: { data: X4Response | undefined; loading: boolean; error: unknown; renderChart?: (item: X4Item) => ReactNode; wide?: boolean; todayDate?: string | null }) {
+// view: 「當天」 or 「近 60 日入選過」 (#1021, the page's ?view=recent); the chips show once the API has a stored list in
+// the window.
+export function X4Section({ data, loading, error, renderChart, wide = false, todayDate = null, view = 'today', onViewChange }: { data: X4Response | undefined; loading: boolean; error: unknown; renderChart?: (item: X4Item) => ReactNode; wide?: boolean; todayDate?: string | null; view?: RecentView; onViewChange?: (view: RecentView) => void }) {
   const state = data ? x4State(data) : null
+  const recent = data?.status !== 'missing' && data?.recent_picks && data.recent_picks.days > 0 ? data.recent_picks : null
+  const shown = recent ? view : 'today'
   return (
     <section className="candidates-section x4-section" aria-labelledby="x4-title">
       <div className="candidates-head">
@@ -54,15 +60,18 @@ export function X4Section({ data, loading, error, renderChart, wide = false, tod
         </span>
       </div>
       {data && state?.kind === 'list' && <p className="small-note mainstream-definition x4-definition">{x4Definition(data)}</p>}
+      {recent && !loading && !error && <RecentViewChips view={shown} onChange={onViewChange ?? (() => undefined)} counts={{ today: state?.kind === 'list' ? state.items.length : 0, recent: recent.items.length }} />}
       {loading
         ? <Skeleton lines={4} label={`${X4_TITLE} 載入中…`} />
         : error
           ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
           : !state || !data
             ? null
-            : state.kind === 'list'
-              ? <X4List items={state.items} listDate={data.trading_date} todayDate={todayDate} renderChart={renderChart} wide={wide} />
-              : <Card><EmptyState title={state.title} reason={state.text} /></Card>}
+            : shown === 'recent' && recent
+              ? <RecentPicksList kind="x4" picks={recent} />
+              : state.kind === 'list'
+                ? <X4List items={state.items} listDate={data.trading_date} todayDate={todayDate} renderChart={renderChart} wide={wide} />
+                : <Card><EmptyState title={state.title} reason={state.text} /></Card>}
     </section>
   )
 }

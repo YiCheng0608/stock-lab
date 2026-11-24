@@ -41,8 +41,9 @@ changes nothing of the today list or ``mainstream_v1``.
 The daily writes it after ``mainstream`` (``worker.h2_list``) into the common
 strategy list tables as strategy ``h2`` (``app.strategy_lists``, #1014;
 ``high_gap_240`` in ``values_json``); a rerun of the date replaces the run and
-its items.  ``/api/h2`` and ``/api/strategy-lists/h2`` answer the same.  ``today_list`` (the stock's rank and
-entry type in the day's today list) is read at request time, not stored,
+its items.  ``/api/h2`` and ``/api/strategy-lists/h2`` answer the same, the
+latter with ``recent_picks`` too (#1021).  ``today_list`` (the stock's rank
+and entry type in the day's today list) is read at request time, not stored,
 and so are the page's ``market`` (the close of T and its change) and
 ``recent_closes`` (the sparkline), as ``/api/mainstream`` reads them (#882).
 """
@@ -500,4 +501,4 @@ H2 = Strategy(
 def h2_list(db: Session, trading_date: date | None) -> dict[str, Any]:
     """The stored list of ``trading_date`` (the latest when None)."""
 
-    return read_list(db, H2.key, trading_date)
+    return read_list(db, H2.key, trading_date, recent=False)

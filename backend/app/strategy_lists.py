@@ -9,6 +9,16 @@ rest is here: a rerun of the date, strategy and version replaces the run and
 its items; the API reads the latest run when no date is asked.  A strategy's
 own values of a stock go in ``values_json`` by name.
 
+``read_list`` adds ``recent_picks`` (#1021): the stocks of the list's last
+``RECENT_SESSIONS`` sessions (``session_window``: the days with a ``stock``
+bar up to the list's date), each with how many of those days' stored lists
+it is in and the first and last of them, and each of the day's items gets its
+own ``recent_picks``.  ``days`` is how many of the sessions have a stored
+list (fewer than 60 before the backfill), ``since`` the first of them.  It
+says which days a stock was listed, nothing of a position.  ``/api/h2`` does
+not carry it (``recent=False``).  ``backfill`` writes the window's lists day
+by day (``worker.cli strategy-lists``), a stored day kept unless forced.
+
 ``STRATEGIES`` is the registry (``strategies()``): ``h2`` is ``app.h2_list``
 (its ``/api/h2`` stays and answers the same) and ``x4`` is ``app.x4_list``
 (#1016).  Migration 0035 moved H2's rows
@@ -19,16 +29,23 @@ here from ``h2_runs`` / ``h2_items`` (``move_h2_in``, and back with
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import delete, desc, inspect, select, text
 from sqlalchemy.orm import Session
 
 from .clock import utcnow
-from .models import StrategyListItem, StrategyListRun
+from .models import Instrument, MarketBar, StrategyListItem, StrategyListRun
+
+# The holding period the research measured each day's list over (#1021).
+RECENT_SESSIONS = 60
+# 60 sessions are about 87 calendar days; 150 covers the longest holidays.
+WINDOW_LOOKBACK_DAYS = 150
+SESSION_TYPE = "stock"
 
 
 @dataclass(frozen=True)
@@ -152,13 +169,202 @@ def stored(
     return run, list(items)
 
 
-def read_list(db: Session, key: str, trading_date: date | None) -> dict[str, Any]:
+def read_list(
+    db: Session, key: str, trading_date: date | None, *, recent: bool = True
+) -> dict[str, Any]:
     """The API response of ``key``'s list; ``UnknownStrategy`` for a key not
-    in the registry."""
+    in the registry.  ``recent`` adds ``recent_picks`` (#1021)."""
 
     entry = strategy(key)
     run, items = stored(db, entry, trading_date)
-    return entry.present(db, run, items, trading_date)
+    response = entry.present(db, run, items, trading_date)
+    if not recent:
+        return response
+    if run is None:
+        response["recent_picks"] = None
+        return response
+    picks = recent_picks(db, entry, run.trading_date)
+    by_id = {row["instrument"]["id"]: row for row in picks["items"]}
+    for item in response["items"]:
+        row = by_id.get(item["instrument"]["id"])
+        item["recent_picks"] = (
+            {key: row[key] for key in ("count", "first_date", "last_date")}
+            if row
+            else None
+        )
+    response["recent_picks"] = picks
+    return response
+
+
+def session_window(db: Session, until: date, sessions: int) -> list[date]:
+    """The last ``sessions`` days with a ``stock`` bar up to ``until``, old to new."""
+
+    # Bounded so the read stays on the index; more sessions look back further.
+    lookback = WINDOW_LOOKBACK_DAYS * max(1, -(-sessions // RECENT_SESSIONS))
+    days = db.scalars(
+        select(MarketBar.trading_date)
+        .join(Instrument, Instrument.id == MarketBar.instrument_id)
+        .where(
+            Instrument.instrument_type == SESSION_TYPE,
+            MarketBar.trading_date <= until,
+            MarketBar.trading_date >= until - timedelta(days=lookback),
+        )
+        .distinct()
+        .order_by(desc(MarketBar.trading_date))
+        .limit(sessions)
+    ).all()
+    return sorted(days)
+
+
+def latest_session(db: Session) -> date | None:
+    """The latest day with a ``stock`` bar."""
+
+    return db.scalar(
+        select(MarketBar.trading_date)
+        .join(Instrument, Instrument.id == MarketBar.instrument_id)
+        .where(Instrument.instrument_type == SESSION_TYPE)
+        .order_by(desc(MarketBar.trading_date))
+        .limit(1)
+    )
+
+
+def recent_picks(
+    db: Session, entry: Strategy, day: date, sessions: int = RECENT_SESSIONS
+) -> dict[str, Any]:
+    """Every stock of the stored lists of the last ``sessions`` sessions to
+    ``day``: how many of those lists it is in, the first and the last; the
+    most often first, then the latest, then the symbol."""
+
+    window = session_window(db, day, sessions) or [day]
+    first, last = window[0], window[-1]
+    days = set(window)
+    run_days = sorted(
+        run_day
+        for run_day in db.scalars(
+            select(StrategyListRun.trading_date).where(
+                StrategyListRun.strategy == entry.key,
+                StrategyListRun.version == entry.version,
+                StrategyListRun.trading_date >= first,
+                StrategyListRun.trading_date <= last,
+            )
+        ).all()
+        if run_day in days
+    )
+    picked: dict[int, list[date]] = {}
+    ranks: dict[int, int] = {}
+    for instrument_id, picked_day, rank in db.execute(
+        select(
+            StrategyListItem.instrument_id,
+            StrategyListItem.trading_date,
+            StrategyListItem.rank,
+        ).where(
+            StrategyListItem.strategy == entry.key,
+            StrategyListItem.version == entry.version,
+            StrategyListItem.trading_date >= first,
+            StrategyListItem.trading_date <= last,
+        )
+    ):
+        if picked_day not in days:
+            continue
+        picked.setdefault(instrument_id, []).append(picked_day)
+        if picked_day == day:
+            ranks[instrument_id] = rank
+    instruments = {
+        row.id: row
+        for row in db.execute(
+            select(
+                Instrument.id,
+                Instrument.exchange,
+                Instrument.symbol,
+                Instrument.name,
+                Instrument.instrument_type,
+            ).where(Instrument.id.in_(list(picked)))
+        )
+    }
+    rows = []
+    for instrument_id, picked_days in picked.items():
+        instrument = instruments[instrument_id]
+        rows.append(
+            {
+                "instrument": {
+                    "id": instrument.id,
+                    "exchange": instrument.exchange,
+                    "symbol": instrument.symbol,
+                    "name": instrument.name,
+                    "instrument_type": instrument.instrument_type,
+                },
+                "count": len(picked_days),
+                "first_date": min(picked_days).isoformat(),
+                "last_date": max(picked_days).isoformat(),
+                "today_rank": ranks.get(instrument_id),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            -row["count"],
+            -date.fromisoformat(row["last_date"]).toordinal(),
+            row["instrument"]["symbol"],
+            row["instrument"]["exchange"],
+        )
+    )
+    return {
+        "sessions": sessions,
+        "days": len(run_days),
+        "since": run_days[0].isoformat() if run_days else None,
+        "items": rows,
+    }
+
+
+def backfill(
+    db: Session,
+    entry: Strategy,
+    until: date,
+    sessions: int = RECENT_SESSIONS,
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Write the lists of the last ``sessions`` sessions to ``until``, old to
+    new, one day at a time.  A day with a stored list of the version is kept
+    (a rerun writes only the days still missing) unless ``force``; a day that
+    cannot be computed is reported and the next one goes on."""
+
+    started = time.monotonic()
+    window = session_window(db, until, sessions)
+    have = set(
+        db.scalars(
+            select(StrategyListRun.trading_date).where(
+                StrategyListRun.strategy == entry.key,
+                StrategyListRun.version == entry.version,
+                StrategyListRun.trading_date.in_(window),
+            )
+        ).all()
+    )
+    written, kept, failed = [], [], []
+    for day in window:
+        if day in have and not force:
+            kept.append(day.isoformat())
+            continue
+        try:
+            write_list(db, entry, day)
+        except Exception as exc:  # noqa: BLE001 - reported, the next day goes on
+            db.rollback()
+            failed.append(
+                {"date": day.isoformat(), "error": f"{type(exc).__name__}: {exc}"}
+            )
+            continue
+        written.append(day.isoformat())
+    return {
+        "status": "failed" if failed or not window else "success",
+        "strategy": entry.key,
+        "version": entry.version,
+        "sessions": len(window),
+        "since": window[0].isoformat() if window else None,
+        "until": window[-1].isoformat() if window else None,
+        "written": len(written),
+        "kept": len(kept),
+        "failed": failed,
+        "seconds": round(time.monotonic() - started, 1),
+    }
 
 
 # --- migration 0035: H2's rows in and out ----------------------------------

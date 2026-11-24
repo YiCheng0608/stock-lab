@@ -616,6 +616,9 @@ def test_today_shots_include_the_market_page():
         ("today-h2", "/?list=h2", (1280, 390)),
         # And its fourth (#1019).
         ("today-x4", "/?list=x4", (1280, 390)),
+        # 近 60 日入選過 of the third and fourth (#1021), selected through ?view=.
+        ("today-h2-recent", "/?list=h2&view=recent", (1280, 390)),
+        ("today-x4-recent", "/?list=x4&view=recent", (1280, 390)),
         ("market", "/market", (1280, 390)),
         ("market-tpex", "/market?index=tpex", (1280,)),
         ("market-tx", "/market?index=tx", (1280,)),
@@ -3749,7 +3752,7 @@ def _t27_run(tmp_path, page=T27_PAGE, payload=None, rows=None, today_day="2026-1
         }
     }
     payloads = {
-        "h2": _h2() if payload is None else payload,
+        "strategy-lists/h2": _h2() if payload is None else payload,
         "dashboard": {"as_of": "2026-10-16T17:30:00+08:00"},
         "candidates": {"trading_date": today_day},
     }
@@ -4036,3 +4039,138 @@ def test_t28_empty_states(tmp_path, status, reason, line):
                 tmp_path, page.replace("前瞻觀察（未通過驗證）\n", ""), payload=payload
             )
         )
+
+
+# ---- T29: 近 60 日入選過 (#1021) ----
+
+
+def _recent(days=3, since="2026-10-14"):
+    def row(symbol, name, exchange, count, first, last, rank):
+        return {
+            "instrument": {"exchange": exchange, "symbol": symbol, "name": name},
+            "count": count,
+            "first_date": first,
+            "last_date": last,
+            "today_rank": rank,
+        }
+
+    return {
+        "sessions": 60,
+        "days": days,
+        "since": since,
+        # Out of order: the page sorts them (recentPickRows).
+        "items": [
+            row("9206", "示範轉市", "TPEx", 2, "2026-10-14", "2026-10-15", None),
+            row("9101", "示範晶圓", "TWSE", 3, "2026-10-14", "2026-10-16", 1),
+            row("9202", "示範板卡", "TPEx", 2, "2026-10-15", "2026-10-16", 2),
+        ],
+    }
+
+
+T29_ROWS = (
+    "9101 示範晶圓 上市\n入選 3 次 · 首次 10/14 · 最近 10/16\n"
+    "9202 示範板卡 上櫃\n入選 2 次 · 首次 10/15 · 最近 10/16\n"
+    "9206 示範轉市 上櫃\n入選 2 次 · 首次 10/14 · 最近 10/15\n今日未入選\n"
+)
+
+
+def _t29_page(title, head, rows=T29_ROWS, window="近 3 個交易日（名單從 10/14 起）"):
+    return (
+        f"今日名單\n主流族群前 20\n接近年高前 20\n盈餘殖利率前 20\n{title}\n{head}"
+        f"當天\n近 60 日入選過 3 檔\n{window}\n{rows}熱門族群\n#1\n"
+    )
+
+
+def _t29_run(tmp_path, h2_page=None, x4_page=None, recent=None):
+    payloads = {
+        "strategy-lists/h2": {**_h2(), "recent_picks": recent or _recent()},
+        "strategy-lists/x4": {**_x4(), "recent_picks": recent or _recent()},
+    }
+    pages = {
+        "today-h2-recent-1280": h2_page or _t29_page("接近年高前 20", "3 檔\n"),
+        "today-x4-recent-1280": x4_page
+        or _t29_page("盈餘殖利率前 20", "2 檔\n前瞻觀察（未通過驗證）\n"),
+    }
+    return FakeRun(tmp_path, payloads, pages)
+
+
+def test_t29_passes_on_the_lines_recent_picks_gives(tmp_path):
+    assert page_checks.t29(_t29_run(tmp_path)) == (
+        "today-h2-recent：`近 60 日入選過 3 檔`、`近 3 個交易日（名單從 10/14 起）`、"
+        "3 列入選次數與日期 = h2.json、`今日未入選` 1 行；"
+        "today-x4-recent：`近 60 日入選過 3 檔`、`近 3 個交易日（名單從 10/14 起）`、"
+        "3 列入選次數與日期 = x4.json、`今日未入選` 1 行"
+    )
+
+
+def test_t29_mirrors_the_frontend_copy():
+    assert (
+        page_checks.recent_window_text({"sessions": 60, "days": 60, "since": "x"})
+        == "近 60 個交易日"
+    )
+    assert [
+        r["instrument"]["symbol"] for r in page_checks.recent_order(_recent()["items"])
+    ] == [
+        "9101",
+        "9202",
+        "9206",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("h2_page", "message"),
+    [
+        # The rows in the API's order, not the page's.
+        (
+            _t29_page(
+                "接近年高前 20",
+                "3 檔\n",
+                rows=T29_ROWS.split("9202")[0]
+                + "9206 示範轉市 上櫃\n入選 2 次 · 首次 10/14 · 最近 10/15\n今日未入選\n"
+                + "9202 示範板卡 上櫃\n入選 2 次 · 首次 10/15 · 最近 10/16\n",
+            ),
+            "列是",
+        ),
+        # 「今日未入選」 missing, a 60 the lists do not have, a position word, a rank.
+        (
+            _t29_page(
+                "接近年高前 20", "3 檔\n", rows=T29_ROWS.replace("今日未入選\n", "")
+            ),
+            "今日未入選",
+        ),
+        (
+            _t29_page("接近年高前 20", "3 檔\n", window="近 60 個交易日"),
+            "缺 `近 3 個交易日",
+        ),
+        (
+            _t29_page("接近年高前 20", "3 檔\n", rows=T29_ROWS + "持有中\n"),
+            "持有",
+        ),
+        (
+            _t29_page(
+                "接近年高前 20", "3 檔\n", rows="#1 9101 示範晶圓 上市\n" + T29_ROWS
+            ),
+            "名次列",
+        ),
+        (
+            _t29_page("接近年高前 20", "3 檔\n").replace(
+                "近 60 日入選過 3 檔", "近 60 日入選過"
+            ),
+            "選中的膠囊",
+        ),
+    ],
+)
+def test_t29_fails(tmp_path, h2_page, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t29(_t29_run(tmp_path, h2_page=h2_page))
+
+
+def test_t29_without_a_list_in_the_window(tmp_path):
+    page = "今日名單\n接近年高前 20\n接近年高前 20\n3 檔\n熱門族群\n"
+    run = _t29_run(
+        tmp_path,
+        h2_page=page,
+        x4_page=page.replace("接近年高前 20", "盈餘殖利率前 20"),
+        recent={"sessions": 60, "days": 0, "since": None, "items": []},
+    )
+    assert "沒有近 60 日的名單" in page_checks.t29(run)
