@@ -29,6 +29,7 @@ here from ``h2_runs`` / ``h2_items`` (``move_h2_in``, and back with
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -327,6 +328,7 @@ def backfill(
     (a rerun writes only the days still missing) unless ``force``; a day that
     cannot be computed is reported and the next one goes on."""
 
+    started = time.monotonic()
     window = session_window(db, until, sessions)
     have = set(
         db.scalars(
@@ -346,7 +348,9 @@ def backfill(
             write_list(db, entry, day)
         except Exception as exc:  # noqa: BLE001 - reported, the next day goes on
             db.rollback()
-            failed.append({"date": day.isoformat(), "error": f"{type(exc).__name__}: {exc}"})
+            failed.append(
+                {"date": day.isoformat(), "error": f"{type(exc).__name__}: {exc}"}
+            )
             continue
         written.append(day.isoformat())
     return {
@@ -359,6 +363,7 @@ def backfill(
         "written": len(written),
         "kept": len(kept),
         "failed": failed,
+        "seconds": round(time.monotonic() - started, 1),
     }
 
 

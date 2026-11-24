@@ -985,9 +985,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         runners = {"h2": backfill_h2, "x4": backfill_x4}
         keys = ("h2", "x4") if args.strategy == "all" else (args.strategy,)
         until = parse_date(args.until)
-        runs = [
-            runners[key](until, args.sessions, force=args.force) for key in keys
-        ]
+        runs = [runners[key](until, args.sessions, force=args.force) for key in keys]
         result = {
             "status": "success"
             if all(run["status"] == "success" for run in runs)

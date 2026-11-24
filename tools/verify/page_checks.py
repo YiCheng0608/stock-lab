@@ -790,7 +790,18 @@ def today_shots(run: Run) -> list[Shot]:
     # The market page (/market, Issue 549) was split off the today page and is checked with it (features/today.md);
     # the page's second list, 主流族群前 20, is its own shot (?list=mainstream, Issue 769), and so is its
     # third, 接近年高前 20 (?list=h2, Issue 882), and its fourth, 盈餘殖利率前 20 (?list=x4, #1019).
-    return [TODAY, TODAY_MAINSTREAM, TODAY_H2, TODAY_X4, MARKET, MARKET_TPEX, MARKET_TX]
+    # 近 60 日入選過 of the third and fourth (?view=recent, #1021) are two more.
+    return [
+        TODAY,
+        TODAY_MAINSTREAM,
+        TODAY_H2,
+        TODAY_X4,
+        TODAY_H2_RECENT,
+        TODAY_X4_RECENT,
+        MARKET,
+        MARKET_TPEX,
+        MARKET_TX,
+    ]
 
 
 def news_shots(run: Run) -> list[Shot]:
@@ -2556,7 +2567,9 @@ def h2_row_lines(item: dict, payload: dict, other_day: str | None = None) -> lis
 
 H2_LIST = ScreenList(
     shot=TODAY_H2,
-    api="h2",
+    # The page reads /api/strategy-lists/h2 since #1021 (/api/h2 with recent_picks).
+    api="strategy-lists/h2",
+    file="h2.json",
     title=H2_TITLE,
     empty=H2_EMPTY,
     definition=h2_definition,
@@ -2575,7 +2588,7 @@ def t27(run: Run) -> str:
         return result
     badge, rows, marks = result
     return (
-        f"{badge}、`{len(run.get('h2', 'h2.json').get('items') or [])} 檔`、定義行；{rows} 列的名次、"
+        f"{badge}、`{len(run.get('strategy-lists/h2', 'h2.json').get('items') or [])} 檔`、定義行；{rows} 列的名次、"
         f"距一年高點與 `今日名單 #n` {marks} 行 = h2.json；沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
     )
 
@@ -2686,6 +2699,116 @@ def t28(run: Run) -> str:
         f"{badge}、`{len(run.get('strategy-lists/x4', 'x4.json').get('items') or [])} 檔`、"
         f"`{X4_WATCH_BADGE}`、定義行；{rows} 列的名次、盈餘殖利率、營收年增與 EPS、`今日名單 #n` {marks} 行 = x4.json；"
         "沒有點位、研究用詞與規則價位線；390 收盤欄不被切"
+    )
+
+
+# ---- T29: 近 60 日入選過 of 接近年高前 20 and 盈餘殖利率前 20 (#1021; UI_COPY_SPEC §10, decision #1 7114503228) ----
+# Mirrors frontend/src/candidates/recentPicks.ts (recentWindowText, recentPickText, recentPickRows, RECENT_NOT_TODAY)
+# and RecentPicksViews.tsx's line structure: change them together.
+TODAY_H2_RECENT = Shot("today-h2-recent", "/?list=h2&view=recent")
+TODAY_X4_RECENT = Shot("today-x4-recent", "/?list=x4&view=recent")
+RECENT_NOT_TODAY = "今日未入選"
+RECENT_LINE = re.compile(r"^入選 [0-9,]+ 次 · 首次 ")
+# Days listed and how often, nothing of a position or an order (#1021 scope 2).
+RECENT_WORDS = ("持有", "買進", "賣出", "該賣", "權重", "部位")
+
+
+def month_day(day: str | None) -> str:
+    return f"{day[5:7]}/{day[8:10]}" if day else "—"
+
+
+def recent_window_text(picks: dict) -> str:
+    if picks["days"] >= picks["sessions"]:
+        return f"近 {picks['sessions']} 個交易日"
+    return f"近 {picks['days']} 個交易日（名單從 {month_day(picks.get('since'))} 起）"
+
+
+def recent_row_lines(row: dict) -> list[str]:
+    instrument = row["instrument"]
+    market = EXCHANGE_LABELS.get(instrument["exchange"], "市場待核實")
+    lines = [
+        f"{instrument['symbol']} {instrument['name']} {market}",
+        f"入選 {row['count']} 次 · 首次 {month_day(row['first_date'])} · 最近 {month_day(row['last_date'])}",
+    ]
+    if row.get("today_rank") is None:
+        lines.append(RECENT_NOT_TODAY)
+    return lines
+
+
+def recent_order(rows: list[dict]) -> list[dict]:
+    """recentPickRows: the most often first, then the latest listed, then the symbol."""
+
+    rows = sorted(
+        rows,
+        key=lambda row: (row["instrument"]["symbol"], row["instrument"]["exchange"]),
+    )
+    rows.sort(key=lambda row: row["last_date"], reverse=True)
+    return sorted(rows, key=lambda row: -row["count"])
+
+
+def recent_view(run: Run, shot: Shot, api: str, file: str, title: str) -> str:
+    payload = run.get(api, file)
+    picks = payload.get("recent_picks")
+    text = run.text(shot)
+    found = [n for n, line in enumerate(text.lines) if line == title]
+    expect(len(found) >= 2, f"{shot.name} 缺標題 `{title}`（分頁之外的整行）")
+    i = found[-1]
+    if payload.get("status") == "missing" or not picks or not picks.get("days"):
+        expect(
+            text.find_where(lambda line: RECENT_LINE.match(line) is not None, i) < 0,
+            f"{api} 沒有近 60 日的名單卻有入選列",
+        )
+        return f"{shot.name}：沒有近 60 日的名單，沒有膠囊與入選列"
+    items = picks.get("items") or []
+    chip = f"近 60 日入選過 {len(items):,} 檔"
+    expect(text.find(chip, i) > i, f"{shot.name} 缺選中的膠囊 `{chip}`")
+    window = recent_window_text(picks)
+    w = text.find(window, i)
+    expect(w > i, f"{shot.name} 缺 `{window}`")
+    rows = [n for n, line in enumerate(text.lines) if n > w and RECENT_LINE.match(line)]
+    expect(
+        len(rows) == len(items),
+        f"{shot.name} 入選列 {len(rows)}，recent_picks.items {len(items)}",
+    )
+    for row, item in zip(rows, recent_order(items)):
+        want = recent_row_lines(item)
+        got = text.lines[row - 1 : row - 1 + len(want)]
+        expect(got == want, f"{shot.name} 列是 {got}，預期 {want}（{text.at(row)}）")
+    marks = text.count(lambda line: line == RECENT_NOT_TODAY)
+    off = sum(1 for item in items if item.get("today_rank") is None)
+    expect(
+        marks == off,
+        f"{shot.name} `{RECENT_NOT_TODAY}` {marks} 行，today_rank 為 null {off} 筆",
+    )
+    expect(
+        text.find_where(lambda line: CANDIDATE_ROW.match(line) is not None, i) < 0,
+        f"{shot.name} 近 60 日入選過仍有名次列",
+    )
+    end = text.find("熱門族群", i)
+    words = sorted(
+        {
+            word
+            for line in text.lines[i : end if end > i else len(text.lines)]
+            for word in RECENT_WORDS
+            if word in line
+        }
+    )
+    expect(not words, f"{shot.name} 出現 {'、'.join(words)}")
+    return f"{shot.name}：`{chip}`、`{window}`、{len(rows)} 列入選次數與日期 = {file}、`{RECENT_NOT_TODAY}` {marks} 行"
+
+
+@check("today", "T29")
+def t29(run: Run) -> str:
+    """#1021: ?list=h2&view=recent and ?list=x4&view=recent show recent_picks: the pressed chip, the window line,
+    each stock's 「入選 k 次 · 首次 · 最近」 in recentPickRows' order, 「今日未入選」 off the day's list, no
+    position word."""
+
+    return "；".join(
+        recent_view(run, shot, api, file, title)
+        for shot, api, file, title in (
+            (TODAY_H2_RECENT, "strategy-lists/h2", "h2.json", H2_TITLE),
+            (TODAY_X4_RECENT, "strategy-lists/x4", "x4.json", X4_TITLE),
+        )
     )
 
 

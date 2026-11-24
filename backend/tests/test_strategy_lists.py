@@ -275,9 +275,9 @@ def test_the_h2_strategy_list_is_api_h2(factory):  # noqa: F811
     for query in QUERIES:
         response = client.get(f"/api/strategy-lists/h2{query}")
         assert response.status_code == 200
-        assert _without_recent(response.json()) == client.get(
-            f"/api/h2{query}"
-        ).json(), query
+        assert (
+            _without_recent(response.json()) == client.get(f"/api/h2{query}").json()
+        ), query
     assert len(client.get("/api/strategy-lists/h2").json()["items"]) == 20
 
 
@@ -402,7 +402,9 @@ def test_recent_picks_count_the_last_60_sessions_lists(factory):  # noqa: F811
     assert any(row["today_rank"] is None for row in recent["items"])
     for item in body["items"]:
         row = next(
-            r for r in recent["items"] if r["instrument"]["id"] == item["instrument"]["id"]
+            r
+            for r in recent["items"]
+            if r["instrument"]["id"] == item["instrument"]["id"]
         )
         assert item["recent_picks"] == {
             key: row[key] for key in ("count", "first_date", "last_date")
@@ -508,7 +510,9 @@ def test_the_backfill_command(factory, monkeypatch, capsys):  # noqa: F811
     cli.main()
     assert calls == [("h2", None, 60, False), ("x4", None, 60, False)]
     argv = ["--strategy", "x4", "--sessions", "5", "--until", T.isoformat(), "--force"]
-    monkeypatch.setattr(sys, "argv", ["worker.cli", "strategy-lists", "backfill", *argv])
+    monkeypatch.setattr(
+        sys, "argv", ["worker.cli", "strategy-lists", "backfill", *argv]
+    )
     cli.main()
     assert calls[-1] == ("x4", T, 5, True)
     capsys.readouterr()
@@ -528,6 +532,8 @@ def test_the_backfill_holds_maintenance_mode_outside_the_daily_hours():
 
     from worker.cli import DAILY_WINDOW_REFUSED, maintenance_guarded
 
-    args = argparse.Namespace(command="strategy-lists", strategy_lists_command="backfill")
+    args = argparse.Namespace(
+        command="strategy-lists", strategy_lists_command="backfill"
+    )
     assert maintenance_guarded(args) == "strategy-lists backfill"
     assert "strategy-lists backfill" in DAILY_WINDOW_REFUSED

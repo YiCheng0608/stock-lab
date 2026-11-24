@@ -1801,7 +1801,26 @@ export type MainstreamResponse = {
   items: MainstreamItem[]
 }
 
-// 接近年高前 20 (/api/h2, #881/#882): the stored H2 list of a session, no price levels.
+// 「近 60 日入選過」 (/api/strategy-lists/{strategy}, #1021): the stocks of the stored lists of the last `sessions`
+// sessions to the list's date, how many of those lists each is in and the first and last of them; `days` is how many
+// of the sessions have a stored list (fewer before the backfill), `since` the first of them. Days listed, no position.
+export type StrategyRecentPick = { count: number; first_date: string; last_date: string }
+
+export type StrategyRecentRow = StrategyRecentPick & {
+  instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
+  // The stock's rank in the list of the date; null when it is not in it.
+  today_rank: number | null
+}
+
+export type StrategyRecentPicks = {
+  sessions: number
+  days: number
+  since: string | null
+  items: StrategyRecentRow[]
+}
+
+// 接近年高前 20 (/api/strategy-lists/h2, #881/#882; /api/h2 without the recent_picks of #1021): the stored H2 list of
+// a session, no price levels.
 export type H2Item = {
   rank: number
   instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
@@ -1812,6 +1831,7 @@ export type H2Item = {
   market: CandidateMarket
   recent_closes: CandidateRecentCloses
   today_list: MainstreamTodayList | null
+  recent_picks?: StrategyRecentPick | null
 }
 
 export type H2Response = {
@@ -1824,6 +1844,8 @@ export type H2Response = {
   // null on missing.
   universe_count: number | null
   items: H2Item[]
+  // null on missing; not on /api/h2.
+  recent_picks?: StrategyRecentPicks | null
 }
 
 // 盈餘殖利率前 20 (/api/strategy-lists/x4, #1016/#1019): the stored X4 list of a session, no price levels.
@@ -1848,6 +1870,7 @@ export type X4Item = {
   market: CandidateMarket
   recent_closes: CandidateRecentCloses
   today_list: MainstreamTodayList | null
+  recent_picks?: StrategyRecentPick | null
 }
 
 export type X4Response = {
@@ -1863,4 +1886,6 @@ export type X4Response = {
   universe_count: number | null
   item_count: number | null
   items: X4Item[]
+  // null on missing.
+  recent_picks?: StrategyRecentPicks | null
 }

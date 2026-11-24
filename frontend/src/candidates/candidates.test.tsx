@@ -43,6 +43,8 @@ import { h2Response, missingH2, zeroH2 } from './h2.fixtures'
 import { X4List, X4Section, x4QueryOptions } from './X4Views'
 import { X4_WATCH_BADGE, x4Definition, x4LineText, x4State, x4YieldText } from './x4'
 import { missingX4, x4Response, zeroX4 } from './x4.fixtures'
+import { RECENT_NOT_TODAY, monthDay, recentView, recentViewSearch, recentChipLabel, recentPickRows, recentPickText, recentWindowText } from './recentPicks'
+import { recentPicks } from './recentPicks.fixtures'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 // scripts/ci-test.cjs runs this module under Node (the frontend ships no Node typings): the stylesheet check reads a file.
 declare const require: (id: string) => unknown
@@ -828,4 +830,77 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   check(plain(render(<X4Section data={undefined} loading error={null} />)).includes('盈餘殖利率前 20 載入中…'), 'loading')
   const failed = plain(render(<X4Section data={undefined} loading={false} error={new Error('API 500: boom')} />))
   check(failed.includes('資料暫時無法載入') && failed.includes('API 500: boom'), `a failed load gives its reason: ${failed}`)
+}
+
+// ---- 近 60 日入選過 (#1021; UI_COPY_SPEC §10, decision #1 7114503228 D4 ③): the chips and the second view on 接近年高前 20 and 盈餘殖利率前 20 ----
+{
+  const plain = (markup: string) => markup.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&')
+  const chips = (markup: string) => [...markup.matchAll(/<button[^>]*class="badge filter-chip[^"]*"[^>]*aria-pressed="(true|false)"[^>]*>([^<]*)<\/button>/g)].map((match) => `${match[1] === 'true' ? '*' : ''}${match[2]}`)
+  const rows = (markup: string) => [...markup.matchAll(/data-recent-symbol="([^"]+)"/g)].map((match) => match[1])
+  const rowOfSymbol = (markup: string, symbol: string) => slice(markup, `data-recent-symbol="${symbol}"`, '</li>')
+  const FORBIDDEN = ['持有', '買進', '賣出', '該賣', '權重', '部位', '加碼', '減碼']
+
+  // The helpers: MM/DD, the line, the window and the order.
+  check(monthDay('2026-11-20') === '11/20' && monthDay(null) === '—', 'MM/DD of an ISO date')
+  check(recentPickText({ count: 3, first_date: '2026-10-01', last_date: '2026-11-20' }) === '入選 3 次 · 首次 10/01 · 最近 11/20', 'the row line')
+  check(recentWindowText({ sessions: 60, days: 60, since: '2026-08-25' }) === '近 60 個交易日', 'a full window says 60 sessions')
+  check(recentWindowText({ sessions: 60, days: 12, since: '2026-11-05' }) === '近 12 個交易日（名單從 11/05 起）', `fewer stored lists than 60: the days they cover, not 60: ${recentWindowText({ sessions: 60, days: 12, since: '2026-11-05' })}`)
+  check(recentPickRows(recentPicks()).map((row) => row.instrument.symbol).join(',') === '2330,6274,2603,1101', 'the most often first, then the latest listed')
+  check(recentPickRows({ items: [...recentPicks().items].reverse() }).map((row) => row.instrument.symbol).join(',') === '2330,6274,2603,1101', 'the order does not depend on the API order')
+  check(recentChipLabel('recent', true, { today: 3, recent: 57 }) === '近 60 日入選過 57 檔' && recentChipLabel('today', false, { today: 3, recent: 57 }) === '當天', 'only the pressed chip writes its count')
+
+  // ?view=recent: the page's address keeps the view; a tab switch drops it.
+  check(recentView(new URLSearchParams('list=h2&view=recent')) === 'recent' && recentView(new URLSearchParams('list=h2&view=x')) === 'today' && recentView(new URLSearchParams('list=x4')) === 'today', 'only view=recent is 近 60 日入選過')
+  check(recentViewSearch(new URLSearchParams('list=h2'), 'recent').toString() === 'list=h2&view=recent' && recentViewSearch(new URLSearchParams('list=h2&view=recent'), 'today').toString() === 'list=h2', 'the chips set and clear view')
+  check(todayListSearch(new URLSearchParams('list=h2&view=recent'), 'x4').toString() === 'list=x4', 'a tab switch opens the list on 當天')
+  for (const [key, location] of [['h2', '/?list=h2&view=recent'], ['x4', '/?list=x4&view=recent']] as const) {
+    const client = new QueryClient()
+    client.setQueryData([key, 'latest'], { ...(key === 'h2' ? h2Response() : x4Response()), recent_picks: recentPicks() })
+    const page = renderToStaticMarkup(<QueryClientProvider client={client}><StaticRouter location={location}><TodayListsSection today={{ data: listResponse(), loading: false, error: null }} /></StaticRouter></QueryClientProvider>)
+    check(rows(page).join(',') === '2330,6274,2603,1101' && chips(page).join('|') === '當天|*近 60 日入選過 4 檔', `${key}: ${location} opens 近 60 日入選過`)
+  }
+
+  for (const [kind, Section, response, empty] of [
+    ['h2', H2Section, h2Response, zeroH2],
+    ['x4', X4Section, x4Response, () => zeroX4('none_passed')],
+  ] as const) {
+    const data = { ...response(), recent_picks: recentPicks() } as H2Response & X4Response
+    // 當天 (the default): the chips under the head, the day's rows as before.
+    const today = render(<Section data={data} loading={false} error={null} todayDate="2026-11-20" />)
+    check(chips(today).join('|') === '*當天 3 檔|近 60 日入選過', `${kind}: the chips, 當天 pressed with its count: ${chips(today).join('|')}`)
+    check(today.includes('role="group" aria-label="名單範圍"') && rows(today).length === 0 && today.includes(`data-${kind}-rank="1"`), `${kind}: the day's list under the chips`)
+    const without = render(<Section data={response() as never} loading={false} error={null} todayDate="2026-11-20" />)
+    check(plain(today).replace('當天 3 檔近 60 日入選過', '') === plain(without), `${kind}: the chips add no other text to 當天`)
+    // 近 60 日入選過: the window, then the rows by count, each its line and 「今日未入選」 off the day's list.
+    const recent = render(<Section data={data} loading={false} error={null} todayDate="2026-11-20" view="recent" />)
+    check(chips(recent).join('|') === '當天|*近 60 日入選過 4 檔', `${kind}: 近 60 日入選過 pressed: ${chips(recent).join('|')}`)
+    check(plain(recent).includes('近 60 個交易日') && !plain(recent).includes('名單從'), `${kind}: the full window line`)
+    check(rows(recent).join(',') === '2330,6274,2603,1101', `${kind}: the rows by count, then the latest: ${rows(recent).join(',')}`)
+    check(!recent.includes(`data-${kind}-rank=`) && !recent.includes('candidate-row-nums') && !recent.includes('sparkline'), `${kind}: no rank, close or sparkline in the second view`)
+    const first = rowOfSymbol(recent, '2330')
+    const third = rowOfSymbol(recent, '2603')
+    check(plain(first).includes('2330 台積電 上市') && plain(first).includes('入選 12 次 · 首次 08/25 · 最近 11/20') && first.includes('href="/stocks/TWSE/2330"'), `${kind}: a row: ${plain(first)}`)
+    check(!plain(first).includes(RECENT_NOT_TODAY) && !plain(rowOfSymbol(recent, '6274')).includes(RECENT_NOT_TODAY), `${kind}: no mark on a stock in the day's list`)
+    check(plain(third).includes('入選 5 次 · 首次 09/01 · 最近 11/10') && third.includes(`<span class="badge badge-compact recent-not-today">${RECENT_NOT_TODAY}</span>`) && plain(rowOfSymbol(recent, '1101')).includes(RECENT_NOT_TODAY), `${kind}: 「今日未入選」 off the day's list: ${plain(third)}`)
+    // Fewer stored lists than 60 sessions: 「近 {n} 個交易日（名單從 MM/DD 起）」.
+    const short = render(<Section data={{ ...data, recent_picks: recentPicks({ days: 12, since: '2026-11-05' }) }} loading={false} error={null} view="recent" />)
+    check(plain(short).includes('近 12 個交易日（名單從 11/05 起）') && !plain(short).includes('近 60 個交易日'), `${kind}: fewer than 60 days of lists: ${plain(short).slice(0, 120)}`)
+    // The day's list empty, the window not: the chips stay and the second view lists the window's stocks.
+    const zero = { ...empty(), recent_picks: recentPicks() } as never
+    check(chips(render(<Section data={zero} loading={false} error={null} />)).join('|') === '*當天 0 檔|近 60 日入選過', `${kind}: zero day keeps the chips`)
+    check(rows(render(<Section data={zero} loading={false} error={null} view="recent" />)).length === 4, `${kind}: zero day, the window's rows`)
+    // No chips without a stored list in the window, on missing, on /api/h2's shape, while loading or on a failure.
+    for (const [label, value] of [
+      ['no recent_picks', response()],
+      ['no list in the window', { ...response(), recent_picks: recentPicks({ days: 0, since: null, items: [] }) }],
+    ] as const) {
+      check(chips(render(<Section data={value as never} loading={false} error={null} view="recent" />)).length === 0, `${kind}: ${label}: no chips, the day's list`)
+    }
+    check(chips(render(<Section data={data} loading error={null} />)).length === 0 && chips(render(<Section data={data} loading={false} error={new Error('x')} />)).length === 0, `${kind}: no chips while loading or failed`)
+    // Only when it was listed and how often: no position, order or weight word in either view.
+    for (const [label, markup] of [['today', today], ['recent', recent], ['short', short]] as const) {
+      const words = FORBIDDEN.filter((word) => plain(slice(markup, `${kind}-title`, '</section>')).includes(word))
+      check(words.length === 0, `${kind} ${label}: no 持有／買進／賣出 wording: ${words.join(',')}`)
+    }
+  }
 }

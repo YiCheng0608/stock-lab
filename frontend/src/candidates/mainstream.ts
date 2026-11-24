@@ -1,5 +1,6 @@
 import type { MainstreamItem, MainstreamResponse } from '../types'
 import { formatDate } from './candidates'
+import { VIEW_PARAM } from './recentPicks'
 
 // 主流族群前 20 (mainstream_v1, #768/#769): the second list beside the today list on the today page. A screen, not a
 // strategy: each row has its groups, its W-session strength, the close and the sparkline, and no price levels (no entry
@@ -34,10 +35,11 @@ export function todayListKind(search: URLSearchParams): TodayListKind {
 }
 
 // The address of another list: ?list=mainstream, ?list=h2 or ?list=x4, or nothing for the today list (its default). A pick is dropped,
-// so switching back by the tab starts the today list from its default row.
+// so switching back by the tab starts the today list from its default row; so is ?view=recent (#1021): a list opens on 當天.
 export function todayListSearch(search: URLSearchParams, kind: TodayListKind): URLSearchParams {
   const next = new URLSearchParams(search)
   next.delete(PICK_PARAM)
+  next.delete(VIEW_PARAM)
   if (kind === 'mainstream') next.set(LIST_PARAM, MAINSTREAM_LIST)
   else if (kind === 'h2') next.set(LIST_PARAM, H2_LIST)
   else if (kind === 'x4') next.set(LIST_PARAM, X4_LIST)
