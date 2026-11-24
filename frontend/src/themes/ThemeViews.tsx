@@ -218,6 +218,18 @@ export function ThemeBoardPanel({ board, data, search, candidates }: { board: Th
   )
 }
 
+// The 熱度 tab's 說明 fold (UI_COPY_SPEC §8.5 熱度分頁): the units and blanks only, as BoardHelp.
+function HeatHelp() {
+  return (
+    <details className="details board-help">
+      <summary>說明</summary>
+      <div className="board-help-body">
+        <p>熱度 0–100，依熱度排名；六分項為<Term id="percentile">同榜百分位</Term>（0–100）；5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。</p>
+      </div>
+    </details>
+  )
+}
+
 // ---- /themes 熱度 tab: theme_heat_v1 (docs/spec/theme_heat.md, #1017), the board-row layout with six components ----
 
 function HeatExtremes({ item }: { item: ThemeHeatItem }) {
@@ -282,9 +294,10 @@ export function ThemeHeatPanel({ data, search }: { data: ThemeHeatResponse; sear
         <Badge tone="warning" className="heat-not-signal">{HEAT_NOT_A_SIGNAL}</Badge>
         {newsNote && <Badge className="heat-news-note">{newsNote}</Badge>}
         <span className="board-dates"><DateBadge date={data.meta.trading_date} /></span>
+        <HeatHelp />
       </div>
       {data.items.length === 0
-        ? <Card><EmptyState reason="題材熱度尚未計算" /></Card>
+        ? <Card><EmptyState reason={data.meta.empty_reason === 'no_theme' ? '當日沒有題材' : '題材熱度尚未計算'} /></Card>
         : items.length === 0
           ? <Card><EmptyState title="沒有符合的題材" reason="換個名稱關鍵字再試" /></Card>
           : (

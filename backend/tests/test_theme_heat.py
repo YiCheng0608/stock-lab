@@ -541,6 +541,39 @@ def test_news_before_the_first_run_is_history_short(factory):
     assert rows["theme-a"].components_json["news"]["percentile"] is None
 
 
+@pytest.mark.parametrize(
+    ("first_run", "status"), [(7, "available"), (8, "history_short")]
+)
+def test_the_first_run_on_the_prior_windows_first_day_is_enough(
+    factory, first_run, status
+):
+    # T's prior window is (S[T-23], S[T-3]]: its first calendar day is DAYS[7].
+    with factory() as db:
+        build(db)
+        db.execute(
+            IngestionRun.__table__.update()
+            .where(IngestionRun.run_date == DAYS[0])
+            .values(run_date=DAYS[first_run])
+        )
+        db.commit()
+        assert theme_heat.compute_theme_heat(db, T).news_status == status
+
+
+def test_an_ai_named_member_counts_whatever_exchange_was_written(factory):
+    # a1 is a TPEx stock; the AI wrote TWSE:a1 (#264): it still counts for A.
+    with factory() as db:
+        build(db)
+        db.execute(
+            Instrument.__table__.update()
+            .where(Instrument.symbol == "a1")
+            .values(exchange="TPEx")
+        )
+        db.commit()
+        theme_heat.compute_theme_heat(db, T)
+    _, rows = _scores(factory)
+    assert rows["theme-a"].details_json["news_recent"] == 6
+
+
 def test_a_failed_news_run_is_not_a_run(factory):
     with factory() as db:
         build(db, news_run_on_t=False)
@@ -698,8 +731,80 @@ def test_the_range_recomputes_every_session_and_reports_weeks(factory):
         for k in sorted({d.isocalendar()[:2] for d in DAYS[20:]})
     ]
     assert weeks[-1]["ranking"][0]["theme_id"] == "theme-a"
+    # The range starts with fewer than 23 sessions before it: its early days have
+    # no news component, but T still reads its news (review #1034 必修 1).
+    run, rows = _scores(factory)
+    with factory() as db:
+        first = db.scalar(
+            select(ThemeHeatRun).where(ThemeHeatRun.trading_date == DAYS[20])
+        )
+    # DAYS[20] has no news run of its own (no_news_run comes before history_short).
+    assert (first.news_status, run.news_status) == ("no_news_run", "available")
+    ranged = (rows["theme-a"].details_json, rows["theme-a"].heat)
+    assert ranged == (
+        {"flow_members": 2, "news_recent": 6, "news_prior": 19},
+        pytest.approx(0.94),
+    )
+    with factory() as db:
+        theme_heat.compute_theme_heat(db, T)
+    _, single = _scores(factory)
+    assert (single["theme-a"].details_json, single["theme-a"].heat) == ranged
     failed = run_theme_heat_range(T + timedelta(days=1), T + timedelta(days=3))
     assert failed["status"] == "failed"
+
+
+def test_the_cli_dispatches_and_exits_one_on_failure(factory, monkeypatch, capsys):
+    import json
+    import sys
+
+    import worker.cli as cli
+
+    with factory() as db:
+        build(db)
+    calls = []
+    monkeypatch.setattr(
+        cli,
+        "run_theme_heat_range",
+        lambda since, until, weekly: calls.append((since, until, weekly))
+        or {"status": "success"},
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["worker.cli", "theme-heat", "--since", "2026-10-21"]
+    )
+    cli.main()
+    assert calls == [(DAYS[20], DAYS[20], False)]
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "worker.cli",
+            "theme-heat",
+            "--since",
+            "2026-10-21",
+            "--until",
+            "2026-10-30",
+            "--weekly",
+        ],
+    )
+    cli.main()
+    assert calls[-1] == (DAYS[20], T, True)
+    capsys.readouterr()
+    # --until alone and no date at all are usage errors (exit 2).
+    for argv in (["--until", "2026-10-30"], []):
+        monkeypatch.setattr(sys, "argv", ["worker.cli", "theme-heat", *argv])
+        with pytest.raises(SystemExit) as exited:
+            cli.main()
+        assert exited.value.code == 2
+    # A date that is not a session: failed, exit 1.
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["worker.cli", "theme-heat", "--date", (T + timedelta(days=1)).isoformat()],
+    )
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    assert exited.value.code == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
 
 
 def test_the_api_returns_the_latest_and_a_date(factory):

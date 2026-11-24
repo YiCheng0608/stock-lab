@@ -27,6 +27,7 @@ from typing import Any
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.orm import Session
 
+from .ai_candidates import candidate_row
 from .clock import utcnow
 from .models import (
     ChipSnapshot,
@@ -83,6 +84,8 @@ NEWS_RUN_TYPE = "news"
 NEWS_RUN_STATUSES = ("success", "partial")
 TAIPEI = timezone(timedelta(hours=8))
 NOT_A_SIGNAL = "不是買賣訊號"
+# Ids per IN (...) of a query (#791: SQLite's bound variable limit).
+QUERY_BATCH = 900
 
 THEME_HEAT_CONFIG: dict[str, Any] = {
     "version": THEME_HEAT_VERSION,
@@ -575,9 +578,12 @@ def load_news(
     ).all()
     run_days = {row.run_date for row in runs}
     first_run_day = min(run_days) if run_days else None
-    lowest = first - NEWS_RECENT_SESSIONS - NEWS_PRIOR_SESSIONS
-    if lowest < 0 or not run_days:
+    if not run_days:
         return NewsInputs([], run_days, first_run_day, None)
+    # Read from the first day's window, or the first session when it is short:
+    # a day whose window is incomplete is history_short (news_status), and the
+    # later days of the range still need their items.
+    lowest = max(0, first - NEWS_RECENT_SESSIONS - NEWS_PRIOR_SESSIONS)
     # A day's items, Taipei, can be stored up to 8 hours earlier in UTC.
     since = datetime.combine(sessions[lowest], datetime.min.time()) - timedelta(hours=8)
     until = datetime.combine(sessions[last] + timedelta(days=1), datetime.min.time())
@@ -590,22 +596,33 @@ def load_news(
             when < until,
         )
     ).all()
-    ai = done_results(db, [row.id for row in items], PROMPT_VERSION)
-    codes: set[tuple[str, str]] = set()
+    ids = [row.id for row in items]
+    ai: dict[int, Any] = {}
+    # SQLite caps the bound variables of a statement (#791): read in batches.
+    for start in range(0, len(ids), QUERY_BATCH):
+        ai.update(done_results(db, ids[start : start + QUERY_BATCH], PROMPT_VERSION))
+    codes: set[str] = set()
     for result in ai.values():
         for candidate in result.ai_symbol_candidates_json or []:
-            exchange, _, symbol = str(candidate.get("symbol", "")).partition(":")
-            if exchange and symbol:
-                codes.add((exchange, symbol))
-    instrument_ids: dict[tuple[str, str], int] = {}
-    if codes:
-        for instrument_id, exchange, symbol in db.execute(
-            select(Instrument.id, Instrument.exchange, Instrument.symbol).where(
-                Instrument.symbol.in_({symbol for _exchange, symbol in codes})
-            )
+            _exchange, _, symbol = str(candidate.get("symbol", "")).partition(":")
+            if symbol:
+                codes.add(symbol)
+    master: dict[str, list[tuple[str, int, str]]] = {}
+    code_list = sorted(codes)
+    for start in range(0, len(code_list), QUERY_BATCH):
+        for instrument_id, exchange, symbol, status in db.execute(
+            select(
+                Instrument.id, Instrument.exchange, Instrument.symbol, Instrument.status
+            ).where(Instrument.symbol.in_(code_list[start : start + QUERY_BATCH]))
         ).all():
-            if (exchange, symbol) in codes:
-                instrument_ids[(exchange, symbol)] = instrument_id
+            master.setdefault(symbol, []).append((exchange, instrument_id, status))
+
+    def named_instrument(written: str, symbol: str) -> int | None:
+        # The news pages' rule (app.ai_candidates): the model often writes the
+        # wrong exchange, so a code with one active row is that row.
+        row = candidate_row(master.get(symbol, []), written, 2)
+        return None if row is None else row[1]
+
     entries: list[NewsEntry] = []
     for row in items:
         named: set[int] = set()
@@ -613,7 +630,7 @@ def load_news(
         if result is not None:
             for candidate in result.ai_symbol_candidates_json or []:
                 exchange, _, symbol = str(candidate.get("symbol", "")).partition(":")
-                found = instrument_ids.get((exchange, symbol))
+                found = named_instrument(exchange, symbol) if symbol else None
                 if found is not None:
                     named.add(found)
         entries.append(

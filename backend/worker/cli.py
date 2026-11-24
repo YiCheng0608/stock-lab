@@ -928,15 +928,13 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
     elif args.command == "action-tiers":
         result = run_action_tiers(parse_date(args.run_date))
     elif args.command == "theme-heat":
-        if args.since:
-            since = date.fromisoformat(args.since)
-            result = run_theme_heat_range(
-                since,
-                date.fromisoformat(args.until) if args.until else since,
-                weekly=args.weekly,
-            )
+        since, until = parse_date(args.since), parse_date(args.until)
+        if until is not None and since is None:
+            parser.error("theme-heat 的 --until 要搭配 --since")
+        if since is not None:
+            result = run_theme_heat_range(since, until or since, weekly=args.weekly)
         elif args.run_date:
-            result = run_theme_heat(date.fromisoformat(args.run_date))
+            result = run_theme_heat(parse_date(args.run_date))
         else:
             parser.error("theme-heat 要 --date 或 --since")
     elif args.command == "news-project":
