@@ -1,0 +1,1410 @@
+{
+  "tool": "round18_research",
+  "version": 1,
+  "design": "1029",
+  "definitions_sha256": "5e840aa8361f40ae87e783caa907b86ea5daafbd02c741e5aeb50df8a25adc73",
+  "label": "每季法定期限的事件日，`nonop_q`（最新一季單季 `營業外收入及支出` ÷ 單季 `營業收入`）小者先取 20 檔",
+  "direction": "基本面：業外損益的反向",
+  "parameters": {
+    "engine": "events",
+    "rule": "quarterly",
+    "keys": [
+      [
+        "nonop_q",
+        "low"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": "next_event",
+    "start": [
+      "date",
+      "2013-05-15"
+    ]
+  },
+  "hypothesis": "G1",
+  "engine": "events",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-05-15",
+    "first_session": "2013-05-16",
+    "last_session": "2019-12-31",
+    "days": 1631,
+    "signal_days": 27,
+    "event_days": 27
+  },
+  "prerequisites": {
+    "days": 1631,
+    "min_days": 500,
+    "delisted": 85,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 3,
+      "members": 1414,
+      "valued": 1166,
+      "delisted": 164,
+      "delisted_missing": 164,
+      "zero": 0,
+      "negative": 347,
+      "events": [
+        {
+          "signal_date": "2013-05-15",
+          "quarter": "2013-03-31",
+          "members": 456,
+          "valued": 371,
+          "stale": 18,
+          "format": 19,
+          "fields": 48,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 55,
+          "delisted_missing": 55,
+          "zero": 0,
+          "negative": 88
+        },
+        {
+          "signal_date": "2013-08-14",
+          "quarter": "2013-06-30",
+          "members": 483,
+          "valued": 399,
+          "stale": 33,
+          "format": 3,
+          "fields": 48,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 56,
+          "delisted_missing": 56,
+          "zero": 0,
+          "negative": 99
+        },
+        {
+          "signal_date": "2013-11-14",
+          "quarter": "2013-09-30",
+          "members": 475,
+          "valued": 396,
+          "stale": 16,
+          "format": 16,
+          "fields": 47,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 53,
+          "delisted_missing": 53,
+          "zero": 0,
+          "negative": 160
+        }
+      ]
+    },
+    "2014": {
+      "days": 4,
+      "members": 2053,
+      "valued": 1716,
+      "delisted": 233,
+      "delisted_missing": 233,
+      "zero": 0,
+      "negative": 571,
+      "events": [
+        {
+          "signal_date": "2014-03-31",
+          "quarter": "2013-12-31",
+          "members": 652,
+          "valued": 551,
+          "stale": 2,
+          "format": 34,
+          "fields": 63,
+          "revenue": 2,
+          "names": 20,
+          "delisted": 72,
+          "delisted_missing": 72,
+          "zero": 0,
+          "negative": 169
+        },
+        {
+          "signal_date": "2014-05-15",
+          "quarter": "2014-03-31",
+          "members": 525,
+          "valued": 443,
+          "stale": 16,
+          "format": 16,
+          "fields": 50,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 57,
+          "delisted_missing": 57,
+          "zero": 0,
+          "negative": 128
+        },
+        {
+          "signal_date": "2014-08-14",
+          "quarter": "2014-06-30",
+          "members": 509,
+          "valued": 423,
+          "stale": 34,
+          "format": 3,
+          "fields": 49,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 58,
+          "delisted_missing": 58,
+          "zero": 0,
+          "negative": 197
+        },
+        {
+          "signal_date": "2014-11-14",
+          "quarter": "2014-09-30",
+          "members": 367,
+          "valued": 299,
+          "stale": 15,
+          "format": 12,
+          "fields": 41,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 46,
+          "delisted_missing": 46,
+          "zero": 0,
+          "negative": 77
+        }
+      ]
+    },
+    "2015": {
+      "days": 4,
+      "members": 1763,
+      "valued": 1466,
+      "delisted": 194,
+      "delisted_missing": 194,
+      "zero": 0,
+      "negative": 473,
+      "events": [
+        {
+          "signal_date": "2015-03-31",
+          "quarter": "2014-12-31",
+          "members": 473,
+          "valued": 395,
+          "stale": 2,
+          "format": 29,
+          "fields": 47,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 53,
+          "delisted_missing": 53,
+          "zero": 0,
+          "negative": 82
+        },
+        {
+          "signal_date": "2015-05-15",
+          "quarter": "2015-03-31",
+          "members": 466,
+          "valued": 387,
+          "stale": 16,
+          "format": 25,
+          "fields": 38,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 47,
+          "delisted_missing": 47,
+          "zero": 0,
+          "negative": 191
+        },
+        {
+          "signal_date": "2015-08-14",
+          "quarter": "2015-06-30",
+          "members": 372,
+          "valued": 303,
+          "stale": 31,
+          "format": 3,
+          "fields": 35,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 45,
+          "delisted_missing": 45,
+          "zero": 0,
+          "negative": 127
+        },
+        {
+          "signal_date": "2015-11-16",
+          "quarter": "2015-09-30",
+          "members": 452,
+          "valued": 381,
+          "stale": 16,
+          "format": 13,
+          "fields": 42,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 49,
+          "delisted_missing": 49,
+          "zero": 0,
+          "negative": 73
+        }
+      ]
+    },
+    "2016": {
+      "days": 4,
+      "members": 1637,
+      "valued": 1409,
+      "delisted": 139,
+      "delisted_missing": 139,
+      "zero": 0,
+      "negative": 691,
+      "events": [
+        {
+          "signal_date": "2016-03-31",
+          "quarter": "2015-12-31",
+          "members": 479,
+          "valued": 414,
+          "stale": 2,
+          "format": 28,
+          "fields": 35,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 39,
+          "delisted_missing": 39,
+          "zero": 0,
+          "negative": 206
+        },
+        {
+          "signal_date": "2016-05-16",
+          "quarter": "2016-03-31",
+          "members": 361,
+          "valued": 310,
+          "stale": 15,
+          "format": 9,
+          "fields": 27,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 31,
+          "delisted_missing": 31,
+          "zero": 0,
+          "negative": 184
+        },
+        {
+          "signal_date": "2016-08-15",
+          "quarter": "2016-06-30",
+          "members": 461,
+          "valued": 400,
+          "stale": 26,
+          "format": 1,
+          "fields": 34,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 39,
+          "delisted_missing": 39,
+          "zero": 0,
+          "negative": 134
+        },
+        {
+          "signal_date": "2016-11-14",
+          "quarter": "2016-09-30",
+          "members": 336,
+          "valued": 285,
+          "stale": 14,
+          "format": 11,
+          "fields": 26,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 30,
+          "delisted_missing": 30,
+          "zero": 0,
+          "negative": 167
+        }
+      ]
+    },
+    "2017": {
+      "days": 4,
+      "members": 1912,
+      "valued": 1644,
+      "delisted": 171,
+      "delisted_missing": 171,
+      "zero": 0,
+      "negative": 637,
+      "events": [
+        {
+          "signal_date": "2017-03-31",
+          "quarter": "2016-12-31",
+          "members": 502,
+          "valued": 435,
+          "stale": 2,
+          "format": 32,
+          "fields": 32,
+          "revenue": 1,
+          "names": 20,
+          "delisted": 39,
+          "delisted_missing": 39,
+          "zero": 0,
+          "negative": 130
+        },
+        {
+          "signal_date": "2017-05-15",
+          "quarter": "2017-03-31",
+          "members": 427,
+          "valued": 366,
+          "stale": 16,
+          "format": 10,
+          "fields": 35,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 41,
+          "delisted_missing": 41,
+          "zero": 0,
+          "negative": 271
+        },
+        {
+          "signal_date": "2017-08-14",
+          "quarter": "2017-06-30",
+          "members": 471,
+          "valued": 398,
+          "stale": 29,
+          "format": 2,
+          "fields": 42,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 47,
+          "delisted_missing": 47,
+          "zero": 0,
+          "negative": 104
+        },
+        {
+          "signal_date": "2017-11-14",
+          "quarter": "2017-09-30",
+          "members": 512,
+          "valued": 445,
+          "stale": 17,
+          "format": 11,
+          "fields": 39,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 44,
+          "delisted_missing": 44,
+          "zero": 0,
+          "negative": 132
+        }
+      ]
+    },
+    "2018": {
+      "days": 4,
+      "members": 1700,
+      "valued": 1461,
+      "delisted": 142,
+      "delisted_missing": 142,
+      "zero": 0,
+      "negative": 619,
+      "events": [
+        {
+          "signal_date": "2018-04-02",
+          "quarter": "2017-12-31",
+          "members": 500,
+          "valued": 429,
+          "stale": 1,
+          "format": 29,
+          "fields": 41,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 47,
+          "delisted_missing": 47,
+          "zero": 0,
+          "negative": 225
+        },
+        {
+          "signal_date": "2018-05-15",
+          "quarter": "2018-03-31",
+          "members": 442,
+          "valued": 378,
+          "stale": 16,
+          "format": 13,
+          "fields": 33,
+          "revenue": 2,
+          "names": 20,
+          "delisted": 38,
+          "delisted_missing": 38,
+          "zero": 0,
+          "negative": 202
+        },
+        {
+          "signal_date": "2018-08-14",
+          "quarter": "2018-06-30",
+          "members": 416,
+          "valued": 359,
+          "stale": 26,
+          "format": 2,
+          "fields": 29,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 33,
+          "delisted_missing": 33,
+          "zero": 0,
+          "negative": 88
+        },
+        {
+          "signal_date": "2018-11-14",
+          "quarter": "2018-09-30",
+          "members": 342,
+          "valued": 295,
+          "stale": 15,
+          "format": 13,
+          "fields": 19,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 24,
+          "delisted_missing": 24,
+          "zero": 0,
+          "negative": 104
+        }
+      ]
+    },
+    "2019": {
+      "days": 4,
+      "members": 1774,
+      "valued": 1583,
+      "delisted": 93,
+      "delisted_missing": 93,
+      "zero": 0,
+      "negative": 514,
+      "events": [
+        {
+          "signal_date": "2019-04-01",
+          "quarter": "2018-12-31",
+          "members": 449,
+          "valued": 398,
+          "stale": 0,
+          "format": 29,
+          "fields": 22,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 26,
+          "delisted_missing": 26,
+          "zero": 0,
+          "negative": 139
+        },
+        {
+          "signal_date": "2019-05-15",
+          "quarter": "2019-03-31",
+          "members": 451,
+          "valued": 403,
+          "stale": 16,
+          "format": 13,
+          "fields": 19,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 23,
+          "delisted_missing": 23,
+          "zero": 0,
+          "negative": 125
+        },
+        {
+          "signal_date": "2019-08-14",
+          "quarter": "2019-06-30",
+          "members": 435,
+          "valued": 388,
+          "stale": 28,
+          "format": 2,
+          "fields": 17,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 22,
+          "delisted_missing": 22,
+          "zero": 0,
+          "negative": 116
+        },
+        {
+          "signal_date": "2019-11-14",
+          "quarter": "2019-09-30",
+          "members": 439,
+          "valued": 394,
+          "stale": 15,
+          "format": 12,
+          "fields": 18,
+          "revenue": 0,
+          "names": 20,
+          "delisted": 22,
+          "delisted_missing": 22,
+          "zero": 0,
+          "negative": 134
+        }
+      ]
+    }
+  },
+  "seconds": {
+    "plan": 4.761590431036893,
+    "nonop_q": 0.5333899111137725,
+    "reference": 0.014788702072110027,
+    "p2_order": 1.3631132160080597,
+    "n2_order": 0.6656482928083278,
+    "a1_order": 0.242731191101484,
+    "x4_order": 0.9831708359415643
+  },
+  "overlap": {
+    "G1_P2": {
+      "days": 23,
+      "mean": 0.030434782608695653,
+      "years": {
+        "2014": {
+          "days": 3,
+          "mean": 0.05000000000000001
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.037500000000000006
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.0125
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.037500000000000006
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.05
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.0
+        }
+      }
+    },
+    "G1_N2": {
+      "days": 27,
+      "mean": 0.06296296296296296,
+      "years": {
+        "2013": {
+          "days": 3,
+          "mean": 0.03333333333333333
+        },
+        "2014": {
+          "days": 4,
+          "mean": 0.0875
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.0625
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.037500000000000006
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.05
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.05
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.1125
+        }
+      }
+    },
+    "G1_A1": {
+      "days": 27,
+      "mean": 0.02592592592592593,
+      "years": {
+        "2013": {
+          "days": 3,
+          "mean": 0.03333333333333333
+        },
+        "2014": {
+          "days": 4,
+          "mean": 0.025
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.0125
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.025
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.05
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.037500000000000006
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.0
+        }
+      }
+    },
+    "G1_X4": {
+      "days": 23,
+      "mean": 0.010869565217391304,
+      "years": {
+        "2014": {
+          "days": 3,
+          "mean": 0.0
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.0125
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.037500000000000006
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.0
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.0125
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.0
+        }
+      }
+    }
+  },
+  "means": {
+    "revenue": {
+      "days": 27,
+      "mean": 3208056.6833333336,
+      "years": {
+        "2013": {
+          "days": 3,
+          "mean": 6090990.416666667
+        },
+        "2014": {
+          "days": 4,
+          "mean": 2382726.125
+        },
+        "2015": {
+          "days": 4,
+          "mean": 4112527.225
+        },
+        "2016": {
+          "days": 4,
+          "mean": 2559905.575
+        },
+        "2017": {
+          "days": 4,
+          "mean": 2595040.2
+        },
+        "2018": {
+          "days": 4,
+          "mean": 2774090.5125
+        },
+        "2019": {
+          "days": 4,
+          "mean": 2661850.1625
+        }
+      }
+    },
+    "negative": {
+      "days": 27,
+      "mean": 1.0,
+      "years": {
+        "2013": {
+          "days": 3,
+          "mean": 1.0
+        },
+        "2014": {
+          "days": 4,
+          "mean": 1.0
+        },
+        "2015": {
+          "days": 4,
+          "mean": 1.0
+        },
+        "2016": {
+          "days": 4,
+          "mean": 1.0
+        },
+        "2017": {
+          "days": 4,
+          "mean": 1.0
+        },
+        "2018": {
+          "days": 4,
+          "mean": 1.0
+        },
+        "2019": {
+          "days": 4,
+          "mean": 1.0
+        }
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1631,
+      "mean": -0.000192090073720035,
+      "annual": -0.04840669857744882,
+      "t": -1.316417235416408
+    },
+    "taiex": {
+      "days": 1631,
+      "mean": -0.00019834326906850846,
+      "annual": -0.04998250380526413,
+      "t": -0.8997937808510634
+    },
+    "reference": {
+      "days": 1631,
+      "mean": -0.00023098098406359278,
+      "annual": -0.05820720798402538,
+      "t": -1.5756373341645593
+    }
+  },
+  "absolute": {
+    "days": 1631,
+    "mean": 5.817935737255503e-05
+  },
+  "curves": {
+    "G1": {
+      "days": 1631,
+      "total": -0.01505660521644725,
+      "annual": -0.0023412885494927815,
+      "volatility": 0.18389114323627598,
+      "max_drawdown": -0.5335705560104602,
+      "invested": 0.9800220212042111,
+      "turnover": 4.156223175965665
+    },
+    "population": {
+      "days": 1631,
+      "total": 0.3936264712907278,
+      "annual": 0.05261982384578867,
+      "volatility": 0.1528776391937438,
+      "max_drawdown": -0.3296411300104911,
+      "invested": 0.9831427930086847,
+      "turnover": 4.030378415160548
+    },
+    "taiex": {
+      "days": 1631,
+      "total": 0.4422083550217084,
+      "annual": 0.05820753812431079,
+      "volatility": 0.1267789988167966,
+      "max_drawdown": -0.2569687319514855,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 538,
+    "won": 216,
+    "rate": 0.40148698884758366,
+    "unsold": 20
+  },
+  "counts": {
+    "G1": {
+      "bought": 538,
+      "limit_up": 1,
+      "not_tradable": 1,
+      "unsold": 20
+    },
+    "population": {
+      "bought": 12244,
+      "limit_up": 5,
+      "sale_held": 42,
+      "limit_down": 8,
+      "not_tradable": 4,
+      "unsold": 472
+    }
+  },
+  "unsold_share": 0.03717472118959108,
+  "rebalances": [
+    {
+      "signal_date": "2013-05-15",
+      "quarter": "2013-03-31",
+      "members": 456,
+      "valued": 371,
+      "stale": 18,
+      "format": 19,
+      "fields": 48,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 55,
+      "delisted_missing": 55,
+      "zero": 0,
+      "negative": 88,
+      "p2_overlap": null,
+      "n2_overlap": 0.0,
+      "a1_overlap": 0.0,
+      "x4_overlap": null,
+      "revenue_mean": 3192121.0,
+      "negative_share": 1.0,
+      "invested": 0.9494322497119174
+    },
+    {
+      "signal_date": "2013-08-14",
+      "quarter": "2013-06-30",
+      "members": 483,
+      "valued": 399,
+      "stale": 33,
+      "format": 3,
+      "fields": 48,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 56,
+      "delisted_missing": 56,
+      "zero": 0,
+      "negative": 99,
+      "p2_overlap": null,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.05,
+      "x4_overlap": null,
+      "revenue_mean": 8698675.4,
+      "negative_share": 1.0,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2013-11-14",
+      "quarter": "2013-09-30",
+      "members": 475,
+      "valued": 396,
+      "stale": 16,
+      "format": 16,
+      "fields": 47,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 53,
+      "delisted_missing": 53,
+      "zero": 0,
+      "negative": 160,
+      "p2_overlap": null,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.05,
+      "x4_overlap": null,
+      "revenue_mean": 6382174.85,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2014-03-31",
+      "quarter": "2013-12-31",
+      "members": 652,
+      "valued": 551,
+      "stale": 2,
+      "format": 34,
+      "fields": 63,
+      "revenue": 2,
+      "names": 20,
+      "delisted": 72,
+      "delisted_missing": 72,
+      "zero": 0,
+      "negative": 169,
+      "p2_overlap": null,
+      "n2_overlap": 0.0,
+      "a1_overlap": 0.0,
+      "x4_overlap": null,
+      "revenue_mean": 1483112.55,
+      "negative_share": 1.0,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2014-05-15",
+      "quarter": "2014-03-31",
+      "members": 525,
+      "valued": 443,
+      "stale": 16,
+      "format": 16,
+      "fields": 50,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 57,
+      "delisted_missing": 57,
+      "zero": 0,
+      "negative": 128,
+      "p2_overlap": 0.05,
+      "n2_overlap": 0.15,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.0,
+      "revenue_mean": 3230084.5,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2014-08-14",
+      "quarter": "2014-06-30",
+      "members": 509,
+      "valued": 423,
+      "stale": 34,
+      "format": 3,
+      "fields": 49,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 58,
+      "delisted_missing": 58,
+      "zero": 0,
+      "negative": 197,
+      "p2_overlap": 0.05,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.0,
+      "revenue_mean": 1208185.1,
+      "negative_share": 1.0,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2014-11-14",
+      "quarter": "2014-09-30",
+      "members": 367,
+      "valued": 299,
+      "stale": 15,
+      "format": 12,
+      "fields": 41,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 46,
+      "delisted_missing": 46,
+      "zero": 0,
+      "negative": 77,
+      "p2_overlap": 0.05,
+      "n2_overlap": 0.15,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 3609522.35,
+      "negative_share": 1.0,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2015-03-31",
+      "quarter": "2014-12-31",
+      "members": 473,
+      "valued": 395,
+      "stale": 2,
+      "format": 29,
+      "fields": 47,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 53,
+      "delisted_missing": 53,
+      "zero": 0,
+      "negative": 82,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.1,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 4843695.75,
+      "negative_share": 1.0,
+      "invested": 1.0000000000000002
+    },
+    {
+      "signal_date": "2015-05-15",
+      "quarter": "2015-03-31",
+      "members": 466,
+      "valued": 387,
+      "stale": 16,
+      "format": 25,
+      "fields": 38,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 47,
+      "delisted_missing": 47,
+      "zero": 0,
+      "negative": 191,
+      "p2_overlap": 0.05,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.05,
+      "revenue_mean": 1034646.25,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2015-08-14",
+      "quarter": "2015-06-30",
+      "members": 372,
+      "valued": 303,
+      "stale": 31,
+      "format": 3,
+      "fields": 35,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 45,
+      "delisted_missing": 45,
+      "zero": 0,
+      "negative": 127,
+      "p2_overlap": 0.1,
+      "n2_overlap": 0.1,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 2935586.95,
+      "negative_share": 1.0,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2015-11-16",
+      "quarter": "2015-09-30",
+      "members": 452,
+      "valued": 381,
+      "stale": 16,
+      "format": 13,
+      "fields": 42,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 49,
+      "delisted_missing": 49,
+      "zero": 0,
+      "negative": 73,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.0,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.0,
+      "revenue_mean": 7636179.95,
+      "negative_share": 1.0,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2016-03-31",
+      "quarter": "2015-12-31",
+      "members": 479,
+      "valued": 414,
+      "stale": 2,
+      "format": 28,
+      "fields": 35,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 39,
+      "delisted_missing": 39,
+      "zero": 0,
+      "negative": 206,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.1,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.05,
+      "revenue_mean": 1721783.35,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2016-05-16",
+      "quarter": "2016-03-31",
+      "members": 361,
+      "valued": 310,
+      "stale": 15,
+      "format": 9,
+      "fields": 27,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 31,
+      "delisted_missing": 31,
+      "zero": 0,
+      "negative": 184,
+      "p2_overlap": 0.05,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.05,
+      "revenue_mean": 2695479.5,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2016-08-15",
+      "quarter": "2016-06-30",
+      "members": 461,
+      "valued": 400,
+      "stale": 26,
+      "format": 1,
+      "fields": 34,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 39,
+      "delisted_missing": 39,
+      "zero": 0,
+      "negative": 134,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.0,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.05,
+      "revenue_mean": 2912271.35,
+      "negative_share": 1.0,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2016-11-14",
+      "quarter": "2016-09-30",
+      "members": 336,
+      "valued": 285,
+      "stale": 14,
+      "format": 11,
+      "fields": 26,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 30,
+      "delisted_missing": 30,
+      "zero": 0,
+      "negative": 167,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.0,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 2910088.1,
+      "negative_share": 1.0,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2017-03-31",
+      "quarter": "2016-12-31",
+      "members": 502,
+      "valued": 435,
+      "stale": 2,
+      "format": 32,
+      "fields": 32,
+      "revenue": 1,
+      "names": 20,
+      "delisted": 39,
+      "delisted_missing": 39,
+      "zero": 0,
+      "negative": 130,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.1,
+      "a1_overlap": 0.1,
+      "x4_overlap": 0.0,
+      "revenue_mean": 1753962.35,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2017-05-15",
+      "quarter": "2017-03-31",
+      "members": 427,
+      "valued": 366,
+      "stale": 16,
+      "format": 10,
+      "fields": 35,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 41,
+      "delisted_missing": 41,
+      "zero": 0,
+      "negative": 271,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.0,
+      "revenue_mean": 1803561.9,
+      "negative_share": 1.0,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2017-08-14",
+      "quarter": "2017-06-30",
+      "members": 471,
+      "valued": 398,
+      "stale": 29,
+      "format": 2,
+      "fields": 42,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 47,
+      "delisted_missing": 47,
+      "zero": 0,
+      "negative": 104,
+      "p2_overlap": 0.1,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.0,
+      "revenue_mean": 1489772.5,
+      "negative_share": 1.0,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2017-11-14",
+      "quarter": "2017-09-30",
+      "members": 512,
+      "valued": 445,
+      "stale": 17,
+      "format": 11,
+      "fields": 39,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 44,
+      "delisted_missing": 44,
+      "zero": 0,
+      "negative": 132,
+      "p2_overlap": 0.05,
+      "n2_overlap": 0.0,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 5332864.05,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2018-04-02",
+      "quarter": "2017-12-31",
+      "members": 500,
+      "valued": 429,
+      "stale": 1,
+      "format": 29,
+      "fields": 41,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 47,
+      "delisted_missing": 47,
+      "zero": 0,
+      "negative": 225,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.1,
+      "x4_overlap": 0.0,
+      "revenue_mean": 1675285.1,
+      "negative_share": 1.0,
+      "invested": 1.0
+    },
+    {
+      "signal_date": "2018-05-15",
+      "quarter": "2018-03-31",
+      "members": 442,
+      "valued": 378,
+      "stale": 16,
+      "format": 13,
+      "fields": 33,
+      "revenue": 2,
+      "names": 20,
+      "delisted": 38,
+      "delisted_missing": 38,
+      "zero": 0,
+      "negative": 202,
+      "p2_overlap": 0.05,
+      "n2_overlap": 0.0,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 3075505.2,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2018-08-14",
+      "quarter": "2018-06-30",
+      "members": 416,
+      "valued": 359,
+      "stale": 26,
+      "format": 2,
+      "fields": 29,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 33,
+      "delisted_missing": 33,
+      "zero": 0,
+      "negative": 88,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 3549584.55,
+      "negative_share": 1.0,
+      "invested": 0.9491624444972826
+    },
+    {
+      "signal_date": "2018-11-14",
+      "quarter": "2018-09-30",
+      "members": 342,
+      "valued": 295,
+      "stale": 15,
+      "format": 13,
+      "fields": 19,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 24,
+      "delisted_missing": 24,
+      "zero": 0,
+      "negative": 104,
+      "p2_overlap": 0.15,
+      "n2_overlap": 0.1,
+      "a1_overlap": 0.05,
+      "x4_overlap": 0.05,
+      "revenue_mean": 2795987.2,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999999
+    },
+    {
+      "signal_date": "2019-04-01",
+      "quarter": "2018-12-31",
+      "members": 449,
+      "valued": 398,
+      "stale": 0,
+      "format": 29,
+      "fields": 22,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 26,
+      "delisted_missing": 26,
+      "zero": 0,
+      "negative": 139,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.2,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 2372229.35,
+      "negative_share": 1.0,
+      "invested": 1.0000000000000004
+    },
+    {
+      "signal_date": "2019-05-15",
+      "quarter": "2019-03-31",
+      "members": 451,
+      "valued": 403,
+      "stale": 16,
+      "format": 13,
+      "fields": 19,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 23,
+      "delisted_missing": 23,
+      "zero": 0,
+      "negative": 125,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.15,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 2512475.75,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999997
+    },
+    {
+      "signal_date": "2019-08-14",
+      "quarter": "2019-06-30",
+      "members": 435,
+      "valued": 388,
+      "stale": 28,
+      "format": 2,
+      "fields": 17,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 22,
+      "delisted_missing": 22,
+      "zero": 0,
+      "negative": 116,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 3578158.65,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999998
+    },
+    {
+      "signal_date": "2019-11-14",
+      "quarter": "2019-09-30",
+      "members": 439,
+      "valued": 394,
+      "stale": 15,
+      "format": 12,
+      "fields": 18,
+      "revenue": 0,
+      "names": 20,
+      "delisted": 22,
+      "delisted_missing": 22,
+      "zero": 0,
+      "negative": 134,
+      "p2_overlap": 0.0,
+      "n2_overlap": 0.05,
+      "a1_overlap": 0.0,
+      "x4_overlap": 0.0,
+      "revenue_mean": 2184536.9,
+      "negative_share": 1.0,
+      "invested": 0.9999999999999996
+    }
+  ],
+  "min_t": 2.0
+}
