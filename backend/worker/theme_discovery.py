@@ -78,6 +78,7 @@ from app.theme_table import (
     THEME_CANDIDATE_ROLE,
     THEME_GROUP_TYPE,
     ThemeTableError,
+    theme_group_id,
     write_theme_candidate,
 )
 
@@ -117,6 +118,7 @@ RAW_ENDPOINT = f"claude -p --model {MODEL}"
 # candidate notes, so a night sends at most this many clusters.
 DAILY_CALL_LIMIT = 3
 MAX_KNOWN_SHARE = 0.5
+ABANDONED_AFTER = timedelta(hours=2, minutes=30)
 MAX_MEMBERS = 20
 MIN_VERIFIED_MEMBERS = 3
 NEWS_DAYS = 7
@@ -132,6 +134,11 @@ ID_MAX_CHARS = 40
 NAME_MAX_CHARS = 12
 DESCRIPTION_MAX_CHARS = 80
 KEYWORD_MAX_CHARS = 10
+KEYWORD_MIN_CHARS = 2
+# ``_usage`` joins every model of the envelope; the stored name is capped so
+# a membership's source JSON stays within String(500).
+MODEL_MAX_CHARS = 60
+EVIDENCE_KIND = "mops_t05st03"
 MAX_KEYWORDS = 8
 QUOTE_MAX_CHARS = 60
 REASON_MAX_CHARS = 200
@@ -425,8 +432,9 @@ def validate_output(structured: Any, symbols: Sequence[str]) -> dict[str, Any]:
     if not isinstance(keywords, list) or not 1 <= len(keywords) <= MAX_KEYWORDS:
         raise LlmBatchError("schema_mismatch", "keywords must list 1-8 words")
     words = [_string(word, "keyword", KEYWORD_MAX_CHARS) for word in keywords]
-    if not all(words):
-        raise LlmBatchError("schema_mismatch", "empty keyword")
+    if any(len(word) < KEYWORD_MIN_CHARS for word in words):
+        # A one-character word would match almost any 主要經營業務 cell.
+        raise LlmBatchError("schema_mismatch", "keyword under 2 characters")
     if not isinstance(raw["members"], list):
         raise LlmBatchError("schema_mismatch", "members must be a list")
     allowed = set(symbols)
@@ -500,7 +508,9 @@ def verify_proposal(
                     "symbol": member["symbol"],
                     "relation": member["relation"],
                     "relevance": member["relevance"],
-                    "url": url,
+                    # Not the URL: mops_profile_url(symbol) rebuilds it, and
+                    # the source JSON must stay within 500 characters.
+                    "evidence": EVIDENCE_KIND,
                     "quote": member["quote"],
                 }
             )
@@ -516,7 +526,7 @@ def _duplicate_of_existing(db: Session, proposal: dict[str, Any]) -> str | None:
             ThemeGroup.group_type == THEME_GROUP_TYPE
         )
     ).all():
-        if group_id == f"theme-{proposal['id']}" or name in {
+        if group_id == theme_group_id(proposal["id"]) or name in {
             (group_name or "").casefold(),
             (display or "").casefold(),
         }:
@@ -525,6 +535,30 @@ def _duplicate_of_existing(db: Session, proposal: dict[str, Any]) -> str | None:
 
 
 # --- run ----------------------------------------------------------------------
+
+
+def close_abandoned_runs(db: Session, now: datetime | None = None) -> list[int]:
+    """Mark theme_discovery runs left running past ABANDONED_AFTER as failed.
+
+    The daily is stopped after 2.5 hours (its process with it), so a run still
+    running after that long lost its process.  Its calls stay counted.
+    """
+
+    current = now or utcnow()
+    rows = db.scalars(
+        select(IngestionRun).where(
+            IngestionRun.run_type == RUN_TYPE,
+            IngestionRun.status == "running",
+            IngestionRun.started_at < current - ABANDONED_AFTER,
+        )
+    ).all()
+    for row in rows:
+        row.status = "failed"
+        row.error = f"abandoned: no finish was recorded within {ABANDONED_AFTER}"
+        row.finished_at = current
+    if rows:
+        db.commit()
+    return [row.id for row in rows]
 
 
 def _calls_today(db: Session, run_date: date) -> int:
@@ -603,6 +637,9 @@ def _propose(
         collected_at=run_at,
     )
     outcome["raw_payload_id"] = _upsert_raw_payload(db, run, raw).id
+    # Kept whatever happens to the proposal: a refused write rolls back only
+    # the candidate rows, never the call's raw.
+    db.commit()
     envelope: dict[str, Any] | None = None
     try:
         envelope = parse_envelope(result)
@@ -627,9 +664,12 @@ def _propose(
         outcome.update(status="rejected", reason="too_few_verified_members")
         return outcome
     provenance = {
-        "model": model or MODEL,
+        "model": (model or MODEL)[:MODEL_MAX_CHARS],
         "prompt_version": PROMPT_VERSION,
         "cluster_version": THEME_CLUSTER_VERSION,
+        # The cluster run id is replaced by a rerun of the date; the date and
+        # cluster number name the cluster.
+        "trading_date": day.isoformat(),
         "cluster_run_id": cluster_run.id,
         "cluster_no": item.cluster_no,
         "ingestion_run_id": run.id,
@@ -688,6 +728,7 @@ def _ai_step(
         db.commit()
         return {"status": "failed", "reason": problem, "calls": 0, "run_id": failed.id}
     assert command is not None
+    close_abandoned_runs(db)
     allowed = max(call_limit - _calls_today(db, run_date), 0)
     template = prompt_text()
     run = IngestionRun(

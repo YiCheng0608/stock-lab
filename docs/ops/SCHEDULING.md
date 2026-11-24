@@ -169,6 +169,8 @@ daily 的 theme_discovery 步驟找題材表以外、正在一起動的一群股
 - **存檔**：`theme_cluster_runs` 每個交易日與版本一列（入選數、群數、門檻），`theme_cluster_members` 每檔一列（群號、群大小、群內平均相關、這檔與群內其他成員的平均相關、20 日超額、成交金額比、20 日均量）。同一天重跑整份換掉，結果相同。
 - **送 AI 的群**：至少 3 檔，而且沒有一個現有題材（active 的 `theme`）或已寫過的候選題材佔群內超過一半。每群一次 `claude -p`（`sonnet`，提示 `theme_discovery_v1`，用使用者的訂閱登入、不帶工具），每個台北日最多 3 次（`DAILY_CALL_LIMIT`，跨 run 合計）；超過的群記 `daily_call_limit` 不送。每群最多送 20 檔，每檔附 MOPS 公司基本資料的「主要經營業務」（程式抓，間隔 3 秒）與近 7 天點名它的新聞標題。
 - **記錄**：`run_type=theme_discovery` 的 ingestion run，`metadata_json` 記 `prompt_version`、`prompt_sha256`、`model`、`calls`、每群的結果（`written`、`not_theme`、`rejected` 與原因、`failed`）、核對沒過的成員與錯誤、token 用量；提示與回應存 raw。每晚的呼叫次數看 `calls`。
+- **耗時上限**：每次 `claude -p` 最多 300 秒（`news_llm.CALL_TIMEOUT_SECONDS`），每群抓 MOPS 最多約 60 秒（20 頁、間隔 3 秒，每頁逾時 30 秒時更久），所以一晚最壞約 3 × (300 + 60) 秒 ≈ 18 分鐘，加上每頁逾時的最壞情況約 48 分鐘；分群本身在正式副本上 4～5 秒。它排在 candidate_notes 之後，不拖到今日名單與候選說明。daily 被上限停掉時，留在 `running` 的 theme_discovery run 會在下一次送 AI 前、超過 2.5 小時時記成 `failed`（abandoned），已用的呼叫照算。
+- **限制**：AI 判成「不是題材」（例如防禦股輪動）或被拒的群不會被記住：那群隔天還在時會再送一次，吃掉當晚的呼叫，排在第 4 群以後的群可能一直送不到。只有寫成候選題材的群，之後才因已知佔比超過一半而不再送。
 - **重放**：`python -m worker.cli theme-discovery --date YYYY-MM-DD --no-ai` 只重算並存那天的分群，不呼叫 AI（[CLI](CLI.md#現有-worker-cli)）。不加 `--no-ai` 時照 daily 的規則送 AI，候選題材的成員從那天生效，所以不要拿它補過去的日期。
 
 ## 重跑與回補

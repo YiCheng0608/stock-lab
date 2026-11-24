@@ -105,7 +105,7 @@ from .decision import (
 from .glossary import GLOSSARY_VERSION, glossary_terms
 from .market_overview import market_overview
 from .theme_member_view import member_columns, member_context, sort_members
-from .theme_table import parse_membership_source
+from .theme_table import THEME_CANDIDATE_GROUP_TYPE, parse_membership_source
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -3461,8 +3461,12 @@ def _instrument_payload(
     )
     memberships = db.scalars(
         select(GroupMembership)
+        .join(ThemeGroup, ThemeGroup.id == GroupMembership.group_id)
         .where(
             GroupMembership.instrument_id == instrument.id,
+            # Theme candidates are unverified AI proposals awaiting review
+            # (#1018): never a group of the stock on its page.
+            ThemeGroup.group_type != THEME_CANDIDATE_GROUP_TYPE,
             GroupMembership.valid_from <= (as_of or date.max),
             or_(GroupMembership.valid_to.is_(None), GroupMembership.valid_to >= as_of)
             if as_of

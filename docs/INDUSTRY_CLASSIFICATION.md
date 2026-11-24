@@ -187,10 +187,10 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 **產生方式**
 
 1. 量價共振分群存進 `theme_cluster_runs`／`theme_cluster_members`。
-2. 至少 3 檔、而且沒有一個現有題材或候選題材佔一半以上的群，交本機 `claude -p` 判斷是不是同一個題材；是的話回 `id`、`name`、`description`、`keywords` 與成員（只能從群內挑），每個成員附 `relation`、`relevance`，以及從程式附上的 MOPS「主要經營業務」逐字摘錄的 `quote`。模型與提示版本（`theme_discovery_v1`）記在 run 與每一列的 `source`。
+2. 至少 3 檔、而且沒有一個現有題材或候選題材佔超過一半的群，交本機 `claude -p` 判斷是不是同一個題材；是的話回 `id`、`name`、`description`、`keywords` 與成員（只能從群內挑），每個成員附 `relation`、`relevance`，以及從程式附上的 MOPS「主要經營業務」逐字摘錄的 `quote`。`keywords` 是 AI 自己給的（1～8 個，每個 2～10 字，一個字的詞擋掉），程式保證的是 `quote` 逐字出現在那一格而且含其中一個詞，`relation`／`relevance` 與詞選得合不合理留給統籌核對。模型與提示版本（`theme_discovery_v1`）記在 run 與每一列的 `source`。
 3. 每個成員以 [7.1 證據核對](#71-證據核對)的 `check_member` 核對：證據網址是該檔的 MOPS 公司基本資料，`quote` 要逐字出現在「主要經營業務」那一格、含 `keywords` 裡的詞，代號要是股票。沒過的成員不寫入；過的不到 3 檔、名稱或 id 和現有題材相同、或回應格式不對時，整個提案不寫入。
-4. 寫入 `theme_groups`：`id="candidate-<id>"`、`group_type="theme_candidate"`、`active=false`、`name_status="pending_verification"`、`display_category="候選題材"`、`definition_version` 與 `name_source` 記提示版本，`source` 是精簡 JSON（`kind="theme_discovery"`、`keywords`、`model`、`prompt_version`、分群 run 與群號）。成員 `role="candidate"`，`valid_from` 是那天（不回溯），`source` 記 `url`、`quote`、`relation`、`relevance` 與同樣的模型、提示版本。同一個 id 之後再出現時，只補上還沒有開放期間的成員。
+4. 寫入 `theme_groups`：`id="candidate-<id>"`、`group_type="theme_candidate"`、`active=false`、`name_status="pending_verification"`、`display_category="候選題材"`、`definition_version` 與 `name_source` 記提示版本，`source` 是精簡 JSON（`kind="theme_discovery"`、`keywords`、`model`、`prompt_version`、分群 run 與群號）。成員 `role="candidate"`，`valid_from` 是那天（不回溯），`source` 記 `evidence="mops_t05st03"`（網址由代號重建，不存，`source` 才不會超過 500 字）、`quote`、`relation`、`relevance` 與同樣的模型、提示版本、分群日期與群號（`cluster_run_id` 在同一天重跑分群後會指到已換掉的 run，以日期與群號為準）。任何一個成員的 `source` 超過 500 字時整個提案不寫入，那次呼叫的 raw 照樣保存。同一個 id 之後再出現時，只補上還沒有開放期間的成員。
 
-**不計分**：候選題材不進題材榜與族群分數（`_group_board` 回 `None`），今日名單的族群分項、主流族群前 20 與策略的族群確認也都不讀它；候選池只以「量價共振群」來源使用分群結果（[#1020](https://github.com/YiCheng0608/stock-lab/issues/1020)），不把候選題材當題材來源。這幾點由 `backend/tests/test_theme_discovery.py` 鎖住。
+**不計分**：候選題材不進題材榜與族群分數（`_group_board` 回 `None`），今日名單的族群分項、主流族群前 20、策略的族群確認與個股頁的「所屬族群」也都不讀它（AI 提的關聯不出現在事實欄）；候選池只以「量價共振群」來源使用分群結果（[#1020](https://github.com/YiCheng0608/stock-lab/issues/1020)），不把候選題材當題材來源。這幾點由 `backend/tests/test_theme_discovery.py` 鎖住。
 
 **核對流程**：統籌每週一次看候選題材（`group_type="theme_candidate"` 的群組與成員 `source`）。要收的，照 [7.2 維護流程](#72-維護流程)把題材與成員寫進 `themes_v1.json`（`valid_from` 填收進表的那天、證據重跑 `themes verify`），合併後 `themes sync` 寫成 `theme` 群組；候選題材本身不改成 `theme`，也不刪。不收的留著，之後同一群再出現時因為已有候選題材佔多數，不會再送 AI。

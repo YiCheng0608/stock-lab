@@ -64,6 +64,11 @@ class ClusterConfig:
     link_threshold: float = 0.45
     min_cluster_size: int = 3
 
+    def __post_init__(self) -> None:
+        # A cluster's mean correlation needs a pair.
+        if self.min_cluster_size < 2:
+            raise ValueError("min_cluster_size must be at least 2")
+
     @property
     def history_days(self) -> int:
         return max(

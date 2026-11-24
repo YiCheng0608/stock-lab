@@ -19,16 +19,23 @@ import hashlib
 import json
 import random
 from datetime import date, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import create_engine, func, insert, select
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, func, insert, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 
+import app.api as api_module
+import app.main as main_module
 import worker.pipeline as pipeline
 import worker.schedule_runs as schedule_runs
 from app import mainstream
+from app import migrations
 from app.db import enable_sqlite_foreign_keys
+from app.main import app as api_app
+from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
 from app.models import (
     GroupMembership,
@@ -37,6 +44,7 @@ from app.models import (
     MarketBar,
     ThemeClusterMember,
     ThemeClusterRun,
+    RawPayload,
     ThemeGroup,
 )
 from app.theme_clusters import (
@@ -534,7 +542,10 @@ def test_a_verified_proposal_is_written_as_an_inactive_candidate(make, cli):
     ]
     evidence = json.loads(members[0].source)
     assert evidence["quote"] == f"{KEYWORD}之製造及銷售"
-    assert "co_id=1001" in evidence["url"]
+    # No URL in the 500-character source: it is rebuilt from the symbol.
+    assert evidence["evidence"] == "mops_t05st03" and "url" not in evidence
+    assert "co_id=1001" in theme_discovery.mops_profile_url("1001")
+    assert len(members[0].source) <= 500
     assert evidence["model"] == "claude-sonnet-test"
     assert evidence["prompt_version"] == "theme_discovery_v1"
     with make() as db:
@@ -577,6 +588,8 @@ def test_a_proposal_that_does_not_verify_writes_nothing(make, cli, members):
         # The name may not contain ETF.
         _answer([_member(i) for i in (1, 2, 3)], name="矽晶圓ETF"),
         _answer([_member(i) for i in (1, 2, 3)], candidate_id="Silicon Wafer"),
+        # A one-character keyword would match almost any 主要經營業務.
+        dict(_answer([_member(i) for i in (1, 2, 3)]), keywords=["矽"]),
     ],
 )
 def test_an_invalid_answer_writes_nothing(make, cli, answer):
@@ -786,3 +799,172 @@ def test_a_candidate_is_never_scored_ranked_or_read_as_a_theme(tmp_path):
             best = pipeline._best_group_for_signal(db, stock.id, SCORE_DATE)
             assert best is None or best.group_id != group_id
     engine.dispose()
+
+
+def test_a_refused_write_keeps_the_calls_raw(make, cli):
+    # The candidate id is taken by a group of another type: the writer refuses.
+    with make() as db:
+        db.add(ThemeGroup(id="candidate-silicon-wafer", name="其他", group_type="theme"))
+        db.commit()
+    claude = FakeClaude(
+        _answer([_member(i) for i in (1, 2, 3)]), _answer([], is_theme=False)
+    )
+    result = _discover(make, claude)
+    with make() as db:
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == "theme_discovery")
+        )
+        outcome = run.metadata_json["proposals"][0]
+        assert (outcome["status"], outcome["reason"]) == ("rejected", "write_refused")
+        raw = db.get(RawPayload, outcome["raw_payload_id"])
+        assert raw is not None and raw.source == "theme_discovery"
+        # The second cluster's raw is its own row, not the first one's id again.
+        second = run.metadata_json["proposals"][1]["raw_payload_id"]
+        assert second != outcome["raw_payload_id"]
+        assert db.scalar(select(func.count()).select_from(RawPayload)) == 2
+    assert result["ai"]["proposals"][0]["reason"] == "write_refused"
+    assert _candidates(make)[1] == []
+
+
+def test_a_candidate_is_not_a_group_on_the_stock_page(make, monkeypatch):
+    with make() as db:
+        write_theme_candidate(
+            db,
+            candidate_id="fresh",
+            name="新題材",
+            description="d",
+            keywords=["kw"],
+            members=[
+                {
+                    "instrument_id": 1,
+                    "relation": "core_business",
+                    "relevance": "high",
+                    "evidence": "mops_t05st03",
+                    "quote": "kw",
+                }
+            ],
+            valid_from=DAYS[0],
+            provenance={"model": "m", "prompt_version": "theme_discovery_v1"},
+        )
+        db.add(ThemeGroup(id="ind-x", name="產業X", group_type="official_industry"))
+        db.flush()
+        db.add(
+            GroupMembership(
+                group_id="ind-x", instrument_id=1, valid_from=DAYS[0], source="t"
+            )
+        )
+        db.commit()
+
+    def override_get_db():
+        with make() as db:
+            yield db
+
+    monkeypatch.setattr(main_module, "check_database_readiness", lambda: None)
+    api_app.dependency_overrides[api_module.get_db] = override_get_db
+    try:
+        with TestClient(api_app, base_url="http://127.0.0.1:8000") as client:
+            detail = client.get(f"/api/stocks/TWSE/{1001}").json()
+    finally:
+        api_app.dependency_overrides.pop(api_module.get_db, None)
+    ids = [group.get("group_id") or group.get("id") for group in detail["groups"]]
+    assert "ind-x" in ids
+    assert "candidate-fresh" not in ids
+
+
+def test_the_cluster_config_needs_a_pair():
+    with pytest.raises(ValueError):
+        ClusterConfig(min_cluster_size=1)
+
+
+def _alembic_config(engine):
+    from alembic.config import Config
+
+    config = Config(str(migrations.ALEMBIC_CONFIG_PATH))
+    config.set_main_option(
+        "script_location", str(Path(migrations.ALEMBIC_CONFIG_PATH).parent / "alembic")
+    )
+    config.attributes["connection"] = engine
+    return config
+
+
+CLUSTER_TABLES = {"theme_cluster_runs", "theme_cluster_members"}
+CLUSTER_INDEXES = {
+    "ix_theme_cluster_runs_trading_date",
+    "ix_theme_cluster_members_theme_cluster_run_id",
+    "ix_theme_cluster_members_trading_date",
+    "ix_theme_cluster_members_instrument_id",
+}
+
+
+def _schema(engine):
+    names = set(inspect(engine).get_table_names())
+    with engine.connect() as connection:
+        indexes = {
+            row[0]
+            for row in connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        version = connection.exec_driver_sql(
+            "SELECT version_num FROM alembic_version"
+        ).fetchall()
+        fk = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+    return names, indexes, version, fk
+
+
+def test_the_migration_goes_down_and_up_again(tmp_path):
+    pytest.importorskip("alembic")
+    from alembic import command
+
+    revision = next(name for name in REVISIONS if name.endswith("_theme_clusters"))
+    previous = REVISIONS[REVISIONS.index(revision) - 1]
+    engine = create_engine(f"sqlite:///{(tmp_path / 'down.db').as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    config = _alembic_config(engine)
+    try:
+        command.upgrade(config, revision)
+        with Session(engine) as db:
+            db.execute(insert(Instrument), _instruments()[:1])
+            db.add(
+                ThemeClusterRun(
+                    id=1,
+                    trading_date=T,
+                    version=THEME_CLUSTER_VERSION,
+                    status="computed",
+                    screened_count=3,
+                    cluster_count=1,
+                    config_json={},
+                )
+            )
+            db.flush()
+            db.add(
+                ThemeClusterMember(
+                    theme_cluster_run_id=1,
+                    trading_date=T,
+                    instrument_id=1,
+                    version=THEME_CLUSTER_VERSION,
+                    cluster_no=1,
+                    cluster_size=3,
+                    cluster_mean_corr=0.6,
+                    member_mean_corr=0.6,
+                    excess_return_20d=0.2,
+                    amount_ratio_5_20=1.5,
+                    average_lots_20d=2000.0,
+                )
+            )
+            db.commit()
+        names, indexes, version, _fk = _schema(engine)
+        assert CLUSTER_TABLES <= names and CLUSTER_INDEXES <= indexes
+        assert version == [(revision,)]
+
+        command.downgrade(config, previous)
+        names, indexes, version, fk = _schema(engine)
+        assert not CLUSTER_TABLES & names and not CLUSTER_INDEXES & indexes
+        assert version == [(previous,)] and fk == []
+
+        command.upgrade(config, revision)
+        names, indexes, version, fk = _schema(engine)
+        assert CLUSTER_TABLES <= names and CLUSTER_INDEXES <= indexes
+        assert version == [(revision,)] and fk == []
+    finally:
+        engine.dispose()

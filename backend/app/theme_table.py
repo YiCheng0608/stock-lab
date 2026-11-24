@@ -357,7 +357,8 @@ def write_theme_candidate(
     """Write (or extend) an inactive ``theme_candidate`` group; no commit.
 
     ``members`` are verified members: ``instrument_id``, ``relation``,
-    ``relevance``, ``url`` and ``quote``.  The group is ``active=False`` and
+    ``relevance``, ``quote`` and ``url`` or ``evidence`` (a named evidence
+    page the URL is rebuilt from, e.g. ``mops_t05st03``).  The group is ``active=False`` and
     ``name_status="pending_verification"``; its members have
     ``role="candidate"`` and start on ``valid_from`` (the day it was found,
     never earlier).  A group already written for the same id keeps its name
@@ -406,17 +407,18 @@ def write_theme_candidate(
             )
         ).all()
     )
-    added: list[int] = []
+    pending: list[tuple[int, str]] = []
     for member in members:
         if member["instrument_id"] in open_members:
             continue
         source = _compact_json(
             {
                 "kind": THEME_CANDIDATE_SOURCE_KIND,
-                "url": member["url"],
-                "quote": member["quote"],
-                "relation": member["relation"],
-                "relevance": member["relevance"],
+                **{
+                    key: member[key]
+                    for key in ("url", "evidence", "quote", "relation", "relevance")
+                    if member.get(key)
+                },
                 **provenance,
             }
         )
@@ -424,10 +426,13 @@ def write_theme_candidate(
             raise ThemeTableError(
                 [f"{group_id}: member {member['instrument_id']} source exceeds 500"]
             )
+        pending.append((member["instrument_id"], source))
+    # Every source fits before any row is added: a refusal adds nothing.
+    for instrument_id, source in pending:
         db.add(
             GroupMembership(
                 group_id=group_id,
-                instrument_id=member["instrument_id"],
+                instrument_id=instrument_id,
                 role=THEME_CANDIDATE_ROLE,
                 confidence=1.0,
                 valid_from=valid_from,
@@ -435,6 +440,6 @@ def write_theme_candidate(
                 source=source,
             )
         )
-        added.append(member["instrument_id"])
+    added = [instrument_id for instrument_id, _source in pending]
     db.flush()
     return {"group_id": group_id, "created": created, "added": added}
