@@ -119,6 +119,7 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /backfill-runs/{run_id}` | 回補覆蓋頁，不在主導航 |
 | `GET /coverage` | 回補覆蓋頁，不在主導航 |
 | `GET /strategies` | 系統資料與策略頁，不在主導航 |
+| `GET /strategy-lists/{strategy}` | 通用策略名單 API（#1014），前端還沒用（今日名單頁的 H2 分頁讀 `/h2`）；`h2` 與 `/h2` 同內容由 `backend/tests/test_strategy_lists.py` 涵蓋 |
 
 ## 結果表
 
