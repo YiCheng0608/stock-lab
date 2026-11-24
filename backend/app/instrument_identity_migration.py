@@ -52,6 +52,7 @@ _CHILDREN = {
     # An older database's H2 items, until 0035 moves them (#1014).
     "h2_items",
     "strategy_list_items",
+    "theme_cluster_members",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"

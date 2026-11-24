@@ -63,6 +63,7 @@ from .schedule_runs import (
     record_preflight_skip,
 )
 from .strategy_levels import run_strategy_levels
+from .theme_discovery import run_theme_discovery
 from .theme_evidence import verify_themes
 from .themes import sync_themes
 from .margin_lists import run_margin_lists
@@ -340,6 +341,18 @@ def main() -> None:
         "--weekly",
         action="store_true",
         help="輸出每週最後一個交易日的排名（題材 id 與熱度）",
+    )
+    discovery_parser = subparsers.add_parser(
+        "theme-discovery",
+        help="量價共振分群與候選題材（daily 的 theme_discovery 步驟；同日重跑改寫分群，#1018）",
+    )
+    discovery_parser.add_argument(
+        "--date", dest="run_date", required=True, help="YYYY-MM-DD 交易日"
+    )
+    discovery_parser.add_argument(
+        "--no-ai",
+        action="store_true",
+        help="只重算並存分群，不呼叫 claude -p、不寫候選題材（重放用）",
     )
     tiers_parser = subparsers.add_parser(
         "action-tiers",
@@ -937,6 +950,10 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             result = run_theme_heat(parse_date(args.run_date))
         else:
             parser.error("theme-heat 要 --date 或 --since")
+    elif args.command == "theme-discovery":
+        result = run_theme_discovery(
+            date.fromisoformat(args.run_date), ai=not args.no_ai
+        )
     elif args.command == "news-project":
         result = run_news_project()
     elif args.command == "trading-calendar":
@@ -1097,6 +1114,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         "action-tiers",
         "news-project",
         "theme-heat",
+        "theme-discovery",
     } and result.get("status") not in {
         "success",
         "no_data",
