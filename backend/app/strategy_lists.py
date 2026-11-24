@@ -10,7 +10,8 @@ its items; the API reads the latest run when no date is asked.  A strategy's
 own values of a stock go in ``values_json`` by name.
 
 ``STRATEGIES`` is the registry (``strategies()``): ``h2`` is ``app.h2_list``
-(its ``/api/h2`` stays and answers the same).  Migration 0035 moved H2's rows
+(its ``/api/h2`` stays and answers the same) and ``x4`` is ``app.x4_list``
+(#1016).  Migration 0035 moved H2's rows
 here from ``h2_runs`` / ``h2_items`` (``move_h2_in``, and back with
 ``move_h2_out``).
 """
@@ -67,8 +68,9 @@ def strategies() -> dict[str, Strategy]:
     """The registry, by key.  Imported here: each strategy imports this module."""
 
     from .h2_list import H2
+    from .x4_list import X4
 
-    return {strategy.key: strategy for strategy in (H2,)}
+    return {strategy.key: strategy for strategy in (H2, X4)}
 
 
 def strategy(key: str) -> Strategy:

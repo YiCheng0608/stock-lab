@@ -3,8 +3,8 @@
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
 analyze -> evaluate -> candidates -> indicators -> mainstream -> h2_list ->
-plan_tracking -> strategy_levels -> action_tiers -> candidate_notes ->
-period_backfill).  catchup
+period_backfill -> x4_list -> plan_tracking -> strategy_levels -> action_tiers ->
+candidate_notes).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -19,8 +19,9 @@ price levels of the day's signals) runs after a successful analyze, and
 candidate_notes (LLM explanations of the day's candidates) last after a
 successful candidates step; whatever their status, they only stay on their
 step rows and never change the run status, and neither does period_backfill
-(#536; last, after every successful collect: the newest quarters and months
-on the days around their statutory deadlines), whose outcome is also kept in
+(#536; after h2_list and before x4_list, after every successful collect: the
+newest quarters and months on the days around their statutory deadlines; the
+X4 list reads them, #1016), whose outcome is also kept in
 the run's ``summary_json.period_backfill`` and, when it did not succeed, in
 ``summary_json.noncore_warnings``.  So does trading_calendar, which
 refreshes the official holiday schedule after a successful collect and before
@@ -88,11 +89,12 @@ DAILY_STEPS = (
     "indicators",
     "mainstream",
     "h2_list",
+    "period_backfill",
+    "x4_list",
     "plan_tracking",
     "strategy_levels",
     "action_tiers",
     "candidate_notes",
-    "period_backfill",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
@@ -103,6 +105,7 @@ STEP_REQUIRES = {
     "indicators": (),
     "mainstream": (),
     "h2_list": (),
+    "x4_list": (),
     "plan_tracking": (),
     "strategy_levels": ("analyze",),
     "action_tiers": ("analyze",),
@@ -127,6 +130,7 @@ NON_BLOCKING_STEPS = frozenset(
         "action_tiers",
         "mainstream",
         "h2_list",
+        "x4_list",
         "period_backfill",
     }
 )
@@ -169,6 +173,8 @@ MAINSTREAM_MODULE = "worker.mainstream"
 MAINSTREAM_FUNCTION = "run_mainstream"
 H2_LIST_MODULE = "worker.h2_list"
 H2_LIST_FUNCTION = "run_h2_list"
+X4_LIST_MODULE = "worker.x4_list"
+X4_LIST_FUNCTION = "run_x4_list"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
 TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
 # Set by worker.job for the worker it starts while holding the job's lock (#336).
@@ -280,6 +286,11 @@ def _mainstream_step(target: date) -> dict[str, Any]:
 def _h2_list_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(H2_LIST_MODULE)
     return getattr(module, H2_LIST_FUNCTION)(target)
+
+
+def _x4_list_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(X4_LIST_MODULE)
+    return getattr(module, X4_LIST_FUNCTION)(target)
 
 
 def _trading_calendar_step(target: date) -> dict[str, Any]:
@@ -856,15 +867,20 @@ def run_daily_job(
         ("mainstream", 7, lambda: _mainstream_step(target)),
         # The H2 list (#881): on the bars and corporate actions alone.
         ("h2_list", 8, lambda: _h2_list_step(target)),
+        # Before x4_list (#1016): a month or quarter it writes during its
+        # window can be available on T (announcement_date = the fetch date
+        # while the deadline is ahead), and the research tool reading the
+        # same T later sees it; x4_list must see it too.  It waits on nothing.
+        ("period_backfill", 9, lambda: _period_backfill_step(target)),
+        # The X4 list (#1016): bars, monthly revenues and quarterly EPS alone.
+        ("x4_list", 10, lambda: _x4_list_step(target)),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
-        ("plan_tracking", 9, lambda: _plan_tracking_step(target)),
-        ("strategy_levels", 10, lambda: _strategy_levels_step(target)),
+        ("plan_tracking", 11, lambda: _plan_tracking_step(target)),
+        ("strategy_levels", 12, lambda: _strategy_levels_step(target)),
         # After strategy_levels, whose rows the tiers read (#476).
-        ("action_tiers", 11, lambda: _action_tiers_step(target)),
-        ("candidate_notes", 12, lambda: _candidate_note_step(target)),
-        # Last: it reads nothing the others write, and no other step waits on it.
-        ("period_backfill", 13, lambda: _period_backfill_step(target)),
+        ("action_tiers", 13, lambda: _action_tiers_step(target)),
+        ("candidate_notes", 14, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
