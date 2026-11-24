@@ -822,6 +822,7 @@ def test_the_api_fields(factory, compared):
         "universe_count",
         "item_count",
         "items",
+        "recent_picks",
     }
     assert (body["status"], body["zero_reason"], body["trading_date"]) == (
         "computed",
@@ -846,7 +847,17 @@ def test_the_api_fields(factory, compared):
         "market",
         "recent_closes",
         "today_list",
+        "recent_picks",
     }
+    # #1021: T's 20 are each listed on T (app.strategy_lists' recent_picks).
+    recent = body["recent_picks"]
+    assert recent["sessions"] == 60 and recent["days"] >= 1
+    assert {row["instrument"]["id"] for row in rows} <= {
+        row["instrument"]["id"] for row in recent["items"]
+    }
+    for row in rows:
+        assert row["recent_picks"]["last_date"] == T.isoformat()
+        assert row["recent_picks"]["count"] >= 1
     assert set(rows[0]["instrument"]) == {
         "id",
         "exchange",
@@ -905,6 +916,7 @@ def test_a_day_without_a_list_is_missing(factory):
         "universe_count": None,
         "item_count": None,
         "items": [],
+        "recent_picks": None,
     }
     run_x4_list(T)
     body = client.get(f"{URL}?date={DAYS[-2].isoformat()}").json()

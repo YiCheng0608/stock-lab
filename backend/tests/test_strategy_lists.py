@@ -6,12 +6,18 @@ a null value, a zero run, two versions) moves into ``strategy_list_runs`` /
 up again the same; the fallback entry moves them too.  AC-3:
 ``/api/strategy-lists/h2`` answers as ``/api/h2`` and an unknown strategy is a
 404.  ``test_h2_api_unchanged`` is AC-2.
+
+#1021: ``recent_picks`` of the last 60 sessions' stored lists, counted again
+here from each day's ``/api/h2`` (AC-1); ``backfill`` and ``worker.cli
+strategy-lists backfill`` write day by day and a rerun writes nothing again
+(AC-3).
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from contextlib import closing
 from datetime import date
 
@@ -36,7 +42,7 @@ from test_h2_list import (  # noqa: F401 - factory and golden_db are fixtures
     golden_db,
 )
 from test_h2_api_unchanged import QUERIES
-from worker.h2_list import run_h2_list
+from worker.h2_list import backfill_h2, run_h2_list
 
 CONFIG = {"source": "explore_research", "window": 240, "missing": "last, kept"}
 RUNS = [
@@ -261,13 +267,17 @@ def test_the_registry_has_h2():
 def test_the_h2_strategy_list_is_api_h2(factory):  # noqa: F811
     client = TestClient(app)
     # No list yet: the missing response, the same on both.
-    assert client.get("/api/strategy-lists/h2").json() == client.get("/api/h2").json()
+    missing = client.get("/api/strategy-lists/h2").json()
+    assert missing.pop("recent_picks") is None
+    assert missing == client.get("/api/h2").json()
     for day in (DAYS[10], DAYS[245], T):
         run_h2_list(day)
     for query in QUERIES:
         response = client.get(f"/api/strategy-lists/h2{query}")
         assert response.status_code == 200
-        assert response.json() == client.get(f"/api/h2{query}").json(), query
+        assert _without_recent(response.json()) == client.get(
+            f"/api/h2{query}"
+        ).json(), query
     assert len(client.get("/api/strategy-lists/h2").json()["items"]) == 20
 
 
@@ -299,7 +309,10 @@ def test_strategies_do_not_mix(factory, monkeypatch):  # noqa: F811
     def present(db, run, items, day):
         return {
             "status": run.status if run else "missing",
-            "items": [(item.instrument_id, item.values_json) for item in items],
+            "items": [
+                {"instrument": {"id": item.instrument_id}, "values": item.values_json}
+                for item in items
+            ],
         }
 
     other = strategy_lists.Strategy(
@@ -315,11 +328,13 @@ def test_strategies_do_not_mix(factory, monkeypatch):  # noqa: F811
     with factory() as db:
         strategy_lists.write_list(db, other, T)
         strategy_lists.write_list(db, other, T)  # a rerun replaces it
-        assert strategy_lists.read_list(db, "demo", None) == {
+        assert strategy_lists.read_list(db, "demo", None, recent=False) == {
             "status": "computed",
-            "items": [(1, {"score": 0.25})],
+            "items": [{"instrument": {"id": 1}, "values": {"score": 0.25}}],
         }
-        assert strategy_lists.read_list(db, "demo", date(2000, 1, 3)) == {
+        demo = strategy_lists.read_list(db, "demo", None)["recent_picks"]
+        assert (demo["days"], [row["count"] for row in demo["items"]]) == (1, [1])
+        assert strategy_lists.read_list(db, "demo", date(2000, 1, 3), recent=False) == {
             "status": "missing",
             "items": [],
         }
@@ -330,3 +345,189 @@ def test_strategies_do_not_mix(factory, monkeypatch):  # noqa: F811
     client = TestClient(app)
     assert client.get("/api/h2").json() == before
     assert client.get("/api/strategy-lists/demo").json()["status"] == "computed"
+
+
+def _without_recent(response: dict) -> dict:
+    response = dict(response)
+    response.pop("recent_picks")
+    response["items"] = [
+        {key: value for key, value in item.items() if key != "recent_picks"}
+        for item in response["items"]
+    ]
+    return response
+
+
+def _by_hand(client, days) -> dict[int, list[str]]:
+    """Each stock's days among ``days``' stored lists, read one day at a time."""
+
+    picked: dict[int, list[str]] = {}
+    for day in days:
+        body = client.get(f"/api/h2?date={day.isoformat()}").json()
+        for item in body["items"]:
+            picked.setdefault(item["instrument"]["id"], []).append(day.isoformat())
+    return picked
+
+
+def test_recent_picks_count_the_last_60_sessions_lists(factory):  # noqa: F811
+    # 60 sessions back from T is DAYS[-60]; DAYS[-61] is out of the window, and
+    # DAYS[-30] has no list: 6 of the 60 sessions have one.
+    listed = [DAYS[-61], DAYS[-60], DAYS[-45], DAYS[-3], DAYS[-2], T]
+    for day in listed:
+        assert run_h2_list(day)["status"] == "success"
+    client = TestClient(app)
+    body = client.get("/api/strategy-lists/h2").json()
+    recent = body["recent_picks"]
+    window = listed[1:]
+    assert (recent["sessions"], recent["days"], recent["since"]) == (
+        60,
+        5,
+        DAYS[-60].isoformat(),
+    )
+    hand = _by_hand(client, window)
+    assert {row["instrument"]["id"] for row in recent["items"]} == set(hand)
+    today = {item["instrument"]["id"]: item["rank"] for item in body["items"]}
+    for row in recent["items"]:
+        days = hand[row["instrument"]["id"]]
+        assert row["count"] == len(days)
+        assert (row["first_date"], row["last_date"]) == (min(days), max(days))
+        assert row["today_rank"] == today.get(row["instrument"]["id"])
+    # The most often first, then the latest, then the symbol.
+    keys = [
+        (-row["count"], -date.fromisoformat(row["last_date"]).toordinal())
+        for row in recent["items"]
+    ]
+    assert keys == sorted(keys)
+    # The fixture is not trivial: counts differ and some are not in T's list.
+    assert len({row["count"] for row in recent["items"]}) > 1
+    assert any(row["today_rank"] is None for row in recent["items"])
+    for item in body["items"]:
+        row = next(
+            r for r in recent["items"] if r["instrument"]["id"] == item["instrument"]["id"]
+        )
+        assert item["recent_picks"] == {
+            key: row[key] for key in ("count", "first_date", "last_date")
+        }
+    # An asked date ends the window there: DAYS[-3]'s window has 4 lists.
+    asked = client.get(f"/api/strategy-lists/h2?date={DAYS[-3].isoformat()}").json()
+    assert (asked["recent_picks"]["days"], asked["recent_picks"]["since"]) == (
+        4,
+        DAYS[-61].isoformat(),
+    )
+    assert sum(row["count"] for row in asked["recent_picks"]["items"]) == sum(
+        len(days) for days in _by_hand(client, listed[:4]).values()
+    )
+
+
+def _counts(make) -> tuple[int, int, list[str]]:
+    with make() as db:
+        runs = db.scalars(
+            select(StrategyListRun.trading_date).where(StrategyListRun.strategy == "h2")
+        ).all()
+        items = db.scalars(
+            select(StrategyListItem.id).where(StrategyListItem.strategy == "h2")
+        ).all()
+        return len(runs), len(items), sorted(day.isoformat() for day in runs)
+
+
+def test_backfill_writes_each_session_once(factory):  # noqa: F811
+    assert run_h2_list(DAYS[-2])["status"] == "success"
+    with factory() as db:
+        computed_at = db.scalar(
+            select(StrategyListRun.computed_at).where(
+                StrategyListRun.trading_date == DAYS[-2]
+            )
+        )
+    first = backfill_h2(T, 4)
+    assert first["status"] == "success"
+    assert (first["sessions"], first["written"], first["kept"]) == (4, 3, 1)
+    assert (first["since"], first["until"]) == (DAYS[-4].isoformat(), T.isoformat())
+    runs, items, days = _counts(factory)
+    assert days == [day.isoformat() for day in DAYS[-4:]]
+    # A rerun writes nothing: the stored days are kept as they are.
+    again = backfill_h2(T, 4)
+    assert (again["written"], again["kept"]) == (0, 4)
+    assert _counts(factory) == (runs, items, days)
+    with factory() as db:
+        assert (
+            db.scalar(
+                select(StrategyListRun.computed_at).where(
+                    StrategyListRun.trading_date == DAYS[-2]
+                )
+            )
+            == computed_at
+        )
+    # --force recomputes every day and still one list a day.
+    forced = backfill_h2(T, 4, force=True)
+    assert (forced["written"], forced["kept"]) == (4, 0)
+    assert _counts(factory) == (runs, items, days)
+    # No date: the window ends at the latest session.
+    assert backfill_h2(None, 1)["until"] == T.isoformat()
+
+
+def test_backfill_reports_a_day_it_cannot_compute(factory, monkeypatch):  # noqa: F811
+    h2 = strategy_lists.strategy("h2")
+
+    def compute(db, day):
+        if day == DAYS[-2]:
+            raise ValueError("no bars")
+        return h2.compute(db, day)
+
+    broken = strategy_lists.Strategy(
+        key=h2.key,
+        version=h2.version,
+        definitions_sha256=h2.definitions_sha256,
+        config=h2.config,
+        compute=compute,
+        present=h2.present,
+    )
+    with factory() as db:
+        result = strategy_lists.backfill(db, broken, T, 3)
+    assert result["status"] == "failed"
+    assert result["written"] == 2
+    assert result["failed"] == [
+        {"date": DAYS[-2].isoformat(), "error": "ValueError: no bars"}
+    ]
+    assert _counts(factory)[2] == [DAYS[-3].isoformat(), T.isoformat()]
+
+
+def test_the_backfill_command(factory, monkeypatch, capsys):  # noqa: F811
+    import worker.cli as cli
+
+    calls = []
+    for key in ("h2", "x4"):
+        monkeypatch.setattr(
+            cli,
+            f"backfill_{key}",
+            lambda until, sessions, force, key=key: calls.append(
+                (key, until, sessions, force)
+            )
+            or {"status": "success", "strategy": key},
+        )
+    monkeypatch.setattr(cli, "maintenance_guarded", lambda args: None)
+    monkeypatch.setattr(sys, "argv", ["worker.cli", "strategy-lists", "backfill"])
+    cli.main()
+    assert calls == [("h2", None, 60, False), ("x4", None, 60, False)]
+    argv = ["--strategy", "x4", "--sessions", "5", "--until", T.isoformat(), "--force"]
+    monkeypatch.setattr(sys, "argv", ["worker.cli", "strategy-lists", "backfill", *argv])
+    cli.main()
+    assert calls[-1] == ("x4", T, 5, True)
+    capsys.readouterr()
+    monkeypatch.setattr(
+        cli, "backfill_h2", lambda until, sessions, force: {"status": "failed"}
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["worker.cli", "strategy-lists", "backfill", "--strategy", "h2"]
+    )
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    assert exited.value.code == 1
+
+
+def test_the_backfill_holds_maintenance_mode_outside_the_daily_hours():
+    import argparse
+
+    from worker.cli import DAILY_WINDOW_REFUSED, maintenance_guarded
+
+    args = argparse.Namespace(command="strategy-lists", strategy_lists_command="backfill")
+    assert maintenance_guarded(args) == "strategy-lists backfill"
+    assert "strategy-lists backfill" in DAILY_WINDOW_REFUSED
