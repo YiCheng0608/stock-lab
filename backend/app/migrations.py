@@ -841,6 +841,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0036_theme_heat', CURRENT_TIMESTAMP)"
         )
     )
+    # 0037 only adds theme_cluster_runs / theme_cluster_members (#1018), made
+    # by create_all with their indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0037_theme_clusters', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

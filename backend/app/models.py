@@ -1549,3 +1549,64 @@ class ThemeHeatScore(Base):
     available_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     components_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class ThemeClusterRun(Base):
+    """One trading day's price-volume clusters of a version (Issue #1018).
+
+    The nightly 量價共振分群 (``app.theme_clusters``): the screened stocks,
+    clustered by the correlation of their daily excess returns.  Written by
+    the daily's ``theme_discovery`` step and ``worker.cli theme-discovery``;
+    a rerun of the same date and version replaces the run and its members.
+    ``config_json`` keeps the thresholds the run used; ``status`` is
+    ``computed`` or ``zero`` (no stock passed the screen).
+    """
+
+    __tablename__ = "theme_cluster_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date", "version", name="uq_theme_cluster_run_day_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))
+    screened_count: Mapped[int] = mapped_column(Integer, default=0)
+    cluster_count: Mapped[int] = mapped_column(Integer, default=0)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ThemeClusterMember(Base):
+    """A member of one cluster of a theme cluster run (Issue #1018)."""
+
+    __tablename__ = "theme_cluster_members"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date",
+            "instrument_id",
+            "version",
+            name="uq_theme_cluster_member_day_version",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    theme_cluster_run_id: Mapped[int] = mapped_column(
+        ForeignKey("theme_cluster_runs.id"), index=True
+    )
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    # 1 is the largest cluster of the run.
+    cluster_no: Mapped[int] = mapped_column(Integer)
+    cluster_size: Mapped[int] = mapped_column(Integer)
+    # Mean pairwise correlation of the cluster's members.
+    cluster_mean_corr: Mapped[float] = mapped_column(Float)
+    # Mean correlation of this member with the cluster's other members.
+    member_mean_corr: Mapped[float] = mapped_column(Float)
+    # The screen's values on the trading date.
+    excess_return_20d: Mapped[float] = mapped_column(Float)
+    amount_ratio_5_20: Mapped[float] = mapped_column(Float)
+    average_lots_20d: Mapped[float] = mapped_column(Float)

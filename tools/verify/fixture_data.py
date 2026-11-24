@@ -2366,6 +2366,11 @@ OMITTED_TABLES: dict[str, str] = {
     "signal_evaluations": "較早的訊號只當追蹤計畫的來源；系統訊號追蹤不在五頁顯示",
     "signal_settlements": "同 signal_evaluations",
     "technical_features": "舊版特徵表；K 線與指標讀 technical_indicators",
+    "theme_cluster_members": "同 theme_cluster_runs",
+    "theme_cluster_runs": (
+        "量價共振分群（#1018）只給候選題材的提案；五頁的 API 不讀，"
+        "由後端 test_theme_discovery 驗"
+    ),
     "trading_calendar_days": (
         "休市表只給 analyze 推算規則最早執行日；API 不讀，"
         "假資料的訊號直接寫好 earliest_execution_date"

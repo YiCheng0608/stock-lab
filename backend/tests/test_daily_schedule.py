@@ -87,6 +87,8 @@ class Steps:
             "strategy_levels": {"status": "success", "records": 6},
             "action_tiers": {"status": "success", "records": 5},
             "candidate_notes": {"status": "success", "records": 3},
+            # Issue #1018; the real step has its own tests (test_theme_discovery).
+            "theme_discovery": {"status": "success", "records": 2},
             # Issue #536; the real step has its own tests (test_period_backfill).
             "period_backfill": {
                 "status": "skipped",
@@ -133,6 +135,9 @@ class Steps:
         monkeypatch.setattr(schedule_runs, "_action_tiers_step", make("action_tiers"))
         monkeypatch.setattr(
             schedule_runs, "_candidate_note_step", make("candidate_notes")
+        )
+        monkeypatch.setattr(
+            schedule_runs, "_theme_discovery_step", make("theme_discovery")
         )
         monkeypatch.setattr(
             schedule_runs, "_period_backfill_step", make("period_backfill")
@@ -189,6 +194,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
     rows, by_run = runs(database)
     assert [
@@ -211,6 +217,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "strategy_levels": ("success", 6),
         "action_tiers": ("success", 5),
         "candidate_notes": ("success", 3),
+        "theme_discovery": ("success", 2),
         "period_backfill": ("skipped", 0),
     }
     assert all(step.started_at and step.finished_at for step in logged.values())
@@ -236,6 +243,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
         "institutional_refetch",
     ]
     rows, by_run = runs(database)
@@ -280,6 +288,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "strategy_levels": "skipped",
         "action_tiers": "skipped",
         "candidate_notes": "skipped",
+        "theme_discovery": "skipped",
         "period_backfill": "skipped",
     }
     # A partial day is retried by the next trigger instead of being reused.
@@ -302,6 +311,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
 
 
@@ -338,6 +348,7 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
         "period_backfill",
         "x4_list",
         "plan_tracking",
+        "theme_discovery",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -388,6 +399,7 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
     rows, by_run = runs(database)
     assert rows[0].error == "evaluate: fixture evaluate failure"
@@ -415,6 +427,7 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
+        "theme_discovery",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -458,7 +471,7 @@ def test_candidate_note_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, candidate_notes=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-1] == "candidate_notes"
+    assert steps.calls[-2:] == ["candidate_notes", "theme_discovery"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]["candidate_notes"]
     assert rows[0].status == "success" and rows[0].error is None
@@ -603,11 +616,12 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
     steps = Steps(monkeypatch, plan_tracking=RuntimeError("fixture plan crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls[-4:] == [
+    assert steps.calls[-5:] == [
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -622,9 +636,10 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
             "strategy_levels",
             "action_tiers",
             "candidate_notes",
+            "theme_discovery",
             "period_backfill",
         )
-    ] == [12, 13, 14, 15, 10]
+    ] == [12, 13, 14, 15, 16, 10]
 
 
 @pytest.mark.parametrize(
@@ -642,10 +657,11 @@ def test_strategy_level_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, strategy_levels=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-3:] == [
+    assert steps.calls[-4:] == [
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -671,7 +687,7 @@ def test_action_tier_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, action_tiers=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-2:] == ["action_tiers", "candidate_notes"]
+    assert steps.calls[-3:] == ["action_tiers", "candidate_notes", "theme_discovery"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert rows[0].status == "success" and rows[0].error is None
@@ -890,6 +906,7 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
 
 
@@ -1393,6 +1410,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
     rows, _ = runs(database)
     assert rows[0].status == "failed" and f"process {dead.pid}" in rows[0].error
@@ -1790,6 +1808,7 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
+        "theme_discovery",
     ]
     caught = result["catchup"]
     # The holiday does not count toward the five sessions.
@@ -2250,7 +2269,7 @@ def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
     rows, by_run = runs(database)
     assert (rows[0].started_at, rows[0].finished_at) == (first, first)
     logged = by_run[rows[0].id]
-    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 16
+    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 17
     assert {(step.started_at, step.finished_at) for step in logged.values()} == {
         (first, first)
     }
