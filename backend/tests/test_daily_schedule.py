@@ -486,7 +486,9 @@ def test_a_period_backfill_failure_is_a_noncore_warning_and_the_run_succeeds(
     assert result["status"] == "success"
     # After h2_list, before x4_list, which reads what it writes (#1016).
     calls = steps.calls
-    assert calls.index("h2_list") < calls.index("period_backfill") < calls.index("x4_list")
+    assert (
+        calls.index("h2_list") < calls.index("period_backfill") < calls.index("x4_list")
+    )
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]["period_backfill"]
     assert rows[0].status == "success" and rows[0].error is None
