@@ -1,5 +1,5 @@
 """題材熱度 theme_heat_v1 (Issue #1017): spec snapshot, hand-computed fixture,
-missing news, the daily step, the CLI range, the API and migration 0035.
+missing news, the daily step, the CLI range, the API and migration 0036.
 
 The fixture is 30 calendar days standing in for sessions (TAIEX has a bar on
 each), T the last.  Group A's three members are built so every component has a
@@ -744,7 +744,7 @@ def test_the_api_returns_the_latest_and_a_date(factory):
     assert (none["items"], none["meta"]["empty_reason"]) == ([], "not_computed")
 
 
-# --- migration 0035 ---------------------------------------------------------
+# --- migration 0036 ---------------------------------------------------------
 
 
 def _tables(path):
@@ -797,14 +797,14 @@ def test_the_upgrade_adds_the_two_tables(tmp_path, monkeypatch, entry):
     assert foreign == {"run_id": "theme_heat_runs", "group_id": "theme_groups"}
     with closing(sqlite3.connect(path)) as connection:
         if entry == "alembic":
-            assert "0035_theme_heat" in REVISIONS
+            assert "0036_theme_heat" in REVISIONS
             assert connection.execute(
                 "SELECT version_num FROM alembic_version"
             ).fetchall() == [(REVISIONS[-1],)]
         else:
             assert connection.execute(
-                "SELECT version FROM schema_migrations WHERE version = '0035_theme_heat'"
-            ).fetchall() == [("0035_theme_heat",)]
+                "SELECT version FROM schema_migrations WHERE version = '0036_theme_heat'"
+            ).fetchall() == [("0036_theme_heat",)]
 
 
 def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
@@ -823,11 +823,11 @@ def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
     )
     config.attributes["connection"] = engine
     try:
-        command.upgrade(config, "0035_theme_heat")
-        command.downgrade(config, "0034_h2_lists")
+        command.upgrade(config, "0036_theme_heat")
+        command.downgrade(config, "0035_strategy_lists")
         tables, indexes, _ = _tables(path)
         assert (tables, indexes) == (set(), set())
-        command.upgrade(config, "0035_theme_heat")
+        command.upgrade(config, "0036_theme_heat")
     finally:
         engine.dispose()
     tables, indexes, _ = _tables(path)

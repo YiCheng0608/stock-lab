@@ -38,8 +38,10 @@ changes nothing of the today list or ``mainstream_v1``.
   A missing value is not dropped: with fewer than 20 values the missing ones
   fill the list, stored with ``high_gap_240`` null.
 
-The daily writes it after ``mainstream`` (``worker.h2_list``); a rerun of the
-date replaces the run and its items.  ``today_list`` (the stock's rank and
+The daily writes it after ``mainstream`` (``worker.h2_list``) into the common
+strategy list tables as strategy ``h2`` (``app.strategy_lists``, #1014;
+``high_gap_240`` in ``values_json``); a rerun of the date replaces the run and
+its items.  ``/api/h2`` and ``/api/strategy-lists/h2`` answer the same.  ``today_list`` (the stock's rank and
 entry type in the day's today list) is read at request time, not stored,
 and so are the page's ``market`` (the close of T and its change) and
 ``recent_closes`` (the sparkline), as ``/api/mainstream`` reads them (#882).
@@ -53,14 +55,20 @@ from dataclasses import dataclass
 from datetime import date, timezone
 from typing import Any
 
-from sqlalchemy import delete, desc, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from .candidate_view import recent_closes, recent_sessions
-from .clock import utcnow
 from .mainstream import _today_list
 from .market_change import adjacent_change
-from .models import CorporateAction, H2Item, H2Run, Instrument, MarketBar
+from .models import (
+    CorporateAction,
+    Instrument,
+    MarketBar,
+    StrategyListItem,
+    StrategyListRun,
+)
+from .strategy_lists import Computed, Entry, Strategy, read_list, write_list
 
 H2_VERSION = "explore_research_v2_X2"
 # explore_research.definitions_sha256() of version 2 (forward_watch WATCHES["H2"]).
@@ -354,44 +362,29 @@ def universe(db: Session, day: date) -> list[Member]:
 # --- writing --------------------------------------------------------------
 
 
-def compute_h2(db: Session, day: date) -> H2Run:
-    """Compute ``day``'s list and replace any stored run of the date and version."""
+def compute_day(db: Session, day: date) -> Computed:
+    """``day``'s universe size and ranked list (``app.strategy_lists``)."""
 
     members = universe(db, day)
     items = rank_members(day, members)
-    old = db.scalars(
-        select(H2Run.id).where(H2Run.trading_date == day, H2Run.version == H2_VERSION)
-    ).all()
-    if old:
-        db.execute(delete(H2Item).where(H2Item.h2_run_id.in_(old)))
-        db.execute(delete(H2Run).where(H2Run.id.in_(old)))
-        db.flush()
-    run = H2Run(
-        trading_date=day,
-        version=H2_VERSION,
-        definitions_sha256=DEFINITIONS_SHA256,
-        status="computed" if items else "zero",
+    return Computed(
         universe_count=len(members),
-        item_count=len(items),
-        config_json=dict(H2_CONFIG),
-        computed_at=utcnow(),
+        entries=[
+            Entry(
+                instrument_id=item.instrument_id,
+                rank=item.rank,
+                close=item.close,
+                values={"high_gap_240": item.high_gap_240},
+            )
+            for item in items
+        ],
     )
-    db.add(run)
-    db.flush()
-    db.add_all(
-        H2Item(
-            h2_run_id=run.id,
-            trading_date=day,
-            instrument_id=item.instrument_id,
-            version=H2_VERSION,
-            rank=item.rank,
-            high_gap_240=item.high_gap_240,
-            close=item.close,
-        )
-        for item in items
-    )
-    db.commit()
-    return run
+
+
+def compute_h2(db: Session, day: date) -> StrategyListRun:
+    """Compute ``day``'s list and replace any stored run of the date and version."""
+
+    return write_list(db, H2, day)
 
 
 # --- reading for /api/h2 --------------------------------------------------
@@ -410,20 +403,16 @@ def _empty(status: str, day: date | None) -> dict[str, Any]:
     }
 
 
-def h2_list(db: Session, trading_date: date | None) -> dict[str, Any]:
-    """The stored list of ``trading_date`` (the latest when None)."""
+def present(
+    db: Session,
+    run: StrategyListRun | None,
+    rows: list[StrategyListItem],
+    trading_date: date | None,
+) -> dict[str, Any]:
+    """The response of a stored run (``app.strategy_lists``); missing without one."""
 
-    query = select(H2Run).where(H2Run.version == H2_VERSION)
-    if trading_date is not None:
-        query = query.where(H2Run.trading_date == trading_date)
-    run = db.scalar(query.order_by(desc(H2Run.trading_date), desc(H2Run.id)).limit(1))
     if run is None:
         return _empty("missing", trading_date)
-    rows = db.execute(
-        select(H2Item.instrument_id, H2Item.rank, H2Item.high_gap_240, H2Item.close)
-        .where(H2Item.h2_run_id == run.id)
-        .order_by(H2Item.rank)
-    ).all()
     ids = [row.instrument_id for row in rows]
     instruments = {
         row.id: row
@@ -456,7 +445,7 @@ def h2_list(db: Session, trading_date: date | None) -> dict[str, Any]:
     items = []
     for row in rows:
         instrument = instruments[row.instrument_id]
-        value = row.high_gap_240
+        value = (row.values_json or {}).get("high_gap_240")
         items.append(
             {
                 "rank": row.rank,
@@ -496,3 +485,19 @@ def h2_list(db: Session, trading_date: date | None) -> dict[str, Any]:
         "universe_count": run.universe_count,
         "items": items,
     }
+
+
+H2 = Strategy(
+    key="h2",
+    version=H2_VERSION,
+    definitions_sha256=DEFINITIONS_SHA256,
+    config=H2_CONFIG,
+    compute=compute_day,
+    present=present,
+)
+
+
+def h2_list(db: Session, trading_date: date | None) -> dict[str, Any]:
+    """The stored list of ``trading_date`` (the latest when None)."""
+
+    return read_list(db, H2.key, trading_date)

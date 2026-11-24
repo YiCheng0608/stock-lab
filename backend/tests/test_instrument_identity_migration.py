@@ -39,7 +39,7 @@ CHILDREN = [
     "trading_halts",
     "preopen_news_checks",
     "mainstream_items",
-    "h2_items",
+    "strategy_list_items",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -230,7 +230,7 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                 "candidate_runs",
                 "raw_payloads",
                 "mainstream_runs",
-                "h2_runs",
+                "strategy_list_runs",
             }
             for table in Base.metadata.sorted_tables:
                 if table.name not in wanted:
@@ -266,8 +266,8 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     values.update(candidate_run_id=11)
                 if table.name == "mainstream_items":
                     values.update(mainstream_run_id=11)
-                if table.name == "h2_items":
-                    values.update(h2_run_id=11)
+                if table.name == "strategy_list_items":
+                    values.update(run_id=11)
                 if table.name in {"no_trade_days", "monthly_revenues", "trading_halts"}:
                     values.update(raw_payload_id=11)
                 if table.name == "tracking_plans":

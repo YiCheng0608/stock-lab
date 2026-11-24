@@ -1,7 +1,7 @@
 """Add the theme heat tables.
 
-Revision ID: 0035_theme_heat
-Revises: 0034_h2_lists
+Revision ID: 0036_theme_heat
+Revises: 0035_strategy_lists
 
 ``theme_heat_runs`` keeps one row per trading date and version, and
 ``theme_heat_scores`` one row per theme of the run (Issue #1017).  The daily's
@@ -27,8 +27,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0035_theme_heat"
-down_revision = "0034_h2_lists"
+revision = "0036_theme_heat"
+down_revision = "0035_strategy_lists"
 branch_labels = None
 depends_on = None
 
