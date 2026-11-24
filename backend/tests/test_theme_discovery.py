@@ -805,7 +805,9 @@ def test_a_candidate_is_never_scored_ranked_or_read_as_a_theme(tmp_path):
 def test_a_refused_write_keeps_the_calls_raw(make, cli):
     # The candidate id is taken by a group of another type: the writer refuses.
     with make() as db:
-        db.add(ThemeGroup(id="candidate-silicon-wafer", name="其他", group_type="theme"))
+        db.add(
+            ThemeGroup(id="candidate-silicon-wafer", name="其他", group_type="theme")
+        )
         db.commit()
     claude = FakeClaude(
         _answer([_member(i) for i in (1, 2, 3)]), _answer([], is_theme=False)
