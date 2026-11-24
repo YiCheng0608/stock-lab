@@ -777,7 +777,8 @@ class MonthlyRevenue(Base):
     first 出表日期, or the statutory deadline (the 10th of the next month,
     rolled to a session) of a backfilled month; ``data_json.announcement_basis``
     names which.  collect writes the snapshot month, ``worker.monthly_revenue``
-    the backfill.  Display only: no strategy or score reads it.
+    the backfill.  No signal strategy or score reads it; the X4 list does
+    (``app.x4_list``, #1016).
     """
 
     __tablename__ = "monthly_revenues"

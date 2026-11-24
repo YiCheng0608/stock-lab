@@ -1,6 +1,6 @@
 """Store a trading day's X4 list (Issue #1016).
 
-The daily's ``x4_list`` step (after ``h2_list``) calls ``run_x4_list``: it
+The daily's ``x4_list`` step (after ``period_backfill``, whose rows it reads) calls ``run_x4_list``: it
 computes and writes the day's ``x4`` run and items of ``strategy_list_runs`` /
 ``strategy_list_items`` (#1014) through ``app.x4_list.compute_x4``.  Rerunning
 a date replaces its list.  A failure is a warning: one ``warning:`` line on stderr, which ``worker.job`` writes into

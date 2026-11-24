@@ -180,12 +180,12 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
     rows, by_run = runs(database)
     assert [
@@ -225,12 +225,12 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
         "institutional_refetch",
     ]
     rows, by_run = runs(database)
@@ -289,12 +289,12 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
 
 
@@ -327,9 +327,9 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
-        "period_backfill",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -373,12 +373,12 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
     rows, by_run = runs(database)
     assert rows[0].error == "evaluate: fixture evaluate failure"
@@ -400,11 +400,11 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
-        "period_backfill",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -448,7 +448,7 @@ def test_candidate_note_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, candidate_notes=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-2:] == ["candidate_notes", "period_backfill"]
+    assert steps.calls[-1] == "candidate_notes"
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]["candidate_notes"]
     assert rows[0].status == "success" and rows[0].error is None
@@ -484,7 +484,9 @@ def test_a_period_backfill_failure_is_a_noncore_warning_and_the_run_succeeds(
     steps = Steps(monkeypatch, period_backfill=outcome)
     result = pipeline.run_daily(DAY, trigger="scheduler")
     assert result["status"] == "success"
-    assert steps.calls[-1] == "period_backfill"
+    # After h2_list, before x4_list, which reads what it writes (#1016).
+    calls = steps.calls
+    assert calls.index("h2_list") < calls.index("period_backfill") < calls.index("x4_list")
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]["period_backfill"]
     assert rows[0].status == "success" and rows[0].error is None
@@ -526,7 +528,7 @@ def test_a_period_backfill_outcome_is_kept_next_to_the_collects_warnings(
         },
     )
     assert pipeline.run_daily(DAY)["status"] == "success"
-    assert steps.calls[-1] == "period_backfill"
+    assert "period_backfill" in steps.calls
     rows, by_run = runs(database)
     summary = rows[0].summary_json
     assert summary["noncore_warnings"] == ["TWSE monthly revenue unavailable: fixture"]
@@ -589,12 +591,11 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
     steps = Steps(monkeypatch, plan_tracking=RuntimeError("fixture plan crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls[-5:] == [
+    assert steps.calls[-4:] == [
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -611,7 +612,7 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
             "candidate_notes",
             "period_backfill",
         )
-    ] == [10, 11, 12, 13, 14]
+    ] == [11, 12, 13, 14, 9]
 
 
 @pytest.mark.parametrize(
@@ -629,11 +630,10 @@ def test_strategy_level_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, strategy_levels=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-4:] == [
+    assert steps.calls[-3:] == [
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -659,7 +659,7 @@ def test_action_tier_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, action_tiers=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-3:] == ["action_tiers", "candidate_notes", "period_backfill"]
+    assert steps.calls[-2:] == ["action_tiers", "candidate_notes"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert rows[0].status == "success" and rows[0].error is None
@@ -871,12 +871,12 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
 
 
@@ -1373,12 +1373,12 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
     rows, _ = runs(database)
     assert rows[0].status == "failed" and f"process {dead.pid}" in rows[0].error
@@ -1769,12 +1769,12 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "indicators",
         "mainstream",
         "h2_list",
+        "period_backfill",
         "x4_list",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
-        "period_backfill",
     ]
     caught = result["catchup"]
     # The holiday does not count toward the five sessions.

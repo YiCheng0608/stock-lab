@@ -616,8 +616,10 @@ def test_the_daily_writes_the_day_after_h2(factory, monkeypatch, compared):
     rows, by_run = runs(factory)
     logged = by_run[rows[0].id]
     step = logged["x4_list"]
-    assert (step.status, step.records, step.sequence) == ("success", 20, 9)
-    assert logged["h2_list"].sequence < step.sequence < logged["plan_tracking"].sequence
+    assert (step.status, step.records, step.sequence) == ("success", 20, 10)
+    assert logged["h2_list"].sequence < logged["period_backfill"].sequence
+    assert logged["period_backfill"].sequence < step.sequence
+    assert step.sequence < logged["plan_tracking"].sequence
     run, items = _stored(factory)
     assert (run.status, run.version, run.definitions_sha256) == (
         "computed",
@@ -627,6 +629,48 @@ def test_the_daily_writes_the_day_after_h2(factory, monkeypatch, compared):
     assert run.config_json == x4_list.X4_CONFIG
     assert (run.item_count, len(items)) == (20, 20)
     assert _same(research[T], items)
+
+
+def test_the_list_reads_what_period_backfill_writes_on_t(factory, monkeypatch):
+    """period_backfill runs before x4_list (#1016 review): a month it writes
+    with announcement_date = T (its deadline ahead) is in T's stored list, as
+    the research tool reading T later sees it."""
+
+    with factory() as db:
+        before = x4_list.compute_day(db, T)
+    top = before.entries[0].instrument_id
+    month = date(2025, 5, 1)  # announced 2025-06-10, after T, in the fixture
+    steps = _real_x4(monkeypatch)
+
+    def backfill(target):
+        steps.calls.append("period_backfill")
+        with factory() as db:
+            db.execute(
+                update(MonthlyRevenue)
+                .where(
+                    MonthlyRevenue.instrument_id == top,
+                    MonthlyRevenue.revenue_month == month,
+                )
+                .values(
+                    announcement_date=target,
+                    prior_year_revenue=MonthlyRevenue.revenue * 2.0,
+                )
+            )
+            db.commit()
+        return {"status": "success", "records": 1}
+
+    monkeypatch.setattr(schedule_runs, "_period_backfill_step", backfill)
+    assert pipeline.run_daily(T)["status"] == "success"
+    with factory() as db:
+        after = x4_list.compute_day(db, T)
+    assert top not in [entry.instrument_id for entry in after.entries]
+    _, stored = _stored(factory)
+    assert [row[0] for row in stored] == [
+        f"S{entry.instrument_id}" for entry in after.entries
+    ]
+    rows, by_run = runs(factory)
+    logged = by_run[rows[0].id]
+    assert logged["period_backfill"].sequence < logged["x4_list"].sequence
 
 
 def test_a_rerun_of_the_day_replaces_it(factory):

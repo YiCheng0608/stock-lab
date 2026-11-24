@@ -43,7 +43,7 @@ no price levels and changes nothing of the today list or the other lists.
   ``sha256("<T>:<instrument_id>")``; the first 20.  With fewer than 20 passing
   the list is those (nothing fills it, unlike H2).
 
-The daily writes it after ``h2_list`` (``worker.x4_list``) into the common
+The daily writes it after ``period_backfill`` (``worker.x4_list``) into the common
 strategy list tables as strategy ``x4`` (``app.strategy_lists``, #1014); a
 rerun of the date replaces the run and its items.  An item's values are in
 ``values_json``; ``/api/strategy-lists/x4`` reads them with ``market``,

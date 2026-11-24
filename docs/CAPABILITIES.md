@@ -11,7 +11,7 @@
 | 融券餘額 | 每日從同一份融資融券官方檔收融券今日餘額（張，`short_balance`），缺欄或非數字留空；2024-09-30 起的歷史以 `chips short-balance` 從已存 raw 補寫；不進策略、評分與候選，畫面不顯示 | [#662](https://github.com/YiCheng0608/stock-lab/issues/662) | [籌碼來源](DATA_SOURCES.md#籌碼來源) |
 | 重大訊息 | 以 MOPS 日期查詢記每日已核實查詢日與空日，可單獨回補事件 | [#464](https://github.com/YiCheng0608/stock-lab/issues/464) | [重大訊息日期查詢](DATA_SOURCES.md#重大訊息日期查詢) |
 | 季度財報 | 季度累計營收與基本 EPS 可用 MOPS 彙總報表回補近 8 季，可得日用各產業的法定申報期限，基本面快照保留首見出表日 | [#529](https://github.com/YiCheng0608/stock-lab/issues/529) | [季度財報回補](DATA_SOURCES.md#季度財報回補) |
-| 月營收 | 每日收集官方快照、可回補近 24 個月（上市、上櫃的國內與國外公司），以可得日篩選、不納入策略 | [#530](https://github.com/YiCheng0608/stock-lab/issues/530) | [月營收](DATA_SOURCES.md#月營收) |
+| 月營收 | 每日收集官方快照、可回補近 24 個月（上市、上櫃的國內與國外公司），以可得日篩選；不納入訊號策略與評分，X4 名單讀它（[#1016](https://github.com/YiCheng0608/stock-lab/issues/1016)） | [#530](https://github.com/YiCheng0608/stock-lab/issues/530) | [月營收](DATA_SOURCES.md#月營收) |
 | 月營收更正 | 快照出表後公司更正的月份以 MOPS 營業收入統計表為準，標「已更正」並保留原快照值，之後的快照不會改回 | [#543](https://github.com/YiCheng0608/stock-lab/issues/543) | — |
 | 申報窗口自動回補 | `daily` 在申報期限前後的窗口自動回補最近 2 季與最近 2 個月，補上快照換期後才上市的新股與晚申報，失敗只記非核心警告 | [#536](https://github.com/YiCheng0608/stock-lab/issues/536) | [排程](ops/SCHEDULING.md#日誌與-run-記錄) |
 | 長區間回補 | CLI 回補可跨多段 93 日視窗 | — | — |
