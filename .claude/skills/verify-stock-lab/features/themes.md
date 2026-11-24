@@ -10,6 +10,7 @@
 | `themes-theme.json` | `/themes?board=theme&limit=100` |
 | `theme-detail.json` | `/themes/<T>`，`T` = 今日記下的 `items[0].theme_id` |
 | `theme-members.json` | `/themes/<T>/members?page=1&page_size=30&sort=turnover` |
+| `theme-heat.json` | `/theme-heat`（「熱度」分頁，#1017；假資料庫只核對 API 值，頁面沒有截圖，見陷阱） |
 
 ## 驗證範圍
 
@@ -23,6 +24,7 @@
 | API route | `GET /themes` |
 | API route | `GET /themes/{theme_id}` |
 | API route | `GET /themes/{theme_id}/members` |
+| API route | `GET /theme-heat` |
 | API route | `GET /news` |
 
 ## 截圖
@@ -64,6 +66,7 @@
 - 族群詳情（#666）：排名、分數、有效成員是頁首一行統計，頁面文字仍是 `排名` 開頭的一行（G7 以它為族群名之後的界線）；成員表單位／空白說明句在「族群成員」標題列的「說明」`<details>` 裡（#732 起沒有題材表版本），截圖展開後在成員表頭之前。
 - 「說明」`<details>` 在 `共 N 個` 那一行的右側，展開後的單位句（#732 起只剩這一句）在 `資料 <B/>` 之後，不影響 G2。
 - 產業榜是 `/themes` 預設分頁，題材榜要帶 `?board=theme`；兩榜的 `B` 各自取該榜的 `meta.trading_date`。
+- 「熱度」分頁（`?board=heat`，[theme_heat_v1](../../../../docs/spec/theme_heat.md)，#1017）讀 `/theme-heat`，列的版面同族群榜，展開是六分項（5 日超額、20 日超額、成交金額、法人、廣度、新聞）；工具列有「不是買賣訊號」badge，當日沒有新聞分項時另有「新聞無資料（…）」badge。G1～G10 都不讀這一頁：CI 模式只以 `fixture_data.EXPECTED` 核對 `/theme-heat` 的值，`page_checks.py` 的截圖清單沒有它；人工驗收時以 `screenshot.cjs --url "<WEB>/themes?board=heat"` 拍 1280 與 390，對 `/theme-heat` 的 `items` 順序、`heat` × 100 與六分項百分位核對。
 - 分數橫條（#654）與漲跌文字（#675）保留數字：族群榜明細五分項的值行與族群詳情「五分項」卡的值仍是 0–100 整數或 `—`（G3 照舊比對）；1／5／20 日相對報酬是沒有底色的紅漲綠跌文字，文字仍是 `±N.NN%`。列標題後的最高、最低分項與族群成員表的 5／20 日相對維持純數字。圖形由 G9 讀 `graphics` 檢查。
 
 ## 判定

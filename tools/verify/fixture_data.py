@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -2102,6 +2102,84 @@ def _h2_item_rows() -> list[dict[str, Any]]:
     ]
 
 
+# ---- theme heat (Issue #1017): hand-set rows of T, not computed from the fixture ----
+
+# group id -> (rank, heat, quality, available weight, percentiles, raw values, news counts)
+HEAT_PLAN: dict[str, tuple[Any, ...]] = {
+    AI_SERVER_ID: (
+        1,
+        0.82,
+        "complete",
+        1.0,
+        [1.0, 1.0, 0.0, 1.0, 1.0, 1.0],
+        [0.0412, 0.0935, 1.21, 0.034, 0.6667, 2.5],
+        (6, 18),
+    ),
+    PACKAGING_ID: (
+        2,
+        0.18,
+        "partial",
+        0.88,
+        [0.0, 0.0, 1.0, None, 0.0, 0.0],
+        [-0.0128, 0.0106, 1.38, None, 0.3333, 0.0],
+        (1, 4),
+    ),
+}
+
+
+def _theme_heat_run_rows() -> list[dict[str, Any]]:
+    from app.theme_heat import THEME_HEAT_CONFIG, THEME_HEAT_VERSION
+
+    return [
+        {
+            "id": 1,
+            "trading_date": T,
+            "version": THEME_HEAT_VERSION,
+            "status": "computed",
+            "theme_count": len(HEAT_PLAN),
+            "ranked_count": len(HEAT_PLAN),
+            "news_status": "available",
+            "news_through_id": len(_news_rows()),
+            "config_json": dict(THEME_HEAT_CONFIG),
+            "computed_at": datetime.combine(T, time(13, 40)),
+        }
+    ]
+
+
+def _theme_heat_score_rows() -> list[dict[str, Any]]:
+    from app.theme_heat import COMPONENTS, THEME_HEAT_VERSION
+
+    rows = []
+    for index, (group_id, plan) in enumerate(HEAT_PLAN.items(), start=1):
+        rank, heat, quality, weight, percentiles, raws, (recent, prior) = plan
+        members = len(GROUP_PLAN[group_id][1])
+        rows.append(
+            {
+                "id": index,
+                "run_id": 1,
+                "trading_date": T,
+                "group_id": group_id,
+                "version": THEME_HEAT_VERSION,
+                "rank": rank,
+                "heat": heat,
+                "quality": quality,
+                "member_count": members,
+                "eligible_members": members,
+                "available_weight": weight,
+                "components_json": {
+                    component: {"raw": raw, "percentile": percentile}
+                    for component, raw, percentile in zip(COMPONENTS, raws, percentiles)
+                },
+                "details_json": {
+                    "flow_members": members if percentiles[3] is not None else 0,
+                    "news_recent": recent,
+                    "news_prior": prior,
+                },
+            }
+        )
+    return rows
+
+
 # ---- assembled tables (insertion order respects foreign keys) ----
 
 TABLES: dict[str, list[dict[str, Any]]] = {
@@ -2133,6 +2211,8 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     # H2 in the common strategy list tables (#1014).
     "strategy_list_runs": _h2_run_rows(),
     "strategy_list_items": _h2_item_rows(),
+    "theme_heat_runs": _theme_heat_run_rows(),
+    "theme_heat_scores": _theme_heat_score_rows(),
     "tracking_plans": _tracking_plan_rows(),
     "tracking_plan_sessions": _tracking_plan_session_rows(),
     "portfolio_positions": _portfolio_rows(),
@@ -2445,6 +2525,13 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items[].display_name",
             ["示範 AI 伺服器", "示範先進封裝"],
         ),
+        # The 熱度 tab (#1017): the hand-set rows of T (HEAT_PLAN).
+        ("theme-heat", "meta.trading_date", D),
+        ("theme-heat", "meta.news_status", "available"),
+        ("theme-heat", "meta.not_a_signal", "不是買賣訊號"),
+        ("theme-heat", "items[].theme_id", [AI_SERVER_ID, PACKAGING_ID]),
+        ("theme-heat", "items[].heat", [0.82, 0.18]),
+        ("theme-heat", "items[].components.institutional_ratio", [1.0, None]),
         (f"themes/{TOP_THEME}", "members_total", 3),
         # The delisted 9205 and the moved 9206 left these groups (LIFECYCLE).
         (f"themes/{BIOTECH_ID}", "members_total", 1),

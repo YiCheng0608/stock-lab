@@ -616,7 +616,8 @@ def test_the_daily_writes_the_day_after_h2(factory, monkeypatch, compared):
     rows, by_run = runs(factory)
     logged = by_run[rows[0].id]
     step = logged["x4_list"]
-    assert (step.status, step.records, step.sequence) == ("success", 20, 10)
+    # theme_heat (#1017) is step 9, so x4_list is 11.
+    assert (step.status, step.records, step.sequence) == ("success", 20, 11)
     assert logged["h2_list"].sequence < logged["period_backfill"].sequence
     assert logged["period_backfill"].sequence < step.sequence
     assert step.sequence < logged["plan_tracking"].sequence

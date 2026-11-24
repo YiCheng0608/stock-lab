@@ -694,7 +694,7 @@ def test_the_daily_runs_the_step_without_changing_the_run(make, monkeypatch):
     assert steps.calls[-1] == "candidate_notes"
     rows, by_run = runs(make)
     step = by_run[rows[0].id]["theme_discovery"]
-    assert (step.status, step.records, step.sequence) == ("partial", 2, 15)
+    assert (step.status, step.records, step.sequence) == ("partial", 2, 16)
     assert rows[0].status == "success" and rows[0].error is None
     assert "theme_discovery" in schedule_runs.NON_BLOCKING_STEPS
 

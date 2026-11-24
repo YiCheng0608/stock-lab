@@ -7,6 +7,8 @@ import type {
   ThemeBoardItem,
   ThemeBoardMeta,
   ThemeDetail,
+  ThemeHeatComponent,
+  ThemeHeatItem,
   ThemeEvidence,
   ThemeInlineMember,
   ThemeMemberRow,
@@ -36,8 +38,64 @@ export function parseBoard(value: string | null | undefined): ThemeBoard {
   return value === 'theme' ? 'theme' : 'industry'
 }
 
-export function boardPagePath(board: ThemeBoard): string {
+export function boardPagePath(board: ThemeBoard | ThemeTab): string {
   return board === 'industry' ? '/themes' : `/themes?board=${board}`
+}
+
+// The page's tabs: the two boards and the theme heat (docs/spec/theme_heat.md, #1017), which is not a board.
+export type ThemeTab = ThemeBoard | 'heat'
+
+export const THEME_TABS: ReadonlyArray<{ id: ThemeTab; label: string }> = [...THEME_BOARDS, { id: 'heat', label: '熱度' }]
+
+// ?board= on /themes: "heat" opens the heat tab; anything else is parseBoard's.
+export function parseThemeTab(value: string | null | undefined): ThemeTab {
+  return value === 'heat' ? 'heat' : parseBoard(value)
+}
+
+// ---- theme heat (theme_heat_v1) ----
+
+export const HEAT_COMPONENTS: ReadonlyArray<{ key: ThemeHeatComponent; label: string }> = [
+  { key: 'excess_5d', label: '5 日超額' },
+  { key: 'excess_20d', label: '20 日超額' },
+  { key: 'turnover_ratio', label: '成交金額' },
+  { key: 'institutional_ratio', label: '法人' },
+  { key: 'breadth', label: '廣度' },
+  { key: 'news', label: '新聞' },
+]
+
+export const HEAT_NOT_A_SIGNAL = '不是買賣訊號'
+
+// The heat 0–1 shown on 0–100 like the components; no heat is 「—」.
+export function formatHeat(value: number | null | undefined): string {
+  return formatComponent(value)
+}
+
+// Why the news component is empty on the whole day; null when the day has it.
+export function heatNewsNote(status: string | null | undefined): string | null {
+  if (status === 'available') return null
+  if (status === 'no_news_run') return '新聞無資料（當日沒有新聞收集）'
+  if (status === 'history_short') return '新聞無資料（收集未滿 20 個交易日）'
+  return null
+}
+
+// The two news windows' item counts; 「—」 on a day without the news component.
+export function heatNewsItems(item: Pick<ThemeHeatItem, 'news_items'>): string {
+  const { recent, prior } = item.news_items
+  return isFiniteNumber(recent) ? `近 3 日 ${recent}／前 20 日 ${isFiniteNumber(prior) ? prior : '—'}` : '—'
+}
+
+// Highest and lowest of the six components, by the same rule as the board rows.
+export function heatComponentExtremes(components: ThemeHeatItem['components']): Array<{ key: ThemeHeatComponent; label: string; value: number }> {
+  const valued = HEAT_COMPONENTS.flatMap((component) => {
+    const value = components[component.key]
+    return isFiniteNumber(value) ? [{ ...component, value }] : []
+  })
+  if (valued.length === 0) return []
+  const highest = valued.reduce((best, entry) => (entry.value > best.value ? entry : best))
+  const rest = valued.filter((entry) => entry !== highest)
+  if (rest.length === 0) return [highest]
+  const lowest = rest.reduce((worst, entry) => (entry.value <= worst.value ? entry : worst))
+  return [highest, lowest]
 }
 
 export function themeDetailPath(themeId: string): string {

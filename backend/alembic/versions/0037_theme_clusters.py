@@ -1,7 +1,7 @@
 """Add the theme cluster tables.
 
-Revision ID: 0036_theme_clusters
-Revises: 0035_strategy_lists
+Revision ID: 0037_theme_clusters
+Revises: 0036_theme_heat
 
 ``theme_cluster_runs`` keeps one row per trading date and cluster version,
 and ``theme_cluster_members`` one row per stock of a cluster (Issue #1018).
@@ -27,8 +27,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0036_theme_clusters"
-down_revision = "0035_strategy_lists"
+revision = "0037_theme_clusters"
+down_revision = "0036_theme_heat"
 branch_labels = None
 depends_on = None
 

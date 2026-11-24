@@ -27,6 +27,7 @@ import {
   getTheme,
   getThemeMembers,
   getThemeBoard,
+  getThemeHeat,
   addTrackingPlan,
   cancelTrackingPlan,
   getTrackingPlan,
@@ -92,7 +93,7 @@ import { CoverageSummaryMetrics, backfillSessionsLabel, coverageReasonLabels } f
 import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
 import { MainstreamChart, TodayListsSection } from './candidates/MainstreamViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
-import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
+import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseThemeTab, type ThemeTab } from './themes/themeBoards'
 import { NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketSummaryLine, TodayHeader } from './today/TodayViews'
 import { MarketPage } from './market/MarketPage'
@@ -523,13 +524,16 @@ function NewsPage() {
 
 function ThemesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const board = parseBoard(searchParams.get('board'))
+  const tab = parseThemeTab(searchParams.get('board'))
+  const board: ThemeBoard = tab === 'heat' ? 'theme' : tab
   const [search, setSearch] = useState('')
-  const query = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board) })
+  const query = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board), enabled: tab !== 'heat' })
   // 今日名單 N 檔 on each row (Issue 522): the same latest list (and cache) as the today page.
   const candidates = useQuery({ queryKey: ['candidates', 'latest'], queryFn: () => getCandidates() })
-  const changeBoard = (next: ThemeBoard) => setSearchParams(next === 'industry' ? {} : { board: next }, { replace: true })
-  return <ThemesBoardView board={board} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error} candidates={candidates.data} />
+  // The 熱度 tab (theme_heat_v1, #1017).
+  const heat = useQuery({ queryKey: ['theme-heat'], queryFn: getThemeHeat, enabled: tab === 'heat' })
+  const changeBoard = (next: ThemeTab) => setSearchParams(next === 'industry' ? {} : { board: next }, { replace: true })
+  return <ThemesBoardView board={tab} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error} candidates={candidates.data} heat={{ data: heat.data, loading: heat.isLoading, error: heat.error }} />
 }
 
 function ThemePage() {

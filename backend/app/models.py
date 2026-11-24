@@ -1488,6 +1488,69 @@ class StrategyListItem(Base):
     values_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class ThemeHeatRun(Base):
+    """One trading day's 題材熱度 of a version (Issue #1017).
+
+    Written by the daily's ``theme_heat`` step and ``worker.cli theme-heat``
+    (``app.theme_heat``); a rerun of the same date and version replaces the
+    run and its scores.  ``status`` is ``computed`` or ``zero`` (no theme had
+    enough members with a value, or none was valid on the day).
+    ``news_status`` is ``available``, ``no_news_run`` or ``history_short``;
+    only ``available`` days have a news component.  ``news_through_id`` is the
+    largest news item id read.  Not a signal (docs/spec/theme_heat.md).
+    """
+
+    __tablename__ = "theme_heat_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date", "version", name="uq_theme_heat_run_day_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))
+    theme_count: Mapped[int] = mapped_column(Integer, default=0)
+    ranked_count: Mapped[int] = mapped_column(Integer, default=0)
+    news_status: Mapped[str] = mapped_column(String(20))
+    news_through_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ThemeHeatScore(Base):
+    """One theme of a theme heat run (Issue #1017).
+
+    ``rank`` and ``heat`` are null when fewer than 3 members have a 20-session
+    return (``quality`` ``insufficient_data``).  ``components_json`` keeps the
+    six components' ``raw`` value and same-board ``percentile`` (null when
+    missing, never 0); ``details_json`` the members with five flow days and
+    the news item counts of the two windows.
+    """
+
+    __tablename__ = "theme_heat_scores"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date", "group_id", "version", name="uq_theme_heat_day_group"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("theme_heat_runs.id"), index=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    group_id: Mapped[str] = mapped_column(ForeignKey("theme_groups.id"), index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    heat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality: Mapped[str] = mapped_column(String(30))
+    member_count: Mapped[int] = mapped_column(Integer, default=0)
+    eligible_members: Mapped[int] = mapped_column(Integer, default=0)
+    available_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    components_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class ThemeClusterRun(Base):
     """One trading day's price-volume clusters of a version (Issue #1018).
 

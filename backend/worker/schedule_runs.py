@@ -3,8 +3,8 @@
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
 analyze -> evaluate -> candidates -> indicators -> mainstream -> h2_list ->
-period_backfill -> x4_list -> plan_tracking -> strategy_levels -> action_tiers ->
-candidate_notes -> theme_discovery).  catchup
+theme_heat -> period_backfill -> x4_list -> plan_tracking -> strategy_levels ->
+action_tiers -> candidate_notes -> theme_discovery).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -89,6 +89,7 @@ DAILY_STEPS = (
     "indicators",
     "mainstream",
     "h2_list",
+    "theme_heat",
     "period_backfill",
     "x4_list",
     "plan_tracking",
@@ -106,6 +107,7 @@ STEP_REQUIRES = {
     "indicators": (),
     "mainstream": (),
     "h2_list": (),
+    "theme_heat": (),
     "x4_list": (),
     "plan_tracking": (),
     "strategy_levels": ("analyze",),
@@ -135,6 +137,7 @@ NON_BLOCKING_STEPS = frozenset(
         "action_tiers",
         "mainstream",
         "h2_list",
+        "theme_heat",
         "x4_list",
         "period_backfill",
     }
@@ -180,6 +183,8 @@ THEME_DISCOVERY_MODULE = "worker.theme_discovery"
 THEME_DISCOVERY_FUNCTION = "run_theme_discovery"
 H2_LIST_MODULE = "worker.h2_list"
 H2_LIST_FUNCTION = "run_h2_list"
+THEME_HEAT_MODULE = "worker.theme_heat"
+THEME_HEAT_FUNCTION = "run_theme_heat"
 X4_LIST_MODULE = "worker.x4_list"
 X4_LIST_FUNCTION = "run_x4_list"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
@@ -298,6 +303,11 @@ def _h2_list_step(target: date) -> dict[str, Any]:
 def _theme_discovery_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(THEME_DISCOVERY_MODULE)
     return getattr(module, THEME_DISCOVERY_FUNCTION)(target)
+
+
+def _theme_heat_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(THEME_HEAT_MODULE)
+    return getattr(module, THEME_HEAT_FUNCTION)(target)
 
 
 def _x4_list_step(target: date) -> dict[str, Any]:
@@ -879,23 +889,25 @@ def run_daily_job(
         ("mainstream", 7, lambda: _mainstream_step(target)),
         # The H2 list (#881): on the bars and corporate actions alone.
         ("h2_list", 8, lambda: _h2_list_step(target)),
+        # The theme heat (#1017): on the bars, chips and news alone.
+        ("theme_heat", 9, lambda: _theme_heat_step(target)),
         # Before x4_list (#1016): a month or quarter it writes during its
         # window can be available on T (announcement_date = the fetch date
         # while the deadline is ahead), and the research tool reading the
         # same T later sees it; x4_list must see it too.  It waits on nothing.
-        ("period_backfill", 9, lambda: _period_backfill_step(target)),
+        ("period_backfill", 10, lambda: _period_backfill_step(target)),
         # The X4 list (#1016): bars, monthly revenues and quarterly EPS alone.
-        ("x4_list", 10, lambda: _x4_list_step(target)),
+        ("x4_list", 11, lambda: _x4_list_step(target)),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
-        ("plan_tracking", 11, lambda: _plan_tracking_step(target)),
-        ("strategy_levels", 12, lambda: _strategy_levels_step(target)),
+        ("plan_tracking", 12, lambda: _plan_tracking_step(target)),
+        ("strategy_levels", 13, lambda: _strategy_levels_step(target)),
         # After strategy_levels, whose rows the tiers read (#476).
-        ("action_tiers", 13, lambda: _action_tiers_step(target)),
-        ("candidate_notes", 14, lambda: _candidate_note_step(target)),
+        ("action_tiers", 14, lambda: _action_tiers_step(target)),
+        ("candidate_notes", 15, lambda: _candidate_note_step(target)),
         # The clusters and theme candidates (#1018): on the bars alone; last,
         # so its LLM calls never delay the notes.
-        ("theme_discovery", 15, lambda: _theme_discovery_step(target)),
+        ("theme_discovery", 16, lambda: _theme_discovery_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
