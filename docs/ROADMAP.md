@@ -88,9 +88,13 @@
 - **候選池與熱門題材**（評估在 [#1003](https://github.com/YiCheng0608/stock-lab/issues/1003)）：使用者要候選池從「規則選出可以買的」改成「今天值得 AI 看的」，交給早盤 AI 判讀（[#1002](https://github.com/YiCheng0608/stock-lab/issues/1002)），怎麼挑交給統籌（[#1 7107251741](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107251741)、更正 [7107407625](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107407625)）。統籌 2026-11-24 照評估的建議決定（[#1 7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228)、[#1003 7114639094](https://github.com/YiCheng0608/stock-lab/issues/1003#issuecomment-7114639094)）。
   - **用途**：題材熱度與候選池只決定 AI 要看哪些題材與股票，不是買賣訊號。今日名單照常產出，直到 #1002 上線、使用者同意替換。
   - **題材表**：AI 每週提出新題材與成員，附公司官方資料的證據；程式核對證據，統籌 review 後收。新題材從加入當天起生效，不回溯。
-  - **上限**：晚上 40 檔，早上最多補 10 檔，同一題材最多 4 檔；三個數都是設定值，#1002 估完 AI 成本後再調。早盤 AI 可以從池外補股，每天最多 5 檔，規則寫在 #1002 的實作單。
+  - **上限**：晚上 40 檔，早上最多補 10 檔，同一題材最多 4 檔；三個數都是設定值，#1002 估完 AI 成本後再調。早盤 AI 只判池內的股票，不從池外補股（[#1 7187528140](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187528140)，更正 #1003 的 Q4）。
   - **討論來源**（論壇、節目）：不加新聞以外的討論來源（使用者 2026-11-24 定案，[#1 7117291647](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7117291647)）；之後要加由使用者另提。
   - **順序**：[#1015](https://github.com/YiCheng0608/stock-lab/issues/1015) 題材表擴充到至少 23 個題材、證據核對工具與每週維護流程 → [#1017](https://github.com/YiCheng0608/stock-lab/issues/1017) 題材熱度 `theme_heat_v1` 與 [#1018](https://github.com/YiCheng0608/stock-lab/issues/1018) 量價共振分群與 AI 命名（兩張都在 #1015 合併後）→ [#1020](https://github.com/YiCheng0608/stock-lab/issues/1020) 候選池 `candidate_pool_v1`（#1017 合併、#1002 結案後）。
+- **早盤 AI 判讀**（評估 [#1002](https://github.com/YiCheng0608/stock-lab/issues/1002) → [#1040](https://github.com/YiCheng0608/stock-lab/issues/1040) 台指期夜盤 → [#1041](https://github.com/YiCheng0608/stock-lab/issues/1041) `premarket-ai` job → [#1042](https://github.com/YiCheng0608/stock-lab/issues/1042) Telegram 與今日名單頁的呈現、[#1043](https://github.com/YiCheng0608/stock-lab/issues/1043) 對答案與月報）：使用者 2026-11-23 決定選股改以 AI 判讀為核心（[#1 7107251741](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107251741)），2026-11-26 選定評估的做法（[#1 7187492081](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187492081)、[#1002 7118246729](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7118246729)）。
+  - **做法**：每個交易日 08:21 用截止 08:15 的隔夜新聞、美股、台指期夜盤與候選池每檔的價量籌碼、規則價位與產業題材，呼叫一次 `claude -p`（sonnet），產出大盤、族群，以及每檔維持、依開盤價重算或暫緩與理由；核對後存檔，存了不改。08:45 的 Telegram 把規則名單（來源事實）和 AI 判讀（推論）分欄送出；判讀失敗就只送規則名單並註明。
+  - **範圍**：只判候選池內的股票（#1020 上線前用暫代池）。只有今日名單附規則價位與程式重算的價位，其他股票只有方向、動作與理由。寫法是判讀口吻（動作＋「根據……推論……」），不寫成下單指示。
+  - **去留**：模型已經知道過去的走勢，不能回測；上線起逐日對答案，每月在 #1 貼累積數字，60 個交易日後由使用者決定去留。新提示詞並行至少 20 個交易日、兩項條件都過才換。今日名單照常產出，直到使用者同意替換。
 
 使用者 2026-11-15 決定不做（[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）：08:45 通知加「我的追蹤觸發」（要的是上面的盤中即時版）、「資料或排程異常」通知、實際交易紀錄。
 
