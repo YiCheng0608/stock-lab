@@ -2406,6 +2406,11 @@ OMITTED_TABLES: dict[str, str] = {
         "預算與即時一致由後端測試驗"
     ),
     "alembic_version": "migration 自己寫入 head 版本，假資料不寫",
+    "candidate_pool_items": "同 candidate_pool_runs",
+    "candidate_pool_runs": (
+        "候選池（#1020）只給早盤 AI 判讀的輸入；五頁的 API 不讀，"
+        "由後端 test_candidate_pool 驗"
+    ),
     "corporate_actions": "沒有除權息或分割；個股頁不需還原價格",
     "events": (
         "官方公告直接寫成 news_items（source_kind=official_disclosure）；"

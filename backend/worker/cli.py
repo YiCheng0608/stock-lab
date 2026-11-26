@@ -70,6 +70,7 @@ from .schedule_runs import (
     record_preflight_skip,
 )
 from .strategy_levels import run_strategy_levels
+from .candidate_pool import run_candidate_pool, run_morning_pool
 from .theme_discovery import run_theme_discovery
 from .theme_evidence import verify_themes
 from .themes import sync_themes
@@ -191,6 +192,16 @@ DAILY_WINDOW_REFUSED = {"chips short-balance --apply", "strategy-lists backfill"
 def in_daily_window(moment: datetime | None = None) -> bool:
     now = (moment or datetime.now(timezone.utc)).astimezone(scheduled_job.TAIPEI)
     return DAILY_WINDOW[0] <= now.time() < DAILY_WINDOW[1]
+
+
+def _utc_naive_moment(value: str | None) -> datetime:
+    """``--now`` (Taipei when it has no zone; now when absent) as UTC-naive."""
+
+    taipei = scheduled_job.TAIPEI
+    moment = datetime.now(taipei) if not value else datetime.fromisoformat(value)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=taipei)
+    return moment.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def main() -> None:
@@ -401,6 +412,33 @@ def main() -> None:
         "--no-ai",
         action="store_true",
         help="只重算並存分群，不呼叫 claude -p、不寫候選題材（重放用）",
+    )
+    pool_parser = subparsers.add_parser(
+        "candidate-pool",
+        help="候選池 candidate_pool_v1（daily 的 candidate_pool 步驟與 preopen 的早上那輪；寫了不改，#1020）",
+    )
+    pool_parser.add_argument(
+        "--date",
+        dest="run_date",
+        required=True,
+        help="YYYY-MM-DD 交易日（晚上那輪的資料日）",
+    )
+    pool_parser.add_argument(
+        "--phase",
+        choices=("evening", "morning"),
+        default="evening",
+        help="evening（預設）或 morning（只補晚上之後收進來的新聞點到的股票）",
+    )
+    pool_parser.add_argument(
+        "--now",
+        help=(
+            "morning 的檢查時刻：ISO 8601，沒有時區時為台北時間；預設現在。"
+            "窗口收到這個時刻為止的新聞，晚於下一個交易日開盤就含開盤後的新聞，"
+            "寫了不改：不要拿它補過去的日期"
+        ),
+    )
+    pool_parser.add_argument(
+        "--dry-run", action="store_true", help="只計算並印出結果，不寫 DB"
     )
     tiers_parser = subparsers.add_parser(
         "action-tiers",
@@ -1044,6 +1082,20 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_theme_discovery(
             date.fromisoformat(args.run_date), ai=not args.no_ai
         )
+    elif args.command == "candidate-pool":
+        pool_date = date.fromisoformat(args.run_date)
+        if args.phase == "evening":
+            if args.now:
+                parser.error("candidate-pool 的 --now 只給 --phase morning")
+            result = run_candidate_pool(pool_date, dry_run=args.dry_run)
+        else:
+            try:
+                moment = _utc_naive_moment(args.now)
+            except ValueError:
+                parser.error(
+                    f"candidate-pool 的 --now 要是 ISO 8601，收到 {args.now!r}"
+                )
+            result = run_morning_pool(pool_date, moment, dry_run=args.dry_run)
     elif args.command == "news-project":
         result = run_news_project()
     elif args.command == "trading-calendar":
@@ -1214,6 +1266,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         "theme-heat",
         "theme-discovery",
         "strategy-lists",
+        "candidate-pool",
     } and result.get("status") not in {
         "success",
         "no_data",

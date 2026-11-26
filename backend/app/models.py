@@ -1650,6 +1650,82 @@ class ThemeClusterMember(Base):
     average_lots_20d: Mapped[float] = mapped_column(Float)
 
 
+class CandidatePoolRun(Base):
+    """One phase of one trading day's 候選池 of a version (Issue #1020).
+
+    ``app.candidate_pool``: ``phase`` is ``evening`` (the daily's
+    ``candidate_pool`` step) or ``morning`` (the 08:20 ``preopen`` job: the
+    stocks named by the news collected after the evening's ``computed_at``).
+    Written once: a rerun of the same date, version and phase returns the
+    stored run.  ``status`` is ``computed`` or ``zero`` (no source named a
+    stock).  ``source_counts_json`` is the union's stocks per source;
+    ``summary_json`` the overlap, the selected composition, the rejections and
+    which inputs were missing; ``base_run_id`` the evening run a morning run
+    adds to.  Not a signal (docs/spec/candidate_pool.md).
+    """
+
+    __tablename__ = "candidate_pool_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date",
+            "version",
+            "phase",
+            name="uq_candidate_pool_run_day_version_phase",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    phase: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20))
+    cap: Mapped[int] = mapped_column(Integer)
+    union_count: Mapped[int] = mapped_column(Integer, default=0)
+    selected_count: Mapped[int] = mapped_column(Integer, default=0)
+    source_counts_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    base_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("candidate_pool_runs.id"), nullable=True
+    )
+    # UTC-naive, taken before any input is read; the morning window starts here.
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CandidatePoolItem(Base):
+    """One stock of a candidate pool run, selected or left out (Issue #1020).
+
+    ``rank`` is the place among the run's selected stocks (null when left
+    out); ``reject_reason`` ``cap`` or ``theme_cap`` when left out.
+    ``sources_json`` has one entry per source: ``source``, ``value`` (the
+    trigger values), ``data_date`` and ``source_ids`` (``<table>:<id>``).
+    """
+
+    __tablename__ = "candidate_pool_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "instrument_id", name="uq_candidate_pool_item_run_instrument"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("candidate_pool_runs.id"), index=True
+    )
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    phase: Mapped[str] = mapped_column(String(20))
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tier: Mapped[int] = mapped_column(Integer)
+    selected: Mapped[bool] = mapped_column(Boolean)
+    reject_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_count: Mapped[int] = mapped_column(Integer)
+    sources_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    themes_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    features_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class PremarketAiReading(Base):
     """One pre-market AI reading of a trading day (Issue #1041, docs/spec/premarket_ai.md).
 
@@ -1685,8 +1761,8 @@ class PremarketAiReading(Base):
     model_alias: Mapped[str] = mapped_column(String(40))
     # The model the CLI reported (``modelUsage``); null when no call answered.
     llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    # morning / evening (candidate_pool_v1's phase read) or interim (the
-    # stand-in pool before #1020).
+    # morning / evening (candidate_pool_v1's rounds read) or interim (the
+    # stand-in pool: no evening round of the list date).
     pool_phase: Mapped[str] = mapped_column(String(20))
     # UTC-naive: D 08:15 Taipei.
     cutoff_at: Mapped[datetime] = mapped_column(DateTime)

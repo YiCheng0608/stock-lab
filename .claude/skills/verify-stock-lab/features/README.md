@@ -119,6 +119,7 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /backfill-runs/{run_id}` | 回補覆蓋頁，不在主導航 |
 | `GET /coverage` | 回補覆蓋頁，不在主導航 |
 | `GET /strategies` | 系統資料與策略頁，不在主導航 |
+| `GET /candidate-pool` | 早盤 AI 判讀（#1041）的輸入，沒有頁面讀；後端 test_candidate_pool 涵蓋 |
 
 ## 結果表
 

@@ -25,6 +25,8 @@ from sqlalchemy.pool import StaticPool
 from app.db import Base, enable_sqlite_foreign_keys
 from app.domain import CANDIDATE_SCORE_READ_VERSIONS, US_INDEX_EXCHANGE, US_INDEXES
 from app.models import (
+    CandidatePoolItem,
+    CandidatePoolRun,
     CandidateRun,
     ChipSnapshot,
     DailyCandidate,
@@ -551,6 +553,150 @@ def test_the_interim_pool_is_capped_and_named(db, world, monkeypatch):
     ]
     assert shot.pool_phase == "interim" and shot.payload["pool"]["phase"] == "interim"
     assert shot.payload["pool"]["today_list_count"] == 2
+
+
+def pool_run(db, phase, items, *, computed, base=None):
+    """A candidate_pool_v1 run of L: ITEMS are (instrument, selected, sources)."""
+
+    run = CandidatePoolRun(
+        trading_date=L,
+        version="candidate_pool_v1",
+        phase=phase,
+        status="computed",
+        cap=40 if phase == "evening" else 10,
+        computed_at=computed,
+        base_run_id=base.id if base is not None else None,
+    )
+    db.add(run)
+    db.flush()
+    rank = 0
+    for row, selected, names in items:
+        rank += selected
+        db.add(
+            CandidatePoolItem(
+                run_id=run.id,
+                trading_date=L,
+                version=run.version,
+                phase=phase,
+                instrument_id=row.id,
+                rank=rank if selected else None,
+                tier=2,
+                selected=selected,
+                reject_reason=None if selected else "cap",
+                source_count=len(names),
+                sources_json=[
+                    {
+                        "source": source,
+                        "value": {"n": 1},
+                        "data_date": str(L),
+                        "source_ids": ["x:1"],
+                    }
+                    for source in names
+                ],
+            )
+        )
+    db.commit()
+    return run
+
+
+@pytest.fixture
+def evening(db, world):
+    return pool_run(
+        db,
+        "evening",
+        [
+            (world.listed[1], True, ["rule_signal"]),
+            (world.listed[0], True, ["rule_signal", "hot_theme"]),
+            (world.watched, False, ["watchlist"]),
+        ],
+        computed=tpe(L, 21, 50),
+    )
+
+
+def test_the_pool_is_evening_and_morning_once_the_morning_round_is_written(
+    db, world, evening
+):
+    morning = pool_run(
+        db,
+        "morning",
+        [(world.busy, True, ["morning_news"])],
+        computed=tpe(D, 8, 20, 30),
+        base=evening,
+    )
+    shot = snapshot(db)
+    assert shot.pool_phase == "morning"
+    assert [item["symbol"] for item in shot.payload["candidates"]] == [
+        "2412",
+        "2330",
+        "3711",
+    ]
+    pool = shot.payload["pool"]
+    assert pool["phase"] == "morning" and "fallback" not in pool
+    assert (pool["evening_run_id"], pool["morning_run_id"]) == (evening.id, morning.id)
+    assert shot.payload["candidates"][1]["pool_sources"] == [
+        {"source": "rule_signal", "value": {"n": 1}, "data_date": "2026-11-23"},
+        {"source": "hot_theme", "value": {"n": 1}, "data_date": "2026-11-23"},
+    ]
+    item_ids = {
+        row.instrument_id: row.id for row in db.scalars(select(CandidatePoolItem))
+    }
+    meta = {item.symbol: item for item in shot.stocks}
+    assert meta["3711"].pool_item_id == item_ids[world.busy.id]
+    # The rule levels are still the today list's only.
+    assert "strategy_levels" in shot.payload["candidates"][0]
+    assert "strategy_levels" not in shot.payload["candidates"][2]
+    reading = premarket_reading.store(
+        db,
+        shot,
+        premarket_reading.read(
+            shot, "premarket_v1", "champion", ["claude"], FakeCli(valid)
+        ),
+        trigger="manual",
+        ingestion_run_id=None,
+    )
+    assert reading.pool_phase == "morning"
+    stored = {row.symbol: row for row in db.scalars(select(PremarketAiStock))}
+    assert stored["3711"].pool_item_id == item_ids[world.busy.id]
+    assert stored["3711"].pool_sources_json[0]["source"] == "morning_news"
+
+
+@pytest.mark.parametrize("morning_at", [None, tpe(D, 8, 22)])
+def test_without_the_morning_round_by_then_the_pool_is_the_evening_round(
+    db, world, evening, morning_at
+):
+    """08:20's preopen may still be waiting for news at 08:21: no wait, the evening."""
+
+    if morning_at is not None:
+        pool_run(
+            db,
+            "morning",
+            [(world.busy, True, ["morning_news"])],
+            computed=morning_at,
+            base=evening,
+        )
+    shot = snapshot(db)
+    assert (
+        shot.pool_phase == "evening" and shot.payload["pool"]["morning_run_id"] is None
+    )
+    assert [item["symbol"] for item in shot.payload["candidates"]] == ["2412", "2330"]
+
+
+def test_without_an_evening_round_the_stand_in_pool_is_read_and_marked(db, world):
+    # An evening round computed only after the snapshot does not count either.
+    pool_run(
+        db, "evening", [(world.listed[0], True, ["rule_signal"])], computed=tpe(D, 9, 0)
+    )
+    shot = snapshot(db)
+    assert shot.pool_phase == "interim"
+    assert shot.payload["pool"]["fallback"] == "no_candidate_pool_evening"
+    assert [item["symbol"] for item in shot.payload["candidates"]] == [
+        "2330",
+        "2412",
+        "1101",
+        "2603",
+        "3711",
+    ]
+    assert all(item.pool_item_id is None for item in shot.stocks)
 
 
 def test_a_done_reading_records_version_hash_model_and_duration(db, world):

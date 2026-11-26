@@ -4,7 +4,7 @@ Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
 analyze -> evaluate -> candidates -> indicators -> mainstream -> h2_list ->
 theme_heat -> period_backfill -> x4_list -> plan_tracking -> strategy_levels ->
-action_tiers -> candidate_notes -> theme_discovery).  catchup
+action_tiers -> candidate_notes -> theme_discovery -> candidate_pool).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -97,6 +97,7 @@ DAILY_STEPS = (
     "action_tiers",
     "candidate_notes",
     "theme_discovery",
+    "candidate_pool",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
@@ -114,6 +115,7 @@ STEP_REQUIRES = {
     "action_tiers": ("analyze",),
     "candidate_notes": ("candidates",),
     "theme_discovery": (),
+    "candidate_pool": (),
     "period_backfill": (),
 }
 # Steps whose failure is kept on the step row only: the run stays success, so
@@ -128,11 +130,14 @@ STEP_REQUIRES = {
 # non-core warning in the run's summary, as a failed fundamentals snapshot is.
 # The price-volume clusters and their theme candidates (#1018): research input
 # nothing else in the run reads; worker.cli theme-discovery --date redoes them.
+# The candidate pool (#1020): the pre-open AI's input, which nothing in the run
+# reads; worker.cli candidate-pool --date writes a missing evening.
 NON_BLOCKING_STEPS = frozenset(
     {
         "trading_calendar",
         "candidate_notes",
         "theme_discovery",
+        "candidate_pool",
         "strategy_levels",
         "action_tiers",
         "mainstream",
@@ -183,6 +188,8 @@ THEME_DISCOVERY_MODULE = "worker.theme_discovery"
 THEME_DISCOVERY_FUNCTION = "run_theme_discovery"
 H2_LIST_MODULE = "worker.h2_list"
 H2_LIST_FUNCTION = "run_h2_list"
+CANDIDATE_POOL_MODULE = "worker.candidate_pool"
+CANDIDATE_POOL_FUNCTION = "run_candidate_pool"
 THEME_HEAT_MODULE = "worker.theme_heat"
 THEME_HEAT_FUNCTION = "run_theme_heat"
 X4_LIST_MODULE = "worker.x4_list"
@@ -303,6 +310,11 @@ def _h2_list_step(target: date) -> dict[str, Any]:
 def _theme_discovery_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(THEME_DISCOVERY_MODULE)
     return getattr(module, THEME_DISCOVERY_FUNCTION)(target)
+
+
+def _candidate_pool_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(CANDIDATE_POOL_MODULE)
+    return getattr(module, CANDIDATE_POOL_FUNCTION)(target)
 
 
 def _theme_heat_step(target: date) -> dict[str, Any]:
@@ -908,6 +920,9 @@ def run_daily_job(
         # The clusters and theme candidates (#1018): on the bars alone; last,
         # so its LLM calls never delay the notes.
         ("theme_discovery", 16, lambda: _theme_discovery_step(target)),
+        # The candidate pool (#1020): last, as it reads the day's clusters,
+        # heat, lists and today list; the morning run is preopen's.
+        ("candidate_pool", 17, lambda: _candidate_pool_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):

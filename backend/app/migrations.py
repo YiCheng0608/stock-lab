@@ -857,12 +857,20 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0038_futures_night_bars', CURRENT_TIMESTAMP)"
         )
     )
-    # 0039 only adds premarket_ai_readings / premarket_ai_stocks /
+    # 0039 only adds candidate_pool_runs / candidate_pool_items (#1020), made
+    # by create_all with their indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0039_candidate_pool', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0040 only adds premarket_ai_readings / premarket_ai_stocks /
     # premarket_ai_scores (#1041), made by create_all with their indexes.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0039_premarket_ai', CURRENT_TIMESTAMP)"
+            "VALUES ('0040_premarket_ai', CURRENT_TIMESTAMP)"
         )
     )
 

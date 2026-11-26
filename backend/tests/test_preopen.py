@@ -693,6 +693,42 @@ def test_the_dry_run_writes_nothing(run_env, capsys):
     assert "--- result status=checked" in capsys.readouterr().out
 
 
+@linux_only
+def test_the_check_runs_the_candidate_pools_morning_and_logs_it(run_env):
+    # No evening pool for the list date: the morning writes nothing (#1020).
+    assert _check(run_env) == 0
+    log = _log(run_env)
+    line = next(x for x in log.splitlines() if x.startswith("--- candidate_pool"))
+    assert line.startswith(
+        "--- candidate_pool phase=morning status=skipped reason=no_evening_run"
+    )
+    assert " finished_at=2" in line and " seconds=" in line
+    assert log.index("--- candidate_pool") < log.index("--- result status=checked")
+
+
+@linux_only
+def test_a_failing_morning_pool_keeps_the_checks_result(run_env, monkeypatch):
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("pool crash")
+
+    monkeypatch.setattr("worker.candidate_pool.run_morning_pool", broken)
+    assert _check(run_env) == 0
+    log = _log(run_env)
+    assert (
+        "--- candidate_pool phase=morning status=failed error=RuntimeError:_pool_crash"
+        in log
+    )
+    assert "--- result status=checked list_date=2026-09-04" in log
+    assert len(_rows(run_env.db)) == 2
+
+
+@linux_only
+def test_a_skipped_check_runs_no_morning_pool(run_env):
+    assert _check(run_env) == 0
+    assert _check(run_env, at="09:00") == 0
+    assert _log(run_env).count("--- candidate_pool") == 1
+
+
 def test_the_command_needs_a_real_date_and_time():
     assert preopen.argument_problem(_args("--date", "2026-02-30"))
     assert preopen.argument_problem(_args("--now", "08:20"))

@@ -1,7 +1,7 @@
 """Add the pre-market AI reading tables.
 
-Revision ID: 0039_premarket_ai
-Revises: 0038_futures_night_bars
+Revision ID: 0040_premarket_ai
+Revises: 0039_candidate_pool
 
 ``premarket_ai_readings`` (one row per run of a day, prompt version and
 role), ``premarket_ai_stocks`` (each stock of a done reading) and
@@ -29,8 +29,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0039_premarket_ai"
-down_revision = "0038_futures_night_bars"
+revision = "0040_premarket_ai"
+down_revision = "0039_candidate_pool"
 branch_labels = None
 depends_on = None
 

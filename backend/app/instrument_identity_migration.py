@@ -53,6 +53,7 @@ _CHILDREN = {
     "h2_items",
     "strategy_list_items",
     "theme_cluster_members",
+    "candidate_pool_items",
     "premarket_ai_stocks",
 }
 _TOKEN = re.compile(

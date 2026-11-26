@@ -30,7 +30,12 @@
 
 | `pool_phase` | 什麼時候 | 內容 |
 | --- | --- | --- |
-| `interim` | [candidate_pool_v1](https://github.com/YiCheng0608/stock-lab/issues/1020)（#1020）上線前 | 暫代池：依序收今日名單（`today_list#<名次>`）、名單日的規則訊號（`signals` 的 analysis 列，`conditional`／`active`，`rule_signal:<進場型態>:<狀態>`）、名單日的 H2 名單（`h2#<名次>`）、自選（`watchlist`）、隔夜新聞至少 2 則且最多的 12 檔（`overnight_news:<則數>`）；同一檔在多個來源時全部列在 `pool_sources`，取前 60 檔 |
+| `morning` | 名單日的 [candidate_pool_v1](candidate_pool.md) 有晚上那輪，而且組輸入時早上那輪（08:20 preopen 寫）已寫好 | 晚上那輪入選的股票（依 `rank`），再接早上那輪入選的；`pool_sources` 是 `candidate_pool_items.sources_json` 每列的 `source`、`value`、`data_date`；`pool_item_id` 對回 `candidate_pool_items.id`；`pool` 另記 `version`、`evening_run_id`、`morning_run_id`、`cap`（兩輪合計） |
+| `evening` | 有晚上那輪，但組輸入時還沒有早上那輪（preopen 等 news 鎖時 08:21 可能還沒寫） | 只有晚上那輪入選的股票；`morning_run_id` 是 null。不等早上那輪、不延後 08:21（#1041 決定 [7188153160](https://github.com/YiCheng0608/stock-lab/issues/1041#issuecomment-7188153160)） |
+| `interim` | 名單日沒有晚上那輪（例如 #1020 部署前、daily 失敗），**退回**暫代池（決定 [7192367021](https://github.com/YiCheng0608/stock-lab/issues/1041#issuecomment-7192367021)） | `pool.fallback=no_candidate_pool_evening`；暫代池：依序收今日名單（`today_list#<名次>`）、名單日的規則訊號（`signals` 的 analysis 列，`conditional`／`active`，`rule_signal:<進場型態>:<狀態>`）、名單日的 H2 名單（`h2#<名次>`）、自選（`watchlist`）、隔夜新聞至少 2 則且最多的 12 檔（`overnight_news:<則數>`）；同一檔在多個來源時全部列在 `pool_sources`，取前 60 檔 |
+
+- 「已寫好」看 run 的 `computed_at` 不晚於組輸入的時點，所以重放過去的日子時，之後才補算的池不會混進來。
+- 規則價位仍只看今日名單（不看候選池的 `rule_signal` 來源）；今日名單的股票因上限沒進池時，就不在輸入裡。
 
 ## 輸出
 

@@ -19,7 +19,9 @@ the cutoff, D 08:15 Taipei (``cutoff``):
   session TAIFEX files under D (#1040), which closed at 05:00 and is read when
   collected by the time the snapshot is made (the 08:15 ``night`` job writes
   it a few seconds after the cutoff).
-- **Candidates**: the pool (``pool``), each stock with its pool sources, the
+- **Candidates**: the pool (``select_pool``: candidate_pool_v1's evening and
+  morning rounds, the evening alone, or the stand-in pool when the list date has
+  no evening round), each stock with its pool sources, the
   list date's prices and volume, five days of institutional and margin
   changes, its industries and themes and its overnight news.  Only a stock on
   the today list (``app.candidate_runs.read_run`` of the list date) carries
@@ -40,6 +42,9 @@ from typing import Any, Iterable
 from sqlalchemy import desc, literal_column, or_, select
 from sqlalchemy.orm import Session
 
+from app.candidate_pool import CANDIDATE_POOL_VERSION, stored_run
+from app.candidate_pool import EVENING as POOL_EVENING
+from app.candidate_pool import MORNING as POOL_MORNING
 from app.candidate_runs import read_run
 from app.candidate_view import _levels
 from app.domain import US_INDEX_EXCHANGE, US_INDEXES
@@ -50,6 +55,8 @@ from app.market_overview import (
     expected_us_session,
 )
 from app.models import (
+    CandidatePoolItem,
+    CandidatePoolRun,
     ChipSnapshot,
     DailyCandidate,
     FuturesNightBar,
@@ -115,7 +122,7 @@ def _round(value: float | None, digits: int = 4) -> float | None:
 @dataclass
 class PoolStock:
     instrument: Instrument
-    sources: list[str] = field(default_factory=list)
+    sources: list[Any] = field(default_factory=list)
     pool_item_id: int | None = None
 
 
@@ -129,7 +136,7 @@ class StockMeta:
     on_today_list: bool
     daily_candidate_id: int | None
     pool_item_id: int | None
-    pool_sources: list[str]
+    pool_sources: list[Any]
     levels: dict[str, Any] | None
 
 
@@ -310,7 +317,8 @@ def interim_pool(
     today_list: list[DailyCandidate],
     stock_news: dict[int, list[_News]],
 ) -> list[PoolStock]:
-    """The stand-in pool before #1020 (``pool_phase=interim``).
+    """The stand-in pool (``pool_phase=interim``): the list date has no
+    candidate_pool_v1 evening round.
 
     In this order, each stock with all its sources: the today list, the list
     date's rule signals (conditional or active), its H2 list, the watchlist,
@@ -380,16 +388,85 @@ def interim_pool(
     return list(pool.values())[:POOL_CAP]
 
 
+def _pool_run(db: Session, list_date: date, phase: str, assembled_at: datetime):
+    """The list date's candidate_pool_v1 run of PHASE, when computed by ASSEMBLED_AT."""
+
+    run = stored_run(db, list_date, phase)
+    if run is None or run.computed_at is None or run.computed_at > assembled_at:
+        return None
+    return run
+
+
+def candidate_pool_stocks(db: Session, runs: list[CandidatePoolRun]) -> list[PoolStock]:
+    """The selected stocks of RUNS (evening, then morning), each in rank order."""
+
+    stocks: list[PoolStock] = []
+    for run in runs:
+        for item, instrument in db.execute(
+            select(CandidatePoolItem, Instrument)
+            .join(Instrument, Instrument.id == CandidatePoolItem.instrument_id)
+            .where(
+                CandidatePoolItem.run_id == run.id,
+                CandidatePoolItem.selected.is_(True),
+            )
+            .order_by(CandidatePoolItem.rank, CandidatePoolItem.id)
+        ):
+            stocks.append(
+                PoolStock(
+                    instrument,
+                    [
+                        {
+                            "source": entry.get("source"),
+                            "value": entry.get("value"),
+                            "data_date": entry.get("data_date"),
+                        }
+                        for entry in item.sources_json or []
+                    ],
+                    pool_item_id=item.id,
+                )
+            )
+    return stocks
+
+
 def select_pool(
     db: Session,
     list_date: date,
     today_list: list[DailyCandidate],
     stock_news: dict[int, list[_News]],
+    assembled_at: datetime,
 ) -> tuple[str, list[PoolStock], dict[str, Any]]:
-    """(pool_phase, stocks, pool summary) for the input."""
+    """(pool_phase, stocks, pool summary) for the input (#1041 decisions 7188153160,
+    7192367021).
 
-    stocks = interim_pool(db, list_date, today_list, stock_news)
-    return INTERIM, stocks, {"cap": POOL_CAP}
+    candidate_pool_v1 of the list date: its evening and morning rounds
+    (``morning``) when the morning round is written by the time the snapshot is
+    made, else the evening round alone (``evening``; 08:20's preopen may still
+    be waiting for the news run). Without an evening round (before #1020 was
+    deployed, a daily that failed) the stand-in pool (``interim``) with
+    ``fallback=no_candidate_pool_evening``, so that 08:21 still reads.
+    """
+
+    evening = _pool_run(db, list_date, POOL_EVENING, assembled_at)
+    if evening is None:
+        stocks = interim_pool(db, list_date, today_list, stock_news)
+        return (
+            INTERIM,
+            stocks,
+            {"cap": POOL_CAP, "fallback": "no_candidate_pool_evening"},
+        )
+    morning = _pool_run(db, list_date, POOL_MORNING, assembled_at)
+    runs = [evening] + ([morning] if morning is not None else [])
+    summary = {
+        "version": CANDIDATE_POOL_VERSION,
+        "evening_run_id": evening.id,
+        "morning_run_id": morning.id if morning is not None else None,
+        "cap": sum(run.cap for run in runs),
+    }
+    return (
+        MORNING if morning is not None else EVENING,
+        candidate_pool_stocks(db, runs),
+        summary,
+    )
 
 
 # --- per stock --------------------------------------------------------------
@@ -663,7 +740,9 @@ def build(
         else []
     )
     listed = {row.instrument_id: row for row in today_list}
-    phase, pool, pool_summary = select_pool(db, list_date, today_list, stock_news)
+    phase, pool, pool_summary = select_pool(
+        db, list_date, today_list, stock_news, assembled_at
+    )
     groups = groups_of(db, [stock.instrument.id for stock in pool], list_date)
     picked_market = market_news(news)
     news_ids = {entry.item.id for entry in picked_market}
