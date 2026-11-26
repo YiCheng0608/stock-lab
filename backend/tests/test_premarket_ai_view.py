@@ -113,7 +113,7 @@ def _payload():
     }
 
 
-def _output(listed_reason=LISTED_REASON):
+def _output(listed_reason=LISTED_REASON, gaps=None):
     return {
         "market": {
             "stance": "bullish",
@@ -129,7 +129,7 @@ def _output(listed_reason=LISTED_REASON):
             }
         ],
         "candidates": [],
-        "data_gaps": ["台指期夜盤沒有資料，大盤判讀信心降低"],
+        "data_gaps": gaps or ["台指期夜盤沒有資料，大盤判讀信心降低"],
     }
 
 
@@ -158,6 +158,9 @@ def _reading(
     version=PROMPT_VERSION,
     listed_reason=LISTED_REASON,
     stocks=True,
+    checks=None,
+    other_reason=OTHER_REASON,
+    gaps=None,
 ):
     at = datetime(2026, 9, 7, 0, 25)
     reading = PremarketAiReading(
@@ -177,8 +180,8 @@ def _reading(
         input_json=_payload(),
         status=status,
         reason=reason,
-        output_json=_output(listed_reason) if status == "done" else None,
-        checks_json={},
+        output_json=_output(listed_reason, gaps) if status == "done" else None,
+        checks_json=checks or {},
         attempts=1,
         attempts_json=[],
         duration_ms=1000,
@@ -193,7 +196,7 @@ def _reading(
         other = _instrument(db, "2330", "台積電")
         listed = _instrument(db, "1101", "台泥")
         rows = [
-            (other, 2, False, None, "defer", None, OTHER_REASON, ["tx:night"]),
+            (other, 2, False, None, "defer", None, other_reason, ["tx:night"]),
             (
                 listed,
                 1,
@@ -496,3 +499,70 @@ def test_the_images_chromium_draws_the_ai_section_in_its_height(
     assert not all(_blank(row, channels) for row in rows[edge - 4 : edge])
     assert all(_blank(row, channels) for row in rows[edge + 2 : height * scale])
     assert os.listdir(card_temp) == []
+
+
+# --- #1058: a price in a reason of a stock without levels is not shown (3a) ----------
+
+PRICED_REASON = "根據台指期夜盤缺資料，推論收盤 85.30 附近暫緩"
+PRICED_GAP = "2330 台積電 收盤 85.30 之後沒有籌碼"
+PRICED_CHECKS = {
+    "prices_without_levels": [
+        {"symbol": "2330", "where": "reasons[0]", "prices": ["85.30"]},
+        {"symbol": "2330", "where": "data_gaps[1]", "prices": ["85.30"]},
+    ]
+}
+PRICED = {
+    "checks": PRICED_CHECKS,
+    "other_reason": PRICED_REASON,
+    "gaps": ["台指期夜盤沒有資料，大盤判讀信心降低", PRICED_GAP],
+}
+
+
+def test_the_view_shows_a_priced_reason_and_gap_as_one_fixed_line(db):
+    _reading(db, **PRICED)
+    view = premarket_ai.view(db, session_date=MONDAY)
+    listed, other = view["stocks"]
+    assert other["reasons"] == [{"text": premarket_ai.PRICE_HIDDEN_TEXT, "refs": []}]
+    assert premarket_ai.PRICE_HIDDEN_TEXT == "理由含價位，未顯示"
+    assert listed["reasons"][0]["text"] == LISTED_REASON
+    assert view["data_gaps"] == [
+        "台指期夜盤沒有資料，大盤判讀信心降低",
+        premarket_ai.PRICE_HIDDEN_TEXT,
+    ]
+    assert "85.30" not in repr(view)
+
+
+def test_a_row_without_the_check_shows_its_reasons_as_stored(db):
+    _reading(db, other_reason=PRICED_REASON)
+    other = premarket_ai.view(db, session_date=MONDAY)["stocks"][1]
+    assert other["reasons"][0]["text"] == PRICED_REASON
+
+
+def test_hidden_prices_reads_only_well_formed_entries():
+    assert premarket_ai.hidden_prices(None) == ({}, frozenset())
+    assert premarket_ai.hidden_prices({"prices_without_levels": "x"}) == (
+        {},
+        frozenset(),
+    )
+    reasons, gaps = premarket_ai.hidden_prices(
+        {
+            "prices_without_levels": [
+                {"symbol": "2330", "where": "reasons[2]"},
+                {"symbol": "2330", "where": "market.reasons[0]"},
+                {"symbol": "2603", "where": "data_gaps[0]"},
+                None,
+            ]
+        }
+    )
+    assert reasons == {"2330": frozenset({2})} and gaps == frozenset({0})
+
+
+def test_the_message_and_card_show_the_fixed_line_not_the_price(db):
+    card = _content(db, **PRICED)
+    message = notify.text(card)
+    ai = _ai_part(message)
+    assert "<b>2330 台積電</b>　暫緩" in ai.splitlines()
+    assert f"　{premarket_ai.PRICE_HIDDEN_TEXT}" in ai.splitlines()
+    assert "85.30" not in message
+    html = notify_card.card_html(card)
+    assert premarket_ai.PRICE_HIDDEN_TEXT in html and "85.30" not in html

@@ -114,6 +114,9 @@ def stocks(db: Session, reading_id: int) -> list[PremarketAiStock]:
 # (docs/UI_COPY_SPEC.md §10 早盤 AI 判讀).
 
 MISSING = "missing"
+# 3a (#1058): a reason or data gap of a stock without usable rule levels that wrote
+# a price (premarket_reading.prices_without_levels in checks_json) shows as this.
+PRICE_HIDDEN_TEXT = "理由含價位，未顯示"
 ACTION_TEXT = {"keep": "維持", "reprice": "依開盤價重算", "defer": "暫緩"}
 STANCE_TEXT = {"bullish": "偏多", "bearish": "偏空", "neutral": "中性"}
 CONFIDENCE_TEXT = {"high": "把握高", "medium": "把握中", "low": "把握低"}
@@ -226,12 +229,41 @@ def _ref(ref: str, news: dict[int, dict[str, Any]]) -> dict[str, Any]:
     return {"ref": ref, "kind": "other", "label": None}
 
 
-def _reasons(value: Any, news: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+def _reasons(
+    value: Any, news: dict[int, dict[str, Any]], hidden: frozenset[int] = frozenset()
+) -> list[dict[str, Any]]:
     out = []
-    for reason in value or []:
+    for index, reason in enumerate(value or []):
+        if index in hidden:
+            out.append({"text": PRICE_HIDDEN_TEXT, "refs": []})
+            continue
         refs = [_ref(ref, news) for ref in reason.get("refs") or []]
         out.append({"text": reason.get("text") or "", "refs": refs})
     return out
+
+
+_HIDDEN_WHERE = re.compile(r"^(reasons|data_gaps)\[(\d+)\]$")
+
+
+def hidden_prices(checks: Any) -> tuple[dict[str, frozenset[int]], frozenset[int]]:
+    """From ``checks_json.prices_without_levels``: each stock's reason indexes and
+    the data gap indexes to show as PRICE_HIDDEN_TEXT (#1058).  A row stored before
+    the check has none."""
+
+    reasons: dict[str, set[int]] = {}
+    gaps: set[int] = set()
+    items = checks.get("prices_without_levels") if isinstance(checks, dict) else None
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        match = _HIDDEN_WHERE.match(str(item.get("where") or ""))
+        if match is None:
+            continue
+        if match.group(1) == "data_gaps":
+            gaps.add(int(match.group(2)))
+        else:
+            reasons.setdefault(str(item.get("symbol")), set()).add(int(match.group(2)))
+    return {key: frozenset(value) for key, value in reasons.items()}, frozenset(gaps)
 
 
 def _pct(value: Any) -> str:
@@ -289,7 +321,12 @@ def input_gaps(payload: dict[str, Any]) -> list[str]:
     return gaps
 
 
-def _stock(row: PremarketAiStock, payload: dict[str, Any], news) -> dict[str, Any]:
+def _stock(
+    row: PremarketAiStock,
+    payload: dict[str, Any],
+    news,
+    hidden: frozenset[int] = frozenset(),
+) -> dict[str, Any]:
     inputs = payload.get("candidates") or []
     source = inputs[row.position - 1] if 0 < row.position <= len(inputs) else {}
     if source.get("symbol") != row.symbol:
@@ -303,7 +340,7 @@ def _stock(row: PremarketAiStock, payload: dict[str, Any], news) -> dict[str, An
         "action_text": ACTION_TEXT.get(row.action, row.action),
         "reprice_rule": row.reprice_rule_json,
         "reprice_text": reprice_text(row.reprice_rule_json),
-        "reasons": _reasons(row.reasons_json, news),
+        "reasons": _reasons(row.reasons_json, news, hidden),
     }
     if row.on_today_list:
         # 3a: only a today-list stock has prices, the rule's levels as the input had
@@ -345,9 +382,15 @@ def view(
     output = (reading.output_json or {}) if done else {}
     news = _news_index(payload)
     market = output.get("market") if done else None
+    hidden, hidden_gaps = (
+        hidden_prices(reading.checks_json) if done else ({}, frozenset())
+    )
     stocks_out = []
     if done:
-        rows = [_stock(row, payload, news) for row in stocks(db, reading.id)]
+        rows = [
+            _stock(row, payload, news, hidden.get(row.symbol, frozenset()))
+            for row in stocks(db, reading.id)
+        ]
         listed = sorted(
             (row for row in rows if row["on_today_list"]),
             key=lambda row: (row.get("rank") is None, row.get("rank") or 0),
@@ -385,6 +428,10 @@ def view(
             for sector in output.get("sectors") or []
         ],
         "stocks": stocks_out,
-        "data_gaps": [gap for gap in output.get("data_gaps") or [] if gap],
+        "data_gaps": [
+            PRICE_HIDDEN_TEXT if index in hidden_gaps else gap
+            for index, gap in enumerate(output.get("data_gaps") or [])
+            if gap
+        ],
         "input_gaps": input_gaps(payload),
     }
