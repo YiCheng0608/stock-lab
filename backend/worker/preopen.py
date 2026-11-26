@@ -24,6 +24,12 @@ candidate, the news its daily had not seen, with the AI direction of each as sto
   before writing, as it may start during the wait for news); no list for the date ``no_list``;
   the lock busy ``already_running``.
 
+- **The candidate pool's morning run** (#1020): after a check (not after a skip), the
+  same ``checked_at`` adds the stocks named by the news collected after the evening
+  pool (``worker.candidate_pool.run_morning_pool``, written once). One
+  ``--- candidate_pool phase=morning status=…`` line with its finish time and seconds;
+  its outcome never changes the result line or the exit code.
+
 The record is the day's log ``<logs>/preopen-YYYYMMDD.log`` (the Taipei day of the
 run): ``===== start``, a line per candidate with news, one ``--- result status=…`` line
 and ``===== end exit=N``; kept 90 days. The lock ``<data>/locks/preopen.lock`` is no other
@@ -354,6 +360,7 @@ class _Run:
                     return 0, f"status={SKIPPED} reason=maintenance after_wait=yes"
                 replace_check(db, run, rows)
                 db.commit()
+        self.log(self._candidate_pool(list_date, checked_at))
         result = (
             f"status={CHECKED} list_date={list_date.isoformat()} run_id={run_id}"
             f" window_start={_taipei(window_start)} checked_at={_taipei(checked_at)}"
@@ -362,6 +369,33 @@ class _Run:
         if news_running:
             result += " news_running=yes"
         return 0, result
+
+    def _candidate_pool(self, list_date: date, checked_at: datetime) -> str:
+        """The candidate pool's morning run (#1020) as one log line.
+
+        After the check, so it reads the same news; its outcome never changes
+        the check's result or exit code (``run_morning_pool`` never raises).
+        """
+
+        from worker.candidate_pool import run_morning_pool
+
+        started = datetime.now(job.TAIPEI)
+        try:
+            outcome = run_morning_pool(
+                list_date, checked_at, dry_run=self.args.dry_run, session=_session
+            )
+        except Exception as exc:  # noqa: BLE001 - one log line, the check stands
+            outcome = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+        finished = datetime.now(job.TAIPEI)
+        fields = [f"status={outcome.get('status')}"]
+        for key in ("reason", "run_id", "records", "union"):
+            if outcome.get(key) is not None:
+                fields.append(f"{'added' if key == 'records' else key}={outcome[key]}")
+        if outcome.get("error"):
+            fields.append(f"error={str(outcome['error']).replace(' ', '_')[:200]}")
+        fields.append(f"finished_at={finished.isoformat()}")
+        fields.append(f"seconds={round((finished - started).total_seconds(), 1)}")
+        return "--- candidate_pool phase=morning " + " ".join(fields)
 
     def _remove_old_logs(self) -> None:
         cutoff = time.time() - LOG_RETENTION_DAYS * 86400
