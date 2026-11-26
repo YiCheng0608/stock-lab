@@ -51,19 +51,36 @@ export function premarketAiGroups(stocks: readonly PremarketAiStock[]): { title:
 
 const price = (value: number | null | undefined): string | null => typeof value === 'number' && Number.isFinite(value) && value > 0 ? formatFixed(value, 2) : null
 
-// 3a: a price only on a today-list stock, and only the rule's: 「規則價位 進場 101.00｜停損 98.00｜目標一 103.20」.
-// Any other stock has none (null), whatever the response holds.
-export function premarketAiLevels(stock: PremarketAiStock): string | null {
+export const PREMARKET_AI_LEVELS = '規則價位'
+export const PREMARKET_AI_LEVELS_INCOMPLETE = '規則價位不完整'
+
+// One labelled price in the §7 entry/stop/target colour (.level-entry, .level-stop, .level-target).
+export type PremarketAiLevel = { label: string; value: string; className: 'level-entry' | 'level-stop' | 'level-target' }
+
+// 3a: prices only on a today-list stock, and only the rule's: 進場 (進場區 for a pullback), 停損, 目標一. Any other stock
+// has none (null), whatever the response holds; a today-list stock without all three is 'incomplete'.
+export function premarketAiLevelParts(stock: PremarketAiStock): PremarketAiLevel[] | 'incomplete' | null {
   if (!stock.on_today_list) return null
   const levels = stock.levels
-  if (!levels) return '規則價位不完整'
+  if (!levels) return 'incomplete'
   const stop = price(levels.invalid_price)
   const target = price(levels.target_1)
-  const entry = levels.entry_type === 'pullback'
-    ? (price(levels.entry_zone?.low) && price(levels.entry_zone?.high) ? `進場區 ${price(levels.entry_zone.low)}～${price(levels.entry_zone.high)}` : null)
-    : (price(levels.entry ?? levels.entry_zone?.low) ? `進場 ${price(levels.entry ?? levels.entry_zone?.low)}` : null)
-  if (!entry || !stop || !target) return '規則價位不完整'
-  return `規則價位 ${entry}｜停損 ${stop}｜目標一 ${target}`
+  const low = price(levels.entry_zone?.low)
+  const high = price(levels.entry_zone?.high)
+  const single = price(levels.entry ?? levels.entry_zone?.low)
+  const entry: PremarketAiLevel | null = levels.entry_type === 'pullback'
+    ? (low && high ? { label: '進場區', value: `${low}～${high}`, className: 'level-entry' } : null)
+    : (single ? { label: '進場', value: single, className: 'level-entry' } : null)
+  if (!entry || !stop || !target) return 'incomplete'
+  return [entry, { label: '停損', value: stop, className: 'level-stop' }, { label: '目標一', value: target, className: 'level-target' }]
+}
+
+// The same as one line: 「規則價位 進場 101.00｜停損 98.00｜目標一 103.20」 (the page's text; verify T30 mirrors it).
+export function premarketAiLevels(stock: PremarketAiStock): string | null {
+  const parts = premarketAiLevelParts(stock)
+  if (parts === null) return null
+  if (parts === 'incomplete') return PREMARKET_AI_LEVELS_INCOMPLETE
+  return `${PREMARKET_AI_LEVELS} ${parts.map((part) => `${part.label} ${part.value}`).join('｜')}`
 }
 
 // One line with the name, 「1101 台泥 · 依開盤價重算（…）」: a name on a line of its own reads as a K-line card's title.

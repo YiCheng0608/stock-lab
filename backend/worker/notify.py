@@ -32,8 +32,10 @@ the text have the same rows, sections, levels and US lines, word for word:
   action and first reason, the today-list stocks first (their prices are the rule's, in the
   list above; 3a), then the rest of the pool without any price. ``failed``／``rejected``:
   no section, one line under the head 「今日 AI 判讀失敗：<reason>」; no reading yet (not
-  run, still running) 「今日 AI 判讀尚未完成」. notify neither waits for the reading nor
-  takes its lock.
+  run, still running) 「今日 AI 判讀尚未完成」. A reading that cannot be read or shaped
+  (an exception in ``view`` or ``ai_view``) is the line 「今日 AI 判讀無法讀取」 and a
+  ``--- premarket_ai unreadable error=<type>`` log line; the list and the US block still go.
+  notify neither waits for the reading nor takes its lock.
 
 The picture (``worker.notify_card``): an HTML page in the dark terminal layout of
 docs/DESIGN_SYSTEM.md, a table per section and the US block (red up, green down), drawn to
@@ -42,7 +44,8 @@ past its time limit. Its caption is one line, 「今日名單 11/13（五）・�
 
 The text: ``parse_mode=HTML`` for the bold title, section heads and row names, marked 🚀
 突破 and ↩️ 回踩, the US indexes 🔴 up, 🟢 down or ⚪ flat. The 4096 characters are counted
-with the tags; rows are cut from the end with 「另 N 檔見今日名單頁」. The caption and the
+with the tags; the AI section's stocks are cut first, from its last one, with 「另 N 檔的 AI
+判讀見今日名單頁」, then the list's rows from the end with 「另 N 檔見今日名單頁」. The caption and the
 picture's page escape the data's text too (``html.escape``: names, reasons, sources).
 
 The token and the chat id come from ``TELEGRAM_BOT_TOKEN`` and ``TELEGRAM_CHAT_ID``, which
@@ -158,6 +161,9 @@ AI_TITLE = "早盤 AI 判讀"
 AI_MARK = "AI 推論"
 AI_FAILED = "今日 AI 判讀失敗："
 AI_PENDING = "今日 AI 判讀尚未完成"
+# The reading could not be read or shaped (#1042 review 7198038610, 1): the list still goes.
+AI_UNREADABLE = "今日 AI 判讀無法讀取"
+AI_ERROR = "error"
 AI_LISTED = "今日名單的股票"
 AI_OTHERS = "候選池其他股票"
 # What the message shows of a done reading; the page has all of it.
@@ -350,8 +356,9 @@ class AiStock:
 class AiView:
     """The day's pre-market AI reading as the message shows it (#1042)."""
 
-    status: str  # done, failed, rejected, missing
-    line: str | None = None  # failed, rejected, missing: the one line instead
+    status: str  # done, failed, rejected, missing, error
+    line: str | None = None  # failed, rejected, missing, error: the one line instead
+    error: str | None = None  # error: the exception's type, for the log
     meta: str = ""  # 「模型 claude-sonnet-5-5・提示 premarket_v1」
     market: str | None = None  # 「偏多（把握中）」
     market_reasons: tuple[str, ...] = ()
@@ -373,11 +380,22 @@ def _first(reasons: Any) -> str | None:
 
 
 def ai_view(reading: dict[str, Any] | None) -> AiView | None:
-    """The message's AI part from ``app.premarket_ai.view``; None without one."""
+    """The message's AI part from ``app.premarket_ai.view``; None without one. Never
+    raises: a reading of another shape is the one line 「今日 AI 判讀無法讀取」, and the
+    list and the US indexes still go (#1042 review 7198038610, 1)."""
 
+    try:
+        return _ai_view(reading)
+    except Exception as exc:
+        return AiView(AI_ERROR, AI_UNREADABLE, error=type(exc).__name__)
+
+
+def _ai_view(reading: dict[str, Any] | None) -> AiView | None:
     if reading is None:
         return None
     status = reading.get("status")
+    if status == AI_ERROR:
+        return AiView(AI_ERROR, AI_UNREADABLE, error=reading.get("error"))
     if status != "done":
         if status in ("failed", "rejected"):
             return AiView(
@@ -830,14 +848,14 @@ def read(db, today: date) -> Content:
     status = (
         daily_status(db, list_date) if listing["status"] == "not_computed" else None
     )
-    return content(
-        today,
-        list_date,
-        listing,
-        foreign_indices(db, today.isoformat()),
-        status,
-        premarket_view(db, session_date=today),
-    )
+    indexes = foreign_indices(db, today.isoformat())
+    try:
+        reading = premarket_view(db, session_date=today)
+    except Exception as exc:
+        # The list and the US indexes go without it (#1042 review 7198038610, 1).
+        db.rollback()
+        reading = {"status": AI_ERROR, "error": type(exc).__name__}
+    return content(today, list_date, listing, indexes, status, reading)
 
 
 def message(db, today: date) -> str:
@@ -1245,6 +1263,8 @@ class _Run:
                 return 1, f"status={FAILED} reason=chat_not_private"
             card = read(db, self.today)
         body, line = text(card), caption(card)
+        if card.ai is not None and card.ai.status == AI_ERROR:
+            self.log(f"--- premarket_ai unreadable error={card.ai.error}")
         self.log(
             f"--- message chars={len(body)}\n{body}\n--- message end\n"
             f"--- caption {line}"

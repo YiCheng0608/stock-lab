@@ -2832,7 +2832,15 @@ PREMARKET_GAPS = "資料缺口"
 PREMARKET_JOIN = " · "
 PREMARKET_LISTED = "今日名單的股票"
 PREMARKET_OTHERS = "候選池其他股票"
-PRICE = re.compile(r"\d+\.\d{2}")
+# 3a forbids prices, not percents or ratios (「5 日漲 3.25%」「量比 1.85 倍」): they go first, as
+# NOT_PRICE does for the near cards, also written without the space (#1042 review 7198038610, 2).
+PREMARKET_NOT_PRICE = re.compile(r"[0-9][0-9.,]*(?:～[0-9][0-9.,]*)?\s*(?:倍|%)")
+
+
+def premarket_prices(line: str) -> list[str]:
+    """The two-decimal numbers of LINE that are no percent or ratio."""
+
+    return PRICE_NUMBER.findall(PREMARKET_NOT_PRICE.sub("", NOT_PRICE.sub("", line)))
 
 
 def premarket_section(text: Text) -> tuple[int, int]:
@@ -2917,6 +2925,13 @@ def t30(run: Run) -> str:
     expect(any(meta in line for line in lines), f"段內缺 `{meta}`")
     problems = []
     stocks = data.get("stocks") or []
+    news = {
+        ref["label"]
+        for part in [data.get("market") or {}, *(data.get("sectors") or []), *stocks]
+        for reason in part.get("reasons") or []
+        for ref in reason.get("refs") or []
+        if ref.get("kind") == "news" and ref.get("label")
+    }
     names = [
         " ".join(part for part in (stock.get("symbol"), stock.get("name")) if part)
         for stock in stocks
@@ -2948,8 +2963,11 @@ def t30(run: Run) -> str:
         block = lines[n : min(following) if following else len(lines)]
         levels = premarket_levels(stock)
         if levels is None:
+            # A cited news title is the source's words (「營收 12.34 億」), not a price.
             priced = [
-                line for line in block if PRICE.search(line) or "規則價位" in line
+                line
+                for line in block
+                if line not in news and (premarket_prices(line) or "規則價位" in line)
             ]
             if priced:
                 problems.append(f"{name} 不在今日名單卻有價位：{priced[0]!r}")
@@ -2960,13 +2978,6 @@ def t30(run: Run) -> str:
             problems.append(f"{name} 的動作不是 `{action}`：{block[0]!r}")
     order = [n for stock, n in zip(stocks, at) if n >= 0]
     expect(order == sorted(order), f"個股順序 {names} 與 API 不同")
-    news = {
-        ref["label"]
-        for part in [data.get("market") or {}, *(data.get("sectors") or []), *stocks]
-        for reason in part.get("reasons") or []
-        for ref in reason.get("refs") or []
-        if ref.get("kind") == "news" and ref.get("label")
-    }
     problems += [
         f"缺引用的新聞 `{title}`" for title in sorted(news) if title not in lines
     ]

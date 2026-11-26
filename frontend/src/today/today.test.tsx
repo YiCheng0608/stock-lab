@@ -252,6 +252,10 @@ check(aiText.includes('依據 1101 籌碼') && !aiText.includes('weird'), '早�
 check(aiText.includes('資料缺口台指期夜盤沒有資料，大盤判讀信心降低') && aiText.includes('判讀輸入的資料缺口：台指期夜盤無資料；2330 台積電 名單日無日線'), `早盤 AI 判讀: the AI's and the input's data gaps as they are, got ${aiText}`)
 const listedStock = slice(ai, 'data-symbol="1101"', '</li><li')
 const otherStock = slice(ai, 'data-symbol="2330"', '</ul>')
+// DESIGN_SYSTEM §7 進出點 (#1042 review 7198038610, 3): each rule price in its colour class, with its label, unbroken.
+check(listedStock.includes('<b class="level-entry">101.00</b>') && listedStock.includes('<b class="level-stop">98.00</b>') && listedStock.includes('<b class="level-target">103.20</b>') && count(listedStock, 'class="premarket-ai-level"') === 3, `早盤 AI 判讀: the rule levels carry .level-entry/.level-stop/.level-target, got ${listedStock}`)
+const premarketCss = fs.readFileSync(path.join(__dirname, 'premarketAi.css'), 'utf8')
+check(/\.premarket-ai-level\s*\{[^}]*white-space:\s*nowrap/.test(premarketCss), '早盤 AI 判讀: a label and its price do not break')
 check(text(listedStock).includes('規則價位 進場 101.00｜停損 98.00｜目標一 103.20') && text(listedStock).includes('1101 台泥 · ') && !text(ai).includes('#1'), `早盤 AI 判讀: a today-list stock has the rule's levels, got ${text(listedStock)}`)
 check(otherStock !== '' && !/\d+\.\d{2}|規則價位|進場|停損|目標/.test(text(otherStock)), `早盤 AI 判讀: a pool stock has no price (3a), got ${text(otherStock)}`)
 // A pool stock with levels in the response still shows none: only the today list's are prices.

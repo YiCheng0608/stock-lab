@@ -5,8 +5,8 @@ import { getPremarketAi } from '../api'
 import { AiBadge } from '../news/NewsViews'
 import type { PremarketAiReason, PremarketAiResponse, PremarketAiStock } from '../types'
 import {
-  PREMARKET_AI_ERROR, PREMARKET_AI_GAPS, PREMARKET_AI_JOIN, premarketAiShown, PREMARKET_AI_INPUT_GAPS, PREMARKET_AI_LOADING, PREMARKET_AI_TITLE,
-  premarketAiAction, premarketAiGroups, premarketAiLevels, premarketAiMeta, premarketAiRefs, premarketAiState, premarketAiStockName,
+  PREMARKET_AI_ERROR, PREMARKET_AI_GAPS, PREMARKET_AI_JOIN, PREMARKET_AI_LEVELS, PREMARKET_AI_LEVELS_INCOMPLETE, premarketAiLevelParts, premarketAiShown, PREMARKET_AI_INPUT_GAPS, PREMARKET_AI_LOADING, PREMARKET_AI_TITLE,
+  premarketAiAction, premarketAiGroups, premarketAiMeta, premarketAiRefs, premarketAiState, premarketAiStockName,
 } from './premarketAi'
 import './premarketAi.css'
 
@@ -42,15 +42,32 @@ function Reasons({ reasons }: { reasons: readonly PremarketAiReason[] }) {
   return <ul className="premarket-ai-reasons">{reasons.map((reason, index) => <ReasonItem key={index} reason={reason} />)}</ul>
 }
 
+// The rule's levels (facts, no 推論 mark) in the §7 entry/stop/target colours, each label and price unbroken.
+function Levels({ stock }: { stock: PremarketAiStock }) {
+  const parts = premarketAiLevelParts(stock)
+  if (parts === null) return null
+  if (parts === 'incomplete') return <div className="premarket-ai-levels">{PREMARKET_AI_LEVELS_INCOMPLETE}</div>
+  return (
+    <div className="premarket-ai-levels">
+      {PREMARKET_AI_LEVELS}{' '}
+      {parts.map((part, index) => (
+        <span key={part.label}>
+          {index > 0 && '｜'}
+          <span className="premarket-ai-level">{part.label} <b className={part.className}>{part.value}</b></span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function StockItem({ stock }: { stock: PremarketAiStock }) {
-  const levels = premarketAiLevels(stock)
   return (
     <li className="premarket-ai-stock" data-symbol={stock.symbol} data-on-today-list={stock.on_today_list ? 'yes' : 'no'}>
       <p className="premarket-ai-stock-head">
         <span className="premarket-ai-stock-name">{premarketAiStockName(stock)}</span>{PREMARKET_AI_JOIN}
         <span className="premarket-ai-action" data-action={stock.action}>{premarketAiAction(stock)}</span>
       </p>
-      {levels && <div className="premarket-ai-levels">{levels}</div>}
+      <Levels stock={stock} />
       <Reasons reasons={stock.reasons} />
     </li>
   )

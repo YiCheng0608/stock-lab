@@ -97,7 +97,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 
 - 每條理由 `{text, refs}`：`refs` 每個是 `{ref, kind, label}`；`news:<id>` 是 `kind=news`、`news_id` 與輸入快照裡那則的標題（頁面連到 `/news/<id>`），`us:<代號>`、`tx:night`、`tx:day`、`taiex`、`stock:<代號>:<欄位>` 是給人看的名稱，其他是 `kind=other`、`label` null（頁面不列）。
 - 價位（3a）：頁面只在今日名單的股票寫「規則價位 進場／進場區 …｜停損 …｜目標一 …」（`levels`，事實，不標推論），其他股票不寫任何價位；依開盤價重算的價位由程式在開盤後算，08:45 還沒有。
-- **Telegram**：`done` 時在隔夜美股之後一段「早盤 AI 判讀（AI 推論）」：模型與提示、大盤與前 2 條理由、族群（前 5 個，各第一條理由）、每檔動作與第一條理由（今日名單的股票在前，最多 20 檔，其餘寫「另 N 檔的 AI 判讀見今日名單頁」），段內不寫價位（今日名單的價位在上面的名單）。文字版超過 4096 字時先從 AI 段最後一檔往前刪，再刪名單的列。`failed`／`rejected` 不送這段，名單標題下一行「今日 AI 判讀失敗：<reason_text>」；`missing` 寫「今日 AI 判讀尚未完成」。notify 不等判讀、不拿判讀的鎖。
+- **Telegram**：`done` 時在隔夜美股之後一段「早盤 AI 判讀（AI 推論）」：模型與提示、大盤與前 2 條理由、族群（前 5 個，各第一條理由）、每檔動作與第一條理由（今日名單的股票在前，最多 20 檔，其餘寫「另 N 檔的 AI 判讀見今日名單頁」），段內不寫價位（今日名單的價位在上面的名單）。文字版超過 4096 字時先從 AI 段最後一檔往前刪，再刪名單的列。`failed`／`rejected` 不送這段，名單標題下一行「今日 AI 判讀失敗：<reason_text>」；`missing` 寫「今日 AI 判讀尚未完成」。讀判讀或組 AI 段時出錯（`view` 或 `notify.ai_view` 丟例外，例如判讀的形狀和這一版不同）寫「今日 AI 判讀無法讀取」，日誌記 `--- premarket_ai unreadable error=<例外型別>`，規則名單與隔夜美股照送。notify 不等判讀、不拿判讀的鎖。
 - **今日名單頁**：只在「今日名單」分頁、名單之後、熱門族群之前（[PRODUCT_SPEC §2](../PRODUCT_SPEC.md#2-主導航與資訊順序)），讀頁面那份名單的 `list_date`；verify 由 today T30 檢查。
 
 ## 限制

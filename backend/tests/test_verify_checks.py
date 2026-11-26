@@ -4327,3 +4327,22 @@ def test_t30_a_reading_not_done_is_one_line(tmp_path, data, line):
     ) == (f"status={data['status']}：`{line}`")
     with pytest.raises(page_checks.Fail, match="段內缺"):
         page_checks.t30(_t30_run(tmp_path, "早盤 AI 判讀\nAI 推論\n別的字\n", data))
+
+
+def test_t30_takes_percents_ratios_and_news_titles_for_no_price(tmp_path):
+    # 3a forbids prices only (#1042 review 7198038610, 2).
+    data = _premarket()
+    data["stocks"][1]["reasons"] = [
+        {
+            "text": "x",
+            "refs": [{"kind": "news", "news_id": 2, "label": "示範生技營收 12.34 億"}],
+        }
+    ]
+    block = PREMARKET_BLOCK.replace(
+        "根據缺資料，推論暫緩\n",
+        "根據量比 1.85 倍、5 日漲 3.25%、量比1.20倍，推論暫緩\n示範生技營收 12.34 億\n",
+    )
+    assert "其他沒有價位" in page_checks.t30(_t30_run(tmp_path, block, data))
+    priced = block.replace("推論暫緩\n", "收盤 85.30，推論暫緩\n", 1)
+    with pytest.raises(page_checks.Fail, match="9204 示範生技 不在今日名單卻有價位"):
+        page_checks.t30(_t30_run(tmp_path, priced, data))

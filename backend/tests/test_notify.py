@@ -1192,3 +1192,43 @@ def test_serve_reads_the_day_results_from_the_log(tmp_path):
     assert not notify.day_done(logs, MONDAY)
     assert notify.day_results(logs, date(2026, 9, 8)) == []
     assert Path(path).name == "notify-20260907.log"
+
+
+# --- the pre-market AI reading cannot break the message (#1042 review 7198038610, 1) ----
+
+
+def _broken(*args, **kwargs):
+    raise KeyError("output_json of another shape")
+
+
+@pytest.mark.parametrize("where", ["view", "ai_view"])
+def test_an_ai_reading_that_cannot_be_read_still_sends_the_list(db, monkeypatch, where):
+    import app.premarket_ai
+
+    if where == "view":
+        monkeypatch.setattr(app.premarket_ai, "view", _broken)
+    else:
+        monkeypatch.setattr(notify, "_ai_view", _broken)
+    _list_of_t(db)
+    card = notify.read(db, MONDAY)
+    message = notify.text(card)
+    assert card.ai.status == notify.AI_ERROR and card.ai.error == "KeyError"
+    assert notify.AI_UNREADABLE in message.splitlines()
+    assert "<b>1101 名1101</b>" in message and "隔夜美股" in message
+    html = notify_card.card_html(card)
+    assert f'<div class="ai-line line">{notify.AI_UNREADABLE}</div>' in html
+    assert "1101" in html and notify_card.card_height(card) > 0
+
+
+@linux_only
+def test_a_run_with_an_unreadable_ai_reading_is_sent(run_env, monkeypatch):
+    import app.premarket_ai
+
+    monkeypatch.setattr(app.premarket_ai, "view", _broken)
+    server = run_env.telegram()
+    assert _send(run_env) == 0
+    assert len(server.requests) == 1
+    log = _log(run_env)
+    assert "--- result status=sent mode=photo" in log
+    assert "--- premarket_ai unreadable error=KeyError" in log
+    assert notify.AI_UNREADABLE in log
