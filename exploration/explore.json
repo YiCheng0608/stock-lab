@@ -1,0 +1,156 @@
+{
+  "tool": "round21_research",
+  "version": 1,
+  "design": "1067",
+  "registration_commit": "3b686bd2",
+  "segment": "exploration",
+  "round": 21,
+  "round_size": 1,
+  "cumulative": 71,
+  "validation_min_t": 3.388,
+  "definitions_sha256": "2c8d393563383ff5bc4376e0fdb7ebbc4df435074c4cf4c7b9fadf48a5984220",
+  "engines": {
+    "portfolio_research": "simulate"
+  },
+  "tool_commit": "e9916b43d5be13a1d1f5201e27a2a4e65495deb9",
+  "command": "python tools/research/round21_research.py --db /research/stock.db --segment exploration --hypotheses AD1 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "AD1"
+  ],
+  "hypotheses": {
+    "AD1": {
+      "engine": "portfolio",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1405,
+      "taiex_excess": {
+        "days": 1405,
+        "mean": -0.0007173110847714388,
+        "annual": -0.18076239336240257,
+        "t": -3.4255450293028415
+      },
+      "excess": {
+        "days": 1405,
+        "mean": 0.0004506664070540565,
+        "annual": 0.11356793457762224,
+        "t": 4.25425024581922
+      },
+      "absolute_mean": -0.00047314610855998384,
+      "prerequisites": {
+        "days": 1405,
+        "min_days": 500,
+        "delisted": 79,
+        "ok": true
+      },
+      "overlap_p1": {
+        "days": 285,
+        "mean": 0.08085987003780713
+      },
+      "reference_excess": {
+        "days": 1405,
+        "mean": 0.0004334873204944393,
+        "annual": 0.1092388047645987,
+        "t": 4.016848202167215
+      },
+      "qualified": 8.917322834645669,
+      "names": 8.586614173228346,
+      "exp_share": 0.11725449879335548,
+      "inside": {
+        "names": 4362,
+        "inside": 2606,
+        "share": 0.5974323704722604
+      },
+      "invested": 0.12387354842835836,
+      "unsold_share": 0.0,
+      "coverage": {
+        "2014": {
+          "days": 67,
+          "members": 34745,
+          "no_exp": 31897,
+          "announced": 643,
+          "outside": 1676,
+          "qualified": 529,
+          "names": 514,
+          "short_days": 63,
+          "empty_days": 8,
+          "delisted": 3981,
+          "delisted_missing": 3981
+        },
+        "2015": {
+          "days": 90,
+          "members": 39395,
+          "no_exp": 34949,
+          "announced": 1454,
+          "outside": 2306,
+          "qualified": 686,
+          "names": 676,
+          "short_days": 85,
+          "empty_days": 10,
+          "delisted": 4326,
+          "delisted_missing": 4326
+        },
+        "2016": {
+          "days": 87,
+          "members": 35855,
+          "no_exp": 31300,
+          "announced": 1642,
+          "outside": 2197,
+          "qualified": 716,
+          "names": 706,
+          "short_days": 79,
+          "empty_days": 10,
+          "delisted": 3061,
+          "delisted_missing": 3061
+        },
+        "2017": {
+          "days": 86,
+          "members": 41395,
+          "no_exp": 36158,
+          "announced": 1768,
+          "outside": 2580,
+          "qualified": 889,
+          "names": 846,
+          "short_days": 70,
+          "empty_days": 11,
+          "delisted": 3602,
+          "delisted_missing": 3602
+        },
+        "2018": {
+          "days": 90,
+          "members": 39598,
+          "no_exp": 34605,
+          "announced": 1835,
+          "outside": 2354,
+          "qualified": 804,
+          "names": 784,
+          "short_days": 79,
+          "empty_days": 16,
+          "delisted": 3229,
+          "delisted_missing": 3229
+        },
+        "2019": {
+          "days": 88,
+          "members": 39103,
+          "no_exp": 33859,
+          "announced": 1698,
+          "outside": 2640,
+          "qualified": 906,
+          "names": 836,
+          "short_days": 72,
+          "empty_days": 8,
+          "delisted": 2161,
+          "delisted_missing": 2161
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 795.3162215120392,
+  "peak_memory_gb": 1.5135040283203125
+}

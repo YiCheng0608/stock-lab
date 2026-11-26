@@ -1,0 +1,4102 @@
+{
+  "tool": "round21_research",
+  "version": 1,
+  "design": "1067",
+  "definitions_sha256": "2c8d393563383ff5bc4376e0fdb7ebbc4df435074c4cf4c7b9fadf48a5984220",
+  "label": "申報窗口內的每個交易日 T，母體中預期公告的交易日（由 `exp_date` 推）落在 T 之後第 1～5 個交易日、T（含）以前這一季還沒公告的股票，以雜湊取 20 檔、不排序；窗口之間兩邊都留現金",
+  "direction": "事件：盈餘公告溢酬",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "window_daily",
+    "condition": "expected_ahead",
+    "keys": [],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": 5,
+    "start": [
+      "date",
+      "2014-04-15"
+    ]
+  },
+  "hypothesis": "AD1",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2014-04-15",
+    "first_session": "2014-04-16",
+    "last_session": "2019-12-31",
+    "days": 1405,
+    "signal_days": 508,
+    "event_days": 23
+  },
+  "prerequisites": {
+    "days": 1405,
+    "min_days": 500,
+    "delisted": 79,
+    "ok": true
+  },
+  "coverage": {
+    "2014": {
+      "days": 67,
+      "members": 34745,
+      "no_exp": 31897,
+      "announced": 643,
+      "outside": 1676,
+      "qualified": 529,
+      "names": 514,
+      "short_days": 63,
+      "empty_days": 8,
+      "delisted": 3981,
+      "delisted_missing": 3981
+    },
+    "2015": {
+      "days": 90,
+      "members": 39395,
+      "no_exp": 34949,
+      "announced": 1454,
+      "outside": 2306,
+      "qualified": 686,
+      "names": 676,
+      "short_days": 85,
+      "empty_days": 10,
+      "delisted": 4326,
+      "delisted_missing": 4326
+    },
+    "2016": {
+      "days": 87,
+      "members": 35855,
+      "no_exp": 31300,
+      "announced": 1642,
+      "outside": 2197,
+      "qualified": 716,
+      "names": 706,
+      "short_days": 79,
+      "empty_days": 10,
+      "delisted": 3061,
+      "delisted_missing": 3061
+    },
+    "2017": {
+      "days": 86,
+      "members": 41395,
+      "no_exp": 36158,
+      "announced": 1768,
+      "outside": 2580,
+      "qualified": 889,
+      "names": 846,
+      "short_days": 70,
+      "empty_days": 11,
+      "delisted": 3602,
+      "delisted_missing": 3602
+    },
+    "2018": {
+      "days": 90,
+      "members": 39598,
+      "no_exp": 34605,
+      "announced": 1835,
+      "outside": 2354,
+      "qualified": 804,
+      "names": 784,
+      "short_days": 79,
+      "empty_days": 16,
+      "delisted": 3229,
+      "delisted_missing": 3229
+    },
+    "2019": {
+      "days": 88,
+      "members": 39103,
+      "no_exp": 33859,
+      "announced": 1698,
+      "outside": 2640,
+      "qualified": 906,
+      "names": 836,
+      "short_days": 72,
+      "empty_days": 8,
+      "delisted": 2161,
+      "delisted_missing": 2161
+    }
+  },
+  "windows": [
+    {
+      "quarter": "2014-03-31",
+      "first_signal": "2014-04-15",
+      "last_signal": "2014-05-15",
+      "signal_days": 22,
+      "members": 688,
+      "with_ann": 72,
+      "with_exp": 62,
+      "qualified": 182,
+      "names": 182,
+      "exp_share": 0.09011627906976744
+    },
+    {
+      "quarter": "2014-06-30",
+      "first_signal": "2014-07-15",
+      "last_signal": "2014-08-14",
+      "signal_days": 22,
+      "members": 714,
+      "with_ann": 71,
+      "with_exp": 57,
+      "qualified": 199,
+      "names": 184,
+      "exp_share": 0.07983193277310924
+    },
+    {
+      "quarter": "2014-09-30",
+      "first_signal": "2014-10-15",
+      "last_signal": "2014-11-14",
+      "signal_days": 23,
+      "members": 493,
+      "with_ann": 41,
+      "with_exp": 38,
+      "qualified": 148,
+      "names": 148,
+      "exp_share": 0.07707910750507099
+    },
+    {
+      "quarter": "2014-12-31",
+      "first_signal": "2015-03-02",
+      "last_signal": "2015-03-31",
+      "signal_days": 22,
+      "members": 543,
+      "with_ann": 91,
+      "with_exp": 87,
+      "qualified": 250,
+      "names": 241,
+      "exp_share": 0.16022099447513813
+    },
+    {
+      "quarter": "2015-03-31",
+      "first_signal": "2015-04-15",
+      "last_signal": "2015-05-15",
+      "signal_days": 22,
+      "members": 596,
+      "with_ann": 54,
+      "with_exp": 52,
+      "qualified": 161,
+      "names": 161,
+      "exp_share": 0.087248322147651
+    },
+    {
+      "quarter": "2015-06-30",
+      "first_signal": "2015-07-15",
+      "last_signal": "2015-08-14",
+      "signal_days": 23,
+      "members": 460,
+      "with_ann": 46,
+      "with_exp": 39,
+      "qualified": 123,
+      "names": 123,
+      "exp_share": 0.08478260869565217
+    },
+    {
+      "quarter": "2015-09-30",
+      "first_signal": "2015-10-15",
+      "last_signal": "2015-11-16",
+      "signal_days": 23,
+      "members": 523,
+      "with_ann": 51,
+      "with_exp": 47,
+      "qualified": 152,
+      "names": 151,
+      "exp_share": 0.08986615678776291
+    },
+    {
+      "quarter": "2015-12-31",
+      "first_signal": "2016-03-01",
+      "last_signal": "2016-03-31",
+      "signal_days": 23,
+      "members": 566,
+      "with_ann": 105,
+      "with_exp": 97,
+      "qualified": 226,
+      "names": 225,
+      "exp_share": 0.17137809187279152
+    },
+    {
+      "quarter": "2016-03-31",
+      "first_signal": "2016-04-15",
+      "last_signal": "2016-05-16",
+      "signal_days": 21,
+      "members": 492,
+      "with_ann": 49,
+      "with_exp": 49,
+      "qualified": 152,
+      "names": 152,
+      "exp_share": 0.09959349593495935
+    },
+    {
+      "quarter": "2016-06-30",
+      "first_signal": "2016-07-15",
+      "last_signal": "2016-08-15",
+      "signal_days": 22,
+      "members": 538,
+      "with_ann": 55,
+      "with_exp": 61,
+      "qualified": 187,
+      "names": 178,
+      "exp_share": 0.11338289962825279
+    },
+    {
+      "quarter": "2016-09-30",
+      "first_signal": "2016-10-17",
+      "last_signal": "2016-11-14",
+      "signal_days": 21,
+      "members": 438,
+      "with_ann": 48,
+      "with_exp": 47,
+      "qualified": 151,
+      "names": 151,
+      "exp_share": 0.10730593607305935
+    },
+    {
+      "quarter": "2016-12-31",
+      "first_signal": "2017-03-01",
+      "last_signal": "2017-03-31",
+      "signal_days": 23,
+      "members": 640,
+      "with_ann": 122,
+      "with_exp": 123,
+      "qualified": 313,
+      "names": 289,
+      "exp_share": 0.1921875
+    },
+    {
+      "quarter": "2017-03-31",
+      "first_signal": "2017-04-17",
+      "last_signal": "2017-05-15",
+      "signal_days": 20,
+      "members": 584,
+      "with_ann": 61,
+      "with_exp": 60,
+      "qualified": 187,
+      "names": 187,
+      "exp_share": 0.10273972602739725
+    },
+    {
+      "quarter": "2017-06-30",
+      "first_signal": "2017-07-17",
+      "last_signal": "2017-08-14",
+      "signal_days": 21,
+      "members": 545,
+      "with_ann": 57,
+      "with_exp": 56,
+      "qualified": 182,
+      "names": 182,
+      "exp_share": 0.10275229357798166
+    },
+    {
+      "quarter": "2017-09-30",
+      "first_signal": "2017-10-16",
+      "last_signal": "2017-11-14",
+      "signal_days": 22,
+      "members": 608,
+      "with_ann": 75,
+      "with_exp": 63,
+      "qualified": 207,
+      "names": 188,
+      "exp_share": 0.10361842105263158
+    },
+    {
+      "quarter": "2017-12-31",
+      "first_signal": "2018-03-01",
+      "last_signal": "2018-04-02",
+      "signal_days": 24,
+      "members": 614,
+      "with_ann": 113,
+      "with_exp": 112,
+      "qualified": 273,
+      "names": 266,
+      "exp_share": 0.18241042345276873
+    },
+    {
+      "quarter": "2018-03-31",
+      "first_signal": "2018-04-16",
+      "last_signal": "2018-05-15",
+      "signal_days": 21,
+      "members": 594,
+      "with_ann": 58,
+      "with_exp": 59,
+      "qualified": 182,
+      "names": 181,
+      "exp_share": 0.09932659932659933
+    },
+    {
+      "quarter": "2018-06-30",
+      "first_signal": "2018-07-16",
+      "last_signal": "2018-08-14",
+      "signal_days": 22,
+      "members": 523,
+      "with_ann": 60,
+      "with_exp": 53,
+      "qualified": 165,
+      "names": 163,
+      "exp_share": 0.10133843212237094
+    },
+    {
+      "quarter": "2018-09-30",
+      "first_signal": "2018-10-15",
+      "last_signal": "2018-11-14",
+      "signal_days": 23,
+      "members": 444,
+      "with_ann": 48,
+      "with_exp": 51,
+      "qualified": 184,
+      "names": 174,
+      "exp_share": 0.11486486486486487
+    },
+    {
+      "quarter": "2018-12-31",
+      "first_signal": "2019-03-04",
+      "last_signal": "2019-04-01",
+      "signal_days": 21,
+      "members": 531,
+      "with_ann": 107,
+      "with_exp": 99,
+      "qualified": 244,
+      "names": 239,
+      "exp_share": 0.1864406779661017
+    },
+    {
+      "quarter": "2019-03-31",
+      "first_signal": "2019-04-15",
+      "last_signal": "2019-05-15",
+      "signal_days": 22,
+      "members": 554,
+      "with_ann": 65,
+      "with_exp": 64,
+      "qualified": 216,
+      "names": 203,
+      "exp_share": 0.11552346570397112
+    },
+    {
+      "quarter": "2019-06-30",
+      "first_signal": "2019-07-15",
+      "last_signal": "2019-08-14",
+      "signal_days": 22,
+      "members": 492,
+      "with_ann": 52,
+      "with_exp": 58,
+      "qualified": 221,
+      "names": 181,
+      "exp_share": 0.11788617886178862
+    },
+    {
+      "quarter": "2019-09-30",
+      "first_signal": "2019-10-15",
+      "last_signal": "2019-11-14",
+      "signal_days": 23,
+      "members": 513,
+      "with_ann": 48,
+      "with_exp": 60,
+      "qualified": 225,
+      "names": 213,
+      "exp_share": 0.11695906432748537
+    }
+  ],
+  "seconds": {
+    "plan": 19.699108712025918,
+    "ann_date": 1.4770357119850814,
+    "p1_order": 3.7001791350194253,
+    "condition": 7.392348970810417,
+    "reference": 0.1381857743836008
+  },
+  "days_listed": [
+    {
+      "signal_date": "2014-04-15",
+      "quarter": "2014-03-31",
+      "members": 602,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2014-04-16",
+      "quarter": "2014-03-31",
+      "members": 592,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2014-04-17",
+      "quarter": "2014-03-31",
+      "members": 580,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2014-04-18",
+      "quarter": "2014-03-31",
+      "members": 572,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2014-04-21",
+      "quarter": "2014-03-31",
+      "members": 560,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2014-04-22",
+      "quarter": "2014-03-31",
+      "members": 559,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2014-04-23",
+      "quarter": "2014-03-31",
+      "members": 577,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2014-04-24",
+      "quarter": "2014-03-31",
+      "members": 580,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2014-04-25",
+      "quarter": "2014-03-31",
+      "members": 583,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2014-04-28",
+      "quarter": "2014-03-31",
+      "members": 577,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2014-04-29",
+      "quarter": "2014-03-31",
+      "members": 573,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2014-04-30",
+      "quarter": "2014-03-31",
+      "members": 569,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2014-05-02",
+      "quarter": "2014-03-31",
+      "members": 561,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2014-05-05",
+      "quarter": "2014-03-31",
+      "members": 551,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2014-05-06",
+      "quarter": "2014-03-31",
+      "members": 543,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2014-05-07",
+      "quarter": "2014-03-31",
+      "members": 539,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2014-05-08",
+      "quarter": "2014-03-31",
+      "members": 544,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2014-05-09",
+      "quarter": "2014-03-31",
+      "members": 538,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-05-12",
+      "quarter": "2014-03-31",
+      "members": 534,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2014-05-13",
+      "quarter": "2014-03-31",
+      "members": 534,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2014-05-14",
+      "quarter": "2014-03-31",
+      "members": 533,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2014-05-15",
+      "quarter": "2014-03-31",
+      "members": 525,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2014-07-15",
+      "quarter": "2014-06-30",
+      "members": 627,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2014-07-16",
+      "quarter": "2014-06-30",
+      "members": 622,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2014-07-17",
+      "quarter": "2014-06-30",
+      "members": 619,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2014-07-18",
+      "quarter": "2014-06-30",
+      "members": 611,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2014-07-21",
+      "quarter": "2014-06-30",
+      "members": 603,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2014-07-22",
+      "quarter": "2014-06-30",
+      "members": 601,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2014-07-24",
+      "quarter": "2014-06-30",
+      "members": 610,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2014-07-25",
+      "quarter": "2014-06-30",
+      "members": 607,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2014-07-28",
+      "quarter": "2014-06-30",
+      "members": 609,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-07-29",
+      "quarter": "2014-06-30",
+      "members": 610,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-07-30",
+      "quarter": "2014-06-30",
+      "members": 600,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2014-07-31",
+      "quarter": "2014-06-30",
+      "members": 586,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2014-08-01",
+      "quarter": "2014-06-30",
+      "members": 576,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2014-08-04",
+      "quarter": "2014-06-30",
+      "members": 565,
+      "qualified": 22,
+      "names": 20
+    },
+    {
+      "signal_date": "2014-08-05",
+      "quarter": "2014-06-30",
+      "members": 566,
+      "qualified": 28,
+      "names": 20
+    },
+    {
+      "signal_date": "2014-08-06",
+      "quarter": "2014-06-30",
+      "members": 569,
+      "qualified": 25,
+      "names": 20
+    },
+    {
+      "signal_date": "2014-08-07",
+      "quarter": "2014-06-30",
+      "members": 552,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2014-08-08",
+      "quarter": "2014-06-30",
+      "members": 544,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2014-08-11",
+      "quarter": "2014-06-30",
+      "members": 531,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2014-08-12",
+      "quarter": "2014-06-30",
+      "members": 526,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2014-08-13",
+      "quarter": "2014-06-30",
+      "members": 518,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2014-08-14",
+      "quarter": "2014-06-30",
+      "members": 509,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2014-10-15",
+      "quarter": "2014-09-30",
+      "members": 419,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2014-10-16",
+      "quarter": "2014-09-30",
+      "members": 425,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2014-10-17",
+      "quarter": "2014-09-30",
+      "members": 434,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2014-10-20",
+      "quarter": "2014-09-30",
+      "members": 435,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2014-10-21",
+      "quarter": "2014-09-30",
+      "members": 436,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2014-10-22",
+      "quarter": "2014-09-30",
+      "members": 434,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-10-23",
+      "quarter": "2014-09-30",
+      "members": 429,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2014-10-24",
+      "quarter": "2014-09-30",
+      "members": 425,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2014-10-27",
+      "quarter": "2014-09-30",
+      "members": 430,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-10-28",
+      "quarter": "2014-09-30",
+      "members": 434,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-10-29",
+      "quarter": "2014-09-30",
+      "members": 431,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2014-10-30",
+      "quarter": "2014-09-30",
+      "members": 432,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2014-10-31",
+      "quarter": "2014-09-30",
+      "members": 429,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-11-03",
+      "quarter": "2014-09-30",
+      "members": 432,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2014-11-04",
+      "quarter": "2014-09-30",
+      "members": 428,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2014-11-05",
+      "quarter": "2014-09-30",
+      "members": 422,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2014-11-06",
+      "quarter": "2014-09-30",
+      "members": 419,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2014-11-07",
+      "quarter": "2014-09-30",
+      "members": 412,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2014-11-10",
+      "quarter": "2014-09-30",
+      "members": 406,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2014-11-11",
+      "quarter": "2014-09-30",
+      "members": 405,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2014-11-12",
+      "quarter": "2014-09-30",
+      "members": 394,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2014-11-13",
+      "quarter": "2014-09-30",
+      "members": 380,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2014-11-14",
+      "quarter": "2014-09-30",
+      "members": 367,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-03-02",
+      "quarter": "2014-12-31",
+      "members": 390,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-03-03",
+      "quarter": "2014-12-31",
+      "members": 393,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-03-04",
+      "quarter": "2014-12-31",
+      "members": 394,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-03-05",
+      "quarter": "2014-12-31",
+      "members": 394,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2015-03-06",
+      "quarter": "2014-12-31",
+      "members": 404,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2015-03-09",
+      "quarter": "2014-12-31",
+      "members": 409,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2015-03-10",
+      "quarter": "2014-12-31",
+      "members": 416,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2015-03-11",
+      "quarter": "2014-12-31",
+      "members": 419,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2015-03-12",
+      "quarter": "2014-12-31",
+      "members": 424,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2015-03-13",
+      "quarter": "2014-12-31",
+      "members": 427,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2015-03-16",
+      "quarter": "2014-12-31",
+      "members": 437,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2015-03-17",
+      "quarter": "2014-12-31",
+      "members": 438,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2015-03-18",
+      "quarter": "2014-12-31",
+      "members": 439,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2015-03-19",
+      "quarter": "2014-12-31",
+      "members": 446,
+      "qualified": 23,
+      "names": 20
+    },
+    {
+      "signal_date": "2015-03-20",
+      "quarter": "2014-12-31",
+      "members": 458,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2015-03-23",
+      "quarter": "2014-12-31",
+      "members": 465,
+      "qualified": 25,
+      "names": 20
+    },
+    {
+      "signal_date": "2015-03-24",
+      "quarter": "2014-12-31",
+      "members": 467,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2015-03-25",
+      "quarter": "2014-12-31",
+      "members": 469,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2015-03-26",
+      "quarter": "2014-12-31",
+      "members": 464,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2015-03-27",
+      "quarter": "2014-12-31",
+      "members": 475,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2015-03-30",
+      "quarter": "2014-12-31",
+      "members": 478,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-03-31",
+      "quarter": "2014-12-31",
+      "members": 473,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-04-15",
+      "quarter": "2015-03-31",
+      "members": 497,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2015-04-16",
+      "quarter": "2015-03-31",
+      "members": 503,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-04-17",
+      "quarter": "2015-03-31",
+      "members": 500,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2015-04-20",
+      "quarter": "2015-03-31",
+      "members": 492,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-04-21",
+      "quarter": "2015-03-31",
+      "members": 489,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2015-04-22",
+      "quarter": "2015-03-31",
+      "members": 481,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2015-04-23",
+      "quarter": "2015-03-31",
+      "members": 478,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2015-04-24",
+      "quarter": "2015-03-31",
+      "members": 482,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2015-04-27",
+      "quarter": "2015-03-31",
+      "members": 487,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2015-04-28",
+      "quarter": "2015-03-31",
+      "members": 483,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2015-04-29",
+      "quarter": "2015-03-31",
+      "members": 483,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2015-04-30",
+      "quarter": "2015-03-31",
+      "members": 479,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2015-05-04",
+      "quarter": "2015-03-31",
+      "members": 475,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2015-05-05",
+      "quarter": "2015-03-31",
+      "members": 477,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2015-05-06",
+      "quarter": "2015-03-31",
+      "members": 477,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2015-05-07",
+      "quarter": "2015-03-31",
+      "members": 479,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2015-05-08",
+      "quarter": "2015-03-31",
+      "members": 475,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2015-05-11",
+      "quarter": "2015-03-31",
+      "members": 478,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2015-05-12",
+      "quarter": "2015-03-31",
+      "members": 474,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2015-05-13",
+      "quarter": "2015-03-31",
+      "members": 477,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-05-14",
+      "quarter": "2015-03-31",
+      "members": 473,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-05-15",
+      "quarter": "2015-03-31",
+      "members": 466,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-07-15",
+      "quarter": "2015-06-30",
+      "members": 403,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2015-07-16",
+      "quarter": "2015-06-30",
+      "members": 399,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2015-07-17",
+      "quarter": "2015-06-30",
+      "members": 396,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2015-07-20",
+      "quarter": "2015-06-30",
+      "members": 397,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-07-21",
+      "quarter": "2015-06-30",
+      "members": 395,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-07-22",
+      "quarter": "2015-06-30",
+      "members": 388,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-07-23",
+      "quarter": "2015-06-30",
+      "members": 388,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2015-07-24",
+      "quarter": "2015-06-30",
+      "members": 391,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2015-07-27",
+      "quarter": "2015-06-30",
+      "members": 396,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-07-28",
+      "quarter": "2015-06-30",
+      "members": 396,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-07-29",
+      "quarter": "2015-06-30",
+      "members": 398,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2015-07-30",
+      "quarter": "2015-06-30",
+      "members": 397,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-07-31",
+      "quarter": "2015-06-30",
+      "members": 397,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2015-08-03",
+      "quarter": "2015-06-30",
+      "members": 397,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2015-08-04",
+      "quarter": "2015-06-30",
+      "members": 401,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2015-08-05",
+      "quarter": "2015-06-30",
+      "members": 395,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2015-08-06",
+      "quarter": "2015-06-30",
+      "members": 388,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2015-08-07",
+      "quarter": "2015-06-30",
+      "members": 382,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2015-08-10",
+      "quarter": "2015-06-30",
+      "members": 380,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2015-08-11",
+      "quarter": "2015-06-30",
+      "members": 381,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-08-12",
+      "quarter": "2015-06-30",
+      "members": 375,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-08-13",
+      "quarter": "2015-06-30",
+      "members": 373,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-08-14",
+      "quarter": "2015-06-30",
+      "members": 372,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-10-15",
+      "quarter": "2015-09-30",
+      "members": 430,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2015-10-16",
+      "quarter": "2015-09-30",
+      "members": 438,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-10-19",
+      "quarter": "2015-09-30",
+      "members": 443,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2015-10-20",
+      "quarter": "2015-09-30",
+      "members": 440,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2015-10-21",
+      "quarter": "2015-09-30",
+      "members": 430,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2015-10-22",
+      "quarter": "2015-09-30",
+      "members": 435,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-10-23",
+      "quarter": "2015-09-30",
+      "members": 436,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2015-10-26",
+      "quarter": "2015-09-30",
+      "members": 441,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-10-27",
+      "quarter": "2015-09-30",
+      "members": 442,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2015-10-28",
+      "quarter": "2015-09-30",
+      "members": 443,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-10-29",
+      "quarter": "2015-09-30",
+      "members": 445,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2015-10-30",
+      "quarter": "2015-09-30",
+      "members": 445,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2015-11-02",
+      "quarter": "2015-09-30",
+      "members": 445,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2015-11-03",
+      "quarter": "2015-09-30",
+      "members": 446,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2015-11-04",
+      "quarter": "2015-09-30",
+      "members": 446,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2015-11-05",
+      "quarter": "2015-09-30",
+      "members": 450,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2015-11-06",
+      "quarter": "2015-09-30",
+      "members": 455,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2015-11-09",
+      "quarter": "2015-09-30",
+      "members": 453,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2015-11-10",
+      "quarter": "2015-09-30",
+      "members": 455,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2015-11-11",
+      "quarter": "2015-09-30",
+      "members": 456,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2015-11-12",
+      "quarter": "2015-09-30",
+      "members": 452,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-11-13",
+      "quarter": "2015-09-30",
+      "members": 448,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2015-11-16",
+      "quarter": "2015-09-30",
+      "members": 452,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-03-01",
+      "quarter": "2015-12-31",
+      "members": 388,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2016-03-02",
+      "quarter": "2015-12-31",
+      "members": 394,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2016-03-03",
+      "quarter": "2015-12-31",
+      "members": 411,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2016-03-04",
+      "quarter": "2015-12-31",
+      "members": 417,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2016-03-07",
+      "quarter": "2015-12-31",
+      "members": 426,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-03-08",
+      "quarter": "2015-12-31",
+      "members": 436,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-03-09",
+      "quarter": "2015-12-31",
+      "members": 444,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-03-10",
+      "quarter": "2015-12-31",
+      "members": 450,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2016-03-11",
+      "quarter": "2015-12-31",
+      "members": 458,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2016-03-14",
+      "quarter": "2015-12-31",
+      "members": 466,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-03-15",
+      "quarter": "2015-12-31",
+      "members": 481,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-03-16",
+      "quarter": "2015-12-31",
+      "members": 478,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-03-17",
+      "quarter": "2015-12-31",
+      "members": 484,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2016-03-18",
+      "quarter": "2015-12-31",
+      "members": 489,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2016-03-21",
+      "quarter": "2015-12-31",
+      "members": 489,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2016-03-22",
+      "quarter": "2015-12-31",
+      "members": 490,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-03-23",
+      "quarter": "2015-12-31",
+      "members": 495,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2016-03-24",
+      "quarter": "2015-12-31",
+      "members": 493,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2016-03-25",
+      "quarter": "2015-12-31",
+      "members": 492,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2016-03-28",
+      "quarter": "2015-12-31",
+      "members": 490,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2016-03-29",
+      "quarter": "2015-12-31",
+      "members": 489,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-03-30",
+      "quarter": "2015-12-31",
+      "members": 484,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-03-31",
+      "quarter": "2015-12-31",
+      "members": 479,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-04-15",
+      "quarter": "2016-03-31",
+      "members": 441,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2016-04-18",
+      "quarter": "2016-03-31",
+      "members": 431,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-04-19",
+      "quarter": "2016-03-31",
+      "members": 429,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-04-20",
+      "quarter": "2016-03-31",
+      "members": 423,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-04-21",
+      "quarter": "2016-03-31",
+      "members": 428,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2016-04-22",
+      "quarter": "2016-03-31",
+      "members": 427,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-04-25",
+      "quarter": "2016-03-31",
+      "members": 418,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2016-04-26",
+      "quarter": "2016-03-31",
+      "members": 416,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2016-04-27",
+      "quarter": "2016-03-31",
+      "members": 410,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2016-04-28",
+      "quarter": "2016-03-31",
+      "members": 400,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2016-04-29",
+      "quarter": "2016-03-31",
+      "members": 393,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2016-05-03",
+      "quarter": "2016-03-31",
+      "members": 393,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2016-05-04",
+      "quarter": "2016-03-31",
+      "members": 387,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2016-05-05",
+      "quarter": "2016-03-31",
+      "members": 381,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2016-05-06",
+      "quarter": "2016-03-31",
+      "members": 373,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2016-05-09",
+      "quarter": "2016-03-31",
+      "members": 366,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-05-10",
+      "quarter": "2016-03-31",
+      "members": 364,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2016-05-11",
+      "quarter": "2016-03-31",
+      "members": 365,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2016-05-12",
+      "quarter": "2016-03-31",
+      "members": 357,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2016-05-13",
+      "quarter": "2016-03-31",
+      "members": 363,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-05-16",
+      "quarter": "2016-03-31",
+      "members": 361,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-07-15",
+      "quarter": "2016-06-30",
+      "members": 401,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2016-07-18",
+      "quarter": "2016-06-30",
+      "members": 409,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2016-07-19",
+      "quarter": "2016-06-30",
+      "members": 414,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2016-07-20",
+      "quarter": "2016-06-30",
+      "members": 422,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2016-07-21",
+      "quarter": "2016-06-30",
+      "members": 427,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2016-07-22",
+      "quarter": "2016-06-30",
+      "members": 428,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-07-25",
+      "quarter": "2016-06-30",
+      "members": 425,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2016-07-26",
+      "quarter": "2016-06-30",
+      "members": 437,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-07-27",
+      "quarter": "2016-06-30",
+      "members": 436,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-07-28",
+      "quarter": "2016-06-30",
+      "members": 437,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2016-07-29",
+      "quarter": "2016-06-30",
+      "members": 443,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-08-01",
+      "quarter": "2016-06-30",
+      "members": 440,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-08-02",
+      "quarter": "2016-06-30",
+      "members": 443,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-08-03",
+      "quarter": "2016-06-30",
+      "members": 442,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-08-04",
+      "quarter": "2016-06-30",
+      "members": 442,
+      "qualified": 25,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-08-05",
+      "quarter": "2016-06-30",
+      "members": 447,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2016-08-08",
+      "quarter": "2016-06-30",
+      "members": 446,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2016-08-09",
+      "quarter": "2016-06-30",
+      "members": 454,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2016-08-10",
+      "quarter": "2016-06-30",
+      "members": 462,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2016-08-11",
+      "quarter": "2016-06-30",
+      "members": 466,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2016-08-12",
+      "quarter": "2016-06-30",
+      "members": 460,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2016-08-15",
+      "quarter": "2016-06-30",
+      "members": 461,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-10-17",
+      "quarter": "2016-09-30",
+      "members": 371,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-10-18",
+      "quarter": "2016-09-30",
+      "members": 367,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-10-19",
+      "quarter": "2016-09-30",
+      "members": 366,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-10-20",
+      "quarter": "2016-09-30",
+      "members": 368,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2016-10-21",
+      "quarter": "2016-09-30",
+      "members": 371,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2016-10-24",
+      "quarter": "2016-09-30",
+      "members": 366,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-10-25",
+      "quarter": "2016-09-30",
+      "members": 362,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2016-10-26",
+      "quarter": "2016-09-30",
+      "members": 355,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2016-10-27",
+      "quarter": "2016-09-30",
+      "members": 354,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2016-10-28",
+      "quarter": "2016-09-30",
+      "members": 352,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2016-10-31",
+      "quarter": "2016-09-30",
+      "members": 339,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2016-11-01",
+      "quarter": "2016-09-30",
+      "members": 334,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2016-11-02",
+      "quarter": "2016-09-30",
+      "members": 332,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2016-11-03",
+      "quarter": "2016-09-30",
+      "members": 331,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2016-11-04",
+      "quarter": "2016-09-30",
+      "members": 326,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2016-11-07",
+      "quarter": "2016-09-30",
+      "members": 325,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2016-11-08",
+      "quarter": "2016-09-30",
+      "members": 323,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2016-11-09",
+      "quarter": "2016-09-30",
+      "members": 327,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2016-11-10",
+      "quarter": "2016-09-30",
+      "members": 328,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2016-11-11",
+      "quarter": "2016-09-30",
+      "members": 331,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2016-11-14",
+      "quarter": "2016-09-30",
+      "members": 336,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-03-01",
+      "quarter": "2016-12-31",
+      "members": 543,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2017-03-02",
+      "quarter": "2016-12-31",
+      "members": 545,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2017-03-03",
+      "quarter": "2016-12-31",
+      "members": 547,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2017-03-06",
+      "quarter": "2016-12-31",
+      "members": 545,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2017-03-07",
+      "quarter": "2016-12-31",
+      "members": 543,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2017-03-08",
+      "quarter": "2016-12-31",
+      "members": 542,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2017-03-09",
+      "quarter": "2016-12-31",
+      "members": 531,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2017-03-10",
+      "quarter": "2016-12-31",
+      "members": 527,
+      "qualified": 22,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-13",
+      "quarter": "2016-12-31",
+      "members": 521,
+      "qualified": 28,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-14",
+      "quarter": "2016-12-31",
+      "members": 522,
+      "qualified": 24,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-15",
+      "quarter": "2016-12-31",
+      "members": 515,
+      "qualified": 27,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-16",
+      "quarter": "2016-12-31",
+      "members": 509,
+      "qualified": 22,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-17",
+      "quarter": "2016-12-31",
+      "members": 510,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-20",
+      "quarter": "2016-12-31",
+      "members": 512,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-21",
+      "quarter": "2016-12-31",
+      "members": 516,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-03-22",
+      "quarter": "2016-12-31",
+      "members": 518,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2017-03-23",
+      "quarter": "2016-12-31",
+      "members": 517,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2017-03-24",
+      "quarter": "2016-12-31",
+      "members": 515,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2017-03-27",
+      "quarter": "2016-12-31",
+      "members": 514,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2017-03-28",
+      "quarter": "2016-12-31",
+      "members": 518,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2017-03-29",
+      "quarter": "2016-12-31",
+      "members": 509,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2017-03-30",
+      "quarter": "2016-12-31",
+      "members": 510,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-03-31",
+      "quarter": "2016-12-31",
+      "members": 502,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-04-17",
+      "quarter": "2017-03-31",
+      "members": 524,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2017-04-18",
+      "quarter": "2017-03-31",
+      "members": 515,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2017-04-19",
+      "quarter": "2017-03-31",
+      "members": 506,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2017-04-20",
+      "quarter": "2017-03-31",
+      "members": 500,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2017-04-21",
+      "quarter": "2017-03-31",
+      "members": 499,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2017-04-24",
+      "quarter": "2017-03-31",
+      "members": 497,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2017-04-25",
+      "quarter": "2017-03-31",
+      "members": 483,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2017-04-26",
+      "quarter": "2017-03-31",
+      "members": 471,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2017-04-27",
+      "quarter": "2017-03-31",
+      "members": 460,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2017-04-28",
+      "quarter": "2017-03-31",
+      "members": 457,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2017-05-02",
+      "quarter": "2017-03-31",
+      "members": 456,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2017-05-03",
+      "quarter": "2017-03-31",
+      "members": 456,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-05-04",
+      "quarter": "2017-03-31",
+      "members": 451,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-05-05",
+      "quarter": "2017-03-31",
+      "members": 451,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2017-05-08",
+      "quarter": "2017-03-31",
+      "members": 445,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2017-05-09",
+      "quarter": "2017-03-31",
+      "members": 439,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2017-05-10",
+      "quarter": "2017-03-31",
+      "members": 437,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2017-05-11",
+      "quarter": "2017-03-31",
+      "members": 434,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2017-05-12",
+      "quarter": "2017-03-31",
+      "members": 434,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2017-05-15",
+      "quarter": "2017-03-31",
+      "members": 427,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-07-17",
+      "quarter": "2017-06-30",
+      "members": 421,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-07-18",
+      "quarter": "2017-06-30",
+      "members": 427,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-07-19",
+      "quarter": "2017-06-30",
+      "members": 429,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2017-07-20",
+      "quarter": "2017-06-30",
+      "members": 432,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2017-07-21",
+      "quarter": "2017-06-30",
+      "members": 430,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2017-07-24",
+      "quarter": "2017-06-30",
+      "members": 429,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2017-07-25",
+      "quarter": "2017-06-30",
+      "members": 426,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2017-07-26",
+      "quarter": "2017-06-30",
+      "members": 429,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2017-07-27",
+      "quarter": "2017-06-30",
+      "members": 440,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2017-07-28",
+      "quarter": "2017-06-30",
+      "members": 447,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2017-07-31",
+      "quarter": "2017-06-30",
+      "members": 444,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2017-08-01",
+      "quarter": "2017-06-30",
+      "members": 445,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2017-08-02",
+      "quarter": "2017-06-30",
+      "members": 446,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2017-08-03",
+      "quarter": "2017-06-30",
+      "members": 444,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2017-08-04",
+      "quarter": "2017-06-30",
+      "members": 449,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2017-08-07",
+      "quarter": "2017-06-30",
+      "members": 454,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-08-08",
+      "quarter": "2017-06-30",
+      "members": 463,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-08-09",
+      "quarter": "2017-06-30",
+      "members": 456,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2017-08-10",
+      "quarter": "2017-06-30",
+      "members": 463,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2017-08-11",
+      "quarter": "2017-06-30",
+      "members": 466,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2017-08-14",
+      "quarter": "2017-06-30",
+      "members": 471,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-10-16",
+      "quarter": "2017-09-30",
+      "members": 483,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-10-17",
+      "quarter": "2017-09-30",
+      "members": 480,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-10-18",
+      "quarter": "2017-09-30",
+      "members": 478,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-10-19",
+      "quarter": "2017-09-30",
+      "members": 474,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2017-10-20",
+      "quarter": "2017-09-30",
+      "members": 472,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2017-10-23",
+      "quarter": "2017-09-30",
+      "members": 470,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2017-10-24",
+      "quarter": "2017-09-30",
+      "members": 464,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2017-10-25",
+      "quarter": "2017-09-30",
+      "members": 461,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2017-10-26",
+      "quarter": "2017-09-30",
+      "members": 469,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2017-10-27",
+      "quarter": "2017-09-30",
+      "members": 472,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2017-10-30",
+      "quarter": "2017-09-30",
+      "members": 477,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2017-10-31",
+      "quarter": "2017-09-30",
+      "members": 485,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2017-11-01",
+      "quarter": "2017-09-30",
+      "members": 491,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2017-11-02",
+      "quarter": "2017-09-30",
+      "members": 492,
+      "qualified": 25,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-11-03",
+      "quarter": "2017-09-30",
+      "members": 495,
+      "qualified": 26,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-11-06",
+      "quarter": "2017-09-30",
+      "members": 504,
+      "qualified": 27,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-11-07",
+      "quarter": "2017-09-30",
+      "members": 503,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2017-11-08",
+      "quarter": "2017-09-30",
+      "members": 501,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2017-11-09",
+      "quarter": "2017-09-30",
+      "members": 503,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2017-11-10",
+      "quarter": "2017-09-30",
+      "members": 512,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2017-11-13",
+      "quarter": "2017-09-30",
+      "members": 513,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2017-11-14",
+      "quarter": "2017-09-30",
+      "members": 512,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-03-01",
+      "quarter": "2017-12-31",
+      "members": 474,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2018-03-02",
+      "quarter": "2017-12-31",
+      "members": 474,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2018-03-05",
+      "quarter": "2017-12-31",
+      "members": 472,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2018-03-06",
+      "quarter": "2017-12-31",
+      "members": 474,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2018-03-07",
+      "quarter": "2017-12-31",
+      "members": 476,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2018-03-08",
+      "quarter": "2017-12-31",
+      "members": 476,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2018-03-09",
+      "quarter": "2017-12-31",
+      "members": 475,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2018-03-12",
+      "quarter": "2017-12-31",
+      "members": 475,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2018-03-13",
+      "quarter": "2017-12-31",
+      "members": 482,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-03-14",
+      "quarter": "2017-12-31",
+      "members": 487,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-03-15",
+      "quarter": "2017-12-31",
+      "members": 470,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2018-03-16",
+      "quarter": "2017-12-31",
+      "members": 473,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-03-19",
+      "quarter": "2017-12-31",
+      "members": 481,
+      "qualified": 25,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-03-20",
+      "quarter": "2017-12-31",
+      "members": 483,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-03-21",
+      "quarter": "2017-12-31",
+      "members": 491,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2018-03-22",
+      "quarter": "2017-12-31",
+      "members": 491,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2018-03-23",
+      "quarter": "2017-12-31",
+      "members": 501,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2018-03-26",
+      "quarter": "2017-12-31",
+      "members": 500,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2018-03-27",
+      "quarter": "2017-12-31",
+      "members": 506,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2018-03-28",
+      "quarter": "2017-12-31",
+      "members": 496,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2018-03-29",
+      "quarter": "2017-12-31",
+      "members": 494,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2018-03-30",
+      "quarter": "2017-12-31",
+      "members": 500,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-03-31",
+      "quarter": "2017-12-31",
+      "members": 495,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-04-02",
+      "quarter": "2017-12-31",
+      "members": 500,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-04-16",
+      "quarter": "2018-03-31",
+      "members": 517,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2018-04-17",
+      "quarter": "2018-03-31",
+      "members": 501,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2018-04-18",
+      "quarter": "2018-03-31",
+      "members": 495,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2018-04-19",
+      "quarter": "2018-03-31",
+      "members": 498,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2018-04-20",
+      "quarter": "2018-03-31",
+      "members": 501,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2018-04-23",
+      "quarter": "2018-03-31",
+      "members": 496,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2018-04-24",
+      "quarter": "2018-03-31",
+      "members": 490,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2018-04-25",
+      "quarter": "2018-03-31",
+      "members": 487,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2018-04-26",
+      "quarter": "2018-03-31",
+      "members": 483,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2018-04-27",
+      "quarter": "2018-03-31",
+      "members": 482,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2018-04-30",
+      "quarter": "2018-03-31",
+      "members": 484,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2018-05-02",
+      "quarter": "2018-03-31",
+      "members": 480,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2018-05-03",
+      "quarter": "2018-03-31",
+      "members": 483,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-05-04",
+      "quarter": "2018-03-31",
+      "members": 471,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-05-07",
+      "quarter": "2018-03-31",
+      "members": 466,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2018-05-08",
+      "quarter": "2018-03-31",
+      "members": 464,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2018-05-09",
+      "quarter": "2018-03-31",
+      "members": 454,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2018-05-10",
+      "quarter": "2018-03-31",
+      "members": 453,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2018-05-11",
+      "quarter": "2018-03-31",
+      "members": 451,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-05-14",
+      "quarter": "2018-03-31",
+      "members": 448,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-05-15",
+      "quarter": "2018-03-31",
+      "members": 442,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-07-16",
+      "quarter": "2018-06-30",
+      "members": 446,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-07-17",
+      "quarter": "2018-06-30",
+      "members": 439,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-07-18",
+      "quarter": "2018-06-30",
+      "members": 440,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2018-07-19",
+      "quarter": "2018-06-30",
+      "members": 435,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2018-07-20",
+      "quarter": "2018-06-30",
+      "members": 431,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2018-07-23",
+      "quarter": "2018-06-30",
+      "members": 430,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2018-07-24",
+      "quarter": "2018-06-30",
+      "members": 426,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2018-07-25",
+      "quarter": "2018-06-30",
+      "members": 425,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2018-07-26",
+      "quarter": "2018-06-30",
+      "members": 426,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2018-07-27",
+      "quarter": "2018-06-30",
+      "members": 421,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2018-07-30",
+      "quarter": "2018-06-30",
+      "members": 421,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2018-07-31",
+      "quarter": "2018-06-30",
+      "members": 418,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2018-08-01",
+      "quarter": "2018-06-30",
+      "members": 419,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2018-08-02",
+      "quarter": "2018-06-30",
+      "members": 414,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2018-08-03",
+      "quarter": "2018-06-30",
+      "members": 415,
+      "qualified": 22,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-08-06",
+      "quarter": "2018-06-30",
+      "members": 414,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2018-08-07",
+      "quarter": "2018-06-30",
+      "members": 412,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2018-08-08",
+      "quarter": "2018-06-30",
+      "members": 416,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2018-08-09",
+      "quarter": "2018-06-30",
+      "members": 418,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2018-08-10",
+      "quarter": "2018-06-30",
+      "members": 415,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2018-08-13",
+      "quarter": "2018-06-30",
+      "members": 422,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-08-14",
+      "quarter": "2018-06-30",
+      "members": 416,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-10-15",
+      "quarter": "2018-09-30",
+      "members": 398,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-10-16",
+      "quarter": "2018-09-30",
+      "members": 392,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-10-17",
+      "quarter": "2018-09-30",
+      "members": 393,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-10-18",
+      "quarter": "2018-09-30",
+      "members": 385,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-10-19",
+      "quarter": "2018-09-30",
+      "members": 383,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2018-10-22",
+      "quarter": "2018-09-30",
+      "members": 384,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2018-10-23",
+      "quarter": "2018-09-30",
+      "members": 382,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2018-10-24",
+      "quarter": "2018-09-30",
+      "members": 380,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2018-10-25",
+      "quarter": "2018-09-30",
+      "members": 384,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2018-10-26",
+      "quarter": "2018-09-30",
+      "members": 383,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2018-10-29",
+      "quarter": "2018-09-30",
+      "members": 382,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2018-10-30",
+      "quarter": "2018-09-30",
+      "members": 381,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2018-10-31",
+      "quarter": "2018-09-30",
+      "members": 381,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2018-11-01",
+      "quarter": "2018-09-30",
+      "members": 378,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2018-11-02",
+      "quarter": "2018-09-30",
+      "members": 382,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2018-11-05",
+      "quarter": "2018-09-30",
+      "members": 371,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-11-06",
+      "quarter": "2018-09-30",
+      "members": 367,
+      "qualified": 27,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-11-07",
+      "quarter": "2018-09-30",
+      "members": 360,
+      "qualified": 23,
+      "names": 20
+    },
+    {
+      "signal_date": "2018-11-08",
+      "quarter": "2018-09-30",
+      "members": 348,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2018-11-09",
+      "quarter": "2018-09-30",
+      "members": 344,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2018-11-12",
+      "quarter": "2018-09-30",
+      "members": 344,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2018-11-13",
+      "quarter": "2018-09-30",
+      "members": 343,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2018-11-14",
+      "quarter": "2018-09-30",
+      "members": 342,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-03-04",
+      "quarter": "2018-12-31",
+      "members": 423,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2019-03-05",
+      "quarter": "2018-12-31",
+      "members": 428,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2019-03-06",
+      "quarter": "2018-12-31",
+      "members": 433,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2019-03-07",
+      "quarter": "2018-12-31",
+      "members": 431,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2019-03-08",
+      "quarter": "2018-12-31",
+      "members": 436,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2019-03-11",
+      "quarter": "2018-12-31",
+      "members": 444,
+      "qualified": 17,
+      "names": 17
+    },
+    {
+      "signal_date": "2019-03-12",
+      "quarter": "2018-12-31",
+      "members": 448,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2019-03-13",
+      "quarter": "2018-12-31",
+      "members": 448,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-03-14",
+      "quarter": "2018-12-31",
+      "members": 452,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-03-15",
+      "quarter": "2018-12-31",
+      "members": 449,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-03-18",
+      "quarter": "2018-12-31",
+      "members": 449,
+      "qualified": 22,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-03-19",
+      "quarter": "2018-12-31",
+      "members": 453,
+      "qualified": 22,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-03-20",
+      "quarter": "2018-12-31",
+      "members": 451,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2019-03-21",
+      "quarter": "2018-12-31",
+      "members": 458,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2019-03-22",
+      "quarter": "2018-12-31",
+      "members": 456,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2019-03-25",
+      "quarter": "2018-12-31",
+      "members": 455,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2019-03-26",
+      "quarter": "2018-12-31",
+      "members": 455,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2019-03-27",
+      "quarter": "2018-12-31",
+      "members": 445,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2019-03-28",
+      "quarter": "2018-12-31",
+      "members": 444,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2019-03-29",
+      "quarter": "2018-12-31",
+      "members": 444,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-04-01",
+      "quarter": "2018-12-31",
+      "members": 449,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-04-15",
+      "quarter": "2019-03-31",
+      "members": 469,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-04-16",
+      "quarter": "2019-03-31",
+      "members": 472,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-04-17",
+      "quarter": "2019-03-31",
+      "members": 475,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-04-18",
+      "quarter": "2019-03-31",
+      "members": 477,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-04-19",
+      "quarter": "2019-03-31",
+      "members": 475,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2019-04-22",
+      "quarter": "2019-03-31",
+      "members": 477,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2019-04-23",
+      "quarter": "2019-03-31",
+      "members": 479,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2019-04-24",
+      "quarter": "2019-03-31",
+      "members": 480,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2019-04-25",
+      "quarter": "2019-03-31",
+      "members": 480,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2019-04-26",
+      "quarter": "2019-03-31",
+      "members": 483,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2019-04-29",
+      "quarter": "2019-03-31",
+      "members": 485,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2019-04-30",
+      "quarter": "2019-03-31",
+      "members": 483,
+      "qualified": 20,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-05-02",
+      "quarter": "2019-03-31",
+      "members": 477,
+      "qualified": 24,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-05-03",
+      "quarter": "2019-03-31",
+      "members": 477,
+      "qualified": 24,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-05-06",
+      "quarter": "2019-03-31",
+      "members": 469,
+      "qualified": 25,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-05-07",
+      "quarter": "2019-03-31",
+      "members": 465,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2019-05-08",
+      "quarter": "2019-03-31",
+      "members": 462,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2019-05-09",
+      "quarter": "2019-03-31",
+      "members": 461,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2019-05-10",
+      "quarter": "2019-03-31",
+      "members": 457,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-05-13",
+      "quarter": "2019-03-31",
+      "members": 457,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-05-14",
+      "quarter": "2019-03-31",
+      "members": 452,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-05-15",
+      "quarter": "2019-03-31",
+      "members": 451,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-07-15",
+      "quarter": "2019-06-30",
+      "members": 385,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-07-16",
+      "quarter": "2019-06-30",
+      "members": 395,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-07-17",
+      "quarter": "2019-06-30",
+      "members": 397,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-07-18",
+      "quarter": "2019-06-30",
+      "members": 402,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-07-19",
+      "quarter": "2019-06-30",
+      "members": 406,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-07-22",
+      "quarter": "2019-06-30",
+      "members": 412,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-07-23",
+      "quarter": "2019-06-30",
+      "members": 418,
+      "qualified": 7,
+      "names": 7
+    },
+    {
+      "signal_date": "2019-07-24",
+      "quarter": "2019-06-30",
+      "members": 425,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2019-07-25",
+      "quarter": "2019-06-30",
+      "members": 427,
+      "qualified": 8,
+      "names": 8
+    },
+    {
+      "signal_date": "2019-07-26",
+      "quarter": "2019-06-30",
+      "members": 433,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2019-07-29",
+      "quarter": "2019-06-30",
+      "members": 440,
+      "qualified": 13,
+      "names": 13
+    },
+    {
+      "signal_date": "2019-07-30",
+      "quarter": "2019-06-30",
+      "members": 443,
+      "qualified": 6,
+      "names": 6
+    },
+    {
+      "signal_date": "2019-07-31",
+      "quarter": "2019-06-30",
+      "members": 445,
+      "qualified": 10,
+      "names": 10
+    },
+    {
+      "signal_date": "2019-08-01",
+      "quarter": "2019-06-30",
+      "members": 446,
+      "qualified": 12,
+      "names": 12
+    },
+    {
+      "signal_date": "2019-08-02",
+      "quarter": "2019-06-30",
+      "members": 443,
+      "qualified": 29,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-08-05",
+      "quarter": "2019-06-30",
+      "members": 443,
+      "qualified": 32,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-08-06",
+      "quarter": "2019-06-30",
+      "members": 451,
+      "qualified": 34,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-08-07",
+      "quarter": "2019-06-30",
+      "members": 440,
+      "qualified": 25,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-08-08",
+      "quarter": "2019-06-30",
+      "members": 436,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2019-08-12",
+      "quarter": "2019-06-30",
+      "members": 436,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-08-13",
+      "quarter": "2019-06-30",
+      "members": 434,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-08-14",
+      "quarter": "2019-06-30",
+      "members": 435,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-10-15",
+      "quarter": "2019-09-30",
+      "members": 412,
+      "qualified": 0,
+      "names": 0
+    },
+    {
+      "signal_date": "2019-10-16",
+      "quarter": "2019-09-30",
+      "members": 414,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-10-17",
+      "quarter": "2019-09-30",
+      "members": 415,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-10-18",
+      "quarter": "2019-09-30",
+      "members": 429,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-10-21",
+      "quarter": "2019-09-30",
+      "members": 431,
+      "qualified": 2,
+      "names": 2
+    },
+    {
+      "signal_date": "2019-10-22",
+      "quarter": "2019-09-30",
+      "members": 438,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2019-10-23",
+      "quarter": "2019-09-30",
+      "members": 440,
+      "qualified": 3,
+      "names": 3
+    },
+    {
+      "signal_date": "2019-10-24",
+      "quarter": "2019-09-30",
+      "members": 439,
+      "qualified": 4,
+      "names": 4
+    },
+    {
+      "signal_date": "2019-10-25",
+      "quarter": "2019-09-30",
+      "members": 438,
+      "qualified": 11,
+      "names": 11
+    },
+    {
+      "signal_date": "2019-10-28",
+      "quarter": "2019-09-30",
+      "members": 438,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2019-10-29",
+      "quarter": "2019-09-30",
+      "members": 436,
+      "qualified": 15,
+      "names": 15
+    },
+    {
+      "signal_date": "2019-10-30",
+      "quarter": "2019-09-30",
+      "members": 432,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2019-10-31",
+      "quarter": "2019-09-30",
+      "members": 437,
+      "qualified": 18,
+      "names": 18
+    },
+    {
+      "signal_date": "2019-11-01",
+      "quarter": "2019-09-30",
+      "members": 440,
+      "qualified": 16,
+      "names": 16
+    },
+    {
+      "signal_date": "2019-11-04",
+      "quarter": "2019-09-30",
+      "members": 436,
+      "qualified": 19,
+      "names": 19
+    },
+    {
+      "signal_date": "2019-11-05",
+      "quarter": "2019-09-30",
+      "members": 439,
+      "qualified": 21,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-11-06",
+      "quarter": "2019-09-30",
+      "members": 444,
+      "qualified": 28,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-11-07",
+      "quarter": "2019-09-30",
+      "members": 441,
+      "qualified": 23,
+      "names": 20
+    },
+    {
+      "signal_date": "2019-11-08",
+      "quarter": "2019-09-30",
+      "members": 442,
+      "qualified": 14,
+      "names": 14
+    },
+    {
+      "signal_date": "2019-11-11",
+      "quarter": "2019-09-30",
+      "members": 441,
+      "qualified": 9,
+      "names": 9
+    },
+    {
+      "signal_date": "2019-11-12",
+      "quarter": "2019-09-30",
+      "members": 436,
+      "qualified": 5,
+      "names": 5
+    },
+    {
+      "signal_date": "2019-11-13",
+      "quarter": "2019-09-30",
+      "members": 440,
+      "qualified": 1,
+      "names": 1
+    },
+    {
+      "signal_date": "2019-11-14",
+      "quarter": "2019-09-30",
+      "members": 439,
+      "qualified": 0,
+      "names": 0
+    }
+  ],
+  "overlap": {
+    "AD1_P1": {
+      "days": 285,
+      "mean": 0.08085987003780713,
+      "years": {
+        "2016": {
+          "days": 56,
+          "mean": 0.11658329998666132
+        },
+        "2017": {
+          "days": 75,
+          "mean": 0.10625851731114888
+        },
+        "2018": {
+          "days": 74,
+          "mean": 0.05517217943688532
+        },
+        "2019": {
+          "days": 80,
+          "mean": 0.055803351060704
+        }
+      }
+    }
+  },
+  "inside": {
+    "names": 4362,
+    "inside": 2606,
+    "share": 0.5974323704722604,
+    "years": {
+      "2014": {
+        "names": 514,
+        "inside": 287,
+        "share": 0.5583657587548638
+      },
+      "2015": {
+        "names": 676,
+        "inside": 444,
+        "share": 0.6568047337278107
+      },
+      "2016": {
+        "names": 706,
+        "inside": 434,
+        "share": 0.6147308781869688
+      },
+      "2017": {
+        "names": 846,
+        "inside": 481,
+        "share": 0.5685579196217494
+      },
+      "2018": {
+        "names": 784,
+        "inside": 483,
+        "share": 0.6160714285714286
+      },
+      "2019": {
+        "names": 836,
+        "inside": 477,
+        "share": 0.5705741626794258
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 1405,
+      "mean": 0.0004506664070540565,
+      "annual": 0.11356793457762224,
+      "t": 4.25425024581922
+    },
+    "taiex": {
+      "days": 1405,
+      "mean": -0.0007173110847714388,
+      "annual": -0.18076239336240257,
+      "t": -3.4255450293028415
+    },
+    "reference": {
+      "days": 1405,
+      "mean": 0.0004334873204944393,
+      "annual": 0.1092388047645987,
+      "t": 4.016848202167215
+    }
+  },
+  "absolute": {
+    "days": 1405,
+    "mean": -0.00047314610855998384
+  },
+  "curves": {
+    "AD1": {
+      "days": 1405,
+      "total": -0.49108894761105304,
+      "annual": -0.11410254275918896,
+      "volatility": 0.061335536578611974,
+      "max_drawdown": -0.491219364897327,
+      "invested": 0.12387354842835836,
+      "turnover": 7.812994534273644
+    },
+    "population": {
+      "days": 1405,
+      "total": -0.7338856734300516,
+      "annual": -0.21135678776574585,
+      "volatility": 0.09475330758861526,
+      "max_drawdown": -0.7353935794860247,
+      "invested": 0.3067804030239402,
+      "turnover": 17.765539718281293
+    },
+    "taiex": {
+      "days": 1405,
+      "total": 0.3454671061411658,
+      "annual": 0.05466516824697898,
+      "volatility": 0.12863272732104777,
+      "max_drawdown": -0.25696873195148584,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 4359,
+    "won": 1518,
+    "rate": 0.34824501032346866,
+    "unsold": 0
+  },
+  "counts": {
+    "AD1": {
+      "bought": 4359,
+      "limit_down": 7,
+      "not_tradable": 2,
+      "sale_held": 3,
+      "limit_up": 1
+    },
+    "population": {
+      "bought": 229861,
+      "limit_up": 164,
+      "limit_down": 275,
+      "sale_held": 163,
+      "not_tradable": 66,
+      "unsold": 63
+    }
+  },
+  "unsold_share": 0.0,
+  "min_t": 2.0
+}
