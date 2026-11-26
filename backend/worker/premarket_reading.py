@@ -376,12 +376,16 @@ def prices_without_levels(
     rejection: ``app.premarket_ai.view`` shows those texts as one fixed line."""
 
     titles = cited_titles(output, payload)
+    # Every input stock's 「<代號> <名稱>」 is no 「<代號> 元」 (#1060 review 1).
+    pairs = [
+        (stock["symbol"], stock.get("name") or "") for stock in payload["candidates"]
+    ]
     found: list[dict[str, Any]] = []
     for item in output["candidates"]:
         if item["symbol"] in with_levels:
             continue
         for index, reason in enumerate(item["reasons"]):
-            prices = price_mentions(reason["text"], titles)
+            prices = price_mentions(reason["text"], titles, pairs)
             if prices:
                 found.append(
                     {
@@ -401,7 +405,7 @@ def prices_without_levels(
                 rf"(?<![0-9A-Za-z]){re.escape(symbol)}(?![0-9A-Za-z])", gap
             )
             if named or (name and name in gap):
-                prices = price_mentions(gap, titles)
+                prices = price_mentions(gap, titles, pairs)
                 if prices:
                     found.append(
                         {

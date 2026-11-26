@@ -4352,14 +4352,14 @@ def test_t30_and_the_readings_check_share_one_price_test(tmp_path):
     # #1058 AC-4: T30 loads backend/worker/price_mentions.py by path, the function the
     # reading's check (premarket_reading.prices_without_levels) calls; same examples, same
     # answers on both sides.
-    from test_premarket_ai import PRICE_EXAMPLES, PRICE_TITLES
+    from test_premarket_ai import PRICE_EXAMPLES, PRICE_NAMES, PRICE_TITLES
     from worker.price_mentions import price_mentions
 
     shared = ROOT / "backend" / "worker" / "price_mentions.py"
     assert Path(page_checks.price_mentions.__code__.co_filename) == shared
     for text, want in PRICE_EXAMPLES:
-        assert page_checks.premarket_prices(text, PRICE_TITLES) == want, text
-        assert price_mentions(text, PRICE_TITLES) == want, text
+        assert page_checks.premarket_prices(text, PRICE_TITLES, PRICE_NAMES) == want
+        assert price_mentions(text, PRICE_TITLES, PRICE_NAMES) == want, text
 
 
 @pytest.mark.parametrize(
@@ -4381,3 +4381,21 @@ def test_t30_uses_the_shared_test_on_a_stock_off_the_list(tmp_path, line, priced
             page_checks.t30(run)
     else:
         page_checks.t30(run)
+
+
+def test_t30_takes_a_stock_named_with_yuan_for_no_price(tmp_path):
+    # #1060 review 1: the line 「2885 元大金 · 暫緩」 has no 「2885 元」.
+    data = _premarket()
+    data["stocks"][1].update(symbol="2885", name="元大金")
+    block = PREMARKET_BLOCK.replace("9204 示範生技 · 暫緩", "2885 元大金 · 暫緩")
+    assert "其他沒有價位" in page_checks.t30(_t30_run(tmp_path, block, data))
+    priced = block.replace("根據缺資料，推論暫緩\n", "元大金 85 元附近\n", 1)
+    with pytest.raises(page_checks.Fail, match="2885 元大金 不在今日名單卻有價位"):
+        page_checks.t30(_t30_run(tmp_path, priced, data))
+
+
+def test_t30_takes_prices_joined_by_a_slash(tmp_path):
+    # #1060 review 2: 「85.30/86.00」 is two prices, not a date.
+    block = PREMARKET_BLOCK.replace("根據缺資料，推論暫緩\n", "支撐 85.30/86.00\n", 1)
+    with pytest.raises(page_checks.Fail, match="9204 示範生技 不在今日名單卻有價位"):
+        page_checks.t30(_t30_run(tmp_path, block))

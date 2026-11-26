@@ -2840,10 +2840,11 @@ price_mentions = _load(
 ).price_mentions
 
 
-def premarket_prices(line: str, titles=()) -> list[str]:
-    """The price wordings of LINE (price_mentions); TITLES are the cited news titles."""
+def premarket_prices(line: str, titles=(), names=()) -> list[str]:
+    """The price wordings of LINE (price_mentions); TITLES are the cited news titles,
+    NAMES the (symbol, name) of the reading's stocks (「8069 元太 · 維持」 has no price)."""
 
-    return price_mentions(line, titles)
+    return price_mentions(line, titles, names)
 
 
 def premarket_section(text: Text) -> tuple[int, int]:
@@ -2939,6 +2940,7 @@ def t30(run: Run) -> str:
         " ".join(part for part in (stock.get("symbol"), stock.get("name")) if part)
         for stock in stocks
     ]
+    pairs = [(stock.get("symbol") or "", stock.get("name") or "") for stock in stocks]
     # premarketAiStockName and the action on one line (PREMARKET_AI_JOIN): 「9101 示範晶圓 · 維持」.
     at = [
         next(
@@ -2971,7 +2973,7 @@ def t30(run: Run) -> str:
                 line
                 for line in block
                 if line not in news
-                and (premarket_prices(line, news) or "規則價位" in line)
+                and (premarket_prices(line, news, pairs) or "規則價位" in line)
             ]
             if priced:
                 problems.append(f"{name} 不在今日名單卻有價位：{priced[0]!r}")

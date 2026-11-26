@@ -1490,15 +1490,33 @@ PRICE_EXAMPLES = [
     ("根據「XX 10 月營收 12.34 億 年增 85.30」，推論營收動能佳。", []),
     ("XX 10 月營收 12.34 億 年增 85.30", []),
     ("根據「沒引用的 85.30」，推論。", ["85.30"]),
+    # #1060 review 1: a stock named 元… is no 「<代號> 元」.
+    ("8069 元太 法人連三買", []),
+    ("2885 元大金 · 維持", []),
+    ("8069元太 名單日沒有日線", []),
+    ("元太 85 元附近", ["85 元"]),
+    # #1060 review 2: a slash between prices is no date.
+    ("支撐 85.30/86.00", ["85.30", "86.00"]),
+    ("壓力 1,050.00/1,100.00", ["1,050.00", "1,100.00"]),
+    ("114/11/26 公布，5/10 日均線上彎", []),
+    # #1060 review suggestions 1–4.
+    ("配息後股價 85.30 元", ["85.30 元"]),
+    ("股利發放後股價 85.30", ["85.30"]),
+    ("收盤 85.30 萬一跌破", ["85.30"]),
+    ("跌破 85.30 股價轉弱", ["85.30"]),
+    ("毛利率提升 2.35 百分點、營收 12.34 百萬元、量比 1.85", []),
+    ("每股淨值 25.30 元、除息 2.5 元", []),
+    ("法人看「85.30」", ["85.30"]),
 ]
 PRICE_TITLES = ["XX 10 月營收 12.34 億 年增 85.30"]
+PRICE_NAMES = [("8069", "元太"), ("2885", "元大金")]
 
 
 @pytest.mark.parametrize("text,want", PRICE_EXAMPLES)
 def test_price_mentions_finds_prices_and_not_percents_amounts_dates_or_titles(
     text, want
 ):
-    assert price_mentions(text, PRICE_TITLES) == want
+    assert price_mentions(text, PRICE_TITLES, PRICE_NAMES) == want
 
 
 def _with_reasons(payload, texts, gaps=()):
@@ -1579,3 +1597,15 @@ def test_a_price_off_the_list_is_stored_done_without_a_retry(db, world):
     assert (outcome.status, outcome.reason) == ("done", None)
     assert len(outcome.attempts) == 1
     assert len(outcome.checks["prices_without_levels"]) == 3
+
+
+def test_a_stock_named_with_yuan_is_no_price_in_a_data_gap(db, world):
+    # #1060 review 1: 「1101 元太」 is the stock, not 「1101 元」.
+    payload = json.loads(json.dumps(snapshot(db).payload))
+    payload["candidates"][2]["name"] = "元太"
+    output = _with_reasons(
+        payload, ["元太 85 元附近有賣壓"], ["1101 元太 名單日沒有日線"]
+    )
+    found = premarket_reading.check(output, payload).checks["prices_without_levels"]
+    assert [item["where"] for item in found] == ["reasons[0]"] * 3
+    assert all(item["prices"] == ["85 元"] for item in found)
