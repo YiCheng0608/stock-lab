@@ -44,6 +44,7 @@ REVISIONS = (
     "0036_theme_heat",
     "0037_theme_clusters",
     "0038_futures_night_bars",
+    "0039_candidate_pool",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]
