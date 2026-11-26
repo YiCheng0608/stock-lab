@@ -22,6 +22,16 @@ commands those tasks ran.
   got D - 2, every 09:30 D - 1); 07:30 and 08:30 are before the 09:00 open, 09:30
   is the insurance. A run after one that stored D - 1 records
   ``already_complete`` and asks nothing.
+- night: Monday to Friday 08:15 (#1040), ``worker.cli job night --trigger scheduler
+  --min-free-memory-gb 1``, which runs ``worker.cli index-bars futures-night``: the TX
+  near-month night session TAIFEX files under the day (one futDataDown request; none
+  on a closed day or when the night is stored). Its own lock ``night.lock``: a us run
+  still going and a preopen waiting for ``news.lock`` do not hold it back. Only
+  between 08:15 and 08:21 (``NIGHT_WINDOW``): a trigger fired later (a host waking
+  up) is skipped (``skipped job=night reason=too_late``), and at start the day's
+  night is caught up only inside the window when it has no ``futures_night_collect``
+  run that is success, already_complete or non_trading_day. Later, only the manual
+  command reads it.
 - preopen: Monday to Friday 08:20 (#755), ``worker.cli preopen --trigger scheduler``:
   the pre-open check of the today list's overnight news (worker.preopen). Not a
   worker.job job: its own lock and log; it waits for a news run still holding
@@ -121,7 +131,26 @@ from . import intraday, job, notify, preopen
 
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
-JOBS = ("daily", "news", "us", "preopen", "notify", "intraday", "watchdog", "monitor")
+JOBS = (
+    "daily",
+    "news",
+    "us",
+    "night",
+    "preopen",
+    "notify",
+    "intraday",
+    "watchdog",
+    "monitor",
+)
+# night (#1040 decision 7188094807): Taipei Monday to Friday 08:15, before the 08:21
+# the pre-market reading needs the night by; never run past 08:21 (only the manual
+# command then). worker.futures_history skips a closed day itself.
+NIGHT_DAYS = "mon-fri"
+NIGHT_WINDOW = ((8, 15), (8, 21))
+# worker.futures_history.NIGHT_RUN_TYPE and NIGHT_COMPLETE_STATUSES (not imported:
+# it loads app and its paths).
+NIGHT_RUN_TYPE = "futures_night_collect"
+NIGHT_COMPLETE_STATUSES = ("success", "already_complete", "non_trading_day")
 # intraday (#801 decision 6906133359): Taipei Monday to Friday 08:59, the run ends itself
 # after the 13:30 round; the job itself skips the days the stored calendar marks closed.
 INTRADAY_DAYS = "mon-fri"
@@ -261,6 +290,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--us-time-limit-minutes", type=float, help="交給 job us（預設 20）"
     )
     parser.add_argument(
+        "--night-min-free-memory-gb",
+        type=float,
+        default=NEWS_MIN_FREE_MEMORY_GB,
+        help=f"交給 job night（預設同 news 的 {NEWS_MIN_FREE_MEMORY_GB:g}）",
+    )
+    parser.add_argument(
+        "--night-time-limit-minutes", type=float, help="交給 job night（預設 5）"
+    )
+    parser.add_argument(
         "--daily-time-limit-minutes",
         type=float,
         default=DAILY_TIME_LIMIT_MINUTES,
@@ -335,6 +373,7 @@ def argument_problem(args: argparse.Namespace) -> str | None:
         "daily_time_limit_minutes",
         "news_time_limit_minutes",
         "us_time_limit_minutes",
+        "night_time_limit_minutes",
     ):
         value = getattr(args, name)
         if value is not None and value <= 0:
@@ -343,10 +382,17 @@ def argument_problem(args: argparse.Namespace) -> str | None:
         "daily_min_free_memory_gb",
         "news_min_free_memory_gb",
         "us_min_free_memory_gb",
+        "night_min_free_memory_gb",
     ):
         if not 0 <= getattr(args, name) <= 1024:
             return f"--{name.replace('_', '-')} must be between 0 and 1024"
     return None
+
+
+def in_night_window(moment: datetime) -> bool:
+    """Whether MOMENT (Taipei) is inside NIGHT_WINDOW, 08:15 to before 08:21."""
+
+    return NIGHT_WINDOW[0] <= (moment.hour, moment.minute) < NIGHT_WINDOW[1]
 
 
 def _news_hour(interval: int) -> str:
@@ -378,6 +424,12 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
             hour=_news_hour(args.news_interval_hours), minute=0, timezone=TAIPEI
         ),
         "us": us[0] if len(us) == 1 else OrTrigger(us),
+        "night": CronTrigger(
+            day_of_week=NIGHT_DAYS,
+            hour=NIGHT_WINDOW[0][0],
+            minute=NIGHT_WINDOW[0][1],
+            timezone=TAIPEI,
+        ),
         "preopen": CronTrigger(
             day_of_week=PREOPEN_DAYS,
             hour=preopen.RUN_TIME[0],
@@ -551,7 +603,7 @@ class Serve:
         limit = getattr(args, f"{name}_time_limit_minutes")
         if limit is not None:
             argv += ["--time-limit-minutes", f"{limit:g}"]
-        if self.offset and name in ("daily", "us"):
+        if self.offset and name in ("daily", "us", "night"):
             argv += ["--date", at.date().isoformat()]
         return argv, environment
 
@@ -587,6 +639,38 @@ class Serve:
         except sqlite3.Error as exc:
             return f"unreadable:{type(exc).__name__}"
         if statuses & set(US_COMPLETE_STATUSES):
+            return None
+        return "not_complete"
+
+    def missed_night(self) -> str | None:
+        """Why serve reads the day's TX night as it starts, or None (#1040).
+
+        Monday to Friday inside NIGHT_WINDOW, when the day has no
+        ``futures_night_collect`` run that is success, already_complete or
+        non_trading_day. Past 08:21 nothing is caught up.
+        """
+
+        now = self.now()
+        if now.weekday() >= 5 or not in_night_window(now):
+            return None
+        db = Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"])
+        if not db.is_file():
+            return None
+        try:
+            uri = db.resolve().as_uri() + "?mode=ro"
+            with sqlite3.connect(uri, uri=True, timeout=30) as conn:
+                statuses = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT status FROM ingestion_runs WHERE run_type = ? "
+                        "AND run_date = ?",
+                        (NIGHT_RUN_TYPE, now.date().isoformat()),
+                    )
+                }
+            conn.close()
+        except sqlite3.Error as exc:
+            return f"unreadable:{type(exc).__name__}"
+        if statuses & set(NIGHT_COMPLETE_STATUSES):
             return None
         return "not_complete"
 
@@ -709,12 +793,13 @@ class Serve:
         )
 
     def catch_up_missed(self, scheduler) -> None:
-        """At start and at the end of maintenance: the day's missing daily, us, preopen,
-        notify and intraday."""
+        """At start and at the end of maintenance: the day's missing daily, us, night,
+        preopen, notify and intraday."""
 
         for name, missed in (
             ("daily", self.missed_daily()),
             ("us", self.missed_us()),
+            ("night", self.missed_night()),
             ("preopen", self.missed_preopen()),
             ("notify", self.missed_notify()),
             ("intraday", self.missed_intraday()),
@@ -776,6 +861,10 @@ class Serve:
         """Run NAME once and wait for it; returns its exit code (None if killed)."""
 
         at = self.now()
+        if name == "night" and not in_night_window(at):
+            # A trigger fired late (misfire grace: the host woke up past 08:21).
+            self.say("skipped", job=name, reason="too_late", at=at.strftime("%H:%M"))
+            return None
         argv, environment = self.command(name, at)
         with self._lock:
             if self._stopping:
