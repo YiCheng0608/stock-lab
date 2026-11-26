@@ -1,0 +1,509 @@
+{
+  "tool": "round19_research",
+  "version": 1,
+  "design": "1047",
+  "registration_commit": "e064372b",
+  "segment": "exploration",
+  "round": 19,
+  "round_size": 2,
+  "cumulative": 68,
+  "validation_min_t": 3.376,
+  "definitions_sha256": "f54483a3ad84d6a3d97215bdfb64834c8b94d175effab458795a49ff3def233e",
+  "engines": {
+    "portfolio_research": "simulate",
+    "explore_research": "simulate_events"
+  },
+  "tool_commit": "ac8873fa3088fcf1c91750b7167e0e1fa78e4e57",
+  "command": "python tools/research/round19_research.py --db /research/stock.db --segment exploration --hypotheses D1,D2 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0033_mainstream_lists",
+    "mtime": "2026-11-21T07:37:26.868391+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "D1",
+    "D2"
+  ],
+  "hypotheses": {
+    "D1": {
+      "engine": "portfolio",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1785,
+      "taiex_excess": {
+        "days": 1785,
+        "mean": -9.79810066823387e-05,
+        "annual": -0.024691213683949356,
+        "t": -0.3891545310291237
+      },
+      "excess": {
+        "days": 1785,
+        "mean": -0.00010107833860974564,
+        "annual": -0.025471741329655902,
+        "t": -0.5607554146621114
+      },
+      "absolute_mean": 0.00017950477786274064,
+      "prerequisites": {
+        "days": 1785,
+        "min_days": 500,
+        "delisted": 96,
+        "ok": true
+      },
+      "overlap_z2": {
+        "days": 1785,
+        "mean": 0.03490196078431373
+      },
+      "overlap_w2": {
+        "days": 1785,
+        "mean": 0.3380112044817927
+      },
+      "overlap_v1": {
+        "days": 1785,
+        "mean": 0.0024089635854341734
+      },
+      "mean_skew_240": {
+        "days": 1785,
+        "mean": 0.4191049677435556
+      },
+      "mean_vol_60": {
+        "days": 1785,
+        "mean": 0.026500880215468044
+      },
+      "mean_reversal_720_240": {
+        "days": 1785,
+        "mean": -0.2777297184859014
+      },
+      "invested": 0.9641088170882074,
+      "unsold_share": 0.04606224019773059,
+      "coverage": {
+        "2012": {
+          "days": 69,
+          "members": 25365,
+          "missing": {
+            "tk_60": 5135,
+            "bar": 5135,
+            "young": 3668
+          },
+          "valued": 20230
+        },
+        "2013": {
+          "days": 246,
+          "members": 114078,
+          "missing": {
+            "tk_60": 25191,
+            "bar": 25191,
+            "young": 17530
+          },
+          "valued": 88887
+        },
+        "2014": {
+          "days": 248,
+          "members": 130171,
+          "missing": {
+            "tk_60": 27378,
+            "bar": 27378,
+            "young": 20187
+          },
+          "valued": 102793
+        },
+        "2015": {
+          "days": 244,
+          "members": 104887,
+          "missing": {
+            "tk_60": 19732,
+            "bar": 19732,
+            "young": 15076
+          },
+          "valued": 85155
+        },
+        "2016": {
+          "days": 244,
+          "members": 94193,
+          "missing": {
+            "tk_60": 16317,
+            "bar": 16317,
+            "young": 12016
+          },
+          "valued": 77876
+        },
+        "2017": {
+          "days": 246,
+          "members": 116000,
+          "missing": {
+            "tk_60": 19191,
+            "bar": 19191,
+            "young": 11241
+          },
+          "valued": 96809
+        },
+        "2018": {
+          "days": 247,
+          "members": 109430,
+          "missing": {
+            "tk_60": 17035,
+            "bar": 17035,
+            "young": 9716
+          },
+          "valued": 92395
+        },
+        "2019": {
+          "days": 241,
+          "members": 100632,
+          "missing": {
+            "tk_60": 15250,
+            "bar": 15250,
+            "young": 8640
+          },
+          "valued": 85382
+        }
+      }
+    },
+    "D2": {
+      "engine": "events",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1168,
+      "taiex_excess": {
+        "days": 1168,
+        "mean": 0.00019076477617614365,
+        "annual": 0.0480727235963882,
+        "t": 0.6877600948689235
+      },
+      "excess": {
+        "days": 1168,
+        "mean": 0.0002318686961891088,
+        "annual": 0.05843091143965542,
+        "t": 1.272374754267808
+      },
+      "absolute_mean": 0.00041733222169579954,
+      "prerequisites": {
+        "days": 1168,
+        "min_days": 500,
+        "delisted": 70,
+        "ok": true
+      },
+      "overlap_x4": {
+        "days": 20,
+        "mean": 0.0825
+      },
+      "overlap_k2": {
+        "days": 20,
+        "mean": 0.12250000000000001
+      },
+      "overlap_p2": {
+        "days": 20,
+        "mean": 0.24500000000000002
+      },
+      "names": 20.0,
+      "hits": 81.4,
+      "invested": 0.9837328767123288,
+      "unsold_share": 0.05,
+      "coverage": {
+        "2015": {
+          "days": 4,
+          "members": 1763,
+          "hits": 360,
+          "not": 1295,
+          "stale": 65,
+          "missing": 43,
+          "delisted": 194,
+          "delisted_missing": 17,
+          "events": [
+            {
+              "signal_date": "2015-03-31",
+              "quarter": "2014-12-31",
+              "members": 473,
+              "hits": 116,
+              "not": 348,
+              "stale": 2,
+              "missing": 7,
+              "names": 20,
+              "delisted": 53,
+              "delisted_missing": 0
+            },
+            {
+              "signal_date": "2015-05-15",
+              "quarter": "2015-03-31",
+              "members": 466,
+              "hits": 108,
+              "not": 331,
+              "stale": 16,
+              "missing": 11,
+              "names": 20,
+              "delisted": 47,
+              "delisted_missing": 2
+            },
+            {
+              "signal_date": "2015-08-14",
+              "quarter": "2015-06-30",
+              "members": 372,
+              "hits": 66,
+              "not": 267,
+              "stale": 31,
+              "missing": 8,
+              "names": 20,
+              "delisted": 45,
+              "delisted_missing": 11
+            },
+            {
+              "signal_date": "2015-11-16",
+              "quarter": "2015-09-30",
+              "members": 452,
+              "hits": 70,
+              "not": 349,
+              "stale": 16,
+              "missing": 17,
+              "names": 20,
+              "delisted": 49,
+              "delisted_missing": 4
+            }
+          ]
+        },
+        "2016": {
+          "days": 4,
+          "members": 1637,
+          "hits": 246,
+          "not": 1288,
+          "stale": 57,
+          "missing": 46,
+          "delisted": 139,
+          "delisted_missing": 11,
+          "events": [
+            {
+              "signal_date": "2016-03-31",
+              "quarter": "2015-12-31",
+              "members": 479,
+              "hits": 54,
+              "not": 408,
+              "stale": 2,
+              "missing": 15,
+              "names": 20,
+              "delisted": 39,
+              "delisted_missing": 1
+            },
+            {
+              "signal_date": "2016-05-16",
+              "quarter": "2016-03-31",
+              "members": 361,
+              "hits": 54,
+              "not": 278,
+              "stale": 15,
+              "missing": 14,
+              "names": 20,
+              "delisted": 31,
+              "delisted_missing": 2
+            },
+            {
+              "signal_date": "2016-08-15",
+              "quarter": "2016-06-30",
+              "members": 461,
+              "hits": 92,
+              "not": 333,
+              "stale": 26,
+              "missing": 10,
+              "names": 20,
+              "delisted": 39,
+              "delisted_missing": 6
+            },
+            {
+              "signal_date": "2016-11-14",
+              "quarter": "2016-09-30",
+              "members": 336,
+              "hits": 46,
+              "not": 269,
+              "stale": 14,
+              "missing": 7,
+              "names": 20,
+              "delisted": 30,
+              "delisted_missing": 2
+            }
+          ]
+        },
+        "2017": {
+          "days": 4,
+          "members": 1912,
+          "hits": 347,
+          "not": 1472,
+          "stale": 64,
+          "missing": 29,
+          "delisted": 171,
+          "delisted_missing": 14,
+          "events": [
+            {
+              "signal_date": "2017-03-31",
+              "quarter": "2016-12-31",
+              "members": 502,
+              "hits": 79,
+              "not": 413,
+              "stale": 2,
+              "missing": 8,
+              "names": 20,
+              "delisted": 39,
+              "delisted_missing": 0
+            },
+            {
+              "signal_date": "2017-05-15",
+              "quarter": "2017-03-31",
+              "members": 427,
+              "hits": 87,
+              "not": 318,
+              "stale": 16,
+              "missing": 6,
+              "names": 20,
+              "delisted": 41,
+              "delisted_missing": 2
+            },
+            {
+              "signal_date": "2017-08-14",
+              "quarter": "2017-06-30",
+              "members": 471,
+              "hits": 77,
+              "not": 357,
+              "stale": 29,
+              "missing": 8,
+              "names": 20,
+              "delisted": 47,
+              "delisted_missing": 8
+            },
+            {
+              "signal_date": "2017-11-14",
+              "quarter": "2017-09-30",
+              "members": 512,
+              "hits": 104,
+              "not": 384,
+              "stale": 17,
+              "missing": 7,
+              "names": 20,
+              "delisted": 44,
+              "delisted_missing": 4
+            }
+          ]
+        },
+        "2018": {
+          "days": 4,
+          "members": 1700,
+          "hits": 349,
+          "not": 1275,
+          "stale": 58,
+          "missing": 18,
+          "delisted": 142,
+          "delisted_missing": 10,
+          "events": [
+            {
+              "signal_date": "2018-04-02",
+              "quarter": "2017-12-31",
+              "members": 500,
+              "hits": 76,
+              "not": 419,
+              "stale": 1,
+              "missing": 4,
+              "names": 20,
+              "delisted": 47,
+              "delisted_missing": 1
+            },
+            {
+              "signal_date": "2018-05-15",
+              "quarter": "2018-03-31",
+              "members": 442,
+              "hits": 101,
+              "not": 320,
+              "stale": 16,
+              "missing": 5,
+              "names": 20,
+              "delisted": 38,
+              "delisted_missing": 2
+            },
+            {
+              "signal_date": "2018-08-14",
+              "quarter": "2018-06-30",
+              "members": 416,
+              "hits": 103,
+              "not": 281,
+              "stale": 26,
+              "missing": 6,
+              "names": 20,
+              "delisted": 33,
+              "delisted_missing": 5
+            },
+            {
+              "signal_date": "2018-11-14",
+              "quarter": "2018-09-30",
+              "members": 342,
+              "hits": 69,
+              "not": 255,
+              "stale": 15,
+              "missing": 3,
+              "names": 20,
+              "delisted": 24,
+              "delisted_missing": 2
+            }
+          ]
+        },
+        "2019": {
+          "days": 4,
+          "members": 1774,
+          "hits": 326,
+          "not": 1348,
+          "stale": 59,
+          "missing": 41,
+          "delisted": 93,
+          "delisted_missing": 11,
+          "events": [
+            {
+              "signal_date": "2019-04-01",
+              "quarter": "2018-12-31",
+              "members": 449,
+              "hits": 85,
+              "not": 354,
+              "stale": 0,
+              "missing": 10,
+              "names": 20,
+              "delisted": 26,
+              "delisted_missing": 1
+            },
+            {
+              "signal_date": "2019-05-15",
+              "quarter": "2019-03-31",
+              "members": 451,
+              "hits": 99,
+              "not": 323,
+              "stale": 16,
+              "missing": 13,
+              "names": 20,
+              "delisted": 23,
+              "delisted_missing": 3
+            },
+            {
+              "signal_date": "2019-08-14",
+              "quarter": "2019-06-30",
+              "members": 435,
+              "hits": 65,
+              "not": 334,
+              "stale": 28,
+              "missing": 8,
+              "names": 20,
+              "delisted": 22,
+              "delisted_missing": 5
+            },
+            {
+              "signal_date": "2019-11-14",
+              "quarter": "2019-09-30",
+              "members": 439,
+              "hits": 77,
+              "not": 337,
+              "stale": 15,
+              "missing": 10,
+              "names": 20,
+              "delisted": 22,
+              "delisted_missing": 2
+            }
+          ]
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 668.4700160690118,
+  "peak_memory_gb": 1.7029266357421875
+}

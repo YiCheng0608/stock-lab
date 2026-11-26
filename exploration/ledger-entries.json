@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "hypothesis": "D1",
+      "tool": "round19_research",
+      "round": 19,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-26T12:41:33+00:00",
+      "report_sha256": "2680fcfbd3232c9d55042e0b066db2a98c7a6f6a75f35fc97b1f69f00f41f8ea",
+      "tool_commit": "ac8873fa3088fcf1c91750b7167e0e1fa78e4e57",
+      "definitions_sha256": "f54483a3ad84d6a3d97215bdfb64834c8b94d175effab458795a49ff3def233e",
+      "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "D2",
+      "tool": "round19_research",
+      "round": 19,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-26T12:41:33+00:00",
+      "report_sha256": "2680fcfbd3232c9d55042e0b066db2a98c7a6f6a75f35fc97b1f69f00f41f8ea",
+      "tool_commit": "ac8873fa3088fcf1c91750b7167e0e1fa78e4e57",
+      "definitions_sha256": "f54483a3ad84d6a3d97215bdfb64834c8b94d175effab458795a49ff3def233e",
+      "verdict": "沒有通過（探索段）"
+    }
+  ]
+}
