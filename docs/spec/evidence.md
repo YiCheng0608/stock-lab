@@ -281,12 +281,12 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 3. 跑 `python tools/research/monthly_review.py --db <副本> --month <上個月 YYYY-MM> --out <目錄> --previous <上月目錄> --min-free-gb 0`。它依序跑 H1（`--window forward`）、`forward_watch.WATCHES` 的每個鍵、候選成績單、特徵證據、候選池的對答案、早盤 AI 判錯清單與早盤 AI 判讀月報，cutoff 是副本裡該月的最後一個交易日。剛複製完時，容器看到的可用記憶體會被頁面快取吃掉（2026-11-14 試跑讀到 0.1 GB，被 `--min-free-gb 2` 擋下）：先在主機確認空閒 ≥ 5 GB，再加 `--min-free-gb 0`，與 #689 相同。耗時與峰值記憶體見[每月檢討](#每月檢討)。exit 1 是有子入口失敗，那段的失敗原因在 `summary.md`，其餘照常貼。
 4. 提案（[#1069](https://github.com/YiCheng0608/stock-lab/issues/1069)，[判錯清單與改版提案](premarket_ai.md#判錯清單與改版提案)）：`<目錄>/premarket_errors/cases.json` 的 `proposal_gate.status` 是 `ok` 才跑，否則 `summary.md`「早盤 AI 判錯清單」段已寫原因（樣本不足、已有 shadow），這一步跳過。在 scheduler 容器跑（容器裡有 `claude` 的登入；agent 不讀、不建、不印認證檔，見 [SETUP](../ops/SETUP.md#容器內的-claude-與-gh-認證env)），避開台北 21:30～23:30、08:00～08:50 與偶數整點前後 10 分鐘（news 與 news_llm）：
    ```bash
-   docker cp <目錄>/premarket_errors/cases.json stock-lab-scheduler-1:/tmp/cases-<YYYYMMDD>.json
+   docker exec -i stock-lab-scheduler-1 sh -c 'cat > /tmp/cases-<YYYYMMDD>.json' < <目錄>/premarket_errors/cases.json
    docker exec stock-lab-scheduler-1 python /app/tools/research/prompt_proposal.py --cases /tmp/cases-<YYYYMMDD>.json --out /tmp/prompt_proposal-<YYYYMMDD>
    docker cp stock-lab-scheduler-1:/tmp/prompt_proposal-<YYYYMMDD> <目錄>/prompt_proposal
    docker exec stock-lab-scheduler-1 rm -r /tmp/cases-<YYYYMMDD>.json /tmp/prompt_proposal-<YYYYMMDD>
    ```
-   輸出只在容器的 `/tmp`，不寫 `/data`、不讀寫 DB。`failed`（逾時、限流等）時可在同一天換個時段手動重跑一次，加 `--attempt 2`、`--out` 用另一個新目錄，`proposal.json` 記第幾次；`rejected` 不重跑，該月就不提案。之後統籌 review `proposal.md`，照[判錯清單與改版提案](premarket_ai.md#判錯清單與改版提案)的「從提案到 shadow」做。
+   `cases.json` 以 `docker exec -i … cat >` 放進去，不用 `docker cp`：`docker cp` 放的檔屬於主機的 uid，容器的 `/tmp` 是 sticky（1777），以 `app` 跑的 `rm` 刪不掉它；正式容器裡也不以 root（`-u 0`）執行命令。輸出只在容器的 `/tmp`，不寫 `/data`、不讀寫 DB。`failed`（逾時、限流等）時可在同一天換個時段手動重跑一次，加 `--attempt 2`、`--out` 用另一個新目錄，`proposal.json` 記第幾次；`rejected` 不重跑，該月就不提案。之後統籌 review `proposal.md`，照[判錯清單與改版提案](premarket_ai.md#判錯清單與改版提案)的「從提案到 shadow」做。
 5. 原始輸出：整個 `<目錄>`（`summary.md`、`review.json`、`logs/`、各子入口的目錄與 `prompt_proposal/`）推 `pr-assets/699` 的 `run-<YYYYMMDD>/`，只推這一處（#1062 決定 [7200751860](https://github.com/YiCheng0608/stock-lab/issues/1062#issuecomment-7200751860)）；H1 在 `run-<YYYYMMDD>/H1/`，前瞻監測對象在 `run-<YYYYMMDD>/<WATCHES 的鍵>/`（兩列 H2、兩列 X4 的代號各自相同，子目錄用鍵分開）。2026-11 以前的輸出在 `pr-assets/691`（H1）與 `pr-assets/868`（前瞻監測對象）。
 6. 在追蹤 Issue「H1 前瞻驗證月報」（[#699](https://github.com/YiCheng0608/stock-lab/issues/699)）留言，H1 與每個對象各一則：
    - **H1**：第一個列對加權指數的超額，再貼判定與 pr-assets 連結（`monthly_review` 的 `summary.md`「H1」段就是這兩行）。滿 250 日的那一則照常寫出判定，標明只當紀錄、不改 H1 成立與否，不另在 #1 回報。

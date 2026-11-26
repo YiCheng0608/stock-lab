@@ -249,6 +249,7 @@ def test_each_failed_check_is_rejected_once(tmp_path, override, reason):
     assert (code, record["status"], record["reason"]) == (1, pp.REJECTED, reason)
     assert len(runner.calls) == 1  # not called again
     assert "```diff" not in md
+    assert record["raw"]["stdout"]  # the answer is kept
 
 
 def test_a_failed_call_is_failed_and_its_rerun_is_attempt_two(tmp_path):

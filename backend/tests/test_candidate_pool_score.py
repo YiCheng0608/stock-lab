@@ -195,11 +195,11 @@ def test_the_returns_and_the_population_are_the_ai_scores_own(copy):
                 [day] = result["horizons"][horizon]["groups"][
                     cps.source_key("rule_signal" if name == "A" else "volume")
                 ]["daily"]
-                if name == "A":
-                    assert day["mean"] == pytest.approx(hold["return"])
-                    assert day["excess"] == pytest.approx(
-                        hold["return"] - population["mean"]
-                    )
+                assert hold["status"] == "comparable"
+                assert day["mean"] == pytest.approx(hold["return"])
+                assert day["excess"] == pytest.approx(
+                    hold["return"] - population["mean"]
+                )
     engine.dispose()
 
 

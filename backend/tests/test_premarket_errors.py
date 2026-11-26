@@ -93,6 +93,7 @@ class Copy:
         sequence=1,
         market_written=True,
         reasons=None,
+        population=POPULATION,
     ):
         """``stocks``: (symbol, action, levels, rows by horizon) each."""
 
@@ -160,7 +161,7 @@ class Copy:
                     score.OVERALL,
                     score.OVERALL,
                     horizon,
-                    {"population": {"mean": POPULATION}},
+                    {"population": {"mean": population}},
                 )
         for position, (symbol, action, level, rows) in enumerate(stocks, start=1):
             stock = PremarketAiStock(
@@ -296,6 +297,59 @@ def test_each_kind_of_miss_on_both_sides_of_its_threshold(copy):
     assert result["found"]["controls"] == 3
 
 
+# 8-place values 3 points apart whose plain difference is 0.02999999999999997
+EDGE_POPULATION = 0.47054417
+EDGE_UP, EDGE_DOWN = 0.50054417, 0.44054417
+
+
+def edge_t5(action, value, day):
+    return {
+        "t5": {
+            "effective_action": action,
+            "open_hold": {
+                "status": "comparable",
+                "return": value,
+                "exit_date": day.isoformat(),
+            },
+        }
+    }
+
+
+def test_exactly_three_points_is_on_the_threshold(copy):
+    assert EDGE_UP - EDGE_POPULATION < pe.ERROR_EXCESS  # the float trap
+    d, out = DAYS[0], DAYS[5]
+    copy.reading(
+        d,
+        population=EDGE_POPULATION,
+        stocks=[
+            ("D1", "defer", None, edge_t5("defer", EDGE_UP, out)),  # rose 3: wrong
+            ("D2", "defer", None, edge_t5("defer", EDGE_DOWN, out)),  # fell 3: right
+            ("K1", "keep", None, edge_t5("keep", EDGE_DOWN, out)),  # fell 3: wrong
+            ("K2", "keep", None, edge_t5("keep", EDGE_UP, out)),  # rose 3: right
+        ],
+    )
+    result = built(copy)
+    day = d.isoformat()
+    assert set(ids(result, "error")) == {f"{day}:D1:defer", f"{day}:K1:no_levels_keep"}
+    assert set(ids(result, "control")) == {
+        f"{day}:D2:defer",
+        f"{day}:K2:no_levels_keep",
+    }
+
+
+@pytest.mark.parametrize(
+    ("days", "errors", "status"),
+    [
+        (14, 10, "insufficient_sample"),
+        (15, 9, "insufficient_sample"),
+        (15, 10, "ok"),
+    ],
+)
+def test_the_gate_on_its_edges(days, errors, status):
+    assert pe.proposal_gate(days, errors, None)["status"] == status
+    assert pe.proposal_gate(days, errors, "premarket_v2")["status"] == "shadow_exists"
+
+
 def test_a_levelled_keep_is_judged_by_its_stop_only(copy):
     # L3's D-open hold is −2 pts against the population (not −3), and L5's −4:
     # with levels only the stop counts, so L5 is not a case either
@@ -391,6 +445,7 @@ def test_a_case_belongs_to_the_month_its_result_came_out(copy, tmp_path):
     december = pe.build(copy.path, MONTH)
     assert "K1" not in " ".join(ids(december))
     assert december["found"]["pending"] == 1
+    assert december["found"]["later_month"] == 0
     # the January copy has the row: January lists it once, December never
     later = Copy(copy.path)
     reading = later.db.query(PremarketAiReading).one()
@@ -411,7 +466,10 @@ def test_a_case_belongs_to_the_month_its_result_came_out(copy, tmp_path):
         stock_id=stock.id,
     )
     later.close()
-    assert "K1" not in " ".join(ids(pe.build(copy.path, MONTH)))
+    again = pe.build(copy.path, MONTH)
+    assert "K1" not in " ".join(ids(again))
+    # written now, its result in January: counted in December as later, not pending
+    assert (again["found"]["pending"], again["found"]["later_month"]) == (0, 1)
     assert ids(pe.build(copy.path, "2027-01"), "error") == [
         f"{last.isoformat()}:K1:no_levels_keep"
     ]

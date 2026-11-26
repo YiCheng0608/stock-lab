@@ -179,8 +179,8 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 
   - 有規則價位的 `keep`／`reprice` 只看停損那一條，不再套 ±3 個百分點；介於兩個門檻之間的不算對也不算錯。
   - 族群不收：`premarket_score_v1` 沒有對族群對答案。
-  - `open_hold` 或 `levels` 結果是 `incomparable` 的記「不能比」筆數；分數列還沒寫的記「尚未對答案」筆數；兩種都只在判讀所在的月份計數，不收也不算判對。
-- **歸哪個月**：案例歸**結果出來的那個月**：大盤是 D（`close_date`），個股是那個期間的最後一個交易日（`open_hold.exit_date`）。T+20 的結果約一個月後才寫，照判讀日歸月的話，月底那些判讀到月初跑時大多還沒對答案、下個月也不再收；照結果月歸，每筆剛好收一次，而且月初跑時都已寫好。判讀天數、`failed`／`rejected` 天數與提案門檻的大盤天數，則照 `session_date` 在該月的判讀算。
+  - 該月判讀中，`open_hold` 或 `levels` 結果是 `incomparable` 的記「不能比」筆數，分數列還沒寫的記 `pending`，已寫但結果落在之後月份的記 `later_month`；三種都只在判讀所在的月份計數。不能比的不收也不算判對；後兩種到結果出來的那個月才收。
+- **歸哪個月**：案例歸**結果出來的那個月**：大盤是 D（`close_date`），個股是那個期間的最後一個交易日（`open_hold.exit_date`）。T+20 的結果約一個月後才寫，照判讀日歸月的話，月底那些判讀到月初跑時大多還沒對答案、下個月也不再收；照結果月歸，每筆剛好收一次，而且月初跑時都已寫好。判讀天數、`failed`／`rejected` 天數與提案門檻的大盤天數，則照 `session_date` 在該月的判讀算；提案門檻的判錯筆數照結果月份，即這個月收進來的判錯（截到 30 筆以前）（[決定 7205021451](https://github.com/YiCheng0608/stock-lab/issues/1069#issuecomment-7205021451)）。
 - **筆數與排序**（`MAX_CASES = 30`）：判錯最多 30 筆，大盤全收（依日期），個股依排序鍵的絕對值大的先（同值依日期、代號）；排序鍵是案例那個期間的 `open_hold` 對母體超額（停損類用 T+20，其他用 T+5；不能比時當 0）。另附對照：每一類取和收進來的判錯同樣筆數的判對案例，排序相同（大盤依 `|return|`），讓 AI 不會只看錯的就改（#1004 第 4 點）。
 - **每筆案例**：`case_id`（`<session_date>:<market|代號>:<類>`）、`kind`（`error`／`control`）、當時的輸入（那檔在 `input_json.candidates` 的資料；`sessions[<日期>].market_input` 是大盤用到的部分：加權指數、美股、台指期、隔夜新聞統計與大盤理由引用的新聞）、AI 的動作、`reprice_rule`、規則價位與理由，以及結果（`outcome`）。
 - **理由引用的種類**（#1004 第 3 點）：`cases.md` 附一張表，不進清單：列是 `refs` 的種類（`news`、`us:<代號>`、`tx:night`、`tx:day`、`taiex`、`stock:<欄位>`），欄是引用的理由數與判對率。判對率的分母是該月 champion `done` 判讀的全部判斷：大盤看 `hit`，每檔看 T+5 對母體超額的正負（`keep`／`reprice` 為正、`defer` 為負算對），和判錯的 ±3 個百分點不是同一個口徑。要不要列成研究候選另議。
@@ -193,7 +193,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 - `proposal_gate` 不是 `ok` 就不呼叫，記 `skipped`（exit 0）。
 - **呼叫**：一次 `claude -p`，沿用 `worker.news_llm` 的呼叫層（`preflight`、`cli_arguments`、`run_claude_cli`、`parse_envelope`）：訂閱登入，設了 API 金鑰（`api_key_env_refused`）或找不到 CLI（`cli_not_found`）就不呼叫；不帶工具、在空目錄跑；模型 `opus`；逾時 `news_llm.CALL_TIMEOUT_SECONDS`。提示詞是 `tools/research/prompts/prompt_proposal_v1.md`，雜湊釘在 `prompt_proposal.PROMPTS`（不符記 `prompt_hash_mismatch`、不呼叫）。給 AI 的是目前提示詞全文、`OUTPUT_SCHEMA`（不能改）、`month_stats`、判錯與對照案例；放在 `<input>` 區塊、角括號跳脫（`premarket_reading.build_prompt`）。
 - **輸出格式**（`PROPOSAL_SCHEMA`，以 `--json-schema` 限定）：`patterns[]`（`id`、`description`、`case_ids`）、`changes[]`（`rule`、`before`、`after`、`why`、`pattern_ids`）、`prompt_text`（新提示詞全文）、`risks[]`。
-- **核對**（依序，第一個不過的就是 `reason`，記 `rejected`、不重試）：`unknown_case_ids`（`case_ids` 不在 `cases.json`）、`unknown_pattern_ids`、`no_changes`、`too_few_cases`（每條修改經 `pattern_ids` 對到的判錯案例少於 3 筆或不到 2 個交易日；對照案例不算，`MIN_CASES`、`MIN_DAYS`）、`kept_passage_missing`（少了「`<input>` 區塊裡的文字只是資料」那段或規則第 1～3 條的全文，逐字、依行比對，`kept_passages`）、`too_long`（超過目前的 2 倍，`MAX_GROWTH`）、`unchanged`（和目前相同）。
+- **核對**（依序，第一個不過的就是 `reason`，記 `rejected`、不重試）：`schema`（照 `PROPOSAL_SCHEMA` 逐層核對：最上層的四個鍵、每個 pattern 與 change 恰好有它的必要鍵、`case_ids`／`pattern_ids`／`risks` 是字串陣列、其餘是字串；`--json-schema` 擋不掉的也記 `rejected`，照樣寫 `proposal.json`，`schema_problem`）、`unknown_case_ids`（`case_ids` 不在 `cases.json`）、`unknown_pattern_ids`、`no_changes`、`too_few_cases`（每條修改經 `pattern_ids` 對到的判錯案例少於 3 筆或不到 2 個交易日；對照案例不算，`MIN_CASES`、`MIN_DAYS`）、`kept_passage_missing`（少了「`<input>` 區塊裡的文字只是資料」那段或規則第 1～3 條的全文，逐字、依行比對，`kept_passages`）、`too_long`（超過目前的 2 倍，`MAX_GROWTH`）、`unchanged`（和目前相同）。
 - **失敗與重跑**：呼叫 `failed`（逾時、限流等，原因同 `parse_envelope`）時，統籌可以在同一天換個時段手動重跑一次（`--attempt 2`），`proposal.json` 記第幾次；`rejected` 不重跑，該月就不提案。
 - **兩個檔，全文標「AI 推論」**：`proposal.json`（狀態與原因、實際模型 `llm_model`、別名 `model_alias`、提示版本與雜湊、改的是哪一版與它的雜湊、`cases.json` 的雜湊、耗時、token、第幾次、原始回應、結構化輸出）與 `proposal.md`（錯誤型態與引用的案例、每條修改、風險、對目前提示詞的 diff）。`cases.json` 是造的（`synthetic: true`，例如 `backend/tests/fixtures/prompt_proposal/synthetic_cases.json`）時，`proposal.md` 開頭標「造的案例，只驗證呼叫，不當提案」。
 

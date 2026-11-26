@@ -137,13 +137,47 @@ def payload(cases: dict[str, Any], current: str) -> dict[str, Any]:
     }
 
 
+def _strings(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def schema_problem(output: Any) -> str | None:
+    """Why ``output`` is not ``PROPOSAL_SCHEMA``'s object, layer by layer (as
+    ``premarket_reading.validate_schema`` checks its own), or None."""
+
+    if not isinstance(output, dict):
+        return "the answer is not an object"
+    if set(output) != set(PROPOSAL_SCHEMA["required"]):
+        return f"keys {sorted(output)} are not {sorted(PROPOSAL_SCHEMA['required'])}"
+    for name in ("patterns", "changes"):
+        if not isinstance(output[name], list):
+            return f"{name} is not an array"
+        spec = PROPOSAL_SCHEMA["properties"][name]["items"]
+        for number, item in enumerate(output[name]):
+            where = f"{name}[{number}]"
+            if not isinstance(item, dict) or set(item) != set(spec["required"]):
+                return f"{where} does not have exactly {spec['required']}"
+            for key, kind in spec["properties"].items():
+                value = item[key]
+                if kind.get("type") == "array" and not _strings(value):
+                    return f"{where}.{key} is not an array of strings"
+                if kind.get("type") == "string" and not isinstance(value, str):
+                    return f"{where}.{key} is not a string"
+    if not isinstance(output["prompt_text"], str):
+        return "prompt_text is not a string"
+    if not _strings(output["risks"]):
+        return "risks is not an array of strings"
+    return None
+
+
 def check(
     output: Any, cases: dict[str, Any], current: str
 ) -> tuple[str | None, str | None]:
     """(reason, detail) of the first check that fails, or (None, None)."""
 
-    if not isinstance(output, dict) or set(output) != set(PROPOSAL_SCHEMA["required"]):
-        return "schema", "the answer is not the proposal schema's object"
+    problem = schema_problem(output)
+    if problem:
+        return "schema", problem
     known = {case["case_id"]: case for case in cases["cases"]}
     patterns = {pattern["id"]: pattern for pattern in output["patterns"]}
     unknown = sorted(

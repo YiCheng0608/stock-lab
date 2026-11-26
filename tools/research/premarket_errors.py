@@ -256,15 +256,21 @@ GATE_TEXT = {
     INSUFFICIENT: "樣本不足，不提案",
     SHADOW_EXISTS: "已有 shadow，不提案",
 }
-PENDING = "pending"  # the row is not written yet: its result is in a later month
+PENDING = "pending"  # the row is not written yet: its result comes later
+LATER = "later_month"  # written, its result falls in a later month: cased then
 INCOMPARABLE = "incomparable"
 
 
 def _excess(hold: dict[str, Any] | None, population: float | None) -> float | None:
-    if not hold or hold.get("status") != "comparable" or population is None:
+    """The hold's return less the population's mean, rounded as the score rows
+    are (``app.premarket_score.difference``): a difference of exactly 3 points
+    is 0.03, not 0.0299999…, so the ±3 points thresholds hold at the edge."""
+
+    from app import premarket_score as score
+
+    if not hold or hold.get("status") != "comparable":
         return None
-    value = hold.get("return")
-    return None if value is None else value - population
+    return score.difference(hold.get("return"), population)
 
 
 def _month(day: str | None) -> str | None:
@@ -594,6 +600,7 @@ def build(db: Path, month: str) -> dict[str, Any]:
             },
             "incomparable": counts[INCOMPARABLE],
             "pending": counts[PENDING],
+            "later_month": counts[LATER],
         },
         "month_stats": {
             "market_d0_days": market_days,
@@ -619,6 +626,11 @@ def _keep(found, counts, judged, reading, stock, month) -> None:
     if verdict is None:
         return
     if _month(judged["result_date"]) != month:
+        if (
+            first_month(reading, month)
+            and (_month(judged["result_date"]) or "") > month
+        ):
+            counts[LATER] += 1
         return
     day = reading["session_date"].isoformat()
     subject = stock["symbol"] if stock else MARKET
@@ -734,8 +746,9 @@ def markdown(result: dict[str, Any], command: str) -> str:
             f"{CATEGORY_TEXT[key]} {value}"
             for key, value in found["by_category"].items()
         )
-        + f"），判對 {found['controls']} 筆；不能比 {found['incomparable']}、"
-        f"尚未對答案 {found['pending']}（本月的判讀，結果在之後的月份）",
+        + f"），判對 {found['controls']} 筆；本月的判讀中不能比 {found['incomparable']}、"
+        f"分數列還沒寫 {found['pending']}、已寫但結果在之後的月份 "
+        f"{found.get('later_month', 0)}（後兩種到結果那個月才收）",
         f"- 大盤 d0 判對率：{lib.pct(stats['market_d0_hit_rate'], 1)}"
         f"（{stats['market_d0_days']} 天）",
         f"- 收進 `cases.json`：判錯最多 {MAX_CASES} 筆（大盤全收，個股依超額絕對值）、"

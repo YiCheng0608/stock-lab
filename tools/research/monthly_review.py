@@ -958,7 +958,7 @@ def markdown(review: dict[str, Any], out: Path) -> str:
         lines += [
             f"- 池的交易日 T：{pool['range'][0]}～{pool['range'][1]}，{pool['pool_days']} 天；"
             f"每日超額對母體（同 `premarket_score_v1`），滿 {pool['min_days']} 日才判；"
-            f"比較 {pool['comparisons']} 組，其中大約 1 組會純屬偶然達標",
+            f"比較 {pool['comparisons']} 組，「通過」與「輸給基準」各大約 1 組會純屬偶然",
             "- AI 組對 `overall` 的 `ai_version.excess`："
             + "；".join(
                 f"T+{h} 比對 {c['compared']} 天、不同 {len(c['differ'])} 天"
