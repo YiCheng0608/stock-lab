@@ -218,7 +218,7 @@ OVERLAP_NOTE = {
     "summary_only": "定義照摘要與索引頁，未讀全文",
     # #1067 決定 7202868880: the coverage's numbers, first among the limits
     "AD1_coverage": "`--coverage-only` 的結果（[#1067 決定 7202868880](https://github.com/YiCheng0608/stock-lab/issues/1067#issuecomment-7202868880)）："
-    "主旨規則每個窗口只收到母體的 8%～19%（年報窗口約 17%～19%，其他三季約 8%～12%）；"
+    "每個窗口有 `ann_date`（主旨規則收到）的檔數占母體的 8.3%～20.2%（年報窗口 16.8%～20.2%，其他三季 8.3%～12.3%），有 `exp_date` 的占 7.7%～19.2%（年報窗口 16.0%～19.2%，其他三季 7.7%～11.8%）；"
     "名單平均 5～13 檔，遠小於母體，窗口內 508 個訊號日有 448 天不足 20 檔、63 天沒有名單，投入比例低，"
     "判讀結果要看實際公告日落在持有期間內的比例與投入比例；登記段「名單接近母體」那一點在這份資料上不成立，"
     "名單遠小於母體（登記段原文照留）；籠統的「董事會重要決議事項」這類主旨只看清單分不出有沒有通過財報，"
@@ -922,7 +922,6 @@ public = ex.public
 threshold = r5.threshold
 _share = r5._share
 PORTFOLIO_TRADE_FIELDS = r5.TRADE_FIELDS
-seconds_lines = r10.seconds_lines
 _yearly_lines = r15._yearly_lines
 _excess_line = r15._excess_line
 
@@ -941,6 +940,32 @@ def _watch_line(min_t: float) -> str:
         f"- 前瞻觀察：超額 > 0 但 t < {threshold(min_t)}（沒有 t 下限），且絕對報酬 > 0；"
         "只當紀錄，不算通過、不進產品"
     )
+
+
+def seconds_lines(body: dict[str, Any]) -> list[str]:
+    """The time of the signal dates (the windows' only, not the equity's
+    sessions) and of the features (PR #1068 review: not round10's, which
+    divides by the equity's sessions)."""
+
+    lines = [
+        "| 代號 | 訊號日（窗口內） | 有淨值的交易日 | 排序與覆蓋（秒） | 特徵計算（秒） "
+        "| 每個訊號日（毫秒） |",
+        "| --- | ---: | ---: | ---: | --- | ---: |",
+    ]
+    for name, row in body["hypotheses"].items():
+        seconds = row.get("seconds") or {}
+        window = row["window"] or {}
+        signals, days = window.get("signal_days", 0), window.get("days", 0)
+        parts = "、".join(
+            f"`{key}` {value:.1f}" for key, value in seconds.items() if key != "plan"
+        )
+        plan = seconds.get("plan", 0.0)
+        per_day = lib.num(plan * 1000 / signals, 1) if signals else "—"
+        lines.append(
+            f"| {name} | {signals:,} | {days:,} | {plan:.1f} | {parts or '—'} "
+            f"| {per_day} |"
+        )
+    return lines
 
 
 def coverage_lines(name: str, coverage: dict[str, Any]) -> list[str]:
@@ -1430,7 +1455,8 @@ def coverage_markdown(body: dict[str, Any]) -> str:
     for name, row in body["hypotheses"].items():
         window = row["window"] or {}
         lines += [
-            f"## {name}（訊號日 {window.get('first_signal', '—')} 起，{window.get('days', 0)} 日）",
+            f"## {name}（訊號日 {window.get('first_signal', '—')} 起，窗口內的訊號日 "
+            f"{window.get('signal_days', 0):,} 日、有淨值的交易日 {window.get('days', 0):,} 日）",
             "",
             *coverage_lines(name, row["coverage"]),
             "",

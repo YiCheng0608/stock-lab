@@ -21,6 +21,7 @@ import sqlite3
 import sys
 import weakref
 from array import array
+from collections import Counter
 from datetime import date, timedelta
 from fractions import Fraction
 from pathlib import Path
@@ -329,7 +330,7 @@ def test_the_docs_tool_section_says_what_the_code_judges():
     assert "t < 3.388（沒有 t 下限）" in section
     # #1067 決定 7202868880: the coverage's numbers lead the limits
     assert tool.LIMITS["AD1"].startswith(tool.OVERLAP_NOTE["AD1_coverage"] + "；")
-    for words in ("8%～19%", "448 天不足 20 檔、63 天沒有名單", "「名單接近母體」那一點在這份資料上不成立",
+    for words in ("8.3%～20.2%", "448 天不足 20 檔、63 天沒有名單", "「名單接近母體」那一點在這份資料上不成立",
                   "董事會重要決議事項", "2013Q2"):  # fmt: skip
         assert words in tool.OVERLAP_NOTE["AD1_coverage"], words
     # the "前瞻觀察" line of the reports, word for word
@@ -824,6 +825,35 @@ def test_the_k5_accounts_hold_cash_between_the_windows_by_hand():
     assert mine.invested[6:] == [0.0] * 6
     assert population.positions[0].cost == pytest.approx(0.2 / 2)
     assert [p.instrument_id for p in reference.positions] == [2, 2]
+
+
+def test_the_reference_does_not_change_the_verdict(monkeypatch):
+    """AD1 第 7 點: the reference is listed only; another reference changes
+    its own excess and nothing the verdict reads."""
+
+    sessions = weekdays(date(2016, 3, 1), 12)
+    prices = {
+        (i, s): (10.0, 10.0 + 0.1 * s * (i % 3))
+        for i in (1, 2, 3)
+        for s in range(1, 12)
+    }
+    monkeypatch.setattr(tool, "segment_window", lambda *a: (1, 11))
+    monkeypatch.setattr(tool, "_prerequisites", lambda *a: True)
+    monkeypatch.setattr(ex, "MIN_SEGMENT_DAYS", {"exploration": 5, "validation": 5})
+    ctx = SimpleNamespace(panel=SimpleNamespace(sessions=sessions, index_close={}, symbols={}),
+                          seconds=Counter(), quote=quote_of(prices), announced=None)  # fmt: skip
+    results = []
+    for reference in ([2], [3]):
+        plan = tool.Plan(picks={1: [1], 2: [1, 2]}, population={1: [1, 2, 3], 2: [1, 2, 3]},
+                         reference={1: reference, 2: reference})  # fmt: skip
+        monkeypatch.setattr(tool, "plan_ad1", lambda *a, plan=plan, **k: plan)
+        results.append(tool.run_portfolio(ctx, Path("unused"), "AD1", "exploration"))
+    first, second = results
+    assert first["verdict"] not in (None, ex.UNDECIDED)
+    assert first["excess"]["reference"] != second["excess"]["reference"]
+    for key in ("verdict", "absolute"):
+        assert first[key] == second[key], key
+    assert first["excess"]["population"] == second["excess"]["population"]
 
 
 # --- the verdicts -----------------------------------------------------------------
@@ -1356,6 +1386,13 @@ def test_coverage_only_computes_no_return(copied, tmp_path):
     )
     assert body["elapsed_seconds"] >= body["load_seconds"] > 0
     assert set(body["load_seconds_parts"]) == {"panel", "statuses"}
+    window = ad1["window"]
+    assert window["signal_days"] == sum(row["days"] for row in years.values())
+    assert window["signal_days"] < window["days"]  # the cash days are not signals
+    lines = tool.seconds_lines(body)
+    assert lines[2].startswith(
+        f"| AD1 | {window['signal_days']:,} | {window['days']:,} |"
+    )
     md = (out / "coverage.md").read_text(encoding="utf-8")
     assert "## 耗時" in md and "峰值記憶體" in md and "每個窗口" in md
     assert "## AD1：符合主旨規則的重大訊息" in md and "不含的 7 個詞各擋掉的則數" in md
