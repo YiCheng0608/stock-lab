@@ -1,0 +1,472 @@
+{
+  "format": 1,
+  "version": 1,
+  "design": "1062",
+  "month": "2026-11",
+  "cutoff": "2026-11-26",
+  "month_complete": false,
+  "copy": {
+    "latest": "2026-11-26",
+    "alembic": "0038_futures_night_bars",
+    "mtime": "2026-11-26T18:40:55.158889+00:00"
+  },
+  "previous": null,
+  "command": "python tools/research/monthly_review.py --db /db/stock.db --month 2026-11 --out /out/review --min-free-gb 0",
+  "tool_commit": "a4ad63705d4a484e7665a62912a732665f82d5c8",
+  "steps": {
+    "H1": {
+      "tool": "portfolio_research",
+      "command": "python tools/research/portfolio_research.py --db /db/stock.db --hypothesis H1 --window forward --out /out/review/H1 --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 7.8,
+      "status": "ok"
+    },
+    "X4": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch X4 --out /out/review/X4 --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 26.6,
+      "status": "ok"
+    },
+    "H2": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch H2 --out /out/review/H2 --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 26.3,
+      "status": "ok"
+    },
+    "H2-product": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch H2-product --out /out/review/H2-product --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 18.8,
+      "status": "ok"
+    },
+    "F2": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch F2 --out /out/review/F2 --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 23.4,
+      "status": "ok"
+    },
+    "P2": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch P2 --out /out/review/P2 --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 19.4,
+      "status": "ok"
+    },
+    "A1": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch A1 --out /out/review/A1 --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 20.8,
+      "status": "ok"
+    },
+    "X4-product": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch X4-product --out /out/review/X4-product --cutoff 2026-11-26 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 18.4,
+      "status": "ok"
+    },
+    "candidate_scorecard": {
+      "tool": "candidate_scorecard",
+      "command": "python tools/research/candidate_scorecard.py --db /db/stock.db --out /out/review/candidate_scorecard --end 2026-11-26",
+      "returncode": 0,
+      "elapsed_seconds": 3.6,
+      "status": "ok"
+    },
+    "feature_evidence": {
+      "tool": "feature_evidence",
+      "command": "python tools/research/feature_evidence.py --db /db/stock.db --out /out/review/feature_evidence --end 2026-11-26",
+      "returncode": 0,
+      "elapsed_seconds": 86.9,
+      "status": "ok"
+    },
+    "premarket_score_report": {
+      "tool": null,
+      "command": "premarket_score_report.render(2026-11)",
+      "status": "failed",
+      "reason": "副本沒有 `premarket_ai_readings` 表（alembic `0038_futures_night_bars`）：建它的 migration 還沒部署到正式 DB",
+      "elapsed_seconds": 1.1
+    }
+  },
+  "failed": [
+    "premarket_score_report"
+  ],
+  "forward": {
+    "H1": {
+      "code": "H1",
+      "kind": "H1 前瞻",
+      "note": "只當紀錄，不改 H1 成立與否（H1 成立以歷史樣本外的判定為準）",
+      "verdict": "樣本不足",
+      "days": 8,
+      "min_days": 250,
+      "excess": {
+        "taiex": {
+          "days": 8,
+          "mean": 0.0062114886212485815,
+          "annual": 1.5652951325546425,
+          "t": 0.47280813702631647
+        },
+        "population": {
+          "days": 8,
+          "mean": 0.0018353107000121383,
+          "annual": 0.46249829640305884,
+          "t": 1.6752108550245481
+        }
+      }
+    },
+    "X4": {
+      "code": "X4",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 4,
+      "min_days": 60,
+      "first_signal": "2026-11-20",
+      "signal_days": 4,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 4,
+          "mean": -0.021437805252925074,
+          "annual": -5.402326923737118,
+          "t": -0.7799375581813793
+        },
+        "population": {
+          "days": 4,
+          "mean": 0.0001745647894537683,
+          "annual": 0.04399032694234961,
+          "t": 1.005934157793386
+        }
+      }
+    },
+    "H2": {
+      "code": "H2",
+      "kind": "通過驗證",
+      "note": "通過驗證、待使用者決定進不進產品的策略：只當紀錄，不判下架；判到「輸給基準」時由統籌在 #1 的進產品提案補一則（是事實，不是下架提案），其餘判定只記錄",
+      "verdict": "樣本不足",
+      "days": 4,
+      "min_days": 60,
+      "first_signal": "2026-11-20",
+      "signal_days": 4,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 4,
+          "mean": -0.022228911180208005,
+          "annual": -5.601685617412417,
+          "t": -0.7984101272270975
+        },
+        "population": {
+          "days": 4,
+          "mean": -0.000616541137829163,
+          "annual": -0.15536836673294907,
+          "t": -0.9223376163396452
+        }
+      }
+    },
+    "H2-product": {
+      "code": "H2",
+      "kind": "已進產品",
+      "note": "已進產品的策略：滿 60 日起每月判一次，判到「輸給基準」由統籌在 #1 提案下架；其餘判定只列出",
+      "verdict": "樣本不足",
+      "days": 3,
+      "min_days": 60,
+      "first_signal": "2026-11-23",
+      "signal_days": 3,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 3,
+          "mean": -0.02248045727139414,
+          "annual": -5.665075232391323,
+          "t": -0.5664235491185893
+        },
+        "population": {
+          "days": 3,
+          "mean": -0.0002373558659667004,
+          "annual": -0.0598136782236085,
+          "t": -0.47012676072545134
+        }
+      }
+    },
+    "F2": {
+      "code": "F2",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 3,
+      "min_days": 60,
+      "first_signal": null,
+      "signal_days": 3,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 3,
+          "mean": -0.022314039094878686,
+          "annual": -5.623137851909429,
+          "t": -0.5599854039806119
+        },
+        "population": {
+          "days": 3,
+          "mean": -7.09376894512485e-05,
+          "annual": -0.01787629774171462,
+          "t": -0.10866892228102822
+        }
+      }
+    },
+    "P2": {
+      "code": "P2",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 0,
+      "min_days": 60,
+      "first_signal": null,
+      "signal_days": 0,
+      "next_deadline": "2027-03-31",
+      "excess": {
+        "taiex": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        },
+        "population": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        }
+      }
+    },
+    "A1": {
+      "code": "A1",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 0,
+      "min_days": 60,
+      "first_signal": null,
+      "signal_days": 0,
+      "next_deadline": "2027-03-31",
+      "excess": {
+        "taiex": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        },
+        "population": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        }
+      }
+    },
+    "X4-product": {
+      "code": "X4",
+      "kind": "已進產品",
+      "note": "已進產品的策略：滿 60 日起每月判一次，判到「輸給基準」由統籌在 #1 提案下架；其餘判定只列出",
+      "verdict": "樣本不足",
+      "days": 2,
+      "min_days": 60,
+      "first_signal": "2026-11-24",
+      "signal_days": 2,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 2,
+          "mean": 0.01199815059906606,
+          "annual": 3.023533950964647,
+          "t": 0.3365088896350973
+        },
+        "population": {
+          "days": 2,
+          "mean": 0.0002445969923476343,
+          "annual": 0.06163844207160385,
+          "t": 1.7459299565667856
+        }
+      }
+    }
+  },
+  "scorecard": {
+    "range": [
+      "2026-10-19",
+      "2026-11-26"
+    ],
+    "candidates": 332,
+    "last_session": "2026-11-26",
+    "horizons": {
+      "5": {
+        "candidates": 332,
+        "comparable": 321,
+        "pending": 10,
+        "days": 21,
+        "mean": 0.019692477570922323,
+        "t": 1.007187223014288,
+        "verdict": "樣本不足"
+      },
+      "20": {
+        "candidates": 332,
+        "comparable": 136,
+        "pending": 192,
+        "days": 7,
+        "mean": 0.09970900807222781,
+        "t": null,
+        "verdict": "樣本不足"
+      }
+    }
+  },
+  "features": {
+    "version": 2,
+    "range": [
+      "2024-09-30",
+      "2026-11-26"
+    ],
+    "verdicts": {
+      "features": {
+        "momentum_20": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "momentum_60": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "momentum_120": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "high_gap_60": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "high_gap_240": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "volume_ratio": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "institutional_flow_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "institutional_flow_20": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "foreign_flow_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "trust_flow_5": {
+          "5": "weak",
+          "20": "not_selected"
+        },
+        "trust_buy_days_5": {
+          "5": "evidence",
+          "20": "not_selected"
+        },
+        "margin_change_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "short_change_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "borrowed_sell_surge": {
+          "5": "cannot_tell",
+          "20": "cannot_tell"
+        },
+        "day_trade_ratio": {
+          "5": "cannot_tell",
+          "20": "cannot_tell"
+        },
+        "revenue_yoy": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "revenue_yoy_change": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "revenue_high_12": {
+          "5": "weak",
+          "20": "not_selected"
+        },
+        "eps_yield": {
+          "5": "evidence",
+          "20": "not_selected"
+        },
+        "eps_growth_yield": {
+          "5": "not_selected",
+          "20": "not_selected"
+        }
+      },
+      "conditions": {
+        "breakout_price": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "breakout_volume": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "breakout_rule": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "pullback_setup": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "institutional_ok": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "margin_ok": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "breakout_confirmed": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "pullback_confirmed": {
+          "5": "not_selected",
+          "20": "not_selected"
+        }
+      }
+    }
+  },
+  "feature_comparison": "沒有上個月可比（沒有 --previous），不列",
+  "feature_changes": [],
+  "lists": {
+    "worse": [
+      {
+        "kind": "note",
+        "name": "feature_evidence",
+        "text": "特徵與條件降級：沒有上個月可比（沒有 --previous），不列",
+        "action": "—"
+      }
+    ],
+    "better": [
+      {
+        "kind": "note",
+        "name": "feature_evidence",
+        "text": "特徵升級：沒有上個月可比（沒有 --previous），不列",
+        "action": "—"
+      }
+    ]
+  },
+  "elapsed_seconds": 253.17324327398092,
+  "peak_memory_gb": 0.6157073974609375
+}

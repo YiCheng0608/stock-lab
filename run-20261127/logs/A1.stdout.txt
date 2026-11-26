@@ -1,0 +1,1 @@
+{"out": "/out/review/A1", "watch": "A1", "days": 0, "min_days": 60, "verdict": "樣本不足", "elapsed_seconds": 19.9}

@@ -1,0 +1,1 @@
+{"out": "/out/review/H2-product", "watch": "H2-product", "days": 3, "min_days": 60, "verdict": "樣本不足", "elapsed_seconds": 17.6}

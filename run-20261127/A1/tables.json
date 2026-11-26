@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "design": "868",
+  "watch": "A1",
+  "kind": "前瞻觀察",
+  "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+  "entry": {
+    "kind": "前瞻觀察",
+    "source": "round17_research",
+    "source_version": 1,
+    "code": "A1",
+    "definitions_sha256": "505666ec2537fdb6b77086ce6b633bd6b58b4a61de8b7aa5f6213ef18d4c95df",
+    "since": "2026-11-24",
+    "min_days": 60,
+    "registered": "https://github.com/YiCheng0608/stock-lab/issues/1011#issuecomment-7113410582"
+  },
+  "definition": {
+    "engine": "events",
+    "direction": "基本面：淨增發",
+    "label": "每季法定期限的事件日，`net_issue`（季報推算的累計加權平均股數，本季對去年同季的對數變化，扣掉期間的配股）小者先取 20 檔",
+    "rule": "quarterly",
+    "keys": [
+      [
+        "net_issue",
+        "low"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": "next_event",
+    "start": [
+      "date",
+      "2014-05-15"
+    ]
+  },
+  "command": "python tools/research/forward_watch.py --db /db/stock.db --watch A1 --out /out/review/A1 --cutoff 2026-11-26 --min-free-gb 0",
+  "tool_commit": "a4ad63705d4a484e7665a62912a732665f82d5c8",
+  "copy": {
+    "latest": "2026-11-26",
+    "alembic": "0038_futures_night_bars",
+    "mtime": "2026-11-26T18:40:55.158889+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "since": "2026-11-24",
+  "cutoff": "2026-11-26",
+  "first_signal": null,
+  "first_session": null,
+  "last_session": null,
+  "signal_days": 0,
+  "days": 0,
+  "min_days": 60,
+  "verdict": "樣本不足",
+  "excess": {
+    "taiex": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    },
+    "population": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    },
+    "reference": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    }
+  },
+  "absolute": {
+    "days": 0,
+    "mean": null
+  },
+  "curves": {
+    "taiex": {
+      "days": 0
+    },
+    "A1": {
+      "days": 0
+    },
+    "population": {
+      "days": 0
+    }
+  },
+  "win": null,
+  "counts": {},
+  "coverage": {},
+  "next_deadline": "2027-03-31",
+  "overlaps": {
+    "A1_X8": {
+      "days": 0,
+      "mean": null,
+      "years": {}
+    }
+  },
+  "rebalances": [],
+  "elapsed_seconds": 19.91144847101532,
+  "peak_memory_gb": 0.31859588623046875
+}

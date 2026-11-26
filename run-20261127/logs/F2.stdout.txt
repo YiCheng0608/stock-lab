@@ -1,0 +1,1 @@
+{"out": "/out/review/F2", "watch": "F2", "days": 3, "min_days": 60, "verdict": "樣本不足", "elapsed_seconds": 22.5}
