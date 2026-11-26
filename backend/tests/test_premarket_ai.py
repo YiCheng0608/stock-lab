@@ -901,6 +901,27 @@ def test_a_reprice_rule_is_stored_on_its_stock_row(db, world):
     assert rows["2412"].reprice_rule_json is None
 
 
+@pytest.mark.parametrize("ref", ["news: 123", "news:1,2", "news:abc"])
+def test_a_malformed_news_ref_is_rejected(db, world, ref):
+    def reply(payload):
+        output = answer(payload)
+        output["candidates"][0]["reasons"][0]["refs"] = [ref]
+        return envelope(output)
+
+    _shot, outcome = read(db, FakeCli(reply))
+    assert (outcome.status, outcome.reason) == ("rejected", "unknown_news_ref")
+    assert ref in outcome.error
+
+
+def test_a_today_list_stock_without_levels_cannot_be_repriced(db, world):
+    shot = snapshot(db)
+    payload = json.loads(json.dumps(shot.payload))
+    payload["candidates"][0]["strategy_levels"] = {"status": "no_levels"}
+    output = answer(payload, actions={"2330": "reprice"})
+    checked = premarket_reading.check(output, payload)
+    assert checked.reason == "reprice_without_levels" and checked.detail == "2330"
+
+
 def test_a_schema_mismatch_is_retried_once_then_rejected(db, world):
     cli = FakeCli(_bad_schema, _bad_schema, valid)
     _shot, outcome = read(db, cli)
@@ -969,6 +990,14 @@ def test_no_retry_starts_without_the_time_for_it(db, world):
         "根據外資賣出 3,000 張，推論籌碼轉弱。",
         "根據法人連三日買進，推論籌碼偏多。",
         "規則價位以開盤價重算後，報酬風險比低於 1.2 時暫緩。",
+        # One-character prefixes that end a word (#1051 review 7194545794, 3).
+        "根據外資率先買進記憶體股的新聞，推論族群偏多。",
+        "根據法人首先賣出權值股，推論賣壓集中。",
+        "根據資金搶先買進題材股，推論短線過熱。",
+        "根據投信優先買進高殖利率股，推論防禦偏好。",
+        "根據外資與投信分別買進與賣出，推論籌碼分歧。",
+        "根據市場反應賣出壓力，推論開盤偏弱。",
+        "根據業者因應賣出潮調整報價，推論影響有限。",
     ],
 )
 def test_rating_quotes_nouns_and_flows_are_not_orders(text):
@@ -1075,6 +1104,87 @@ def test_the_scheduled_run_stores_one_reading_and_logs_it(run_env):
 
 
 @linux_only
+def test_a_running_reading_is_among_the_running_jobs(tmp_path):
+    """Maintenance (MaintenanceHold, status, a deploy) sees a reading in progress."""
+
+    from worker import job as worker_job
+
+    lock = worker_job.FileLock(worker_job.lock_path(tmp_path, premarket_ai.LOCK))
+    assert lock.acquire()
+    try:
+        assert worker_job.running_jobs(tmp_path) == ["premarket_ai"]
+    finally:
+        lock.release()
+    assert worker_job.running_jobs(tmp_path) == []
+
+
+def _no_pending_write(db) -> bool:
+    return not db.connection().connection.dbapi_connection.in_transaction
+
+
+@linux_only
+def test_no_write_is_open_during_the_calls(run_env, monkeypatch, tmp_path):
+    """A retry or a shadow call never holds SQLite's write lock (review 7194545794, 2)."""
+
+    prompts = tmp_path / "prompts"
+    prompts.mkdir()
+    text = premarket_reading.prompt_text("premarket_v1")
+    (prompts / "premarket_v1.md").write_text(text, encoding="utf-8")
+    (prompts / "premarket_v1_test.md").write_text(text + "\n", encoding="utf-8")
+    monkeypatch.setattr(premarket_reading, "PROMPT_DIR", prompts)
+    monkeypatch.setitem(
+        premarket_reading.PROMPTS,
+        "premarket_v1_test",
+        hashlib.sha256((text + "\n").encode("utf-8")).hexdigest(),
+    )
+    monkeypatch.setattr(premarket_reading, "SHADOW_PROMPT_VERSION", "premarket_v1_test")
+    seen = []
+
+    def watching(reply):
+        def call(payload):
+            seen.append(_no_pending_write(run_env.db))
+            return reply(payload) if callable(reply) else reply
+
+        return call
+
+    code, _ = job(run_env, FakeCli(watching(BROKEN), watching(valid), watching(valid)))
+    assert code == 0 and seen == [True, True, True]
+    champion, shadow = _rows(run_env.db)
+    assert champion.attempts == 2 and shadow.status == "done"
+    # The raw rows came with the readings, one per call.
+    ids = [a["raw_payload_id"] for a in champion.attempts_json + shadow.attempts_json]
+    assert len(set(ids)) == 3
+    assert all(run_env.db.get(RawPayload, raw_id) is not None for raw_id in ids)
+    assert run_env.db.get(IngestionRun, champion.ingestion_run_id).status == "success"
+
+
+@linux_only
+def test_maintenance_started_during_the_calls_writes_nothing(run_env):
+    from worker import job as worker_job
+
+    counts = lambda: [  # noqa: E731
+        run_env.db.scalar(select(func.count(model.id)))
+        for model in (PremarketAiReading, PremarketAiStock, IngestionRun, RawPayload)
+    ]
+    before = counts()
+
+    def deploy_starts(payload):
+        worker_job.maintenance_on(run_env.data, "deploy")
+        return valid(payload)
+
+    try:
+        code, _ = job(run_env, FakeCli(deploy_starts))
+    finally:
+        worker_job.maintenance_off(run_env.data, "deploy")
+    assert code == 0
+    assert "--- result status=skipped reason=maintenance after_calls=yes" in _log(
+        run_env
+    )
+    run_env.db.rollback()
+    assert counts() == before
+
+
+@linux_only
 def test_a_rerun_after_done_calls_nothing_and_changes_nothing(run_env):
     job(run_env, FakeCli(valid))
     (first,) = _rows(run_env.db)
@@ -1164,6 +1274,10 @@ def test_a_later_shadow_reads_the_champions_stored_input(
     assert len(cli.prompts) == 1
     _champion, shadow = _rows(run_env.db)
     assert shadow.role == "shadow" and shadow.input_hash == champion.input_hash
+    assert (
+        f"--- stored_input reading_id={champion.id} input_hash={champion.input_hash}"
+        in _log(run_env)
+    )
 
 
 @linux_only

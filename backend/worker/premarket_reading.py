@@ -202,6 +202,34 @@ _RATING_AFTER = re.compile(r"^\s*(?:評等|評級)")
 # ... or a noun (進場區, 進場價).
 _NOUN_AFTER = re.compile(r"^(?:區|價|點)")
 RATING_LOOKBEHIND = 8
+# A one-character prefix that is the end of a word is no order (#1051 review
+# 7194545794, 3): 外資率先買進, 首先賣出, 市場反應賣出壓力.
+COMPOUND_PREFIXES = frozenset(
+    {
+        "率先",
+        "首先",
+        "搶先",
+        "優先",
+        "事先",
+        "預先",
+        "原先",
+        "特別",
+        "分別",
+        "區別",
+        "反應",
+        "回應",
+        "因應",
+        "相應",
+        "對應",
+        "響應",
+        "供應",
+        "效應",
+        "便宜",
+        "認可",
+        "許可",
+        "申請",
+    }
+)
 
 
 def directive_words(texts: Sequence[str]) -> list[str]:
@@ -217,6 +245,10 @@ def directive_words(texts: Sequence[str]) -> list[str]:
             if _RATING_BEFORE.search(before) or _RATING_AFTER.match(after):
                 continue
             if _NOUN_AFTER.match(after):
+                continue
+            if match.start() > 0 and (
+                text[match.start() - 1 : match.start() + 1] in COMPOUND_PREFIXES
+            ):
                 continue
             found.append(text[max(0, match.start() - 6) : match.end() + 6])
     return found
@@ -338,8 +370,13 @@ def check(output: Any, payload: dict[str, Any]) -> Checked:
         "duplicate": duplicate,
     }
     checks["coverage"] = coverage
+    # A today-list stock without a signal has strategy_levels={"status":
+    # "no_levels"}: nothing to reprice either (review 7194545794, suggestion 3).
     with_levels = {
-        item["symbol"] for item in payload["candidates"] if "strategy_levels" in item
+        item["symbol"]
+        for item in payload["candidates"]
+        if "strategy_levels" in item
+        and item["strategy_levels"].get("status") != "no_levels"
     }
     without = sorted(
         item["symbol"]
@@ -353,7 +390,11 @@ def check(output: Any, payload: dict[str, Any]) -> Checked:
             ref
             for reason in _all_reasons(output)
             for ref in reason["refs"]
-            if (match := _NEWS_REF.match(ref)) and int(match.group(1)) not in ids
+            if ref.startswith("news")
+            and (
+                (match := _NEWS_REF.match(ref)) is None
+                or int(match.group(1)) not in ids
+            )
         }
     )
     checks["unknown_news_refs"] = unknown
@@ -434,13 +475,13 @@ def read(
     *,
     deadline: float | None = None,
     clock: Callable[[], float] = time.monotonic,
-    capture: Callable[[dict[str, Any], datetime], int | None] | None = None,
+    capture: Callable[[dict[str, Any], datetime, dict[str, Any]], None] | None = None,
 ) -> Outcome:
     """Call the CLI on SNAPSHOT with VERSION's prompt, at most MAX_ATTEMPTS times.
 
     ``deadline`` (on ``clock``): no call starts when fewer than
-    CALL_TIMEOUT_SECONDS are left before it.  ``capture`` stores an attempt's
-    prompt and response as raw and returns its raw payload id.
+    CALL_TIMEOUT_SECONDS are left before it.  ``capture`` keeps an attempt's
+    prompt and response as raw (``RawCapture``) for the rows written at the end.
     """
 
     template = prompt_text(version)
@@ -480,7 +521,7 @@ def read(
         run_at = utcnow()
         attempt: dict[str, Any] = {"number": number, "duration_ms": duration_ms}
         if capture is not None:
-            attempt["raw_payload_id"] = capture(
+            capture(
                 {
                     "prompt_version": version,
                     "role": role,
@@ -495,6 +536,7 @@ def read(
                     "duration_ms": duration_ms,
                 },
                 run_at,
+                attempt,
             )
         outcome.attempts.append(attempt)
         try:
@@ -530,16 +572,33 @@ def read(
 # --- rows -------------------------------------------------------------------
 
 
-def raw_capture(db: Session, run: IngestionRun):
-    """``capture`` for ``read``: the attempt as a raw payload of RUN."""
+class RawCapture:
+    """``capture`` for ``read``: writes each attempt's raw file at once and keeps it
+    in memory; ``store_rows`` adds the ``raw_payloads`` rows later.
 
-    def capture(payload: dict[str, Any], run_at: datetime) -> int:
+    Nothing is written to the database during the calls (#1051 review 7194545794,
+    1 and 2): a flush there would hold SQLite's write lock through the next call
+    (up to 300 seconds; the other writers give up after 30), and maintenance may
+    start meanwhile.
+    """
+
+    def __init__(self) -> None:
+        self.pending: list[tuple[Any, dict[str, Any]]] = []
+
+    def __call__(
+        self, payload: dict[str, Any], run_at: datetime, attempt: dict[str, Any]
+    ) -> None:
         raw = sources.capture_payload(
             RAW_SOURCE, RAW_ENDPOINT, payload, run_at.isoformat(), collected_at=run_at
         )
-        return _upsert_raw_payload(db, run, raw).id
+        self.pending.append((raw, attempt))
 
-    return capture
+    def store_rows(self, db: Session, run: IngestionRun) -> None:
+        """Add the raw rows of RUN and put their ids on the attempts."""
+
+        for raw, attempt in self.pending:
+            attempt["raw_payload_id"] = _upsert_raw_payload(db, run, raw).id
+        self.pending = []
 
 
 def _stock_row(

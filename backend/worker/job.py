@@ -82,9 +82,9 @@ from typing import BinaryIO, Sequence
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news", "us", "night")
-# The locks of the scheduled runs that write stock.db (``running_jobs``): the jobs here and
-# worker.preopen's (#755), which is not a worker.job job.
-WRITER_LOCKS = (*JOBS, "preopen")
+# The locks of the scheduled runs that write stock.db (``running_jobs``): the jobs here,
+# worker.preopen's (#755) and worker.premarket_ai's (#1041), which are not worker.job jobs.
+WRITER_LOCKS = (*JOBS, "preopen", "premarket_ai")
 TRIGGERS = ("scheduler", "manual", "simulation")
 # daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
 # serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
@@ -217,8 +217,11 @@ def lock_held(path: Path) -> bool:
     and record ``already_running``.  Callers:
 
     - the maintenance checks: serve's lock, and the job locks (``running_jobs``, with
-      preopen's, #755); daily, news and us skip for maintenance before they look at
-      their lock (``_Job._skip_reason``), preopen only after it took its own;
+      preopen's, #755, and premarket_ai's, #1041); daily, news and us skip for
+      maintenance before they look at their lock (``_Job._skip_reason``), preopen and
+      premarket-ai only after they took their own;
+    - ``worker.premarket_ai`` (#1041): ``news.lock`` once, only to log whether a news
+      run was going at 08:21;
     - ``worker.preopen.wait_for_news`` (#755): ``news.lock`` every 10 seconds while a
       news run holds it, up to 10 minutes from 08:20.  A news job starting in the very
       moment of a probe records ``already_running`` and that run is lost; news runs on

@@ -5,7 +5,7 @@
 
 ## 輸入快照
 
-每天一份 JSON，整份存進 `premarket_ai_readings.input_json`（送給模型的就是它）。截止點 `cutoff_taipei` 是 D 08:15。
+每天一份 JSON，整份存進 `premarket_ai_readings.input_json`（送給模型的就是它）。截止點 `cutoff_taipei` 是 D 08:15。截止點管的是 job 自己組進快照的資料（新聞、美股、夜盤、價量籌碼與規則價位）；候選池照它存的那一輪讀，例外見[限制](#限制)。
 
 | 欄位 | 內容 | 時點 |
 | --- | --- | --- |
@@ -60,11 +60,11 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 | `additions_present` | 輸出有 `additions`（#1 決定 7187528140） | 不重試 |
 | `schema` | 不符 schema：缺欄、多欄、型別或列舉值不對、`reprice` 的 `reprice_rule` 不是物件或其他動作的不是 `null` | 重試 1 次 |
 | `coverage` | 少了輸入的股票、多了輸入以外的股票或同一檔出現兩次（`missing`／`extra`／`duplicate`） | 不重試 |
-| `reprice_without_levels` | 沒有 `strategy_levels` 的股票判 `reprice` | 不重試 |
-| `unknown_news_ref` | 引用的 `news:<id>` 不在輸入裡 | 不重試 |
+| `reprice_without_levels` | 沒有可用規則價位的股票判 `reprice`：沒有 `strategy_levels`，或今日名單裡 `strategy_levels.status=no_levels` 的 | 不重試 |
+| `unknown_news_ref` | 引用的 `news:<id>` 不在輸入裡，或 `news` 開頭的引用格式不是 `news:<數字>`（例如 `news: 123`、`news:1,2`） | 不重試 |
 | `directive_words` | 理由或資料缺口有下單指示：「下單」「掛單」，或「買進／買入／賣出／進場／出場」前面緊接「建議、可、宜、應、請、今日、明日、立即、逢低、開盤、分批、考慮、不宜、暫不……」 | 不重試 |
 
-- **不算指令**（#1002 AC-2 2/2 觀察 2）：引述評等（動詞前 8 個字內有「評等、初評、調升、調降、券商、投顧、分析師、目標價……」，或後面接「評等」），以及名詞用法（後面接「區、價、點」，例如「進場區」）。法人「賣出」「連三日買進」這類事實沒有指令前綴，也不算。
+- **不算指令**（#1002 AC-2 2/2 觀察 2）：引述評等（動詞前 8 個字內有「評等、初評、調升、調降、券商、投顧、分析師、目標價……」，或後面接「評等」），以及名詞用法（後面接「區、價、點」，例如「進場區」）。法人「賣出」「連三日買進」這類事實沒有指令前綴，也不算；單字前綴其實是複合詞的尾字時也不算（`COMPOUND_PREFIXES`：率先、首先、搶先、優先、事先、預先、原先、特別、分別、反應、回應、因應、供應……，例如「外資率先買進」「市場反應賣出壓力」）。「今日」「明日」前綴照算：08:21 的「今日」指還沒開盤的那一盤。
 - 另外記、但不判 `rejected`：`unknown_group_ids`（`sectors` 用了 `groups` 以外的 id）、`long_reasons`（超過 120 字的理由數）。
 - **呼叫失敗**記 `failed`：`timeout`、`invalid_json`（不是 CLI 的 JSON）、`cli_error` 重試 1 次；`rate_limited`、`not_logged_in`、`cli_not_started` 不重試（`news_llm.FATAL_REASONS`）；找不到 CLI（`cli_not_found`）、設了 API 金鑰（`api_key_env_refused`）、提示詞與釘住的雜湊不符（`prompt_hash_mismatch`）都不呼叫；剩下的時間不到 CLI 的 300 秒逾時就不再開始新的呼叫（第一次就不夠記 `no_time`，重試不夠記 `checks_json.retry_skipped=no_time`，保留第一次的結果）。
 
@@ -83,3 +83,6 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 - 價量用未調整的收盤：名單日前 20 個交易日內有除權息或減資時，5／20 日報酬與 240 日高點距離會受影響。
 - 只收有時間的新聞；只有日期的公告（`time_precision=date`）不在隔夜新聞裡。
 - 美股以截止點前抓到的為準：07:30 那次沒抓到 D 前一個美股交易日時，輸入是較舊的值並標 `stale`，不等 08:30。
+- **候選池早上那輪不受 08:15 截止**（#1041 決定 [7194510455](https://github.com/YiCheng0608/stock-lab/issues/1041#issuecomment-7194510455)）：`pool_phase=morning` 讀 08:20 preopen 算好的那一輪，它的成員與 `pool_sources` 的值（例如 `news_count`、`directions`）是到 preopen 檢查時點（08:2x）的資料，含 08:15 之後才收進、才判讀的新聞。不另外過濾也不重算：早上那輪一定在 08:15 之後才算好，嚴格照 08:15 切就永遠用不到它；差的只有幾分鐘，都在 09:00 開盤之前。輸入裡每檔自己的 `news` 與 `market_news` 仍照 08:15 截止。
+- **重放過去的日子**（`--dry-run --date`）：只有新聞、新聞的 AI 判讀、美股、夜盤與候選池有用抓取或計算時間限制；今日名單、訊號價位、自選（`is_watchlisted` 是現在的值）、H2 名單、價量籌碼與美股的品質列都讀現在存的值。排程當天 08:21 的判讀不受影響。
+- **寫入**：呼叫期間不寫 DB，呼叫結束、再查一次維護標記之後才在同一個交易裡寫 run、raw、判讀與每檔列；被 serve 的保險時間殺掉或中途例外時，DB 什麼都沒寫（不會留下 `running` 的 run），只有已寫到磁碟的 raw 檔。

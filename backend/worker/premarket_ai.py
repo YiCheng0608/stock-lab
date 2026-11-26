@@ -350,20 +350,12 @@ class _Run:
             )
             self._log_input(fresh)
             command, problem = preflight()
-            run = None
-            capture = None
-            if not self.args.dry_run:
-                run = IngestionRun(
-                    run_type=premarket_reading.RUN_TYPE,
-                    source="claude_cli",
-                    run_date=self.today,
-                    status="running",
-                    data_as_of=fresh.cutoff_at.isoformat(),
-                    metadata_json={},
-                )
-                db.add(run)
-                db.commit()
-                capture = premarket_reading.raw_capture(db, run)
+            # No database write until the calls are over (review 7194545794, 1 and 2):
+            # the raw files are written as they come, their rows with the readings.
+            capture = None if self.args.dry_run else premarket_reading.RawCapture()
+            # Nothing above wrote: end the read transaction so that no snapshot is
+            # held through the calls.
+            db.rollback()
             champion_snapshot = None
             outcomes = []
             for version, role in roles:
@@ -375,6 +367,10 @@ class _Run:
                     )
                     if role == CHAMPION:
                         champion_snapshot = premarket_reading.snapshot_of(db, stored)
+                        self.log(
+                            f"--- stored_input reading_id={stored.id}"
+                            f" input_hash={stored.input_hash}"
+                        )
                     continue
                 snapshot = champion_snapshot or fresh
                 if role == CHAMPION:
@@ -411,11 +407,20 @@ class _Run:
                 # Maintenance may have started during the calls: read it again before
                 # writing (as preopen does).
                 if job.maintenance_state(self.data_dir):
-                    run.status = "failed"
-                    run.error = "maintenance started during the run; nothing stored"
-                    run.finished_at = _utc_naive(datetime.now(job.TAIPEI))
-                    db.commit()
+                    # Nothing is written (the raw files stay on disk, without rows).
+                    db.rollback()
                     return 0, f"status={SKIPPED} reason=maintenance after_calls=yes"
+                run = IngestionRun(
+                    run_type=premarket_reading.RUN_TYPE,
+                    source="claude_cli",
+                    run_date=self.today,
+                    status="running",
+                    data_as_of=fresh.cutoff_at.isoformat(),
+                    metadata_json={},
+                )
+                db.add(run)
+                db.flush()
+                capture.store_rows(db, run)
                 for outcome, snapshot in outcomes:
                     reading = premarket_reading.store(
                         db,
