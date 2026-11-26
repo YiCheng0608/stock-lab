@@ -1013,6 +1013,10 @@ def test_rating_quotes_nouns_and_flows_are_not_orders(text):
         "持有者可出場。",
         "可於開盤掛單。",
         "推論宜逢低買進。",
+        # An order prefix before a compound word (#1051 review 7195500836, 1).
+        "建議優先買進台積電。",
+        "推論應優先賣出。",
+        "可以率先買進。",
     ],
 )
 def test_order_wordings_are_found(text):
@@ -1098,6 +1102,9 @@ def test_the_scheduled_run_stores_one_reading_and_logs_it(run_env):
     assert reading.trigger == "scheduler" and reading.role == "champion"
     run = run_env.db.get(IngestionRun, reading.ingestion_run_id)
     assert run.run_type == "premarket_ai" and run.status == "success"
+    # The run row is written after the calls but keeps the job's start.
+    assert run.started_at <= reading.started_at
+    assert run.finished_at >= reading.finished_at
     raw_id = reading.attempts_json[0]["raw_payload_id"]
     assert run_env.db.get(RawPayload, raw_id).source == "premarket_ai"
     assert premarket_ai.day_done(run_env.logs, D)

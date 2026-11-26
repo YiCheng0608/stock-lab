@@ -267,6 +267,7 @@ class _Run:
         if not self.args.dry_run:
             self.log_dir.mkdir(parents=True, exist_ok=True)
         started = datetime.now(job.TAIPEI)
+        self.started_at = _utc_naive(started)
         self.deadline = self.clock() + TIME_LIMIT_MINUTES * 60
         lock = job.FileLock(job.lock_path(self.data_dir, LOCK))
         locked = True if self.args.dry_run else lock.acquire()
@@ -415,6 +416,9 @@ class _Run:
                     source="claude_cli",
                     run_date=self.today,
                     status="running",
+                    # The job's start, not the write's (review 7195500836, 2): the
+                    # row is only added once the calls are over.
+                    started_at=self.started_at,
                     data_as_of=fresh.cutoff_at.isoformat(),
                     metadata_json={},
                 )

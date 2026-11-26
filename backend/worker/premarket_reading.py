@@ -188,11 +188,14 @@ def build_prompt(template: str, payload: dict[str, Any]) -> str:
 
 _ORDER_VERBS = "買進|買入|賣出|進場|出場"
 # A verb with one of these right before it is an order (#1002 AC-2 2/2, 2).
-_DIRECTIVE = re.compile(
+_ORDER_PREFIXES = (
     r"(?:建議|可以|可|宜|應該|應|請|今日|今天|明日|明天|立即|馬上|逢低|逢高|開盤|分批"
-    r"|擇機|伺機|考慮|適合|不宜|暫不|不要|別|先行|先|直接|積極|準備)\s*"
-    rf"(?:{_ORDER_VERBS})"
+    r"|擇機|伺機|考慮|適合|不宜|暫不|不要|別|先行|先|直接|積極|準備)"
 )
+_DIRECTIVE = re.compile(rf"{_ORDER_PREFIXES}\s*(?:{_ORDER_VERBS})")
+# An order prefix right before a compound word: 建議優先買進 is still an order
+# (#1051 review 7195500836, 1).
+_PREFIX_BEFORE_COMPOUND = re.compile(rf"{_ORDER_PREFIXES}\s*$")
 _ALWAYS = re.compile(r"下單|掛單")
 # Not an order: a rating quote (a broker's 買進 rating) ...
 _RATING_BEFORE = re.compile(
@@ -246,8 +249,10 @@ def directive_words(texts: Sequence[str]) -> list[str]:
                 continue
             if _NOUN_AFTER.match(after):
                 continue
-            if match.start() > 0 and (
-                text[match.start() - 1 : match.start() + 1] in COMPOUND_PREFIXES
+            if (
+                match.start() > 0
+                and text[match.start() - 1 : match.start() + 1] in COMPOUND_PREFIXES
+                and not _PREFIX_BEFORE_COMPOUND.search(text[: match.start() - 1])
             ):
                 continue
             found.append(text[max(0, match.start() - 6) : match.end() + 6])
