@@ -435,6 +435,12 @@ def _comparison(
     return None
 
 
+def _by_horizon(by: dict[str, str]) -> list[tuple[str, str]]:
+    """(horizon, verdict) by the horizon's number: T+5 before T+20."""
+
+    return sorted(by.items(), key=lambda pair: int(pair[0]))
+
+
 def _changes(
     current: dict[str, Any], previous: dict[str, Any], kind: str, keys: list[str]
 ) -> list[tuple[str, str, str, str]]:
@@ -443,12 +449,41 @@ def _changes(
     moved = []
     before = previous["features"]["verdicts"].get(kind, {})
     for key in keys:
-        for horizon, now in sorted(current["verdicts"][kind].get(key, {}).items()):
+        for horizon, now in _by_horizon(current["verdicts"][kind].get(key, {})):
             then = before.get(key, {}).get(horizon)
             if then is None or then == now or UNRANKED in (then, now):
                 continue
             moved.append((key, horizon, then, now))
     return moved
+
+
+NOT_LAST_MONTH = "上個月沒有，不比"
+
+
+def _missing(
+    current: dict[str, Any], previous: dict[str, Any], kind: str, keys: list[str]
+) -> list[tuple[str, str]]:
+    """(key, horizon) this month has and last month had not (a key or a
+    horizon added without a new feature_evidence.VERSION): said, not compared."""
+
+    before = previous["features"]["verdicts"].get(kind, {})
+    return [
+        (key, horizon)
+        for key in keys
+        for horizon, _now in _by_horizon(current["verdicts"][kind].get(key, {}))
+        if before.get(key, {}).get(horizon) is None
+    ]
+
+
+def _missing_items(
+    current: dict[str, Any], previous: dict[str, Any], kind: str, keys: list[str]
+) -> list[dict]:
+    return [
+        _item(
+            "note", f"{key}:T+{horizon}", f"`{key}` T+{horizon}：{NOT_LAST_MONTH}", "—"
+        )
+        for key, horizon in _missing(current, previous, kind, keys)
+    ]
 
 
 def feature_changes(
@@ -463,23 +498,26 @@ def feature_changes(
     before = previous["features"]["verdicts"]
     for kind in ("conditions", "features"):
         for key, by in current["verdicts"][kind].items():
-            for horizon, now in sorted(by.items()):
+            for horizon, now in _by_horizon(by):
                 then = before.get(kind, {}).get(key, {}).get(horizon)
-                if then is not None and then != now:
-                    rows.append(
-                        {
-                            "kind": kind,
-                            "key": key,
-                            "horizon": horizon,
-                            "from": then,
-                            "to": now,
-                            "direction": (
-                                "不排序"
-                                if UNRANKED in (then, now)
-                                else ("升級" if RANKS[now] > RANKS[then] else "降級")
-                            ),
-                        }
-                    )
+                if then is None:
+                    direction = NOT_LAST_MONTH
+                elif then == now:
+                    continue
+                elif UNRANKED in (then, now):
+                    direction = "不排序"
+                else:
+                    direction = "升級" if RANKS[now] > RANKS[then] else "降級"
+                rows.append(
+                    {
+                        "kind": kind,
+                        "key": key,
+                        "horizon": horizon,
+                        "from": then,
+                        "to": now,
+                        "direction": direction,
+                    }
+                )
     return rows
 
 
@@ -495,6 +533,31 @@ def _verdict(code: str) -> str:
     return fe.VERDICTS[code]
 
 
+def _forward_text(fact: dict[str, Any], verdict: str) -> str:
+    """The verdict's numbers on one window: H1's verdict reads its first
+    ``min_days`` sessions (``excess.judged``), so its days are those."""
+
+    e = fact["excess"][POPULATION]
+    days = f"{e['days']} 日"
+    if e["days"] != fact["days"]:
+        days = f"判定窗口 {e['days']} 日（至今 {fact['days']} 日）"
+    return (
+        f"{fact['code']}（{fact['kind']}）判「{verdict}」：對母體超額日均 "
+        f"{lib.pct(e['mean'], 3)}，t {lib.num(e['t'], 2)}，{days}"
+    )
+
+
+def _failed_items(review: dict[str, Any]) -> list[dict]:
+    """H1 or a forward object that failed: in both lists, so a 「（沒有）」
+    never stands for an entry that did not run."""
+
+    return [
+        _item("failed", name, f"{name} 失敗，未判", "看該段的失敗原因")
+        for name in review["failed"]
+        if name in fw.WATCHES or name == H1
+    ]
+
+
 def worse(review: dict[str, Any], previous: dict[str, Any] | None) -> list[dict]:
     """變差: a forward object or H1 judged 輸給基準, the scorecard's list judged
     輸給基準, a live condition's or a product strategy's feature downgraded."""
@@ -506,17 +569,11 @@ def worse(review: dict[str, Any], previous: dict[str, Any] | None) -> list[dict]
                 _item(
                     "forward",
                     name,
-                    f"{fact['code']}（{fact['kind']}）判「輸給基準」：對母體超額日均 "
-                    f"{lib.pct(fact['excess'][POPULATION]['mean'], 3)}，t "
-                    f"{lib.num(fact['excess'][POPULATION]['t'], 2)}，累積 {fact['days']} 日",
+                    _forward_text(fact, LOSING),
                     fact["note"],
                 )
             )
-    for name in review["failed"]:
-        if name in fw.WATCHES or name == H1:
-            items.append(
-                _item("failed", name, f"{name} 失敗，未判", "看該段的失敗原因")
-            )
+    items += _failed_items(review)
     card = review["scorecard"]
     if card is None:
         items.append(
@@ -557,6 +614,7 @@ def worse(review: dict[str, Any], previous: dict[str, Any] | None) -> list[dict]
                     "列出；採不採用由使用者決定（研究規則第 2 條）",
                 )
             )
+        items += _missing_items(current, previous, kind, keys)
     return items
 
 
@@ -575,12 +633,11 @@ def better(
                 _item(
                     "forward",
                     name,
-                    f"{fact['code']}（{fact['kind']}）判「通過」：對母體超額日均 "
-                    f"{lib.pct(fact['excess'][POPULATION]['mean'], 3)}，t "
-                    f"{lib.num(fact['excess'][POPULATION]['t'], 2)}，累積 {fact['days']} 日",
+                    _forward_text(fact, PASSING),
                     "只當紀錄；" + fact["note"],
                 )
             )
+    items += _failed_items(review)
     current = review["features"]
     why = _comparison(current, previous)
     if why:
@@ -601,6 +658,7 @@ def better(
                 "下一輪研究的候選，照探索、驗證兩段做；不直接進策略",
             )
         )
+    items += _missing_items(current, previous, "features", keys)
     return items
 
 
@@ -745,7 +803,8 @@ def markdown(review: dict[str, Any], out: Path) -> str:
                 label = "條件" if row["kind"] == "conditions" else "特徵"
                 lines.append(
                     f"| {label} | `{row['key']}` | T+{row['horizon']} "
-                    f"| {_verdict(row['from'])} | {_verdict(row['to'])} "
+                    f"| {_verdict(row['from']) if row['from'] else '—'} "
+                    f"| {_verdict(row['to'])} "
                     f"| {row['direction']} |"
                 )
         lines += ["", f"- 原始輸出：`{FEATURES}/`", ""]
@@ -896,6 +955,10 @@ def main(
             problems.append(
                 f"--previous 的月份 {previous['month']} 不在 {args.month} 之前"
             )
+    out = Path(args.out)
+    if not problems and out.exists() and any(out.iterdir()):
+        # a failed entry would leave last time's files there, pushed with the rest
+        problems.append(f"--out {out} 不是空的：每次用新的空目錄")
     if problems:
         print(json.dumps({"refused": problems}, ensure_ascii=False))
         return 2

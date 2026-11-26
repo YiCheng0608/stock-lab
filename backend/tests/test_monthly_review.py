@@ -298,6 +298,31 @@ def test_the_review_refuses_a_previous_without_review_json(
     assert "review.json" in capsys.readouterr().out
 
 
+def test_the_review_refuses_a_previous_not_before_the_month(
+    copy_db, tmp_path, monkeypatch, capsys
+):
+    fwt.no_window(monkeypatch)
+    (tmp_path / "last").mkdir()
+    (tmp_path / "last" / "review.json").write_text(
+        json.dumps({"format": mr.REVIEW_FORMAT, "month": MONTH}), encoding="utf-8"
+    )
+    argv = review_argv(copy_db, tmp_path / "out", "--previous", str(tmp_path / "last"))
+    assert mr.main(argv, runner=never) == 2
+    assert f"--previous 的月份 {MONTH} 不在 {MONTH} 之前" in capsys.readouterr().out
+
+
+def test_the_review_refuses_an_out_with_files(copy_db, tmp_path, monkeypatch, capsys):
+    fwt.no_window(monkeypatch)
+    out = tmp_path / "out"
+    (out / "premarket_score_report").mkdir(parents=True)
+    (out / "premarket_score_report" / "report.md").write_text("old", encoding="utf-8")
+    assert mr.main(review_argv(copy_db, out), runner=never) == 2
+    assert "不是空的" in capsys.readouterr().out
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert mr.main(review_argv(copy_db, empty), runner=lambda *a: (1, "", "")) == 1
+
+
 def test_the_review_refuses_a_previous_of_another_format(
     copy_db, tmp_path, monkeypatch, capsys
 ):
@@ -489,8 +514,9 @@ def test_an_upgraded_unused_feature_is_stronger():
     )
     used = {"trust_buy_days_5": ["portfolio_research:H1"]}
     items = mr.better(made_review(features=current), previous, used)
-    assert names(items) == ["short_change_5:T+20", "short_change_5:T+5"]
-    assert "沒有證據 → 方向一致但不顯著" in items[1]["text"]
+    # T+5 before T+20: the horizons by number, not as strings
+    assert names(items) == ["short_change_5:T+5", "short_change_5:T+20"]
+    assert "沒有證據 → 方向一致但不顯著" in items[0]["text"]
 
 
 def test_the_used_features_are_read_from_the_registered_definitions(tmp_path):
@@ -519,15 +545,57 @@ def test_without_a_previous_month_no_feature_is_compared():
     assert mr.feature_changes(current, None) == []
 
 
-def test_a_key_last_month_lacked_is_not_compared():
-    previous = {"features": verdicts(features={"short_change_5": {"5": "weak"}})}
+def test_a_key_last_month_lacked_is_said_not_compared():
+    # a horizon (short_change_5 T+20), a feature and a condition added without
+    # a new feature_evidence.VERSION
+    previous = {
+        "features": verdicts(
+            features={"short_change_5": {"5": "weak"}},
+            conditions={"margin_ok": {"5": "weak"}},
+        )
+    }
     current = verdicts(
-        features={"short_change_5": {"5": "weak", "20": "evidence"}},
-        conditions={"breakout_rule": {"5": "reversed"}},
+        features={
+            "short_change_5": {"5": "weak", "20": "evidence"},
+            "high_gap_240": {"20": "reversed"},
+        },
+        conditions={"margin_ok": {"5": "weak"}, "breakout_rule": {"5": "reversed"}},
     )
     review = made_review(features=current)
-    assert mr.better(review, previous, {}) == []
-    assert mr.worse(review, previous) == []
+    better = mr.better(review, previous, {})
+    # in feature_evidence.FEATURES's order
+    assert [(i["kind"], i["name"]) for i in better] == [
+        ("note", "high_gap_240:T+20"),
+        ("note", "short_change_5:T+20"),
+    ]
+    assert better[1]["text"] == "`short_change_5` T+20：上個月沒有，不比"
+    # worse: the conditions, then the product strategies' features only
+    worse = mr.worse(review, previous)
+    assert [(i["kind"], i["name"]) for i in worse] == [
+        ("note", "breakout_rule:T+5"),
+        ("note", "high_gap_240:T+20"),
+    ]
+    changes = mr.feature_changes(current, previous)
+    assert [(r["key"], r["horizon"], r["direction"]) for r in changes] == [
+        ("breakout_rule", "5", "上個月沒有，不比"),
+        ("short_change_5", "20", "上個月沒有，不比"),
+        ("high_gap_240", "20", "上個月沒有，不比"),
+    ]
+
+
+def test_h1_states_the_judged_window_days():
+    fact = forward_fact("H1", "H1 前瞻", 300, -0.01, -2.5)
+    fact["excess"]["population"] = {"days": 250, "mean": -0.01, "t": -2.5}
+    fact["verdict"] = "輸給基準"
+    item = mr.worse(made_review(forward={"H1": fact}), None)[0]
+    assert item["name"] == "H1"
+    assert "判定窗口 250 日（至今 300 日）" in item["text"]
+
+
+def test_a_failed_forward_entry_is_in_both_lists():
+    review = made_review(failed=["H1", "X4"])
+    assert names(mr.better(review, None, {}), "failed") == ["H1", "X4"]
+    assert names(mr.worse(review, None), "failed") == ["H1", "X4"]
 
 
 def test_another_feature_evidence_version_is_not_compared():
