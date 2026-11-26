@@ -116,6 +116,7 @@ def test_the_round_and_the_thresholds():
     assert (tool.TK_SESSIONS, tool.TK_STEP, tool.TK_SEGMENTS) == (61, 20, 60)
     assert (tool.ALPHA, tool.LAMBDA, tool.GAMMA, tool.DELTA) == (0.88, 2.25, 0.61, 0.69)
     assert (tool.EPS_FIELD, tool.STREAK_QUARTERS, tool.YEAR_LAG) == ("eps", 4, 4)
+    assert tool.EPS_DIGITS == r15.EPS_DIGITS == 6  # #1047 決定 7190372315
     # imported, not rewritten
     assert tool.overlap_share is r10.overlap_share
     assert tool.overlap_summary is r10.overlap_summary
@@ -187,6 +188,8 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "LATEST_RULE", "P2's reading: an EPS null row too"),
         (tool, "LATEST_RULE", "any quarter known"),
         (tool, "STREAK_RULE", "e(q-k) >= e(q-k-4)"),
+        (tool, "STREAK_RULE", "e(q-k) > e(q-k-4), not rounded"),
+        (tool, "EPS_DIGITS", 2),
         (tool, "STREAK_MISSING", "a missing quarter is skipped"),
         (tool, "SINGLE_QUARTER", "the cumulative figures"),
         (features, "VERSION", features.VERSION + 1),
@@ -601,6 +604,21 @@ def test_tk_60_is_missing_on_a_sampling_day_only():
     assert tk({**gap, 60: 0.0}, flat).reason == "bar"
 
 
+def test_tk_60_lists_a_first_bar_after_the_first_sampling_day():
+    """Listed only (PR #1049 review): a missing bar on a sampling day is
+    "young" when the item's first bar is after T − 1200, else a gap."""
+
+    flat = [500.0] * 1201
+    full = sampled([10.0 + (k % 3) for k in range(61)])
+    late = {k: c for k, c in full.items() if k >= 15}
+    got = tk(late, flat)
+    assert (got.value, got.reason, got.young) == (None, "bar", True)
+    gap = {k: c for k, c in full.items() if k != 600}
+    got = tk(gap, flat)
+    assert (got.reason, got.young) == ("bar", False)
+    assert tk(full, flat).young is False
+
+
 def test_the_market_part_is_once_per_t_and_shared():
     index = [1000.0 + (s % 9) for s in range(1201)]
     full = sampled([10.0 + (k % 4) for k in range(61)])
@@ -814,6 +832,34 @@ def test_eps_streak_4_needs_four_strict_year_on_year_rises():
     assert negative.qualifies and all(value < 0 for value in negative.singles)
     falling = {y: [-x for x in vs] for y, vs in SINGLES.items()}
     assert not streak(quarters_of(falling)).qualifies
+
+
+def test_eps_streak_4_rounds_before_it_compares():
+    """#1047 決定 7190372315 (PR #1049 review): two decimals as filed.  2015
+    cumulative Q1 0.30, Q2 1.00; 2016 Q1 0.60, Q2 1.30: both Q2 singles are
+    0.70, but 1.30 − 0.60 is 0.7000000000000001 and 1.00 − 0.30 is 0.7, so
+    without the rounding to 6 decimals the pair would count as a rise.  The
+    other three pairs rise (0.60 > 0.30, 0.60 > 0.10, 0.50 > 0.10)."""
+
+    cumulative = {
+        2014: [0.10, 0.20, 0.30, 0.40],
+        2015: [0.30, 1.00, 1.50, 2.10],
+        2016: [0.60, 1.30],
+    }
+    rows = [
+        (due, end, value)
+        for year, values in cumulative.items()
+        for end, due, value in zip(ENDS(year), DUES(year), values)
+    ]
+    day, quarter = date(2016, 8, 15), date(2016, 6, 30)
+    got = streak(rows, day, quarter)
+    assert got.reason is None and not got.qualifies
+    raw = got.singles
+    assert raw[0] > raw[4]  # the floating remainder the rounding takes away
+    assert [round(v, 6) for v in raw] == [0.7, 0.6, 0.6, 0.5, 0.7, 0.3, 0.1, 0.1]
+    # 2016 Q2 cumulative 1.31: 0.71 > 0.70, all four rise
+    rows = [(a, e, 1.31 if e == quarter else v) for a, e, v in rows]
+    assert streak(rows, day, quarter).qualifies
 
 
 def test_eps_streak_4_is_missing_stale_or_a_quarter_short():
@@ -1573,7 +1619,7 @@ def test_coverage_only_computes_no_return(copied, tmp_path):
     assert year["days"] == 99 and year.get("index_days", 0) == 0
     assert year.get("empty_days", 0) == 0
     # stock 13 lacks session 600: T = 1200, 1220, 1240, 1260, 1280
-    assert year["missing"] == {"tk_60": 5, "bar": 5}
+    assert year["missing"] == {"tk_60": 5, "bar": 5, "young": 0}
     assert year["valued"] == year["members"] - 5
     seconds = {name: set(hyp[name]["seconds"]) for name in NAMES}
     assert {"plan", "tk_60", "z2_order", "w2_order", "v1_order"} <= seconds["D1"]

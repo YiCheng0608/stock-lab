@@ -166,9 +166,14 @@ LATEST_RULE = (
     "with announcement_date <= T and an EPS (the largest period_end) must be the "
     "deadline's quarter"
 )
+# #1047 決定 7190372315: each single quarter rounded to round15_research's
+# EPS_DIGITS before the comparison (as P1, #984 決定 7095896595), so a
+# floating remainder of the cumulative difference is not a rise.
+EPS_DIGITS = r15.EPS_DIGITS
 STREAK_RULE = (
-    "e(q-k) > e(q-k-4) for k = 0 .. 3, all four, strictly; an equal pair fails; "
-    "the sign and size of the EPS not read; not over the price"
+    "round(e(q-k), EPS_DIGITS) > round(e(q-k-4), EPS_DIGITS) for k = 0 .. 3, all "
+    "four, strictly; an equal pair fails; the sign and size of the EPS not read; "
+    "not over the price"
 )
 STREAK_MISSING = (
     "the latest quarter not the deadline's; a single quarter of q .. q-7 missing "
@@ -303,6 +308,7 @@ def definitions() -> dict[str, Any]:
                 "year_lag": YEAR_LAG,
                 "latest": LATEST_RULE,
                 "formula": STREAK_RULE,
+                "digits": EPS_DIGITS,
                 "missing": STREAK_MISSING,
                 # K2's reading of the latest quarter
                 "k2": [r14.VERSION, r14.definitions_sha256()],
@@ -491,6 +497,8 @@ def tk_market(ctx: Context, s: int) -> TkMarket | str:
 class Tk:
     value: float | None
     reason: str | None = None  # "index", "bar", "price" or None
+    # "bar" only, listed in the coverage: the item's first bar is after T − 1200
+    young: bool = False
 
 
 def tk_60(ctx: Context, item: lib.Series, at: int) -> Tk:
@@ -505,7 +513,7 @@ def tk_60(ctx: Context, item: lib.Series, at: int) -> Tk:
     for s in market.samples:
         bar = bisect_left(session, s, 0, at + 1)
         if bar > at or session[bar] != s:
-            return Tk(None, "bar")
+            return Tk(None, "bar", young=session[0] > market.samples[0])
         closes.append(close[bar])
     if not all(value > 0 for value in closes):  # NaN fails too
         return Tk(None, "price")
@@ -544,7 +552,8 @@ def eps_streak_4(item: lib.Series, at: int, quarter: date) -> Streak:
     ]
     if any(value is None for value in singles):
         return Streak(False, "missing")
-    grows = all(singles[k] > singles[k + YEAR_LAG] for k in range(STREAK_QUARTERS))
+    rounded = [round(value, EPS_DIGITS) for value in singles]
+    grows = all(rounded[k] > rounded[k + YEAR_LAG] for k in range(STREAK_QUARTERS))
     return Streak(grows, None, tuple(singles))
 
 
@@ -683,6 +692,7 @@ def plan_d1(
             if got.value is None:
                 missing["tk_60"] += 1
                 missing[got.reason] += 1
+                missing["young"] += got.young
             rows.append((item, k, got, pr.tie_break(day, item.instrument_id)))
         ctx.seconds["tk_60"] += time.perf_counter() - t0
         rows.sort(
@@ -1011,7 +1021,7 @@ def _hold_text(hold: Any) -> str:
     return {"next_event": "持有到下一個事件日"}.get(hold, f"K＝{hold}")
 
 
-COVERAGE_KEYS = ("index", "bar", "price")
+COVERAGE_KEYS = ("index", "bar", "young", "price")
 
 
 def coverage_lines(name: str, coverage: dict[str, Any]) -> list[str]:
@@ -1045,7 +1055,8 @@ def coverage_lines(name: str, coverage: dict[str, Any]) -> list[str]:
             )
         return lines
     head = ["年", "日數", "母體檔次", "有 `tk_60` 的檔次", "缺值", "（加權指數缺值）",
-            "（取樣日沒有日線）", "（收盤缺值或 ≤ 0）", "加權指數缺值的訊號日",
+            "（取樣日沒有日線）", "（其中第一根日線晚於 T−1200）", "（收盤缺值或 ≤ 0）",
+            "加權指數缺值的訊號日",
             "一檔都沒有值的訊號日"]  # fmt: skip
     lines = [
         "| " + " | ".join(head) + " |",
@@ -1403,7 +1414,7 @@ def _overview_line(name: str, row: dict[str, Any], judged: bool) -> str:
 COVERAGE_NOTES = (
     "- 缺值比例的分母是母體檔次（每個訊號日的母體加總）；每個訊號日都數；不跑模擬、不算報酬",
     f"- D1：{DEGENERATE['D1']}。依年一列，缺值的原因依序判（加權指數缺值、取樣日沒有日線、收盤缺值或 ≤ 0），"
-    "每檔只算第一個；「加權指數缺值的訊號日」是那一天母體每一檔都缺值的訊號日數，「一檔都沒有值的訊號日」"
+    "每檔只算第一個；「其中第一根日線晚於 T−1200」是取樣日沒有日線的檔次中，這一檔的第一根日線在 T−1200 之後（上市或研究 DB 的日線晚於第一個取樣日）的檔次，其餘是取樣日剛好沒有日線；「加權指數缺值的訊號日」是那一天母體每一檔都缺值的訊號日數，「一檔都沒有值的訊號日」"
     "是母體有檔、卻沒有一檔有 `tk_60` 的訊號日數；`z2_order`、`w2_order`、`v1_order` 是同一個 T 算 Z2、W2、V1 "
     "名單的時間，`--coverage-only` 不算重疊比例與平均 `skew_240`、`vol_60`、`reversal_720_240`，各段的 `summary.md` 才列",
     f"- D2：{DEGENERATE['D2']}。每個事件日一列，缺值的原因依序判（最新一季、8 季中有單季 EPS 缺），"
