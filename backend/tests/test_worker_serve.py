@@ -141,10 +141,18 @@ class ServeTree(Tree):
     def __init__(self, root: Path) -> None:
         super().__init__(root)
         worker = self.backend / "worker"
-        # serve reads the notify, preopen and intraday logs through worker.notify (#728),
-        # worker.preopen (#755) and worker.intraday (#801, which imports worker.fugle); all
-        # standard library only at the top.
-        for name in ("serve.py", "notify.py", "preopen.py", "intraday.py", "fugle.py"):
+        # serve reads the notify, preopen, premarket-ai and intraday logs through
+        # worker.notify (#728), worker.preopen (#755), worker.premarket_ai (#1041) and
+        # worker.intraday (#801, which imports worker.fugle); all standard library only
+        # at the top.
+        for name in (
+            "serve.py",
+            "notify.py",
+            "preopen.py",
+            "premarket_ai.py",
+            "intraday.py",
+            "fugle.py",
+        ):
             shutil.copyfile(ROOT / "backend" / "worker" / name, worker / name)
         (worker / "cli.py").write_text(SERVE_CLI, encoding="utf-8")
         ops = self.project / "tools" / "ops"
@@ -322,6 +330,7 @@ def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
         "us",
         "night",
         "preopen",
+        "premarket-ai",
         "notify",
         "intraday",
         "watchdog",
@@ -2117,6 +2126,125 @@ def test_the_missed_preopen_check_waits_for_the_end_of_maintenance(tmp_path, cap
     assert "preopen-catchup" not in jobs
     assert " serve catchup_deferred job=preopen reason=not_checked maintenance=on" in (
         capsys.readouterr().out
+    )
+
+
+# premarket-ai (#1041) ---------------------------------------------------------------
+
+
+def test_premarket_ai_fires_monday_to_friday_at_0821_after_preopen_before_notify():
+    triggers = serve.triggers(serve_args())
+    monday = datetime(2026, 11, 16, tzinfo=TAIPEI)
+    week = monday + timedelta(days=7)
+    times = fire_times(triggers["premarket-ai"], monday, week)
+    assert [moment.strftime("%a %H:%M") for moment in times] == [
+        f"{day} 08:21" for day in ("Mon", "Tue", "Wed", "Thu", "Fri")
+    ]
+    for name in ("daily", "news", "us", "night", "preopen", "notify", "watchdog"):
+        other = set(fire_times(triggers[name], monday, week))
+        assert not other & set(times), name
+    for moment in times:
+        night = fire_times(triggers["night"], moment - timedelta(hours=1), moment)
+        preopen_at = fire_times(
+            triggers["preopen"], moment - timedelta(hours=1), moment
+        )
+        assert night and preopen_at
+        assert (moment.hour, moment.minute) < notify.SEND_TIME
+    # The job's limit and serve's backstop end before notify at 08:45.
+    runner = serve.Serve(serve_args())
+    assert runner.backstop("premarket-ai") == (12 + 5) * 60
+
+
+def test_the_premarket_ai_command_has_its_own_log_and_no_job_wrapper(tmp_path):
+    data = tmp_path / "data"
+    runner = serve.Serve(serve_args("--data-dir", str(data)))
+    command, environment = runner.command("premarket-ai", runner.now())
+    assert command == [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-m",
+        "worker.cli",
+        "premarket-ai",
+        "--trigger",
+        "scheduler",
+        "--log-dir",
+        str(data / "logs"),
+        "--min-free-memory-gb",
+        "1",
+    ]
+    assert environment["STOCK_DB_PATH"] == str(data / "stock.db")
+    injected = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(data),
+            "--now",
+            "2026-11-16T08:20:50",
+            "--claude-cli",
+            "/opt/claude",
+        )
+    )
+    argv = injected.command("premarket-ai", injected.now())[0]
+    assert argv[-4:-2] == ["--claude-cli", "/opt/claude"]
+    assert argv[-2] == "--now" and argv[-1].startswith("2026-11-16T08:20:5")
+
+
+def _premarket_log(data: Path, day: str, *results: str) -> None:
+    logs = data / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / f"premarket-ai-{day.replace('-', '')}.log").write_text(
+        "".join(
+            f"===== {day}T08:21:00+08:00 start job=premarket-ai\n--- result {result}\n"
+            f"===== {day}T08:22:01+08:00 end exit=0 seconds=61\n"
+            for result in results
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    "results, now, reason",
+    [
+        ((), f"{MONDAY}T08:25", "not_done"),
+        (("status=failed reason=rate_limited",), f"{MONDAY}T08:30", "not_done"),
+        (("status=rejected reason=coverage",), f"{MONDAY}T08:30", "not_done"),
+        (("status=skipped reason=already_running",), f"{MONDAY}T08:25", "not_done"),
+        (("status=done session_date=2026-11-02",), f"{MONDAY}T08:30", None),
+        (("status=skipped reason=already_done",), f"{MONDAY}T08:30", None),
+        (("status=skipped reason=non_trading_day",), f"{MONDAY}T08:30", None),
+        ((), f"{MONDAY}T08:20", None),
+        # After 08:45 nothing is caught up: the message is out.
+        ((), f"{MONDAY}T08:45", None),
+        ((), f"{SATURDAY}T08:25", None),
+    ],
+)
+def test_serve_runs_the_missed_premarket_ai_reading_only_before_0845(
+    tmp_path, results, now, reason
+):
+    data = tmp_path / "data"
+    _runs_db(data)
+    if results:
+        _premarket_log(data, MONDAY, *results)
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    jobs = {scheduled.id: scheduled for scheduled in runner.scheduler().get_jobs()}
+    assert runner.missed_premarket_ai() == reason
+    if reason is None:
+        assert "premarket-ai-catchup" not in jobs
+    else:
+        assert jobs["premarket-ai-catchup"].args == ("premarket-ai",)
+
+
+def test_the_missed_premarket_ai_reading_waits_for_the_end_of_maintenance(
+    tmp_path, capsys
+):
+    data = tmp_path / "data"
+    _runs_db(data)
+    _maintenance_on(data)
+    runner, scheduler, jobs = _deferred(data, f"{MONDAY}T08:25")
+    assert "premarket-ai-catchup" not in jobs
+    assert (
+        " serve catchup_deferred job=premarket-ai reason=not_done maintenance=on"
+        in capsys.readouterr().out
     )
 
 

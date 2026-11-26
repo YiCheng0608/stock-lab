@@ -2433,6 +2433,12 @@ OMITTED_TABLES: dict[str, str] = {
         "台指期夜盤（#1040）只給早盤判讀讀；五頁的 API 不讀，"
         "由後端 test_futures_night 驗"
     ),
+    "premarket_ai_readings": (
+        "早盤 AI 判讀紀錄（#1041）只給 job 與之後的 Telegram、對答案讀；五頁的 API 不讀，"
+        "由後端 test_premarket_ai 驗"
+    ),
+    "premarket_ai_scores": "同 premarket_ai_readings（對答案表，#1043 寫入）",
+    "premarket_ai_stocks": "同 premarket_ai_readings（每檔判讀）",
     "theme_cluster_members": "同 theme_cluster_runs",
     "theme_cluster_runs": (
         "量價共振分群（#1018）只給候選題材的提案；五頁的 API 不讀，"

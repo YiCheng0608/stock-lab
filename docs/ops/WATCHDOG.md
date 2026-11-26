@@ -47,6 +47,13 @@
   - 已知限制（notify 也一樣）：同一天同一個 key 只留一則，所以 09:15 報了「沒有日誌」之後手動補跑又卡住，不會再報第二則；09:15 那一輪剛好碰上 serve 補跑中的 preopen（最多會等 news 10 分鐘）時，會報一則 `preopen_missing`。
   - 每台北日各最多一則；還沒有任何 `preopen-*.log` 時不判定（#755 部署前的日子）。
   - 處置：查該日誌的 `--- result` 列與 `docker logs`，修好後用 `docker compose -p <P> exec scheduler python -m worker.cli preopen --trigger manual` 補跑（`--trigger manual` 不受 08:20～13:30 的時段限制）；同一份名單已檢查過時會記 `already_checked`，不會重寫。
+- `premarket_ai`（早盤 AI 判讀，[#1041](https://github.com/YiCheng0608/stock-lab/issues/1041)；週一至週五 08:21，只在 08:21～08:45 判讀，上限 12 分鐘加 serve 的第二道防線 5 分鐘，見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve) 的 premarket-ai 一節）：
+  - `premarket_ai_missing`：週一至週五台北 09:15 以後（09:15 那一輪起），當天的 `logs/premarket-ai-YYYYMMDD.log` 不存在（留言寫 scheduler 可能沒在跑），或 `start` 列比 `end` 列多（比法同 `preopen_missing`；留言寫卡住或被 serve 的保險時間結束）。
+  - `premarket_ai_failed`：當天最後一個不是 `skipped` 的 `--- result` 列是 `status=failed`（例如 `reason=rate_limited`、`not_logged_in`、`timeout`）或 `status=rejected`（AI 回應沒過核對，[premarket_ai_v1 核對](../spec/premarket_ai.md#核對)），留言附那一列；當天有 `status=done`（之後手動補跑成功）就不報。
+  - `premarket_ai_missed`：當天的結果只有 skipped，其中有 `skipped reason=too_late`（排程在 08:21～08:45 之外才跑，例如主機 08:21 睡著）。08:45 之後的判讀不補，留言只請查主機與 scheduler。
+  - 不算異常、不留言的 skipped：`non_trading_day`、`already_done`、`already_running`、`maintenance`（含 `after_calls=yes`）、`low_memory`。
+  - 每台北日各最多一則；還沒有任何 `premarket-ai-*.log` 時不判定（部署前的日子）。不送 Telegram：通知那邊由 08:45 的 notify 自己寫失敗（#1042）。
+  - 處置：查該日誌與當天的 `premarket_ai_readings`（`status`、`reason`、`error`、`checks_json`）；要補可用 `docker compose -p <P> exec scheduler python -m worker.cli premarket-ai --trigger manual`（不受時段限制，開盤後補的判讀只供紀錄）。
 - `intraday_result_<日期>`（盤中即時通知，[#801](https://github.com/YiCheng0608/stock-lab/issues/801)；週一至週五 08:59～13:31，見 [scheduler 容器的排程](SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）：
   - 週一至週五台北 13:45 以後（13:45 那一輪起），當天的 `logs/intraday-YYYYMMDD.log` 不存在（08:59 的 intraday 沒有跑，留言寫 scheduler 可能沒在跑），或當天成功的輪詢（`--- poll` 列 `ok` 大於 0）少於整天 271 輪（09:00～13:30 每分鐘一輪）的 80%：216 輪以下留言，留言附最後一個 `--- result` 列。少於 80% 的例子：富果連續失敗、改成每 5 分鐘一輪；401／403／429 當天停止讀取（`status=stopped`）；scheduler 中途停過、補跑晚了。
   - 不判定：行事曆（`trading_calendar_days`，以 `watchdog_helper.py closed-day` 唯讀查）標 `closed` 的日子；日誌的結果有 `non_trading_day`、`not_configured`（還沒放 `FUGLE_API_KEY` 或 Telegram 的設定）或 `no_targets`（當天沒有對象）。還沒有任何 `intraday-*.log` 時也不判定（#801 部署前的日子）。

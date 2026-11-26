@@ -53,6 +53,7 @@ _CHILDREN = {
     "h2_items",
     "strategy_list_items",
     "theme_cluster_members",
+    "premarket_ai_stocks",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"
