@@ -327,6 +327,11 @@ def test_the_docs_tool_section_says_what_the_code_judges():
     assert "tools/research/round21_research.py" in section
     assert "本輪 1 個、累計 71 個" in section
     assert "t < 3.388（沒有 t 下限）" in section
+    # #1067 決定 7202868880: the coverage's numbers lead the limits
+    assert tool.LIMITS["AD1"].startswith(tool.OVERLAP_NOTE["AD1_coverage"] + "；")
+    for words in ("8%～19%", "448 天不足 20 檔、63 天沒有名單", "「名單接近母體」那一點在這份資料上不成立",
+                  "董事會重要決議事項", "2013Q2"):  # fmt: skip
+        assert words in tool.OVERLAP_NOTE["AD1_coverage"], words
     # the "前瞻觀察" line of the reports, word for word
     assert "t < 3.388（沒有 t 下限）" in tool._watch_line(tool.VALIDATION_MIN_T)
 
