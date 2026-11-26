@@ -15,7 +15,9 @@ content, which the user accepted for local personal research only (#1
 
 The near-month rule, fields and null rules are ``worker.futures_bars``':
 ``契約=TX``, ``交易時段=一般``, ``到期月份(週別)`` equal to the session's near
-month; spreads (``202410/202411``) and the after-hours rows are never taken.
+month; spreads (``202410/202411``) and the after-hours rows are never taken
+into these bars (the after-hours near-month rows go to ``futures_night_bars``
+through ``collect_night`` only, Issue #1040).
 The rows are written with their own ``source`` (``taifex_futdatadown``) and
 raw source (``taifex_web``), only for sessions without a TX row of the other
 source (``store_futures_bars``), so the two never overlap, and never for
@@ -239,6 +241,9 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
     (OfficialDataError).  A session with regular rows but no single readable
     near-month one is listed in ``unusable_dates`` and gets no bar; a day with
     after-hours rows only is ``after_hours_only_dates`` (not yet traded).
+    The near-month after-hours row of every listed date is ``night_bars``
+    (Issue #1040; ``collect_night`` stores them), a date with after-hours rows
+    but no single readable near-month one ``night_unusable_dates``.
     """
 
     if not isinstance(text, str):
@@ -940,6 +945,9 @@ def collect_night(
             metadata.get("counts", {}).get(name, 0) for name in ("inserted", "replaced")
         )
         run.metadata_json = {**run.metadata_json, **metadata}
+        if status == "failed":
+            # As us-collect: the error is on the run, for /api/ingestion-runs.
+            run.error = str(metadata.get("error") or "")[:2000] or None
         db.commit()
         return {
             "status": status,
@@ -961,11 +969,16 @@ def collect_night(
         text: str | None = None
         parsed: ParsedMonth | None = None
         error: Exception | None = None
+        answered = False
         try:
-            text = decode(get(request))
+            content = get(request)
+            answered = True
+            text = decode(content)
             parsed = parse_month(text, request)
         except OfficialDataError as exc:
             error = exc
+        # Any answer is kept, as the history keeps it: an undecodable one with
+        # ``csv`` empty.  No answer (a transport failure) has no raw.
         captured = (
             capture_payload(
                 RAW_SOURCE,
@@ -973,7 +986,7 @@ def collect_night(
                 {"form": request.form, "encoding": ENCODING, "csv": text},
                 request.end.isoformat(),
             )
-            if text is not None
+            if answered
             else None
         )
         raw_id = _upsert_raw_payload(db, run, captured).id if captured else None

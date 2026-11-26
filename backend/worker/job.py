@@ -942,7 +942,7 @@ class _Job:
         if skip_reason and (
             job not in RECORDS_SKIPS or skip_reason == MAINTENANCE_SKIP_REASON
         ):
-            # Only daily and us record a skipped run in the database, and not in
+            # Only daily, us and night record a skipped run in the database, and not in
             # maintenance mode: then nothing is written there (#468).
             code = 0
         else:

@@ -1091,7 +1091,7 @@ def maintenance_marker(
     return path
 
 
-@pytest.mark.parametrize("job_name", ["daily", "news", "us"])
+@pytest.mark.parametrize("job_name", ["daily", "news", "us", "night"])
 def test_in_maintenance_a_job_only_logs_the_skip_and_starts_no_worker(tree, job_name):
     """AC-1: no worker, so not even the skipped row a daily records for other skips."""
 

@@ -11,10 +11,11 @@ from __future__ import annotations
 import socket
 from argparse import Namespace
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, func, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func, inspect, select
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
@@ -345,7 +346,10 @@ def test_a_broken_answer_is_rejected_whole_as_the_history_does(
     assert stored(factory) == []
     with factory() as db:
         run = db.get(IngestionRun, result["run_id"])
-    assert run.status == "failed"
+        raw = db.get(RawPayload, result["raw_payload_id"])
+    # The error is on the run (as us-collect), and the answer is kept as raw.
+    assert run.status == "failed" and message in run.error
+    assert raw is not None and raw.source == "taifex_web"
 
 
 def test_a_transport_failure_is_a_failed_run(factory):
@@ -353,6 +357,8 @@ def test_a_transport_failure_is_a_failed_run(factory):
 
     assert result["status"] == "failed" and "503" in result["error"]
     assert result["raw_payload_id"] is None and stored(factory) == []
+    with factory() as db:
+        assert "503" in db.get(IngestionRun, result["run_id"]).error
 
 
 def test_a_night_not_listed_yet_is_partial(factory):
@@ -442,3 +448,91 @@ def test_the_exit_codes_of_futures_night():
         "skipped": 0,
         "partial": 2,
     }
+
+
+# --- the migration -----------------------------------------------------------------------
+
+NIGHT_INDEXES = {
+    "ix_futures_night_bars_trading_date",
+    "ix_futures_night_bars_raw_payload_id",
+}
+
+
+def _alembic_config(engine):
+    from alembic.config import Config
+
+    from app import migrations
+
+    config = Config(str(migrations.ALEMBIC_CONFIG_PATH))
+    config.set_main_option(
+        "script_location", str(Path(migrations.ALEMBIC_CONFIG_PATH).parent / "alembic")
+    )
+    config.attributes["connection"] = engine
+    return config
+
+
+def _schema(engine):
+    names = set(inspect(engine).get_table_names())
+    with engine.connect() as connection:
+        indexes = {
+            row[0]
+            for row in connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        version = connection.exec_driver_sql(
+            "SELECT version_num FROM alembic_version"
+        ).fetchall()
+        fk = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+    return names, indexes, version, fk
+
+
+def test_the_migration_goes_down_and_up_again(tmp_path):
+    pytest.importorskip("alembic")
+    from alembic import command
+
+    from app.migration_revisions import REVISIONS
+
+    revision = next(name for name in REVISIONS if name.endswith("_futures_night_bars"))
+    previous = REVISIONS[REVISIONS.index(revision) - 1]
+    engine = create_engine(f"sqlite:///{(tmp_path / 'down.db').as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    config = _alembic_config(engine)
+    try:
+        command.upgrade(config, revision)
+        with Session(engine) as db:
+            raw = RawPayload(source="taifex_web", endpoint=fh.ENDPOINT)
+            db.add(raw)
+            db.flush()
+            db.add(
+                FuturesNightBar(
+                    symbol="TX",
+                    trading_date=DAY,
+                    contract_month="202612",
+                    open=20970.0,
+                    high=21040.0,
+                    low=20950.0,
+                    close=21000.0,
+                    change=-123.0,
+                    volume=45678,
+                    source=fh.SOURCE,
+                    data_as_of=datetime(2026, 11, 24),
+                    raw_payload_id=raw.id,
+                )
+            )
+            db.commit()
+        names, indexes, version, _fk = _schema(engine)
+        assert "futures_night_bars" in names and NIGHT_INDEXES <= indexes
+        assert version == [(revision,)]
+
+        command.downgrade(config, previous)
+        names, indexes, version, fk = _schema(engine)
+        assert "futures_night_bars" not in names and not NIGHT_INDEXES & indexes
+        assert version == [(previous,)] and fk == []
+
+        command.upgrade(config, revision)
+        names, indexes, version, fk = _schema(engine)
+        assert "futures_night_bars" in names and NIGHT_INDEXES <= indexes
+        assert version == [(revision,)] and fk == []
+    finally:
+        engine.dispose()
