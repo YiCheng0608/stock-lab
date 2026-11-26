@@ -28,7 +28,6 @@ from app.models import (
     Instrument,
     MarketBar,
     PremarketAiReading,
-    PremarketAiScore,
     PremarketAiStock,
 )
 from worker import pipeline
@@ -155,7 +154,9 @@ def copy(tmp_path):
         db.add(run)
         db.flush()
         items = {
-            "A": pool_item(db, run, stocks["A"], ["rule_signal", "news"], tier=2, rank=1),
+            "A": pool_item(
+                db, run, stocks["A"], ["rule_signal", "news"], tier=2, rank=1
+            ),
             "B": pool_item(db, run, stocks["B"], ["volume"], tier=5, rank=2),
             "E": pool_item(db, run, stocks["E"], ["volume"], tier=5, rank=3),
             "C": pool_item(
@@ -181,7 +182,11 @@ def test_the_returns_and_the_population_are_the_ai_scores_own(copy):
             population = scoring.population(db, T, SESSIONS, length)
             [got] = result["horizons"][horizon]["population"]
             got = {key: value for key, value in got.items() if key != "liquid"}
-            assert got == {"t": T.isoformat(), "d": SESSIONS[0].isoformat(), **population}
+            assert got == {
+                "t": T.isoformat(),
+                "d": SESSIONS[0].isoformat(),
+                **population,
+            }
             for name in ("A", "B"):
                 tracked = pipeline._tracking_inputs(
                     db, copy["ids"][name], T, evaluation_cutoff=SESSIONS[-1]
@@ -284,7 +289,11 @@ def test_the_ai_group_is_the_champions_keep_and_reprice_and_equals_its_score(cop
     scored(
         copy,
         [
-            ("champion", "premarket_v1", [("A", "keep"), ("B", "defer"), ("E", "keep")]),
+            (
+                "champion",
+                "premarket_v1",
+                [("A", "keep"), ("B", "defer"), ("E", "keep")],
+            ),
             ("shadow", "premarket_v9", [("A", "defer"), ("B", "keep"), ("E", "keep")]),
         ],
     )
@@ -295,9 +304,10 @@ def test_the_ai_group_is_the_champions_keep_and_reprice_and_equals_its_score(cop
         # A only: B deferred, E incomparable, the shadow not read
         assert group["stocks"] == 1
         assert part["ai_check"] == {"compared": 1, "differ": []}
-        assert group["daily"][0]["mean"] == part["groups"][
-            cps.source_key("rule_signal")
-        ]["daily"][0]["mean"]
+        assert (
+            group["daily"][0]["mean"]
+            == part["groups"][cps.source_key("rule_signal")]["daily"][0]["mean"]
+        )
 
 
 def test_the_ai_group_waits_for_the_score_rows(copy):
@@ -347,5 +357,8 @@ def test_the_command_writes_the_tables_with_no_clock(copy, tmp_path, monkeypatch
     assert (first / "tables.json").read_text(encoding="utf-8") == (
         second / "tables.json"
     ).read_text(encoding="utf-8")
-    assert json.loads((first / "tables.json").read_text(encoding="utf-8"))["pool_days"] == 1
+    assert (
+        json.loads((first / "tables.json").read_text(encoding="utf-8"))["pool_days"]
+        == 1
+    )
     assert "候選池的對答案" in (first / "summary.md").read_text(encoding="utf-8")

@@ -305,13 +305,18 @@ def judge_stock(
     if first is None:
         return {"verdict": PENDING}
     action = first.get("effective_action")
-    levelled = score.has_levels(stock["levels"]) and action in (score.KEEP, score.REPRICE)
+    levelled = score.has_levels(stock["levels"]) and action in (
+        score.KEEP,
+        score.REPRICE,
+    )
     if levelled:
         if t20 is None:
             return {"verdict": PENDING}
         part = t20.get("levels") or {}
         result = (
-            part.get("original") if action == score.KEEP else part.get("repriced_result")
+            part.get("original")
+            if action == score.KEEP
+            else part.get("repriced_result")
         ) or {}
         excess = _excess(t20.get("open_hold"), populations.get("t20"))
         outcome = {
@@ -431,7 +436,9 @@ def ref_table(calls: list[tuple[list[dict[str, Any]], bool | None]]) -> list[dic
     cited: dict[str, list[bool | None]] = defaultdict(list)
     for reasons, right in calls:
         for reason in reasons or []:
-            for kind in sorted({ref_kind(str(ref)) for ref in reason.get("refs") or []}):
+            for kind in sorted(
+                {ref_kind(str(ref)) for ref in reason.get("refs") or []}
+            ):
                 cited[kind].append(right)
     rows = []
     for kind, outcomes in cited.items():
@@ -483,7 +490,9 @@ def build(db: Path, month: str) -> dict[str, Any]:
         for reading_id in ids:
             reading = readings[reading_id]
             in_month = first <= reading["session_date"] <= last
-            market = judge_market(written.get((reading_id, score.MARKET, score.MARKET, "d0")))
+            market = judge_market(
+                written.get((reading_id, score.MARKET, score.MARKET, "d0"))
+            )
             if in_month:
                 if market["verdict"] in (ERROR, CONTROL):
                     market_days += 1
@@ -499,8 +508,10 @@ def build(db: Path, month: str) -> dict[str, Any]:
             _keep(found, counts, market, reading, None, month)
             populations = {
                 horizon: (
-                    (written.get((reading_id, score.OVERALL, score.OVERALL, horizon)) or {})
-                    .get("population")
+                    (
+                        written.get((reading_id, score.OVERALL, score.OVERALL, horizon))
+                        or {}
+                    ).get("population")
                     or {}
                 ).get("mean")
                 for horizon in score.STOCK_HORIZONS
@@ -510,14 +521,16 @@ def build(db: Path, month: str) -> dict[str, Any]:
                 key=lambda row: row["position"],
             ):
                 rows = {
-                    horizon: written.get((reading_id, score.STOCK, stock["symbol"], horizon))
+                    horizon: written.get(
+                        (reading_id, score.STOCK, stock["symbol"], horizon)
+                    )
                     for horizon in score.STOCK_HORIZONS
                 }
                 if in_month and rows["t5"] is not None:
                     action = rows["t5"].get("effective_action")
                     excess = _excess(rows["t5"].get("open_hold"), populations["t5"])
                     refs.append((stock["reasons"], sign_right(action, excess)))
-                    hold = (rows["t5"].get("open_hold") or {})
+                    hold = rows["t5"].get("open_hold") or {}
                     if hold.get("status") == "comparable":
                         by_action[action].append(hold["return"])
                 case = judge_stock(stock, rows, populations)
@@ -550,7 +563,9 @@ def build(db: Path, month: str) -> dict[str, Any]:
         payload = inputs.get(case["reading_id"]) or {}
         if case["symbol"]:
             case["input"] = candidate_input(payload, case["symbol"])
-    month_days = {day: status for day, status in statuses.items() if first <= day <= last}
+    month_days = {
+        day: status for day, status in statuses.items() if first <= day <= last
+    }
     gate = proposal_gate(market_days, errors, shadow)
     return {
         "version": VERSION,
@@ -716,7 +731,8 @@ def markdown(result: dict[str, Any], command: str) -> str:
         f"- 案例歸結果出來的那個月（大盤是 D，個股是期間的最後一個交易日）：本月判錯 "
         f"{found['errors']} 筆（"
         + "、".join(
-            f"{CATEGORY_TEXT[key]} {value}" for key, value in found["by_category"].items()
+            f"{CATEGORY_TEXT[key]} {value}"
+            for key, value in found["by_category"].items()
         )
         + f"），判對 {found['controls']} 筆；不能比 {found['incomparable']}、"
         f"尚未對答案 {found['pending']}（本月的判讀，結果在之後的月份）",
@@ -749,7 +765,9 @@ def markdown(result: dict[str, Any], command: str) -> str:
                 what = f"對母體超額 {lib.pct(outcome.get('excess'))}"
                 if case["category"] == LEVELS:
                     what = f"先觸 `{outcome['first_trigger']}`，" + what
-                action = case["action"] + ("（重算後暫緩）" if case["reprice_deferred"] else "")
+                action = case["action"] + (
+                    "（重算後暫緩）" if case["reprice_deferred"] else ""
+                )
             kind = "判錯" if case["kind"] == ERROR else "判對"
             lines.append(
                 f"| `{case['case_id']}` | {CATEGORY_TEXT[case['category']]} | {kind} "

@@ -259,7 +259,8 @@ def liquid_members(session, day: date) -> set[int] | None:
     )
     try:
         sessions = [
-            when for when, _close in cp.index_sessions(session, day, floor.liquidity_days)
+            when
+            for when, _close in cp.index_sessions(session, day, floor.liquidity_days)
         ]
     except cp.CandidatePoolDataError:
         return None
@@ -291,7 +292,9 @@ def day_results(
             session, instrument_id, day, evaluation_cutoff=sessions[-1]
         )[1]
 
-    tracked = {item["instrument_id"]: tracked_of(item["instrument_id"]) for item in items}
+    tracked = {
+        item["instrument_id"]: tracked_of(item["instrument_id"]) for item in items
+    }
     liquid = liquid_members(session, day)
     liquid_tracked = None
     if liquid is not None:
@@ -576,7 +579,9 @@ def markdown(result: dict[str, Any], command: str) -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="candidate_pool_score.py", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="candidate_pool_score.py", description=__doc__
+    )
     parser.add_argument("--db", required=True, help="a copy_db.py copy of stock.db")
     parser.add_argument("--out", required=True)
     parser.add_argument("--end", type=date.fromisoformat, default=None)

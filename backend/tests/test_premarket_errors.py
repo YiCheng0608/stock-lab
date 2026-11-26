@@ -301,14 +301,19 @@ def test_a_levelled_keep_is_judged_by_its_stop_only(copy):
     # with levels only the stop counts, so L5 is not a case either
     rows = t20_levels("keep", None, DAYS[19])
     rows["t20"]["open_hold"] = hold(-0.04, DAYS[19])
-    copy.reading(DAYS[0], stocks=[("L5", "keep", levels(), {**t5("keep", -0.04, DAYS[5]), **rows})])
+    copy.reading(
+        DAYS[0],
+        stocks=[("L5", "keep", levels(), {**t5("keep", -0.04, DAYS[5]), **rows})],
+    )
     assert ids(built(copy), "error") == []
 
 
 def test_only_the_running_champion_version_is_read(copy):
     stocks = [("K1", "keep", None, t5("keep", -0.05, DAYS[6]))]
     copy.reading(DAYS[1], hit=False, stocks=stocks)
-    copy.reading(DAYS[1], role="shadow", version="premarket_v2", hit=False, stocks=stocks)
+    copy.reading(
+        DAYS[1], role="shadow", version="premarket_v2", hit=False, stocks=stocks
+    )
     copy.reading(DAYS[2], version="premarket_v0", hit=False, stocks=stocks)
     copy.reading(DAYS[3], status="failed")
     copy.reading(DAYS[4], status="rejected")
@@ -329,7 +334,12 @@ def test_at_most_thirty_with_the_market_first_and_the_stocks_by_excess(copy):
             day,
             hit=False,
             stocks=[
-                (f"S{at}{n}", "keep", None, t5("keep", -0.03 - 0.001 * (n + 10 * at), DAYS[at + 5]))
+                (
+                    f"S{at}{n}",
+                    "keep",
+                    None,
+                    t5("keep", -0.03 - 0.001 * (n + 10 * at), DAYS[at + 5]),
+                )
                 for n in range(12)
             ]
             + [(f"C{at}", "keep", None, t5("keep", 0.10 + at / 100, DAYS[at + 5]))],
@@ -385,8 +395,21 @@ def test_a_case_belongs_to_the_month_its_result_came_out(copy, tmp_path):
     later = Copy(copy.path)
     reading = later.db.query(PremarketAiReading).one()
     stock = later.db.query(PremarketAiStock).one()
-    later.score(reading, score.OVERALL, score.OVERALL, "t5", {"population": {"mean": POPULATION}})
-    later.score(reading, score.STOCK, "K1", "t5", t5("keep", -0.05, january)["t5"], stock_id=stock.id)
+    later.score(
+        reading,
+        score.OVERALL,
+        score.OVERALL,
+        "t5",
+        {"population": {"mean": POPULATION}},
+    )
+    later.score(
+        reading,
+        score.STOCK,
+        "K1",
+        "t5",
+        t5("keep", -0.05, january)["t5"],
+        stock_id=stock.id,
+    )
     later.close()
     assert "K1" not in " ".join(ids(pe.build(copy.path, MONTH)))
     assert ids(pe.build(copy.path, "2027-01"), "error") == [
@@ -395,11 +418,15 @@ def test_a_case_belongs_to_the_month_its_result_came_out(copy, tmp_path):
 
 
 def test_a_case_carries_the_input_the_call_and_the_outcome(copy):
-    copy.reading(DAYS[0], hit=False, stocks=[("K1", "keep", None, t5("keep", -0.05, DAYS[5]))])
+    copy.reading(
+        DAYS[0], hit=False, stocks=[("K1", "keep", None, t5("keep", -0.05, DAYS[5]))]
+    )
     result = built(copy)
     [market, stock] = [case for case in result["cases"] if case["kind"] == "error"]
     assert stock["input"] == {"symbol": "K1", "name": "名K1", "price": {"close": 100}}
-    assert stock["action"] == "keep" and stock["reasons"][0]["refs"][0] == "stock:K1:chips"
+    assert (
+        stock["action"] == "keep" and stock["reasons"][0]["refs"][0] == "stock:K1:chips"
+    )
     assert stock["outcome"]["excess"] == pytest.approx(-0.05)
     session = result["sessions"][DAYS[0].isoformat()]
     # only the market news its reasons cited
@@ -411,7 +438,17 @@ def test_incomparable_and_unwritten_calls_are_counted_not_cased(copy):
     copy.reading(
         DAYS[0],
         stocks=[
-            ("K1", "keep", None, {"t5": {"effective_action": "keep", "open_hold": hold(0, DAYS[5], status="incomparable")}}),
+            (
+                "K1",
+                "keep",
+                None,
+                {
+                    "t5": {
+                        "effective_action": "keep",
+                        "open_hold": hold(0, DAYS[5], status="incomparable"),
+                    }
+                },
+            ),
             ("K2", "keep", None, {}),
         ],
     )
@@ -445,4 +482,6 @@ def test_the_command_writes_cases_json_and_md(copy, tmp_path, monkeypatch):
     cases = json.loads((out / "cases.json").read_text(encoding="utf-8"))
     assert cases["proposal_gate"]["status"] == pe.INSUFFICIENT
     assert cases["synthetic"] is False
-    assert (out / "cases.md").read_text(encoding="utf-8").startswith("# 早盤 AI 判錯清單")
+    assert (
+        (out / "cases.md").read_text(encoding="utf-8").startswith("# 早盤 AI 判錯清單")
+    )

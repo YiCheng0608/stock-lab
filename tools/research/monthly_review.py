@@ -6,9 +6,12 @@ coordinator runs this on a copy and gets, for the month before,
 - each object's numbers as its own entry writes them: H1 forward
   (``portfolio_research.py --hypothesis H1 --window forward``), every key of
   ``forward_watch.WATCHES`` (read from it, so a row added there runs here),
-  the candidates' scorecard, the feature evidence and the pre-market AI
-  scores' monthly report (``worker.premarket_score_report.render``, the code
-  of ``worker.cli premarket-score-report``, on the copy);
+  the candidates' scorecard, the feature evidence, the candidate pool's
+  sources (``candidate_pool_score.py``), the month's wrong pre-market AI
+  calls (``premarket_errors.py``, the cases ``prompt_proposal.py`` reads) and
+  the pre-market AI scores' monthly report
+  (``worker.premarket_score_report.render``, the code of ``worker.cli
+  premarket-score-report``, on the copy);
 - two lists, 變差 and 變強, by the rules frozen here (``worse``, ``better``)
   before the first real run.  The lists only list: a product or delisting
   decision is the user's, a 變強 feature only a candidate for a next round.
@@ -49,8 +52,14 @@ import feature_evidence as fe  # noqa: E402
 import forward_watch as fw  # noqa: E402
 import portfolio_research as pr  # noqa: E402
 
-VERSION = 1
+VERSION = 2
 DESIGN = "1062"
+# What each VERSION changed in the lists (研究規則第 3 條)
+VERSION_NOTES = {
+    1: "#1062：前瞻對象、H1、今日名單、特徵與條件",
+    2: "#1069：加候選池的 16 個來源（任一期間「輸給基準」進變差、「通過」進變強，"
+    "只當紀錄）；新增「候選池的對答案」「早盤 AI 判錯清單」兩段，判錯清單不進清單",
+}
 # review.json's layout; a --previous of another layout is refused, not read
 REVIEW_FORMAT = 1
 HERE = Path(__file__).resolve().parent
@@ -58,6 +67,8 @@ H1 = "H1"
 SCORECARD = "candidate_scorecard"
 FEATURES = "feature_evidence"
 PREMARKET = "premarket_score_report"
+POOL_SCORE = "candidate_pool_score"
+ERRORS = "premarket_errors"
 LOGS = "logs"
 OK, FAILED = "ok", "failed"
 TAIEX, POPULATION = pr.TAIEX, pr.POPULATION
@@ -112,9 +123,12 @@ def month_cutoff(db: Path, month: str) -> date | None:
 
 def steps(db: Path, out: Path, cutoff: date, min_free_gb: float) -> list[dict]:
     """Every entry in the order run: H1, the ``WATCHES`` keys, the scorecard,
-    the feature evidence, then the pre-market report (no tool: in process)."""
+    the feature evidence, the pool's sources, the AI's misses, then the
+    pre-market report (no tool: in process).  ``tables`` is the file an entry
+    that succeeded has written (``tables.json`` unless said)."""
 
     end = cutoff.isoformat()
+    month = end[:7]
     memory = ["--min-free-gb", f"{min_free_gb:g}"]
     listed = [
         {
@@ -141,6 +155,37 @@ def steps(db: Path, out: Path, cutoff: date, min_free_gb: float) -> list[dict]:
                 "argv": ["--db", str(db), "--out", str(out / name), "--end", end],
             }
         )
+    listed.append(
+        {
+            "name": POOL_SCORE,
+            "tool": POOL_SCORE,
+            "argv": [
+                "--db",
+                str(db),
+                "--out",
+                str(out / POOL_SCORE),
+                "--end",
+                end,
+                *memory,
+            ],
+        }
+    )
+    listed.append(
+        {
+            "name": ERRORS,
+            "tool": ERRORS,
+            "argv": [
+                "--db",
+                str(db),
+                "--month",
+                month,
+                "--out",
+                str(out / ERRORS),
+                *memory,
+            ],
+            "tables": "cases.json",
+        }
+    )
     listed.append({"name": PREMARKET, "tool": None, "argv": []})
     return listed
 
@@ -171,7 +216,7 @@ def run_tool_step(step: dict, out: Path, runner: Runner) -> dict[str, Any]:
     logs.mkdir(parents=True, exist_ok=True)
     (logs / f"{step['name']}.stdout.txt").write_text(stdout, encoding="utf-8")
     (logs / f"{step['name']}.stderr.txt").write_text(stderr, encoding="utf-8")
-    tables = out / step["name"] / "tables.json"
+    tables = out / step["name"] / step.get("tables", "tables.json")
     status = {
         "tool": step["tool"],
         "command": f"python tools/research/{step['tool']}.py " + " ".join(step["argv"]),
@@ -181,7 +226,7 @@ def run_tool_step(step: dict, out: Path, runner: Runner) -> dict[str, Any]:
     if code != 0:
         return {**status, "status": FAILED, "reason": _reason(code, stdout, stderr)}
     if not tables.is_file():
-        return {**status, "status": FAILED, "reason": "exit 0 但沒有 tables.json"}
+        return {**status, "status": FAILED, "reason": f"exit 0 但沒有 {tables.name}"}
     return {**status, "status": OK}
 
 
@@ -328,6 +373,48 @@ def feature_facts(out: Path, status: dict[str, dict]) -> dict[str, Any] | None:
     return {"version": t["version"], "range": t["range"], "verdicts": verdicts}
 
 
+def pool_facts(out: Path, status: dict[str, dict]) -> dict[str, Any] | None:
+    """The pool's 16 sources: each horizon's days, excess, t and verdict."""
+
+    if status[POOL_SCORE]["status"] != OK:
+        return None
+    t = _read(out / POOL_SCORE / "tables.json")
+    sources: dict[str, dict[str, dict]] = {}
+    for horizon, part in t["horizons"].items():
+        for source in t["sources"]:
+            group = part["groups"][f"source:{source}"]
+            sources.setdefault(source, {})[horizon] = {
+                "days": group["days"],
+                "mean": group["mean"],
+                "t": group["t"],
+                "verdict": group["verdict"],
+                "liquid_mean": group["liquid_reference"]["mean"],
+            }
+    return {
+        "version": t["version"],
+        "range": t["range"],
+        "pool_days": t["pool_days"],
+        "comparisons": t["comparisons"],
+        "min_days": t["min_days"],
+        "ai_check": {h: part["ai_check"] for h, part in t["horizons"].items()},
+        "sources": sources,
+    }
+
+
+def error_facts(out: Path, status: dict[str, dict]) -> dict[str, Any] | None:
+    if status[ERRORS]["status"] != OK:
+        return None
+    t = _read(out / ERRORS / "cases.json")
+    return {
+        "version": t["version"],
+        "prompt_version": t["prompt_version"],
+        "days": t["days"],
+        "found": t["found"],
+        "cases": len(t["cases"]),
+        "proposal_gate": t["proposal_gate"],
+    }
+
+
 # --- the lists (docs/spec/evidence.md 每月檢討) -----------------------------------
 #
 # Frozen before the first real run (#1062 AC-1); a change is a new VERSION.
@@ -340,6 +427,43 @@ UNRANKED = "cannot_tell"
 BETTER_FLOOR = RANKS["weak"]  # a 變強 feature is at least 方向一致但不顯著 now
 SCORECARD_MIN_DAYS = 60
 SCORECARD_NOTE = "今日名單是產品：統籌在 #1 提案檢討（不是下架提案）"
+POOL_NOTE = (
+    "候選池只決定 AI 看哪些股票：統籌在 #1 提案調整來源或上限；改 `PoolConfig` "
+    "預設值要留 `決定：`"
+)
+
+
+def pool_items(review: dict[str, Any], verdict: str) -> list[dict]:
+    """The pool sources judged ``verdict`` on a horizon (#1069 Q5), or its
+    failure: in both lists, as a failed forward object is."""
+
+    if "pool" not in review:
+        return []  # a review of the first version's shape
+    pool = review["pool"]
+    if pool is None:
+        return [
+            _item("failed", POOL_SCORE, f"{POOL_SCORE} 失敗，未判", "看該段的失敗原因")
+        ]
+    items = []
+    for source, by in pool["sources"].items():
+        for horizon, part in _by_horizon_parts(by):
+            if part["verdict"] != verdict:
+                continue
+            items.append(
+                _item(
+                    "pool",
+                    f"pool:{source}:T+{horizon}",
+                    f"候選池來源 `{source}` T+{horizon} 判「{verdict}」：每日超額日均 "
+                    f"{lib.pct(part['mean'], 3)}，t {lib.num(part['t'], 2)}，"
+                    f"{part['days']} 日（比較 {pool['comparisons']} 組）",
+                    POOL_NOTE if verdict == LOSING else "只當紀錄；" + POOL_NOTE,
+                )
+            )
+    return items
+
+
+def _by_horizon_parts(by: dict[str, dict]) -> list[tuple[str, dict]]:
+    return sorted(by.items(), key=lambda pair: int(pair[0]))
 
 
 def scorecard_verdict(daily: dict[str, Any]) -> str:
@@ -574,6 +698,7 @@ def worse(review: dict[str, Any], previous: dict[str, Any] | None) -> list[dict]
                 )
             )
     items += _failed_items(review)
+    items += pool_items(review, LOSING)
     card = review["scorecard"]
     if card is None:
         items.append(
@@ -638,6 +763,7 @@ def better(
                 )
             )
     items += _failed_items(review)
+    items += pool_items(review, PASSING)
     current = review["features"]
     why = _comparison(current, previous)
     if why:
@@ -709,6 +835,7 @@ def markdown(review: dict[str, Any], out: Path) -> str:
         f"- 耗時 {review['elapsed_seconds']:.0f} 秒，峰值記憶體 "
         f"{lib.num(review['peak_memory_gb'], 2)} GB",
         f"- 重現：`{review['command']}`",
+        f"- 第 {review['version']} 版改了什麼：{VERSION_NOTES[review['version']]}",
         "",
     ]
     lines += _list_lines("變差", review["lists"]["worse"])
@@ -808,6 +935,63 @@ def markdown(review: dict[str, Any], out: Path) -> str:
                     f"| {row['direction']} |"
                 )
         lines += ["", f"- 原始輸出：`{FEATURES}/`", ""]
+    lines += ["## 候選池的對答案", ""]
+    pool = review.get("pool")
+    if pool is None:
+        lines += _failed_lines(status[POOL_SCORE])
+    elif not pool["range"]:
+        lines += [
+            "- 副本沒有 candidate_pool_v1 的池",
+            "",
+            f"- 原始輸出：`{POOL_SCORE}/`",
+            "",
+        ]
+    else:
+        lines += [
+            f"- 池的交易日 T：{pool['range'][0]}～{pool['range'][1]}，{pool['pool_days']} 天；"
+            f"每日超額對母體（同 `premarket_score_v1`），滿 {pool['min_days']} 日才判；"
+            f"比較 {pool['comparisons']} 組，其中大約 1 組會純屬偶然達標",
+            "- AI 組對 `overall` 的 `ai_version.excess`："
+            + "；".join(
+                f"T+{h} 比對 {c['compared']} 天、不同 {len(c['differ'])} 天"
+                for h, c in sorted(pool["ai_check"].items(), key=lambda p: int(p[0]))
+            ),
+            "",
+            "| 來源 | T+5 日數 | T+5 日均 | T+5 判定 | T+20 日數 | T+20 日均 | T+20 判定 |",
+            "| --- | ---: | ---: | --- | ---: | ---: | --- |",
+        ]
+        for source, by in pool["sources"].items():
+            cells = []
+            for horizon in ("5", "20"):
+                part = by.get(horizon)
+                cells += (
+                    [str(part["days"]), lib.pct(part["mean"], 3), part["verdict"]]
+                    if part
+                    else ["—", "—", "—"]
+                )
+            lines.append(f"| `{source}` | " + " | ".join(cells) + " |")
+        lines += [
+            "",
+            f"- 另列的組（全池、層級、來源數、被上限擋掉、AI 判 keep／reprice）與對流動母體的"
+            f"參考值在 `{POOL_SCORE}/summary.md`",
+            "",
+        ]
+    lines += ["## 早盤 AI 判錯清單", ""]
+    errors = review.get("errors")
+    if errors is None:
+        lines += _failed_lines(status[ERRORS])
+    else:
+        found, gate = errors["found"], errors["proposal_gate"]
+        lines += [
+            f"- champion `{errors['prompt_version']}`；本月判錯 {found['errors']} 筆、"
+            f"判對 {found['controls']} 筆，收進 `cases.json` {errors['cases']} 筆"
+            f"（不能比 {found['incomparable']}、尚未對答案 {found['pending']}）",
+            f"- 提案：**{gate['text']}**（{gate['why']}）",
+            "- 不進清單：換版照 premarket_ai 自己的兩個條件；提案命令 `prompt_proposal.py` "
+            "另跑（每月流程）",
+            f"- 原始輸出：`{ERRORS}/cases.json`、`{ERRORS}/cases.md`",
+            "",
+        ]
     lines += ["## 早盤 AI 判讀月報", ""]
     if status[PREMARKET]["status"] != OK:
         lines += _failed_lines(status[PREMARKET])
@@ -895,6 +1079,8 @@ def run_review(
         "forward": forward_facts(out, status),
         "scorecard": scorecard_facts(out, status),
         "features": feature_facts(out, status),
+        "pool": pool_facts(out, status),
+        "errors": error_facts(out, status),
     }
     review["feature_comparison"] = _comparison(review["features"], previous)
     review["feature_changes"] = feature_changes(review["features"], previous)
