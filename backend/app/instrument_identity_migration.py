@@ -53,6 +53,7 @@ _CHILDREN = {
     "h2_items",
     "strategy_list_items",
     "theme_cluster_members",
+    "candidate_pool_items",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"

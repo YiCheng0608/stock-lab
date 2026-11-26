@@ -34,6 +34,7 @@ from .candidate_view import (
     DEFAULT_LIMIT as CANDIDATES_DEFAULT_LIMIT,
     MAX_LIMIT as CANDIDATES_MAX_LIMIT,
 )
+from .candidate_pool import candidate_pool as stored_candidate_pool
 from .candidate_runs import read_run as read_candidate_run
 from .candidate_view import (
     candidate_for_instrument,
@@ -2826,6 +2827,22 @@ def strategy_list(
         raise HTTPException(
             status_code=404, detail=f"unknown strategy: {strategy}"
         ) from None
+
+
+@router.get("/candidate-pool")
+def candidate_pool(
+    date_: date | None = Query(default=None, alias="date"),
+    include_rejected: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Stored candidate pool (candidate_pool_v1, #1020) of ``date`` (the latest
+    evening when absent): the pre-open AI's input (#1041).
+
+    ``meta.phases.morning`` is null until the morning run is stored; the
+    evening never stands in for it.  Not a buy or sell signal
+    (docs/spec/candidate_pool.md).
+    """
+    return stored_candidate_pool(db, date_, include_rejected=include_rejected)
 
 
 @router.get("/theme-heat")
