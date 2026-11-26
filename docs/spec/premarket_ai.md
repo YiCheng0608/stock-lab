@@ -1,7 +1,7 @@
-<!-- owns: premarket_ai_v1、早盤 AI 判讀的輸入快照、早盤 AI 判讀的核對、早盤 AI 判讀紀錄表、早盤 AI 判讀的顯示 -->
+<!-- owns: premarket_ai_v1、早盤 AI 判讀的輸入快照、早盤 AI 判讀的核對、早盤 AI 判讀紀錄表、早盤 AI 判讀的顯示、premarket_score_v1、早盤 AI 判讀的對答案 -->
 # premarket_ai_v1
 
-早盤 AI 判讀：每個交易日 D 08:21（台北），用截止 D 08:15 的隔夜新聞、美股、台指期夜盤，以及候選池每檔的價量籌碼、產業題材（今日名單的股票另附規則價位），呼叫一次 `claude -p`（sonnet），產出大盤、族群與每檔「維持／依開盤價重算／暫緩」與理由；核對後存檔，存了不改。判讀是**推論**，不是買賣訊號，也不改今日名單、分數或規則價位。依據：#1002 的評估（[AC-2 1/2](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7118193790)、[AC-2 2/2](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7118209417)、[AC-3](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7108600534)）與 #1 決定 [7187492081](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187492081)（3a、4A）、[7187528140](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187528140)（不從池外補股）。程式：job `backend/worker/premarket_ai.py`、輸入 `backend/worker/premarket_input.py`、呼叫與核對 `backend/worker/premarket_reading.py`、讀取 `backend/app/premarket_ai.py`；排程與日誌見 [SCHEDULING](../ops/SCHEDULING.md#scheduler-容器的排程serve)，看門狗見 [WATCHDOG](../ops/WATCHDOG.md)。08:45 的 Telegram 與今日名單頁怎麼顯示見[顯示](#顯示)（#1042），對答案的計算是 #1043。
+早盤 AI 判讀：每個交易日 D 08:21（台北），用截止 D 08:15 的隔夜新聞、美股、台指期夜盤，以及候選池每檔的價量籌碼、產業題材（今日名單的股票另附規則價位），呼叫一次 `claude -p`（sonnet），產出大盤、族群與每檔「維持／依開盤價重算／暫緩」與理由；核對後存檔，存了不改。判讀是**推論**，不是買賣訊號，也不改今日名單、分數或規則價位。依據：#1002 的評估（[AC-2 1/2](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7118193790)、[AC-2 2/2](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7118209417)、[AC-3](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7108600534)）與 #1 決定 [7187492081](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187492081)（3a、4A）、[7187528140](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187528140)（不從池外補股）。程式：job `backend/worker/premarket_ai.py`、輸入 `backend/worker/premarket_input.py`、呼叫與核對 `backend/worker/premarket_reading.py`、讀取 `backend/app/premarket_ai.py`；排程與日誌見 [SCHEDULING](../ops/SCHEDULING.md#scheduler-容器的排程serve)，看門狗見 [WATCHDOG](../ops/WATCHDOG.md)。08:45 的 Telegram 與今日名單頁怎麼顯示見[顯示](#顯示)（#1042）；對答案見[對答案](#對答案)（#1043）。
 
 ## 輸入快照
 
@@ -74,7 +74,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 
 - **`premarket_ai_readings`**（判讀紀錄）：每次 run 一列，`session_date`＋`prompt_version`＋`role`＋`sequence` 唯一。欄位：`list_date`、`role`（`champion`／`shadow`）、`sequence`、`trigger`、`prompt_version`、`prompt_sha256`、`schema_sha256`、`model_alias`（`sonnet`）、`llm_model`（CLI 回報的實際模型，例如 `claude-sonnet-5-5`）、`pool_phase`、`cutoff_at`（UTC）、`input_hash`、`input_json`、`status`（`done`／`failed`／`rejected`）、`reason`、`error`、`output_json`（模型的結構化輸出）、`checks_json`、`attempts`、`attempts_json`（每次呼叫的耗時、token、原因、raw 的 `raw_payload_id`）、`duration_ms`（各次呼叫合計）、`usage_json`（token 合計）、`ingestion_run_id`（`run_type=premarket_ai`）、`started_at`、`finished_at`。每次呼叫的提示與回應另存 raw（`source=premarket_ai`）。
 - **`premarket_ai_stocks`**（每檔判讀）：`done` 的判讀每檔一列：`reading_id`、`instrument_id`、`symbol`、`position`、`on_today_list`、`daily_candidate_id`、`pool_item_id`（讀 candidate_pool_v1 時對回 `candidate_pool_items.id`）、`pool_sources_json`、`levels_json`（今日名單的規則價位，其他是 null）、`action`、`reprice_rule_json`、`reasons_json`。
-- **`premarket_ai_scores`**（對答案）：`reading_id`、`stock_id`、`scope`（`market`／`stock`／`overall`）、`subject`、`horizon`、`score_version`、`outcome_json`、`computed_at`；口徑與計算是 #1043，本單只建表。
+- **`premarket_ai_scores`**（對答案）：`reading_id`、`stock_id`、`scope`（`market`／`stock`／`overall`）、`subject`、`horizon`、`score_version`、`outcome_json`、`computed_at`；口徑與寫法見[對答案](#對答案)。
 - **重跑**：當天同一版本、同一角色已有 `done` 的列就不再呼叫（`skipped reason=already_done`），已存的列不變；只有 `failed`／`rejected` 時再判一次，另加下一個 `sequence`，前面的列不變。當天的判讀是 `done` 那列，沒有時是最新的一列（`app.premarket_ai.day_reading`）。
 - **shadow**（#1002 AC-3 D）：`premarket_reading.SHADOW_PROMPT_VERSION` 設了新版本時，同一次 run 在 champion 之後用**同一份輸入**再呼叫一次，另存 `role=shadow` 的列（同一個 `input_hash`）；champion 當天稍早已經 `done` 時，shadow 讀 champion 存下的那份輸入，不重組。shadow 只記錄，不送 Telegram。同時最多一個 shadow。
 
@@ -99,6 +99,60 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 - 價位（3a）：頁面只在今日名單的股票寫「規則價位 進場／進場區 …｜停損 …｜目標一 …」（`levels`，事實，不標推論），其他股票不寫任何價位；依開盤價重算的價位由程式在開盤後算，08:45 還沒有。
 - **Telegram**：`done` 時在隔夜美股之後一段「早盤 AI 判讀（AI 推論）」：模型與提示、大盤與前 2 條理由、族群（前 5 個，各第一條理由）、每檔動作與第一條理由（今日名單的股票在前，最多 20 檔，其餘寫「另 N 檔的 AI 判讀見今日名單頁」），段內不寫價位（今日名單的價位在上面的名單）。文字版超過 4096 字時先從 AI 段最後一檔往前刪，再刪名單的列。`failed`／`rejected` 不送這段，名單標題下一行「今日 AI 判讀失敗：<reason_text>」；`missing` 寫「今日 AI 判讀尚未完成」。讀判讀或組 AI 段時出錯（`view` 或 `notify.ai_view` 丟例外，例如判讀的形狀和這一版不同）寫「今日 AI 判讀無法讀取」，日誌記 `--- premarket_ai unreadable error=<例外型別>`，規則名單與隔夜美股照送。notify 不等判讀、不拿判讀的鎖。
 - **今日名單頁**：只在「今日名單」分頁、名單之後、熱門族群之前（[PRODUCT_SPEC §2](../PRODUCT_SPEC.md#2-主導航與資訊順序)），讀頁面那份名單的 `list_date`；verify 由 today T30 檢查。
+
+## 對答案
+
+口徑 `premarket_score_v1`：#1043 決定 [7196577181](https://github.com/YiCheng0608/stock-lab/issues/1043#issuecomment-7196577181)（依據 #1002 [AC-3](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7108600534) 的 B、D），在看任何結果之前寫死；之後要改就是新的 `score_version`，舊列不動。常數在 `app.premarket_score.RULES`，它與本節全文由 `test_premarket_score` 的快照釘住。計算是 daily 的最後一步 `premarket_score`（`backend/worker/premarket_score.py`，[SCHEDULING](../ops/SCHEDULING.md#日誌與-run-記錄)）與 `worker.cli premarket-score`；純計算在 `backend/app/premarket_score.py`。早盤 AI 判讀不能回測（模型已知道過去的走勢），只能從上線那天起逐日記錄、用之後才發生的走勢對答案。
+
+- **對哪些判讀**：每個交易日 D、每個 `prompt_version`＋`role` 的 `done` 判讀各算一套；`failed`／`rejected` 不算分，月報另列天數。champion 與 shadow、不同提示版本各自成套，不混。
+- **交易日**：D 是第 1 個交易日，T+N 是 D 起第 N 個台股交易日（`pipeline.taiwan_bar_dates`：名單日之後有台股日 K 的日子，美股在台股休市日的列不算）。休市日沒有判讀，也不算進 N。名單日之後的第一個有日 K 的日子不是 D 時，先以 `app.coverage.collect_states`（daily 補抓判休市的同一條規則）判 D：確認休市（`non_trading`）才把大盤與整體記 `no_data`（`no_session`）、不算每檔；不是確認休市（例如 collect 失敗、補抓還沒成功）就整筆判讀這次不寫，等 D 的日 K 補上後照常算。
+- **報酬**：買進價加 5 bps、賣出價減 5 bps，再扣 30 bps 來回成本（`app.tracking` 的假設）；價格用 `pipeline._tracking_inputs` 的除權息因子換回名單日的基準。
+
+### 大盤
+
+`scope=market`、`subject=market`，`horizon` 是 `d0`（D 開盤→D 收盤）與 `t5`（D 開盤→T+5 收盤）。
+
+- 開盤價用 D 的加權指數日 K 的 `open`（collect 的指數日 K，#552）；D 的列只有收盤（`open` 是空的、`price_reason` 有值或來源仍是 `twse_index`）時記 `no_data`（`no_open`），不拿前收代替。
+- 漲跌 `r`：|r| ≤ 0.5%（`d0`）／1.5%（`t5`）是 `flat`，否則 `up`／`down`。`bullish` 對 `up`、`bearish` 對 `down`、`neutral` 對 `flat` 是 `hit=true`，其他是 `false`。
+- `outcome_json`：`stance`、`confidence`、`open`、`close`、`close_date`、`return`、`band`、`realized`、`hit`、`status`（`scored`／`no_data`）、`reason`。
+
+### 每檔
+
+`scope=stock`、`subject` 是代號、`stock_id` 是 `premarket_ai_stocks.id`，`horizon` 是 `t5`、`t20`。每檔兩種結果：
+
+1. **`open_hold`**（池內每檔都有）：D 開盤買、T+N 收盤賣。D..T+N 少一根交易日的日 K 記 `incomparable`（`missing_bar`），有停牌（`app.tracking` 的停牌判斷）記 `suspended_in_window`，價格不能用記 `no_price`；這些不算報酬。
+2. **`levels`**（只有附規則價位的今日名單股票；`strategy_levels.status=no_levels` 的沒有）：`tracking_v2`（`track_path`＋`settle`，名單日是 level date，D 是 session 1，最多 20 個交易日），不能成交照 `tracking_v2` 的原因碼（`not_filled_by_horizon`、`gap_above_target`、`gap_below_invalid`、停牌），不算報酬。
+   - `original`：照 `levels_json` 的規則價位（突破用 `entry_zone.low` 當突破價，拉回用 `entry_zone.low`～`high`）。`keep`、`defer`（假設做了的結果）、`reprice` 都記。
+   - `repriced`（只有 `reprice`）：程式依開盤價重算的價位，唯一的算法是 `app.premarket_score.reprice`，顯示重算價位的地方都呼叫它。停損價 `invalid_price` 與目標價 `target_1` 不動，進場改成 D 開盤價 O；`gap = O ÷ 名單日收盤 − 1`、`stop_distance = O − invalid_price`、`risk_reward = (target_1 − O) ÷ (O − invalid_price)`。依序檢查 `O ≤ invalid_price`（`open_at_or_below_invalid`）、`O ≥ target_1`（`open_at_or_above_target`）、`gap > max_gap_pct`（`gap_up_over_max`）、`−gap > max_gap_down_pct`（`gap_down_over_max`）、`risk_reward < min_risk_reward`（`risk_reward_under_min`），任一成立就是 `reprice_deferred`（全部列在 `conditions`），不算重算後的結果；否則是 `repriced`，`repriced_result` 是 D 開盤成交後照 `tracking_v2` 的結果。D 沒有日 K 或名單日沒有收盤時記 `no_data`。
+- **有效動作** `effective_action`：`keep`；`reprice` 沒被暫緩是 `reprice`；`defer` 與 `reprice_deferred` 是 `defer`。
+- 我的追蹤（#1002 AC-3 B 4）不算：輸入沒有我的追蹤（見[輸入快照](#輸入快照)）。
+
+### 整體
+
+`scope=overall`、`subject=overall`，`horizon` 是 `t5`、`t20`。每組列筆數、可比數、平均、中位數與不能比的原因碼；`tracking_v2` 的組另列成交數。
+
+- **母體**：D 有日 K、沒停牌的 `stock`／`ipo`（上市與上櫃，不含 ETF，不設流動性門檻）的 `open_hold` 等權平均。
+- **AI 版本**：有效動作是 `keep`／`reprice` 的股票的 `open_hold` 等權平均；`reprice` 也用 `open_hold`，因為兩者都是 D 開盤進。超額＝平均－母體。
+- **規則版本**：今日名單全部（`on_today_list`）的 `open_hold` 等權平均與超額；今日名單 0 檔記 `no_list`，不算 0。
+- **AI 判讀的價值**：
+  - `value_open_hold`＝AI 版本的平均－有效動作 `defer` 的平均（同一個候選池）。這是換版條件用的那一個（T+5）。
+  - `levels.value`＝今日名單內 `keep` 的 `original` 與 `reprice` 的 `repriced_result` 的平均－`defer`／`reprice_deferred` 的 `original` 的平均。只當參考，不進換版條件。
+  - 任一邊沒有可比的結果就記 `null`（`empty_side`）。
+- `tracking_v2` 有停損與達標，和母體的 `open_hold` 不是同一個口徑，所以 `levels` 只列平均與價值，不算對母體的超額。
+- `outcome_json` 另記 `reading_id`、`pool_phase`、`today_list_count`、`population`（`members`、`comparable`、`mean`）、各有效動作的 `open_hold`。
+
+### 寫入與重跑
+
+- 一個 horizon 的最後一個交易日已有日 K（到 daily 的目標日為止）才寫那個 horizon 的列；還沒到就不寫，不寫 pending 列。之後的日子都不讀。
+- 寫了不改：同一個 `reading_id`＋`scope`＋`subject`＋`horizon`＋`score_version` 已有就跳過（表上的 unique），所以同一天重跑、或錯過幾天之後的 daily 都只補還沒寫的列。日 K 事後更正也不重算；要重算就是新的 `score_version`。
+- 個股在 T+N 之前下市或長期停牌：市場已到 T+N 卻少了那根，就記 `incomparable`（`missing_bar`）照寫，不永遠等。
+
+### 月報與去留
+
+- `worker.cli premarket-score-report --month YYYY-MM` 產 markdown（讀 DB、不寫）：每個 `prompt_version`＋`role` 一節，從上線起累積到該月底的判讀天數（`done`／`failed`／`rejected`）、大盤 `d0`／`t5` 判對率、判讀×實際的 3×3 表與各判讀下的平均漲跌、各有效動作的 `open_hold` 與 `levels` 平均、AI 版本與規則版本對母體的超額、AI 判讀的價值。大盤當日已對答案的交易日未滿 60 天標 `insufficient_sample`。
+- 統籌每月第一個交易日（和 #1004 的每月檢討同一天）跑它，以 `回報：` 貼 #1；CLI 不自己貼。
+- 60 個交易日滿才給「AI 版本比規則版本好、差或分不出」的結論，由使用者決定去留；中途不改口徑。
+- **換版**（#1002 AC-3 D）：shadow 上線後，同一批交易日上，新版本的大盤當日判對率不低於舊版本，**而且** `value_open_hold` 的 T+5 平均高於舊版本，兩項都過才換；同一批交易日未滿 20 天標 `insufficient_sample`。月報有 shadow 時列這兩項。換版由統籌在 #1 提案、使用者決定。
 
 ## 限制
 
