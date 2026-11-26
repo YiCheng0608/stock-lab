@@ -18,6 +18,11 @@ The page:
   line 「隔夜新聞 2（可能負向 1）」 under its name and levels (the today page's place, its
   可能負向 count in the falling colour ``--color-down``); a list without a check of its own
   has the line 「開盤前檢查：尚未完成」 under the head's date line.
+- the pre-market AI reading as the text has it (#1042): done, a section of its own after
+  the US block, with the accent bar and the 「AI 推論」 badge of DESIGN_SYSTEM §7, the
+  model and the prompt version, 大盤, 族群 and each stock's action, its reprice rule on a
+  line of its own, and its first reason (each at most two lines, ``AI_REASON_H``; longer ones end with an ellipsis, the page has
+  them whole); no price in it. Not done: no section, its one line under the head.
 
 The drawing (``render``) runs in a new temporary directory under the system's (not beside
 any output, #750): the page, the browser profile and the PNG live there, and the directory
@@ -92,6 +97,14 @@ US_TITLE_H = 36
 US_ROW_H = 36
 US_NOTE_H = 24  # a second line for 「（11/11 收盤） 非最新」
 SOURCE_H = 28
+# The AI section (#1042): its title, the model line, a head (大盤, 族群, a group's
+# title), a stock's line, a reason (two lines at most) and 「另 N 檔」.
+AI_TITLE_H = 36
+AI_META_H = 24
+AI_HEAD_H = 30
+AI_LINE_H = 28
+AI_REASON_H = 42
+AI_MORE_H = 30
 
 # docs/DESIGN_SYSTEM.md tokens (the frontend's tokens.css): the dark terminal layout.
 STYLE = f"""
@@ -99,7 +112,7 @@ STYLE = f"""
   --color-bg: #0b0f1a; --color-bg-alt: #111827; --color-bg-card: #1f2937;
   --color-bg-elevated: #374151; --color-border: rgba(255, 255, 255, 0.10);
   --color-text: #f9fafb; --color-text-muted: #9ca3af; --color-text-subtle: #6b7280;
-  --color-primary: #3b82f6; --color-warning: #f59e0b;
+  --color-primary: #3b82f6; --color-warning: #f59e0b; --color-accent: #8b5cf6;
   --color-up: #ef4444; --color-down: #22c55e; --color-flat: #9ca3af;
   --font-body: "Inter", "Noto Sans CJK TC", "Noto Sans TC", sans-serif;
   --font-mono: "JetBrains Mono", "DejaVu Sans Mono", "Noto Sans Mono CJK TC", monospace;
@@ -156,6 +169,27 @@ header .preopen-pending {{ height: {HEAD_LINE_H}px; line-height: {HEAD_LINE_H}px
 .up {{ color: var(--color-up); }} .down {{ color: var(--color-down); }}
 .flat {{ color: var(--color-flat); }}
 .up, .down, .flat {{ font-weight: 600; }}
+.ai {{ border-left: 2px solid var(--color-accent); }}
+.ai h2 {{ height: {AI_TITLE_H}px; line-height: {AI_TITLE_H}px; border-left: none;
+  display: flex; align-items: center; gap: 10px; }}
+.ai .badge {{ height: 24px; line-height: 22px; padding: 0 10px; font-size: 13px;
+  font-weight: 600; border: 1px solid var(--color-accent); border-radius: 50px; }}
+.ai .meta {{ height: {AI_META_H}px; line-height: {AI_META_H}px; font-size: 13px;
+  padding: 0 14px; }}
+.ai .head {{ height: {AI_HEAD_H}px; line-height: {AI_HEAD_H}px; font-size: 15px;
+  font-weight: 700; padding: 0 14px; border-top: 1px solid var(--color-border); }}
+.ai .head .v {{ font-weight: 600; margin-left: 8px; }}
+.ai .stock {{ height: {AI_LINE_H}px; line-height: {AI_LINE_H}px; font-size: 15px;
+  padding: 0 14px; display: flex; gap: 10px; }}
+.ai .stock .name {{ font-weight: 600; flex: 0 0 auto; max-width: 70%; }}
+.ai .stock .action {{ flex: 1 1 auto; text-align: right; }}
+.ai .reason {{ height: {AI_REASON_H}px; line-height: 20px; font-size: 14px;
+  padding: 0 14px 0 28px; overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; }}
+.ai .more {{ margin: 0; height: {AI_MORE_H}px; line-height: {AI_MORE_H}px;
+  padding: 0 14px; border-top: 1px solid var(--color-border); }}
+header .ai-line {{ height: {HEAD_LINE_H}px; line-height: {HEAD_LINE_H}px;
+  font-size: 15px; color: var(--color-warning); }}
 .source {{ height: {SOURCE_H}px; line-height: {SOURCE_H}px; font-size: 13px;
   padding: 0 14px; border-top: 1px solid var(--color-border); }}
 """
@@ -188,6 +222,8 @@ def card_height(content: Content) -> int:
     height = 2 * PAD + HEAD_TITLE_H + HEAD_LINE_H
     if content.preopen_line:
         height += HEAD_LINE_H
+    if content.ai_line:
+        height += HEAD_LINE_H
     if content.note:
         height += HEAD_NOTE_H
     for _mark, _title, members in sections(shown_rows(content)):
@@ -202,6 +238,32 @@ def card_height(content: Content) -> int:
         height += sum(US_NOTE_H for row in us.rows if row.close and row.note.strip())
     if us.source:
         height += SOURCE_H
+    return height + ai_height(content)
+
+
+def ai_height(content: Content) -> int:
+    """The AI section's height (0 when the reading is not done)."""
+
+    from .notify import ai_groups
+
+    ai = content.ai
+    if ai is None or not ai.done:
+        return 0
+    height = GAP + 2 + AI_TITLE_H + AI_META_H
+    height += AI_HEAD_H + len(ai.market_reasons) * AI_REASON_H
+    if ai.sectors:
+        height += AI_HEAD_H
+        height += sum(AI_LINE_H + (AI_REASON_H if why else 0) for _, why in ai.sectors)
+    for _title, members in ai_groups(ai.stocks):
+        height += AI_HEAD_H
+        height += sum(
+            AI_LINE_H
+            + (AI_REASON_H if stock.rule else 0)
+            + (AI_REASON_H if stock.reason else 0)
+            for stock in members
+        )
+    if len(ai.stocks) < ai.total:
+        height += AI_MORE_H
     return height
 
 
@@ -258,6 +320,47 @@ def _us_html(content: Content) -> str:
     return "".join(parts)
 
 
+def _ai_html(content: Content) -> str:
+    from .notify import AI_MARK, AI_TITLE, ai_groups
+
+    ai = content.ai
+    if ai is None or not ai.done:
+        return ""
+    parts = [
+        f'<section class="ai"><h2>{esc(AI_TITLE)}'
+        f'<span class="badge">{esc(AI_MARK)}</span></h2>',
+        f'<div class="meta muted line">{esc(ai.meta)}</div>',
+        f'<div class="head line">大盤<span class="v">{esc(ai.market)}</span></div>',
+    ]
+    parts += [f'<div class="reason">{esc(why)}</div>' for why in ai.market_reasons]
+    if ai.sectors:
+        parts.append('<div class="head line">族群</div>')
+        for head, why in ai.sectors:
+            parts.append(
+                f'<div class="stock"><span class="name line">{esc(head)}</span></div>'
+            )
+            if why:
+                parts.append(f'<div class="reason muted">{esc(why)}</div>')
+    for title, members in ai_groups(ai.stocks):
+        parts.append(f'<div class="head line">{esc(title)}</div>')
+        for stock in members:
+            parts.append(
+                f'<div class="stock"><span class="name line">{esc(stock.name)}</span>'
+                f'<span class="action line">{esc(stock.action)}</span></div>'
+            )
+            if stock.rule:
+                # The reprice rule on its own (two lines at most): beside the name it is cut.
+                parts.append(f'<div class="reason">{esc(stock.rule)}</div>')
+            if stock.reason:
+                parts.append(f'<div class="reason muted">{esc(stock.reason)}</div>')
+    if len(ai.stocks) < ai.total:
+        parts.append(
+            f'<div class="more muted">另 {ai.total - len(ai.stocks)} 檔的 AI 判讀見今日名單頁</div>'
+        )
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def card_html(content: Content) -> str:
     """The page: the head, a table per section, 「另 N 檔」, then the US block."""
 
@@ -274,6 +377,8 @@ def card_html(content: Content) -> str:
         head.append(
             f'<div class="preopen-pending line">{esc(content.preopen_line)}</div>'
         )
+    if content.ai_line:
+        head.append(f'<div class="ai-line line">{esc(content.ai_line)}</div>')
     if content.note:
         head.append(f'<div class="note muted">{esc(content.note)}</div>')
     head.append("</header>")
@@ -290,6 +395,7 @@ def card_html(content: Content) -> str:
     if more:
         body.append(f'<div class="more muted">另 {more} 檔見今日名單頁</div>')
     body.append(_us_html(content))
+    body.append(_ai_html(content))
     return (
         '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
         f'<meta http-equiv="Content-Security-Policy" content="{CSP}">'
