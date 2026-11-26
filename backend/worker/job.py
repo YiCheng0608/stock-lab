@@ -81,7 +81,7 @@ from typing import BinaryIO, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
-JOBS = ("daily", "news", "us")
+JOBS = ("daily", "news", "us", "night")
 # The locks of the scheduled runs that write stock.db (``running_jobs``): the jobs here and
 # worker.preopen's (#755), which is not a worker.job job.
 WRITER_LOCKS = (*JOBS, "preopen")
@@ -90,16 +90,19 @@ TRIGGERS = ("scheduler", "manual", "simulation")
 # serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
 # (#466). news: well inside its 2-hour interval. us: four FinMind requests and the
 # four indexes' indicators, well inside the hour between two us times (#568, #681).
-TIME_LIMIT_MINUTES = {"daily": 150.0, "news": 90.0, "us": 20.0}
+# night: one futDataDown request (#1040), inside the 08:15 to 08:21 window.
+TIME_LIMIT_MINUTES = {"daily": 150.0, "news": 90.0, "us": 20.0, "night": 5.0}
 # The worker command of each job (us is ``index-bars us-collect``, #568).
 JOB_COMMANDS = {
     "daily": ["daily"],
     "news": ["news"],
     "us": ["index-bars", "us-collect"],
+    "night": ["index-bars", "futures-night"],
 }
 # Jobs that record a skip (low_memory, git_busy, already_running) in the database:
-# daily in schedule_runs, us as a skipped us_index_collect run (#568 AC-3).
-RECORDS_SKIPS = ("daily", "us")
+# daily in schedule_runs, us as a skipped us_index_collect run (#568 AC-3), night as a
+# skipped futures_night_collect run (#1040).
+RECORDS_SKIPS = ("daily", "us", "night")
 # The scheduled daily's threshold (serve passes 2, news 1): a manual run without the
 # option has to start on the Docker VM, whose total memory is about 8.1 GB (#574).
 DEFAULT_MIN_FREE_MEMORY_GB = 2.0
@@ -761,7 +764,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="YYYY-MM-DD；news-llm 不帶（它的 --date 是篩選）",
     )
     parser.add_argument("--trigger", choices=TRIGGERS, default="scheduler")
-    parser.add_argument("--force", action="store_true", help="只給 daily 與 us")
+    parser.add_argument("--force", action="store_true", help="只給 daily、us 與 night")
     # Passed by tasks registered before #314; the checkout is no longer pulled.
     parser.add_argument("--git-pull", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
@@ -785,7 +788,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--time-limit-minutes",
         type=float,
-        help="單次上限；預設 daily 150、news 90（news 與 news-llm 合計）、us 20",
+        help="單次上限；預設 daily 150、news 90（news 與 news-llm 合計）、us 20、night 5",
     )
 
 
@@ -793,7 +796,7 @@ def argument_problem(args: argparse.Namespace) -> str | None:
     if args.job != "news" and args.skip_news_llm:
         return "--skip-news-llm applies only to the news job"
     if args.job not in RECORDS_SKIPS and args.force:
-        return "--force applies only to the daily and us jobs"
+        return "--force applies only to the daily, us and night jobs"
     if not 1 <= args.log_retention_days <= 3650:
         return "--log-retention-days must be between 1 and 3650"
     if not 0 <= args.min_free_memory_gb <= 1024:
@@ -945,9 +948,10 @@ class _Job:
         else:
             step_args = list(JOB_COMMANDS[job])
             if job in RECORDS_SKIPS:
-                # us-collect takes manual or scheduler; a simulation is a manual run.
+                # us-collect and futures-night take manual or scheduler; a simulation
+                # is a manual run.
                 trigger = args.trigger
-                if job == "us" and trigger not in ("scheduler", "manual"):
+                if job in ("us", "night") and trigger not in ("scheduler", "manual"):
                     trigger = "manual"
                 step_args += ["--trigger", trigger]
                 if args.force:
