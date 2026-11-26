@@ -1,4 +1,4 @@
-"""Scheduled worker jobs: ``python -m worker.cli job daily|news`` (#313).
+"""Scheduled worker jobs: ``python -m worker.cli job daily|news|us|night`` (#313).
 
 What tools/Invoke-WorkerJob.ps1 did, together with what the Task Scheduler task
 settings did (a run time limit, one instance at a time), so that any scheduler
