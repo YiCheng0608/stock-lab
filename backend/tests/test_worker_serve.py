@@ -320,6 +320,7 @@ def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
         "daily",
         "news",
         "us",
+        "night",
         "preopen",
         "notify",
         "intraday",
@@ -2286,3 +2287,156 @@ def test_the_env_example_lists_the_telegram_variables_empty():
     assert "docs/ops/SETUP.md" in text
     # Nothing that looks like a real token (digits, a colon and 35 characters).
     assert not re.search(r"\d{6,}:[A-Za-z0-9_-]{20,}", text)
+
+
+# night (#1040) ----------------------------------------------------------------------
+
+NIGHT_DAY = "2026-11-24"  # a Tuesday
+
+
+def test_night_fires_monday_to_friday_at_0815_before_preopen():
+    triggers = serve.triggers(serve_args())
+    monday = datetime(2026, 11, 23, tzinfo=TAIPEI)
+    week = monday + timedelta(days=7)
+    times = fire_times(triggers["night"], monday, week)
+    assert [moment.strftime("%a %H:%M") for moment in times] == [
+        f"{day} 08:15" for day in ("Mon", "Tue", "Wed", "Thu", "Fri")
+    ]
+    # The watchdog also runs at :15; it only reads the logs.
+    for name in ("daily", "news", "us", "preopen", "notify"):
+        assert not set(fire_times(triggers[name], monday, week)) & set(times), name
+    assert serve.NIGHT_WINDOW == ((8, 15), (8, 21))
+
+
+def test_the_night_command_is_job_night_with_news_memory_threshold(tmp_path):
+    data = tmp_path / "data"
+    runner = serve.Serve(serve_args("--data-dir", str(data)))
+    command, _ = runner.command("night", runner.now())
+    assert command == [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-m",
+        "worker.cli",
+        "job",
+        "night",
+        "--trigger",
+        "scheduler",
+        "--data-dir",
+        str(data),
+        "--log-dir",
+        str(data / "logs"),
+        "--min-free-memory-gb",
+        f"{serve.NEWS_MIN_FREE_MEMORY_GB:g}",
+    ]
+    switched = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(data),
+            "--night-time-limit-minutes",
+            "2",
+            "--now",
+            f"{NIGHT_DAY}T08:15:00",
+        )
+    )
+    argv = switched.command("night", switched.now())[0]
+    assert argv[-4:] == ["--time-limit-minutes", "2", "--date", NIGHT_DAY]
+    assert runner.backstop("night") == (job.TIME_LIMIT_MINUTES["night"] + 5) * 60
+
+
+@pytest.mark.parametrize(
+    "now, runs", [("08:21:00", False), ("09:40:00", False), ("08:20:30", True)]
+)
+def test_a_night_trigger_fired_past_0821_runs_nothing(tmp_path, capsys, now, runs):
+    runner = serve.Serve(
+        serve_args("--data-dir", str(tmp_path), "--now", f"{NIGHT_DAY}T{now}")
+    )
+    started = []
+
+    class Tree:
+        def start(self, argv, **_kwargs):
+            started.append(argv)
+            raise RuntimeError("started")
+
+    runner.tree = Tree()
+    if runs:
+        with pytest.raises(RuntimeError, match="started"):
+            runner.fire("night")
+        assert started and started[0][5:7] == ["job", "night"]
+    else:
+        assert runner.fire("night") is None
+        assert not started
+        assert " serve skipped job=night reason=too_late" in capsys.readouterr().out
+
+
+def _night_runs_db(data: Path, *rows: tuple[str, str]) -> None:
+    _runs_db(data)
+    with sqlite3.connect(data / "stock.db") as conn:
+        conn.execute(
+            "CREATE TABLE ingestion_runs (id INTEGER PRIMARY KEY, run_type TEXT, "
+            "run_date DATE, status TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO ingestion_runs (run_type, run_date, status) "
+            "VALUES ('futures_night_collect', ?, ?)",
+            rows,
+        )
+        conn.execute(
+            "INSERT INTO ingestion_runs (run_type, run_date, status) "
+            "VALUES ('us_index_collect', ?, 'success')",
+            (NIGHT_DAY,),
+        )
+    conn.close()
+
+
+@pytest.mark.parametrize(
+    "rows, now, reason",
+    [
+        ((), f"{NIGHT_DAY}T08:16", "not_complete"),
+        (((NIGHT_DAY, "failed"),), f"{NIGHT_DAY}T08:20", "not_complete"),
+        (((NIGHT_DAY, "partial"),), f"{NIGHT_DAY}T08:17", "not_complete"),
+        (((NIGHT_DAY, "skipped"),), f"{NIGHT_DAY}T08:17", "not_complete"),
+        ((("2026-11-23", "success"),), f"{NIGHT_DAY}T08:16", "not_complete"),
+        (((NIGHT_DAY, "success"),), f"{NIGHT_DAY}T08:16", None),
+        (((NIGHT_DAY, "already_complete"),), f"{NIGHT_DAY}T08:16", None),
+        (((NIGHT_DAY, "non_trading_day"),), f"{NIGHT_DAY}T08:16", None),
+        # Outside 08:15 to 08:21, or a weekend: never at start.
+        ((), f"{NIGHT_DAY}T08:14", None),
+        ((), f"{NIGHT_DAY}T08:21", None),
+        ((), f"{NIGHT_DAY}T10:00", None),
+        ((), "2026-11-28T08:16", None),
+    ],
+)
+def test_serve_reads_the_missed_night_only_inside_the_window(
+    tmp_path, rows, now, reason
+):
+    data = tmp_path / "data"
+    _night_runs_db(data, *rows)
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    jobs = {scheduled.id: scheduled for scheduled in runner.scheduler().get_jobs()}
+    assert runner.missed_night() == reason
+    if reason is None:
+        assert "night-catchup" not in jobs
+    else:
+        assert jobs["night-catchup"].args == ("night",)
+
+
+def test_the_missed_night_waits_for_the_end_of_maintenance(tmp_path, capsys):
+    data = tmp_path / "data"
+    _night_runs_db(data)
+    marker = _maintenance_on(data)
+    runner, scheduler, jobs = _deferred(data, f"{NIGHT_DAY}T08:16")
+    assert "night-catchup" not in jobs
+    assert " serve catchup_deferred job=night reason=not_complete maintenance=on" in (
+        capsys.readouterr().out
+    )
+    marker.unlink()
+    runner.watch_maintenance()
+    assert {s.id: s for s in scheduler.get_jobs()}["night-catchup"].args == ("night",)
+
+
+def test_the_night_constants_are_the_workers():
+    from worker import futures_history
+
+    assert serve.NIGHT_RUN_TYPE == futures_history.NIGHT_RUN_TYPE
+    assert serve.NIGHT_COMPLETE_STATUSES == futures_history.NIGHT_COMPLETE_STATUSES

@@ -15,7 +15,9 @@ content, which the user accepted for local personal research only (#1
 
 The near-month rule, fields and null rules are ``worker.futures_bars``':
 ``契約=TX``, ``交易時段=一般``, ``到期月份(週別)`` equal to the session's near
-month; spreads (``202410/202411``) and the after-hours rows are never taken.
+month; spreads (``202410/202411``) and the after-hours rows are never taken
+into these bars (the after-hours near-month rows go to ``futures_night_bars``
+through ``collect_night`` only, Issue #1040).
 The rows are written with their own ``source`` (``taifex_futdatadown``) and
 raw source (``taifex_web``), only for sessions without a TX row of the other
 source (``store_futures_bars``), so the two never overlap, and never for
@@ -30,9 +32,10 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from sqlalchemy import select
@@ -60,6 +63,9 @@ ENDPOINT = "https://www.taifex.com.tw/cht/3/futDataDown"
 SOURCE = "taifex_futdatadown"
 RAW_SOURCE = "taifex_web"
 RUN_TYPE = "futures_bar_backfill"
+# The after-hours session (Issue #1040): its own table and run type.
+AFTER_HOURS_SESSION = "盤後"
+NIGHT_RUN_TYPE = "futures_night_collect"
 # The index history start (worker.index_bars.HISTORY_START, Issue #563).
 HISTORY_START = date(2023, 9, 1)
 DEFAULT_FIRST_MONTH = "2023-09"
@@ -132,6 +138,26 @@ class ParsedMonth:
     # before, filed under the next trading day, whose regular session has not
     # traded yet.  Not a gap; no bar until a later read.
     after_hours_only_dates: list[str] = field(default_factory=list)
+    # The near-month after-hours bar of every listed date (Issue #1040), and
+    # the dates with after-hours rows but no single readable near-month one.
+    night_bars: list[NightBar] = field(default_factory=list)
+    night_unusable_dates: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class NightBar:
+    """The near-month 盤後 row of a TAIFEX trading date (the evening before it)."""
+
+    trading_date: date
+    contract_month: str
+    open: float | None
+    high: float | None
+    low: float | None
+    close: float
+    # 漲跌價: against the regular-session settlement price of the day before.
+    change: float | None
+    volume: int
+    price_reason: str | None
 
 
 def decode(content: Any) -> str:
@@ -179,6 +205,33 @@ def _row_bar(row: dict[str, str], day: date, contract: str) -> FuturesBar | None
     )
 
 
+_SIGNED = re.compile(r"[+-]?\d+(?:\.\d+)?")
+
+
+def _signed(value: str) -> float | None:
+    """漲跌價: a signed number; ``-`` (no trade) or anything else is empty."""
+
+    text = value.strip()
+    return float(text) if _SIGNED.fullmatch(text) else None
+
+
+def _night_bar(row: dict[str, str], day: date, contract: str) -> NightBar | None:
+    bar = _row_bar(row, day, contract)
+    if bar is None:
+        return None
+    return NightBar(
+        trading_date=day,
+        contract_month=contract,
+        open=bar.open,
+        high=bar.high,
+        low=bar.low,
+        close=bar.close,
+        change=_signed(row["漲跌價"]),
+        volume=bar.volume,
+        price_reason=bar.price_reason,
+    )
+
+
 def parse_month(text: Any, request: Request) -> ParsedMonth:
     """The near-month regular-session bar of every session in one month's CSV.
 
@@ -188,6 +241,9 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
     (OfficialDataError).  A session with regular rows but no single readable
     near-month one is listed in ``unusable_dates`` and gets no bar; a day with
     after-hours rows only is ``after_hours_only_dates`` (not yet traded).
+    The near-month after-hours row of every listed date is ``night_bars``
+    (Issue #1040; ``collect_night`` stores them), a date with after-hours rows
+    but no single readable near-month one ``night_unusable_dates``.
     """
 
     if not isinstance(text, str):
@@ -205,6 +261,7 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
             f"TAIFEX futDataDown header is not the 19 fields: {header[:5]}"
         )
     candidates: dict[date, list[dict[str, str]]] = {}
+    night: dict[date, list[dict[str, str]]] = {}
     listed: set[date] = set()
     for cells in reader:
         if len(cells) < len(FIELDS):
@@ -228,6 +285,11 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
                 f"TAIFEX futDataDown has contract {row['契約']!r}, not {CONTRACT}"
             )
         listed.add(day)
+        if row["交易時段"] == AFTER_HOURS_SESSION:
+            rows = night.setdefault(day, [])
+            if row["到期月份(週別)"] == near_month(day):
+                rows.append(row)
+            continue
         if row["交易時段"] != REGULAR_SESSION:
             continue
         rows = candidates.setdefault(day, [])
@@ -245,7 +307,16 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
     # The evening session belongs to the next trading day: before that day's
     # regular session the CSV lists the day with after-hours rows only.
     after_hours_only = sorted(day.isoformat() for day in listed - set(candidates))
-    return ParsedMonth(bars, unusable, after_hours_only)
+    night_bars: list[NightBar] = []
+    night_unusable: list[str] = []
+    for day in sorted(night):
+        rows = night[day]
+        found = _night_bar(rows[0], day, near_month(day)) if len(rows) == 1 else None
+        if found is None:
+            night_unusable.append(day.isoformat())
+        else:
+            night_bars.append(found)
+    return ParsedMonth(bars, unusable, after_hours_only, night_bars, night_unusable)
 
 
 def fetch_month(request: Request, *, timeout_seconds: float = 30.0) -> bytes:
@@ -707,6 +778,311 @@ def run_futures_history(
         try:
             return backfill_futures_history(
                 db, first=first_month, last=last_month, force=force, today=today
+            )
+        except ValueError as exc:
+            db.rollback()
+            return {"status": "failed", "error": str(exc)}
+
+
+# --- the after-hours (夜盤) session (Issue #1040) ---------------------------------
+# A night row dated D is the session from 15:00 of the trading day before to 05:00
+# of D; before NIGHT_CLOSE on D it is still trading and is not stored.
+NIGHT_CLOSE = (5, 0)
+NIGHT_FIELDS = (
+    "contract_month",
+    "open",
+    "high",
+    "low",
+    "close",
+    "change",
+    "volume",
+    "price_reason",
+)
+# The statuses after which the day's night needs no other run (serve's catch-up).
+NIGHT_COMPLETE_STATUSES = ("success", "already_complete", "non_trading_day")
+
+
+def night_rows(db: Session, start: date, end: date) -> dict[date, Any]:
+    from app.models import FuturesNightBar
+
+    rows = db.scalars(
+        select(FuturesNightBar).where(
+            FuturesNightBar.symbol == SYMBOL,
+            FuturesNightBar.trading_date >= start,
+            FuturesNightBar.trading_date <= end,
+        )
+    ).all()
+    return {row.trading_date: row for row in rows}
+
+
+def store_night_bars(
+    db: Session, bars: list[NightBar], raw_id: int, *, force: bool = False
+) -> dict[str, Any]:
+    """Insert new nights; a stored night with other values is a conflict unless ``force``.
+
+    The same night read again with the same values is ``unchanged`` (no row is
+    touched), so a rerun is idempotent.
+    """
+
+    from app.models import FuturesNightBar
+
+    counts = {"inserted": 0, "replaced": 0, "unchanged": 0, "conflict": 0}
+    conflicts: list[dict[str, Any]] = []
+    written: list[str] = []
+    if not bars:
+        return {"counts": counts, "conflicts": conflicts, "written_dates": written}
+    stored = night_rows(
+        db,
+        min(bar.trading_date for bar in bars),
+        max(bar.trading_date for bar in bars),
+    )
+    for bar in bars:
+        row = stored.get(bar.trading_date)
+        incoming = {name: getattr(bar, name) for name in NIGHT_FIELDS}
+        if row is not None:
+            current = {name: getattr(row, name) for name in NIGHT_FIELDS}
+            if current == incoming:
+                counts["unchanged"] += 1
+                continue
+            if not force:
+                counts["conflict"] += 1
+                conflicts.append(
+                    {
+                        "trading_date": bar.trading_date.isoformat(),
+                        "stored": current,
+                        "incoming": incoming,
+                        "raw_payload_id": raw_id,
+                    }
+                )
+                continue
+        outcome = "replaced" if row is not None else "inserted"
+        if row is None:
+            row = FuturesNightBar(symbol=SYMBOL, trading_date=bar.trading_date)
+            db.add(row)
+        for name, value in incoming.items():
+            setattr(row, name, value)
+        row.source = SOURCE
+        row.data_as_of = datetime.combine(bar.trading_date, datetime.min.time())
+        row.collected_at = utcnow()
+        row.raw_payload_id = raw_id
+        counts[outcome] += 1
+        written.append(bar.trading_date.isoformat())
+    db.flush()
+    return {"counts": counts, "conflicts": conflicts, "written_dates": written}
+
+
+def _taipei_now() -> datetime:
+    return datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
+
+
+def collect_night(
+    db: Session,
+    *,
+    day: date | None = None,
+    month: Month | None = None,
+    get: Callable[[Request], Any] = fetch_month,
+    now: datetime | None = None,
+    force: bool = False,
+    trigger: str = "manual",
+    skip_reason: str | None = None,
+) -> dict[str, Any]:
+    """Read the TX near-month night of ``day`` (default today), or of every date of ``month``.
+
+    One ``futures_night_collect`` run and at most one ``futDataDown`` request:
+    ``day`` asks for ``day``..``day`` (at 08:15 the CSV lists that date with
+    the night's after-hours rows only), ``month`` for the calendar month up to
+    today.  The rows are parsed and rejected as the history's (``parse_month``)
+    and written to ``futures_night_bars`` (``store_night_bars``).  For ``day``
+    without ``force``: a weekend or a date the stored calendar marks closed is
+    ``non_trading_day`` and a night already stored ``already_complete``, both
+    without a request.  A night dated today before 05:00 (Taipei) is still
+    trading and is not written.  ``success`` when the night of ``day`` (every
+    listed night of ``month``) is stored, ``partial`` when the answer had none
+    (not yet listed, or no usable near-month row), ``failed`` on an unreadable
+    answer; with ``skip_reason`` (the job's low_memory, git_busy,
+    already_running) a ``skipped`` run without a request.
+    """
+
+    from app.models import IngestionRun
+
+    from .notify import is_trading_day
+    from .pipeline import _upsert_raw_payload
+
+    now = now or _taipei_now()
+    today = now.date()
+    if month is not None and day is not None:
+        raise ValueError("give a day or a month, not both")
+    if month is not None:
+        if (month.year, month.month) > (today.year, today.month):
+            raise ValueError(f"{month.label} is after the current month {today:%Y-%m}")
+        request = request_for(month, today)
+    else:
+        day = day or today
+        if day > today:
+            raise ValueError(f"{day.isoformat()} is after today {today.isoformat()}")
+        request = Request(Month.of(day), day, day)
+    run = IngestionRun(
+        run_type=NIGHT_RUN_TYPE,
+        source="official",
+        run_date=today,
+        status="running",
+        started_at=utcnow(),
+        data_as_of=request.end.isoformat(),
+        metadata_json={
+            "trigger": trigger,
+            "force": force,
+            "start": request.start.isoformat(),
+            "end": request.end.isoformat(),
+        },
+    )
+    db.add(run)
+    db.commit()
+
+    def finish(status: str, **metadata: Any) -> dict[str, Any]:
+        run.status = status
+        run.finished_at = utcnow()
+        run.records = sum(
+            metadata.get("counts", {}).get(name, 0) for name in ("inserted", "replaced")
+        )
+        run.metadata_json = {**run.metadata_json, **metadata}
+        if status == "failed":
+            # As us-collect: the error is on the run, for /api/ingestion-runs.
+            run.error = str(metadata.get("error") or "")[:2000] or None
+        db.commit()
+        return {
+            "status": status,
+            "run_id": run.id,
+            "start": request.start.isoformat(),
+            "end": request.end.isoformat(),
+            **metadata,
+        }
+
+    try:
+        if skip_reason:
+            return finish("skipped", skip_reason=skip_reason, requests=0)
+        if month is None and not force:
+            if not is_trading_day(db, day):
+                return finish("non_trading_day", requests=0)
+            if day in night_rows(db, day, day):
+                return finish("already_complete", requests=0)
+        db.commit()  # no read is held open during the request
+        text: str | None = None
+        parsed: ParsedMonth | None = None
+        error: Exception | None = None
+        answered = False
+        try:
+            content = get(request)
+            answered = True
+            text = decode(content)
+            parsed = parse_month(text, request)
+        except OfficialDataError as exc:
+            error = exc
+        # Any answer is kept, as the history keeps it: an undecodable one with
+        # ``csv`` empty.  No answer (a transport failure) has no raw.
+        captured = (
+            capture_payload(
+                RAW_SOURCE,
+                request.endpoint,
+                {"form": request.form, "encoding": ENCODING, "csv": text},
+                request.end.isoformat(),
+            )
+            if answered
+            else None
+        )
+        raw_id = _upsert_raw_payload(db, run, captured).id if captured else None
+        if parsed is None or raw_id is None:
+            exc = error or OfficialDataError("no answer")
+            warning = (
+                f"{WARNING_PREFIX} night unavailable for TAIFEX TX "
+                f"{request.start.isoformat()}..{request.end.isoformat()}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return finish(
+                "failed",
+                requests=1,
+                raw_payload_id=raw_id,
+                error=f"{type(exc).__name__}: {exc}",
+                warnings=[warning],
+            )
+        trading = (now.hour, now.minute) < NIGHT_CLOSE
+        in_progress = [
+            bar.trading_date.isoformat()
+            for bar in parsed.night_bars
+            if trading and bar.trading_date == today
+        ]
+        bars = [
+            bar
+            for bar in parsed.night_bars
+            if bar.trading_date.isoformat() not in in_progress
+        ]
+        stored = store_night_bars(db, bars, raw_id, force=force)
+        warnings: list[str] = []
+        if parsed.night_unusable_dates:
+            warnings.append(
+                f"{WARNING_PREFIX} has no usable TX near-month night row on "
+                + ", ".join(parsed.night_unusable_dates)
+            )
+        if stored["conflicts"]:
+            warnings.append(
+                f"{WARNING_PREFIX} kept {len(stored['conflicts'])} stored TX night(s) "
+                "that differ from the report"
+            )
+        listed = {bar.trading_date for bar in bars}
+        if month is None:
+            complete = day in listed
+            if not complete and not parsed.night_unusable_dates:
+                warnings.append(
+                    f"{WARNING_PREFIX} lists no TX night for {day.isoformat()} yet"
+                )
+        else:
+            complete = not parsed.night_unusable_dates
+        return finish(
+            "success" if complete else "partial",
+            requests=1,
+            raw_payload_id=raw_id,
+            counts=stored["counts"],
+            conflicts=stored["conflicts"],
+            written_dates=stored["written_dates"],
+            nights=sorted(day.isoformat() for day in listed),
+            unusable_dates=parsed.night_unusable_dates,
+            in_progress_dates=in_progress,
+            warnings=warnings,
+        )
+    except BaseException as exc:
+        db.rollback()
+        failed_run = db.get(IngestionRun, run.id)
+        if failed_run is not None and isinstance(exc, Exception):
+            failed_run.status = "failed"
+            failed_run.error = f"{type(exc).__name__}: {exc}"
+            failed_run.finished_at = utcnow()
+            db.commit()
+        raise
+
+
+def run_futures_night(
+    day: str | None,
+    month: str | None,
+    *,
+    force: bool = False,
+    trigger: str = "manual",
+    skip_reason: str | None = None,
+) -> dict[str, Any]:
+    from app.db import SessionLocal
+
+    try:
+        night_day = date.fromisoformat(day) if day else None
+        night_month = Month.parse(month) if month else None
+    except ValueError as exc:
+        return {"status": "failed", "error": str(exc)}
+    with SessionLocal() as db:
+        try:
+            return collect_night(
+                db,
+                day=night_day,
+                month=night_month,
+                force=force,
+                trigger=trigger,
+                skip_reason=skip_reason,
             )
         except ValueError as exc:
             db.rollback()

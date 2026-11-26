@@ -381,7 +381,7 @@ def test_news_llm_can_be_switched_off(tree):
     "job_name, option, message",
     [
         ("daily", "--skip-news-llm", "--skip-news-llm applies only to the news job"),
-        ("news", "--force", "--force applies only to the daily and us jobs"),
+        ("news", "--force", "--force applies only to the daily, us and night jobs"),
         ("us", "--skip-news-llm", "--skip-news-llm applies only to the news job"),
     ],
 )
@@ -1091,7 +1091,7 @@ def maintenance_marker(
     return path
 
 
-@pytest.mark.parametrize("job_name", ["daily", "news", "us"])
+@pytest.mark.parametrize("job_name", ["daily", "news", "us", "night"])
 def test_in_maintenance_a_job_only_logs_the_skip_and_starts_no_worker(tree, job_name):
     """AC-1: no worker, so not even the skipped row a daily records for other skips."""
 
@@ -1206,3 +1206,94 @@ def test_the_us_job_limit_is_twenty_minutes():
 
     assert job_module.TIME_LIMIT_MINUTES["us"] == 20.0
     assert job_module.JOB_COMMANDS["us"] == ["index-bars", "us-collect"]
+
+
+# The night job: index-bars futures-night (#1040) --------------------------------------
+
+
+def test_the_night_job_runs_futures_night_with_its_own_log_and_lock(tree):
+    result = tree.run("night", "--date", "2026-11-24")
+    assert result.code == 0, result.stderr
+    call = tree.calls()[0]
+    assert call["argv"] == [
+        "index-bars",
+        "futures-night",
+        "--trigger",
+        "scheduler",
+        "--date",
+        "2026-11-24",
+    ]
+    assert call["env"]["STOCK_JOB_LOCK"] == str(tree.data / "locks" / "night.lock")
+    assert " start job=night trigger=scheduler" in result.log
+    assert list(tree.logs.glob("night-*.log"))
+    assert not list(tree.logs.glob("us-*.log"))
+
+
+def test_a_us_run_still_going_does_not_hold_the_night_job_back(tree):
+    """A 07:30 us run past 08:15 holds us.lock only: the night runs beside it."""
+
+    release = tree.root / "release"
+    first = tree.start("us", index_bars_until=release, index_bars_sleep=90)
+    try:
+        tree.wait_for_call(1)
+        night = tree.run("night")
+        assert night.code == 0, night.stderr
+        assert "already_running" not in night.log
+        assert tree.calls()[1]["argv"][:2] == ["index-bars", "futures-night"]
+        assert "--skip-reason" not in tree.calls()[1]["argv"]
+    finally:
+        release.touch()
+        first.wait(timeout=60)
+    assert first.returncode == 0
+
+
+def test_a_preopen_waiting_for_news_does_not_hold_the_night_job_back(tree):
+    """preopen holds preopen.lock and waits on news.lock (#755); night takes neither."""
+
+    held = [
+        job.FileLock(job.lock_path(tree.data, name)) for name in ("preopen", "news")
+    ]
+    assert all(lock.acquire() for lock in held)
+    try:
+        night = tree.run("night")
+    finally:
+        for lock in held:
+            lock.release()
+    assert night.code == 0, night.stderr
+    assert "already_running" not in night.log
+    assert tree.calls()[0]["argv"] == [
+        "index-bars",
+        "futures-night",
+        "--trigger",
+        "scheduler",
+    ]
+
+
+def test_a_second_night_job_records_already_running(tree):
+    release = tree.root / "release"
+    first = tree.start("night", index_bars_until=release, index_bars_sleep=90)
+    try:
+        tree.wait_for_call(1)
+        second = tree.run("night")
+        assert second.code == 0, second.stderr
+        assert tree.calls()[1]["argv"][-2:] == ["--skip-reason", "already_running"]
+    finally:
+        release.touch()
+        first.wait(timeout=60)
+
+
+def test_a_manual_or_simulated_night_job_is_a_manual_futures_night(tree):
+    tree.run("night", "--trigger", "simulation", "--force")
+    assert tree.calls()[0]["argv"] == [
+        "index-bars",
+        "futures-night",
+        "--trigger",
+        "manual",
+        "--force",
+    ]
+
+
+def test_the_night_job_limit_is_five_minutes():
+    assert job.TIME_LIMIT_MINUTES["night"] == 5.0
+    assert job.JOB_COMMANDS["night"] == ["index-bars", "futures-night"]
+    assert "night" in job.WRITER_LOCKS

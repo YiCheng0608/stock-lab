@@ -1,7 +1,7 @@
 """Add the candidate pool tables.
 
-Revision ID: 0038_candidate_pool
-Revises: 0037_theme_clusters
+Revision ID: 0039_candidate_pool
+Revises: 0038_futures_night_bars
 
 ``candidate_pool_runs`` keeps one row per trading date, version and phase
 (``evening`` / ``morning``), and ``candidate_pool_items`` one row per stock of
@@ -29,8 +29,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0038_candidate_pool"
-down_revision = "0037_theme_clusters"
+revision = "0039_candidate_pool"
+down_revision = "0038_futures_night_bars"
 branch_labels = None
 depends_on = None
 

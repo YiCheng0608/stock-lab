@@ -1,5 +1,5 @@
 """候選池 candidate_pool_v1 (Issue #1020): sources, caps, written once, the
-morning run, the daily step, the CLI, the API and migration 0038.
+morning run, the daily step, the CLI, the API and migration 0039.
 
 The fixture is 30 calendar days standing in for sessions (TAIEX has a bar on
 each), T the last, with a small ``PoolConfig`` (5-session liquidity, 20-session
@@ -972,7 +972,7 @@ def test_the_api_tells_a_missing_morning_from_an_empty_one(factory):
     assert none["meta"]["phases"] == {"evening": None, "morning": None}
 
 
-# --- migration 0038 -----------------------------------------------------------
+# --- migration 0039 -----------------------------------------------------------
 
 
 def _tables(path):
@@ -992,6 +992,8 @@ def _tables(path):
     return tables & {"candidate_pool_runs", "candidate_pool_items"}, indexes
 
 
+# The candidate pool's revision, found by name so a renumbering keeps the test.
+MIGRATION = next(name for name in REVISIONS if name.endswith("_candidate_pool"))
 INDEXES = {
     "ix_candidate_pool_runs_trading_date",
     "ix_candidate_pool_items_run_id",
@@ -1016,15 +1018,15 @@ def test_the_upgrade_adds_the_two_tables(tmp_path, monkeypatch, entry):
     assert _tables(path) == ({"candidate_pool_runs", "candidate_pool_items"}, INDEXES)
     with closing(sqlite3.connect(path)) as connection:
         if entry == "alembic":
-            assert "0038_candidate_pool" in REVISIONS
+            assert MIGRATION in REVISIONS
             assert connection.execute(
                 "SELECT version_num FROM alembic_version"
             ).fetchall() == [(REVISIONS[-1],)]
         else:
             assert connection.execute(
-                "SELECT version FROM schema_migrations"
-                " WHERE version = '0038_candidate_pool'"
-            ).fetchall() == [("0038_candidate_pool",)]
+                "SELECT version FROM schema_migrations WHERE version = ?",
+                (MIGRATION,),
+            ).fetchall() == [(MIGRATION,)]
 
 
 def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
@@ -1043,10 +1045,10 @@ def test_the_downgrade_drops_the_two_tables_and_the_upgrade_makes_them_again(
     )
     config.attributes["connection"] = engine
     try:
-        command.upgrade(config, "0038_candidate_pool")
-        command.downgrade(config, "0037_theme_clusters")
+        command.upgrade(config, MIGRATION)
+        command.downgrade(config, REVISIONS[REVISIONS.index(MIGRATION) - 1])
         assert _tables(path) == (set(), set())
-        command.upgrade(config, "0038_candidate_pool")
+        command.upgrade(config, MIGRATION)
     finally:
         engine.dispose()
     assert _tables(path) == ({"candidate_pool_runs", "candidate_pool_items"}, INDEXES)

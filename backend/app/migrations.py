@@ -849,12 +849,20 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0037_theme_clusters', CURRENT_TIMESTAMP)"
         )
     )
-    # 0038 only adds candidate_pool_runs / candidate_pool_items (#1020), made
+    # 0038 only adds futures_night_bars (#1040), made by create_all with its
+    # indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0038_futures_night_bars', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0039 only adds candidate_pool_runs / candidate_pool_items (#1020), made
     # by create_all with their indexes.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0038_candidate_pool', CURRENT_TIMESTAMP)"
+            "VALUES ('0039_candidate_pool', CURRENT_TIMESTAMP)"
         )
     )
 

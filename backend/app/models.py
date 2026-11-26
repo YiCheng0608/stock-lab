@@ -144,6 +144,44 @@ class MarketBar(Base):
     settlement_price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class FuturesNightBar(Base):
+    """The TX near-month after-hours (夜盤) bar of one TAIFEX trading date (Issue #1040).
+
+    The website download ``futDataDown`` rows with ``交易時段=盤後``
+    (``worker.futures_history``): the evening session from 15:00 of the
+    trading day before to 05:00, which TAIFEX files under the next trading
+    date, ``trading_date`` here.  Kept apart from ``market_bars``, so the
+    regular-session TX bars, their indicators and backtests never see it.
+    ``change`` is TAIFEX's 漲跌價, against the regular-session settlement
+    price of the day before; open/high/low are empty with ``price_reason``
+    when the source gave none.  No settlement or open interest is published
+    for the session.
+    """
+
+    __tablename__ = "futures_night_bars"
+    __table_args__ = (
+        UniqueConstraint("symbol", "trading_date", name="uq_futures_night_bar_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(20))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    contract_month: Mapped[str] = mapped_column(String(10))
+    open: Mapped[float | None] = mapped_column(Float, nullable=True)
+    high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    close: Mapped[float] = mapped_column(Float)
+    change: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume: Mapped[int] = mapped_column(Integer)
+    price_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source: Mapped[str] = mapped_column(String(120))
+    data_as_of: Mapped[datetime] = mapped_column(DateTime)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+
+
 class ChipSnapshot(Base):
     __tablename__ = "chip_snapshots"
     __table_args__ = (
