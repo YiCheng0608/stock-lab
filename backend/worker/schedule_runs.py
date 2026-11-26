@@ -4,9 +4,9 @@ Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
 analyze -> evaluate -> candidates -> indicators -> mainstream -> h2_list ->
 theme_heat -> period_backfill -> x4_list -> plan_tracking -> strategy_levels ->
-action_tiers -> candidate_notes -> theme_discovery -> candidate_pool).  catchup
-first collects recent official
-sessions that have no successful collect yet (the machine was off, or every
+action_tiers -> candidate_notes -> theme_discovery -> candidate_pool ->
+premarket_score).  catchup first collects recent official sessions that
+have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
 analyze, evaluate and candidates run only after a
 successful collect; evaluate and candidates only after a successful analyze

@@ -20,15 +20,17 @@ nothing.  Nothing after the target date is read.
 
 from __future__ import annotations
 
+import sys
 import time
 from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app import premarket_score as score
 from app.clock import utcnow
+from app.coverage import collect_states
 from app.indicators import is_synthetic_bar
 from app.models import (
     CorporateAction,
@@ -43,6 +45,8 @@ from app.tracking import TRACKING_RULES_V2, TrackBar, settle, track_path
 from worker import pipeline
 
 TAIEX_SYMBOL = "TAIEX"
+# app.coverage.collect_states: a confirmed closure.
+NON_TRADING = "non_trading"
 MAX_SESSIONS = max(score.STOCK_HORIZONS.values())
 
 
@@ -218,6 +222,10 @@ def population(
                 db, instrument_id, list_date, evaluation_cutoff=end
             )
         else:
+            # No suspension events are read here: ``suspension_gap`` is only
+            # set when a market session has no bar, and open_hold already
+            # needs a bar on every session from D (missing_bar), so the pool
+            # stocks' ``_tracking_inputs`` path decides the same.
             tracked = [pipeline._track_bar(bar, 1.0, False, False) for bar in bars]
         if not tracked or tracked[0].trading_date != day or score.suspended(tracked[0]):
             continue
@@ -229,14 +237,43 @@ def population(
 
 def _existing(db: Session, reading_id: int) -> set[tuple[str, str, str]]:
     return {
-        (row.scope, row.subject, row.horizon)
-        for row in db.scalars(
-            select(PremarketAiScore).where(
+        (scope, subject, horizon)
+        for scope, subject, horizon in db.execute(
+            select(
+                PremarketAiScore.scope,
+                PremarketAiScore.subject,
+                PremarketAiScore.horizon,
+            ).where(
                 PremarketAiScore.reading_id == reading_id,
                 PremarketAiScore.score_version == score.SCORE_VERSION,
             )
         )
     }
+
+
+# A reading is finished once these are written: every market horizon and the
+# overall row of the longest horizon (written with its stock rows, or alone on
+# a confirmed closure).
+FINISHED = frozenset(
+    {
+        *((score.MARKET, score.MARKET, horizon) for horizon in score.MARKET_HORIZONS),
+        (
+            score.OVERALL,
+            score.OVERALL,
+            max(score.STOCK_HORIZONS, key=score.STOCK_HORIZONS.get),
+        ),
+    }
+)
+
+
+def _closed(db: Session, day: date) -> bool:
+    """D was a confirmed closure (``app.coverage.collect_states``, the catch-up's rule).
+
+    A D without bars that is not confirmed closed (a failed collect, a
+    catch-up still to come) is not a closure: the reading waits.
+    """
+
+    return collect_states(db, day, day).get(day) == NON_TRADING
 
 
 def score_reading(
@@ -246,13 +283,21 @@ def score_reading(
     *,
     now: datetime,
     population_cache: dict[tuple[date, int], dict[str, Any]],
-) -> list[PremarketAiScore]:
-    """The rows of one reading that are due by ``target`` and not yet written."""
+) -> list[PremarketAiScore] | None:
+    """The rows of one reading that are due by ``target`` and not yet written.
 
+    None when the reading is already finished (nothing was read for it).
+    """
+
+    have = _existing(db, reading.id)
+    if FINISHED <= have:
+        return None
     sessions = _sessions(db, reading.list_date, target)
     if not sessions:
         return []
-    have = _existing(db, reading.id)
+    no_session = sessions[0] != reading.session_date
+    if no_session and not _closed(db, reading.session_date):
+        return []
     rows: list[PremarketAiScore] = []
 
     def add(scope: str, subject: str, horizon: str, outcome, stock_id=None):
@@ -272,7 +317,6 @@ def score_reading(
             )
         )
 
-    no_session = sessions[0] != reading.session_date
     for horizon, length in score.MARKET_HORIZONS.items():
         key = (score.MARKET, score.MARKET, horizon)
         if key in have or (len(sessions) < length and not no_session):
@@ -283,6 +327,16 @@ def score_reading(
             horizon,
             market_rows(db, reading, sessions, horizon),
         )
+    if no_session:
+        for horizon in score.STOCK_HORIZONS:
+            if (score.OVERALL, score.OVERALL, horizon) not in have:
+                add(
+                    score.OVERALL,
+                    score.OVERALL,
+                    horizon,
+                    {"status": score.NO_DATA, "reason": score.NO_SESSION},
+                )
+        return rows
     stocks = list(
         db.scalars(
             select(PremarketAiStock)
@@ -290,23 +344,10 @@ def score_reading(
             .order_by(PremarketAiStock.position)
         )
     )
-    pool = (reading.input_json or {}).get("pool") or {}
     for horizon, length in score.STOCK_HORIZONS.items():
         wanted = [(score.STOCK, row.symbol, horizon) for row in stocks]
         wanted.append((score.OVERALL, score.OVERALL, horizon))
-        if all(key in have for key in wanted):
-            continue
-        if no_session:
-            key = (score.OVERALL, score.OVERALL, horizon)
-            if key not in have:
-                add(
-                    score.OVERALL,
-                    score.OVERALL,
-                    horizon,
-                    {"status": score.NO_DATA, "reason": score.NO_SESSION},
-                )
-            continue
-        if len(sessions) < length:
+        if all(key in have for key in wanted) or len(sessions) < length:
             continue
         outcomes = [
             (row, stock_outcome(db, reading, row, sessions, length)) for row in stocks
@@ -320,6 +361,8 @@ def score_reading(
                 population_cache[cache_key] = population(
                     db, reading.list_date, sessions, length
                 )
+            # input_json is deferred: read only here, for the pool's count.
+            pool = (reading.input_json or {}).get("pool") or {}
             overall = score.overall_outcome(
                 [outcome for _row, outcome in outcomes],
                 population_cache[cache_key],
@@ -332,13 +375,27 @@ def score_reading(
 
 
 def score_readings(
-    db: Session, target: date, *, now: datetime | None = None
+    db: Session,
+    target: date,
+    *,
+    now: datetime | None = None,
+    stats: dict[str, int] | None = None,
 ) -> list[PremarketAiScore]:
-    """Every due, unwritten row of the done readings through ``target`` (added, not committed)."""
+    """Every due, unwritten row of the done readings through ``target`` (not added).
+
+    ``stats`` gets how many readings were checked and how many were already
+    finished.
+    """
 
     stamp = now or utcnow()
     readings = db.scalars(
         select(PremarketAiReading)
+        .options(
+            defer(PremarketAiReading.input_json),
+            defer(PremarketAiReading.checks_json),
+            defer(PremarketAiReading.attempts_json),
+            defer(PremarketAiReading.error),
+        )
         .where(
             PremarketAiReading.status == DONE,
             PremarketAiReading.session_date <= target,
@@ -352,18 +409,50 @@ def score_readings(
     ).all()
     cache: dict[tuple[date, int], dict[str, Any]] = {}
     rows: list[PremarketAiScore] = []
+    finished = 0
     for reading in readings:
-        rows.extend(
-            score_reading(db, reading, target, now=stamp, population_cache=cache)
-        )
+        due = score_reading(db, reading, target, now=stamp, population_cache=cache)
+        if due is None:
+            finished += 1
+        else:
+            rows.extend(due)
+    if stats is not None:
+        stats.update(readings_checked=len(readings), readings_finished=finished)
     return rows
+
+
+def _failed(day: date | None, exc: Exception) -> dict[str, Any]:
+    error = f"{type(exc).__name__}: {exc}"
+    print(
+        f"warning: {score.SCORE_VERSION} {day.isoformat() if day else '-'} failed: {error}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return {
+        "status": "failed",
+        "date": day.isoformat() if day else None,
+        "score_version": score.SCORE_VERSION,
+        "error": error,
+        "records": 0,
+    }
 
 
 def run_premarket_score(
     target: date | None = None, *, dry_run: bool = False
 ) -> dict[str, Any]:
-    """Score the readings due by ``target`` (default: the latest stored session)."""
+    """Score the readings due by ``target`` (default: the latest stored session).
 
+    Never raises: a failure is a ``warning:`` line on stderr and a ``failed``
+    result, which the daily keeps on the step row only.
+    """
+
+    try:
+        return _run(target, dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001 - a warning, the daily goes on
+        return _failed(target, exc)
+
+
+def _run(target: date | None, *, dry_run: bool) -> dict[str, Any]:
     started = time.monotonic()
     with pipeline.SessionLocal() as db:
         day = target or db.scalar(
@@ -373,12 +462,8 @@ def run_premarket_score(
         )
         if day is None:
             return {"status": "no_data", "reason": "no_market_bars", "records": 0}
-        readings = db.scalar(
-            select(PremarketAiReading.id)
-            .where(PremarketAiReading.status == DONE)
-            .limit(1)
-        )
-        rows = score_readings(db, day) if readings is not None else []
+        stats: dict[str, int] = {"readings_checked": 0, "readings_finished": 0}
+        rows = score_readings(db, day, stats=stats)
         counts: dict[str, int] = {}
         for row in rows:
             counts[row.scope] = counts.get(row.scope, 0) + 1
@@ -387,6 +472,7 @@ def run_premarket_score(
             "date": day.isoformat(),
             "score_version": score.SCORE_VERSION,
             "dry_run": dry_run,
+            **stats,
             "rows": counts,
             "readings": sorted({row.reading_id for row in rows}),
             "records": 0 if dry_run else len(rows),

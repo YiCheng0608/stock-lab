@@ -59,15 +59,22 @@ def collect(db: Session, end: date) -> dict[tuple[str, str], dict[str, Any]]:
     out: dict[tuple[str, str], dict[str, Any]] = defaultdict(
         lambda: {"days": {}, "scores": []}
     )
-    for reading in db.scalars(
-        select(PremarketAiReading)
+    # Only the columns the day statuses need: a reading row carries its whole
+    # input and output.
+    for session_date, version, role, status in db.execute(
+        select(
+            PremarketAiReading.session_date,
+            PremarketAiReading.prompt_version,
+            PremarketAiReading.role,
+            PremarketAiReading.status,
+        )
         .where(PremarketAiReading.session_date <= end)
         .order_by(PremarketAiReading.session_date, PremarketAiReading.sequence)
     ):
-        days = out[(reading.prompt_version, reading.role)]["days"]
+        days = out[(version, role)]["days"]
         # The day's reading: its done row, else its latest row.
-        if days.get(reading.session_date) != DONE:
-            days[reading.session_date] = reading.status
+        if days.get(session_date) != DONE:
+            days[session_date] = status
     for row in db.scalars(
         select(PremarketAiScore).where(
             PremarketAiScore.session_date <= end,
@@ -305,6 +312,29 @@ def switch_section(
     ]
 
 
+def _done_days(part: dict[str, Any]) -> set[date]:
+    return {day for day, status in part["days"].items() if status == DONE}
+
+
+def paired_champion(
+    champions: list[tuple[str, dict[str, Any]]], shadow: tuple[str, dict[str, Any]]
+) -> tuple[str, dict[str, Any]]:
+    """The champion version that ran on the most of the shadow's done days.
+
+    Not the last by name (``premarket_v10`` sorts before ``premarket_v9``), and
+    after a switch an old shadow pairs with the champion of its own days.
+    """
+
+    days = _done_days(shadow[1])
+    return max(
+        champions,
+        key=lambda item: (
+            len(_done_days(item[1]) & days),
+            max(item[1]["days"], default=date.min),
+        ),
+    )
+
+
 def render(db: Session, month: str) -> str:
     _start, end = month_bounds(month)
     data = collect(db, end)
@@ -324,9 +354,9 @@ def render(db: Session, month: str) -> str:
         lines += section(version, role, part)
     champions = [(key[0], part) for key, part in ordered if key[1] == CHAMPION]
     shadows = [(key[0], part) for key, part in ordered if key[1] == SHADOW]
-    if champions and shadows:
-        for shadow in shadows:
-            lines += switch_section(champions[-1], shadow)
+    for shadow in shadows:
+        if champions:
+            lines += switch_section(paired_champion(champions, shadow), shadow)
     return "\n".join(lines)
 
 

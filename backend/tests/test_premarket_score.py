@@ -10,6 +10,7 @@ horizon close sells at the close without slippage (app.tracking.settle).
 from __future__ import annotations
 
 import hashlib
+import sys
 import json
 import re
 import statistics
@@ -17,20 +18,23 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import premarket_score as score
 from app.db import Base, enable_sqlite_foreign_keys
 from app.models import (
+    CorporateAction,
+    IngestionRun,
     Instrument,
     MarketBar,
     PremarketAiReading,
     PremarketAiScore,
     PremarketAiStock,
+    ScheduleRun,
 )
-from worker import pipeline, premarket_score, premarket_score_report
+from worker import pipeline, premarket_score, premarket_score_report, schedule_runs
 
 L = date(2026, 12, 1)
 D = date(2026, 12, 2)
@@ -202,7 +206,15 @@ POOL = (
 )
 
 
-def reading(db, stocks, *, role="champion", version="premarket_v1", stance="bullish"):
+def reading(
+    db,
+    stocks,
+    *,
+    role="champion",
+    version="premarket_v1",
+    stance="bullish",
+    pool=None,
+):
     now = datetime(2026, 12, 2, 0, 25)
     row = PremarketAiReading(
         session_date=D,
@@ -231,7 +243,9 @@ def reading(db, stocks, *, role="champion", version="premarket_v1", stance="bull
     )
     db.add(row)
     db.flush()
-    for position, (symbol, listed, action, level, rule) in enumerate(POOL, start=1):
+    for position, (symbol, listed, action, level, rule) in enumerate(
+        POOL if pool is None else pool, start=1
+    ):
         db.add(
             PremarketAiStock(
                 reading_id=row.id,
@@ -284,7 +298,7 @@ def tracked(entry_raw, exit_, *, sell=False):
 # change to either fails here: give it a new SCORE_VERSION and pin that one.
 PINNED = {
     "premarket_score_v1": (
-        "30cb4aed987d1f69bb28c6795c5d9d2e2202c547f5fcbacdbf4bce845a681290",
+        "1975afd837382f2fcfab3467bd4630a36d175bd42cffd50c82a2705fb7afd42e",
         "30157c112a817fa7d526c0fc9ca9d9d77cf1ec9ff1df9ee106eb4d48b64f3c41",
     ),
 }
@@ -546,3 +560,268 @@ def test_the_month_report_marks_a_short_sample_and_compares_a_shadow(db, world):
     assert "| 大盤當日判對率不低於 | 0.0% | 100.0% | 是 |" in text
     assert premarket_score_report.month_problem("2026-13") is not None
     assert premarket_score_report.month_problem("2026-12") is None
+
+
+# --- review 7198655936 -----------------------------------------------------------------
+
+
+def drop_day(db, day):
+    """Every bar of DAY, removed and returned (a collect that never wrote them)."""
+
+    kept = [
+        {
+            column.name: getattr(row, column.name)
+            for column in MarketBar.__table__.columns
+            if column.name != "id"
+        }
+        for row in db.scalars(select(MarketBar).where(MarketBar.trading_date == day))
+    ]
+    db.execute(delete(MarketBar).where(MarketBar.trading_date == day))
+    db.flush()
+    return kept
+
+
+def test_a_confirmed_closed_d_is_no_session_once(db, world):
+    drop_day(db, D)
+    row = reading(db, world)
+    db.add(
+        ScheduleRun(
+            job="daily", target_date=D, trigger="scheduler", status="non_trading_day"
+        )
+    )
+    db.add(
+        IngestionRun(
+            run_type="collect",
+            source="fixture",
+            run_date=D,
+            status="skipped",
+            started_at=datetime(2026, 12, 2, 13, 40),
+            finished_at=datetime(2026, 12, 2, 13, 41),
+        )
+    )
+    db.flush()
+    first = run(db, SESSIONS[1])
+    assert {(item.scope, item.horizon) for item in first} == {
+        ("market", "d0"),
+        ("market", "t5"),
+        ("overall", "t5"),
+        ("overall", "t20"),
+    }
+    assert all(item.outcome_json["reason"] == "no_session" for item in first)
+    # Finished: later days read nothing for it.
+    assert run(db, SESSIONS[19]) == []
+    stats = {}
+    premarket_score.score_readings(db, SESSIONS[19], stats=stats)
+    assert stats == {"readings_checked": 1, "readings_finished": 1}
+    assert (
+        written(db, row.id)[(row.id, "market", "market", "d0")]["status"] == "no_data"
+    )
+
+
+def test_a_d_without_bars_that_is_not_a_closure_waits_for_them(db, world):
+    kept = drop_day(db, D)
+    row = reading(db, world)
+    # D's collect failed and nothing confirms a closure: write nothing.
+    assert run(db, SESSIONS[4]) == []
+    # The catch-up stores D: every horizon due by then is scored as usual.
+    db.add_all(MarketBar(**values) for values in kept)
+    db.flush()
+    rows = run(db, SESSIONS[4])
+    assert len(rows) == 2 + 6 + 1
+    scores = written(db, row.id)
+    assert scores[(row.id, "market", "market", "d0")]["status"] == "scored"
+    assert scores[(row.id, "overall", "overall", "t5")]["ai_version"]["n"] == 4
+
+
+def dividend(db, row, day, factor):
+    db.add(
+        CorporateAction(
+            instrument_id=row.id,
+            action_date=day,
+            action_type="dividend",
+            details_json={"price_factor": factor},
+            source="fixture",
+        )
+    )
+
+
+def test_ex_dividend_prices_are_put_back_on_the_list_date_basis(db, world):
+    """H goes ex-dividend on D (factor 0.9); Q, a market stock, on session 3."""
+
+    h = instrument(db, "H")
+    # Level basis: D 51/53/50.5/52, day 2 touches the target 56, then 55; raw x0.9.
+    path(
+        db,
+        h,
+        50,
+        (45.9, 47.7, 45.45, 46.8),
+        lambda at: (46.8, 51.3, 46.8, 50.4) if at == 2 else 49.5,
+    )
+    dividend(db, h, D, 0.9)
+    q = instrument(db, "Q")
+    path(db, q, 40, (40, 40.5, 39.5, 40), lambda at: 40 if at == 2 else 36)
+    dividend(db, q, SESSIONS[2], 0.9)
+    world["H"] = h
+    pool = (
+        *POOL,
+        (
+            "H",
+            True,
+            "reprice",
+            levels("breakout", 52, 52, 47, 56),
+            {"max_gap_pct": 0.05, "max_gap_down_pct": 0.03, "min_risk_reward": 1.2},
+        ),
+    )
+    row = reading(db, world, pool=pool)
+    run(db, SESSIONS[4])
+    scores = written(db, row.id)
+    stock = scores[(row.id, "stock", "H", "t5")]
+    repriced = stock["levels"]["repriced"]
+    # The raw open 45.9 is 51 on the list date's basis: a 2% gap, not -8.2%
+    # (which would be gap_down_over_max and at or below the invalid price 47).
+    assert repriced["status"] == "repriced"
+    assert repriced["entry"] == pytest.approx(51)
+    assert repriced["gap"] == pytest.approx(51 / 50 - 1)
+    assert repriced["risk_reward"] == pytest.approx((56 - 51) / (51 - 47))
+    assert stock["effective_action"] == "reprice"
+    assert stock["levels"]["repriced_result"]["return"] == pytest.approx(
+        tracked(51, 56, sell=True)
+    )
+    assert stock["levels"]["original"]["return"] == pytest.approx(
+        tracked(52, 56, sell=True)
+    )
+    assert stock["open_hold"]["return"] == pytest.approx(hold(51, 55))
+    # Q: 40 held to 36 raw after a 0.9 factor is 40 to 40, not -10%.
+    overall = scores[(row.id, "overall", "overall", "t5")]
+    expected = [
+        hold(101, 102),
+        hold(51, 55),
+        hold(30.5, 29),
+        hold(20, 21),
+        hold(10.8, 11),
+        hold(40, 40),
+        hold(51, 55),
+        hold(40, 40),
+    ]
+    assert overall["population"]["comparable"] == len(expected)
+    assert overall["population"]["mean"] == pytest.approx(statistics.fmean(expected))
+
+
+REAL_STEP = schedule_runs._premarket_score_step
+
+
+@pytest.fixture
+def daily_db(tmp_path, monkeypatch):
+    """As test_daily_schedule's ``database``: a migrated file DB for the run log."""
+
+    from app.migrations import upgrade_database
+    from worker import sources
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'score.db'}")
+    enable_sqlite_foreign_keys(engine)
+    upgrade_database(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    monkeypatch.setattr(pipeline, "SessionLocal", factory)
+    monkeypatch.setattr(pipeline, "init_db", lambda: None)
+    monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
+    yield factory
+    engine.dispose()
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_the_real_daily_step_never_fails_the_run(daily_db, monkeypatch, capsys, broken):
+    from test_daily_schedule import DAY, Steps, runs
+
+    from worker.cli import DAILY_EXIT_CODES
+
+    Steps(monkeypatch)
+    monkeypatch.setattr(schedule_runs, "_premarket_score_step", REAL_STEP)
+    assert "premarket_score" in schedule_runs.NON_BLOCKING_STEPS
+    if broken:
+
+        def crash(*_args, **_kwargs):
+            raise RuntimeError("fixture score crash")
+
+        monkeypatch.setattr(premarket_score, "score_readings", crash)
+    result = pipeline.run_daily(DAY)
+    assert result["status"] == "success"
+    assert DAILY_EXIT_CODES[result["status"]] == 0
+    rows, by_run = runs(daily_db)
+    step = by_run[rows[0].id]["premarket_score"]
+    assert rows[0].status == "success" and rows[0].error is None
+    err = capsys.readouterr().err
+    if broken:
+        assert step.status == "failed" and "fixture score crash" in step.error
+        assert "warning: premarket_score_v1 2026-09-04 failed: RuntimeError" in err
+    else:
+        assert (step.status, step.records, step.sequence) == ("success", 0, 18)
+        assert "premarket_score_v1" not in err
+
+
+def cli_main(monkeypatch, *argv):
+    import worker.cli as cli
+
+    monkeypatch.setattr(sys, "argv", ["worker.cli", *argv])
+    try:
+        cli.main()
+    except SystemExit as exc:
+        return exc.code
+    return 0
+
+
+def test_the_cli_scores_reports_and_refuses_a_bad_month(
+    engine, db, world, monkeypatch, capsys, tmp_path
+):
+    reading(db, world)
+    db.commit()
+    monkeypatch.setattr(
+        pipeline, "SessionLocal", sessionmaker(bind=engine, expire_on_commit=False)
+    )
+    day = SESSIONS[4].isoformat()
+    assert cli_main(monkeypatch, "premarket-score", "--date", day, "--dry-run") == 0
+    dry = json.loads(capsys.readouterr().out)
+    assert (dry["status"], dry["records"], dry["dry_run"]) == ("success", 0, True)
+    assert db.scalar(select(func.count(PremarketAiScore.id))) == 0
+    assert cli_main(monkeypatch, "premarket-score", "--date", day) == 0
+    assert json.loads(capsys.readouterr().out)["records"] == 9
+    out = tmp_path / "report.md"
+    assert (
+        cli_main(
+            monkeypatch,
+            "premarket-score-report",
+            "--month",
+            "2026-12",
+            "--out",
+            str(out),
+        )
+        == 0
+    )
+    assert "`premarket_v1`／`champion`" in out.read_text(encoding="utf-8")
+    assert cli_main(monkeypatch, "premarket-score-report", "--month", "2026-12") == 0
+    assert "**insufficient_sample**" in capsys.readouterr().out
+    assert cli_main(monkeypatch, "premarket-score-report", "--month", "2026-13") == 2
+    assert "YYYY-MM" in capsys.readouterr().err
+
+    def crash(*_args, **_kwargs):
+        raise RuntimeError("fixture score crash")
+
+    monkeypatch.setattr(premarket_score, "score_readings", crash)
+    assert cli_main(monkeypatch, "premarket-score", "--date", day) == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+
+
+def test_a_shadow_is_paired_with_the_champion_of_its_own_days():
+    def part(days):
+        return {"days": {day: "done" for day in days}, "scores": []}
+
+    old = ("premarket_v9", part(SESSIONS[:10]))
+    new = ("premarket_v10", part(SESSIONS[10:]))
+    shadow = ("premarket_v11", part(SESSIONS[12:15]))
+    # By name v10 sorts before v9; the days decide.
+    assert (
+        premarket_score_report.paired_champion([new, old], shadow)[0] == "premarket_v10"
+    )
+    early = ("premarket_v10", part(SESSIONS[2:5]))
+    assert (
+        premarket_score_report.paired_champion([new, old], early)[0] == "premarket_v9"
+    )

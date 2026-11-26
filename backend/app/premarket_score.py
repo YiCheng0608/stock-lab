@@ -21,6 +21,7 @@ from datetime import date
 from typing import Any, Iterable, Sequence
 
 from .tracking import (
+    EXECUTION_SLIPPAGE_BPS,
     ROUND_TRIP_TRANSACTION_COST_BPS,
     TRACKING_RULES_V2,
     TrackBar,
@@ -106,6 +107,8 @@ RULES: dict[str, Any] = {
     "value_levels": "keep original + reprice repriced mean - defer/reprice_deferred original mean, today list only (reference)",
     "write": "a horizon is written once its session exists, never rewritten",
     "cost_bps": ROUND_TRIP_TRANSACTION_COST_BPS,
+    "slippage_bps": EXECUTION_SLIPPAGE_BPS,
+    "population_types": list(POPULATION_TYPES),
     "report_min_days": REPORT_MIN_DAYS,
     "shadow_min_days": SHADOW_MIN_DAYS,
 }
