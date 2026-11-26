@@ -148,9 +148,10 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 ## 每日 Telegram 通知
 
-每個交易日台北 08:45，scheduler 用使用者自己的 Telegram bot 送一則訊息到使用者與 bot 的 1 對 1 對話（#728，使用者決定 [#1 6881270275](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881270275)）。內容是前一個交易日的今日名單與隔夜美股四檔：名單分「突破」「回踩」兩區（其他進場型態放最後的「其他」），每檔是代號名稱、進場、停損、目標（回踩的進場是區間，缺價位寫「價位不完整」），有隔夜新聞的檔另標 08:20 開盤前檢查的「隔夜新聞 N（可能負向 k）」，這份名單還沒檢查時寫一行「開盤前檢查：尚未完成」（#759，規則見 [notify 的內容](SCHEDULING.md#scheduler-容器的排程serve)）；美股每檔是收盤、漲跌幅（紅漲綠跌），附收盤日、新鮮度與來源名稱。缺資料時寫「無資料（原因）」。
+每個交易日台北 08:45，scheduler 用使用者自己的 Telegram bot 送一則訊息到使用者與 bot 的 1 對 1 對話（#728，使用者決定 [#1 6881270275](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881270275)）。內容是前一個交易日的今日名單與隔夜美股四檔：名單分「突破」「回踩」兩區（其他進場型態放最後的「其他」），每檔是代號名稱、進場、停損、目標（回踩的進場是區間，缺價位寫「價位不完整」），有隔夜新聞的檔另標 08:20 開盤前檢查的「隔夜新聞 N（可能負向 k）」，這份名單還沒檢查時寫一行「開盤前檢查：尚未完成」（#759，規則見 [notify 的內容](SCHEDULING.md#scheduler-容器的排程serve)）；美股每檔是收盤、漲跌幅（紅漲綠跌），附收盤日、新鮮度與來源名稱。缺資料時寫「無資料（原因）」。當天的[早盤 AI 判讀](../spec/premarket_ai.md#顯示)（08:21 的 champion）是 `done` 時，美股之後另一段「早盤 AI 判讀」，標「AI 推論」、模型與提示版本，寫大盤、族群與每檔的動作和第一條理由（今日名單的股票在前，最多 20 檔，段內不寫價位；重算的那檔另寫暫緩條件）；失敗、核對不過或 08:45 還沒寫好時不送這段，只在名單標題下寫一行「今日 AI 判讀失敗：<原因>」或「今日 AI 判讀尚未完成」（#1042）。notify 不等判讀。
 
 - **圖片卡片**（#754，使用者選定）：照 [DESIGN_SYSTEM](../DESIGN_SYSTEM.md) 盤後終端深色版面畫成一張 PNG（每區一張表，數字靠右、等寬），用 `sendPhoto` 送出，圖下一行文字「今日名單 11/13（五）・突破 8、回踩 9」。scheduler 容器用 image 內的 Chromium 與 `fonts-noto-cjk` 畫（`backend/worker/notify_card.py`），暫存檔放系統暫存目錄、畫完即刪，逾時就殺掉。
+- **AI 段**（#1042）：卡片上是另一張左側紫色豎線的區塊（DESIGN_SYSTEM §7），每條理由最多兩行、超過以省略號收尾；文字版超過 4096 字時先從 AI 段的最後一檔往前刪，再刪名單的列，各自寫「另 N 檔…見今日名單頁」。
 - **退回文字版**（#742 的卡片式文字）：畫圖失敗（沒有瀏覽器、非 0 結束、逾時、PNG 是空的）、`sendPhoto` 回不重試的 4xx、或重試後仍失敗，就改送文字版（`sendMessage`，每檔一行粗體代號名稱（有隔夜新聞時同一行接「　隔夜新聞 N（可能負向 k）」）、一行「進場 X｜停損 Y｜目標 Z」，名單還沒檢查時標題下多一行「開盤前檢查：尚未完成」，美股 🔴／🟢／⚪）。兩種內容出自同一次讀取，名單、價位與美股的文字逐項相同。
 - 日誌 `logs/notify-YYYYMMDD.log` 的 result 行記送了哪一種：`status=sent mode=photo … photo=<寬>x<高>`（Telegram 保留的最大尺寸），或 `status=sent mode=text reason=render_failed:<原因>`／`reason=photo_failed:<每次的原因>`；兩種都失敗才是 `status=failed`（文字版的原因，加 `photo=<圖的原因>`）。一天只送一則，不論是哪一種。
 - 圖片說明與文字版都用 Telegram 的 `parse_mode=HTML`（粗體），資料裡的文字先跳脫；Telegram 回 400 `can't parse entities` 時記 `parse_error`、不重試。排程、不重送與失敗的處理見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)。

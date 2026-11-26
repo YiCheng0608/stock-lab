@@ -4174,3 +4174,156 @@ def test_t29_without_a_list_in_the_window(tmp_path):
         recent={"sessions": 60, "days": 0, "since": None, "items": []},
     )
     assert "沒有近 60 日的名單" in page_checks.t29(run)
+
+
+# ---- T30: 早盤 AI 判讀 (#1042) ----
+
+PREMARKET_LEVELS = {
+    "entry_type": "breakout",
+    "entry": 21.1,
+    "entry_zone": {"low": 21.1, "high": 21.1},
+    "invalid_price": 20.05,
+    "target_1": 22.78,
+}
+
+
+def _premarket(status="done", **change):
+    data = {
+        "status": status,
+        "llm_model": "claude-sonnet-5-5",
+        "prompt_version": "premarket_v1",
+        "reason_text": None,
+        "market": {
+            "reasons": [
+                {
+                    "text": "根據美股，推論偏多",
+                    "refs": [{"kind": "news", "news_id": 1, "label": "示範新聞標題"}],
+                }
+            ]
+        },
+        "sectors": [],
+        "stocks": [
+            {
+                "symbol": "9100",
+                "name": "示範一",
+                "on_today_list": True,
+                "action_text": "維持",
+                "levels": PREMARKET_LEVELS,
+                "reasons": [],
+            },
+            {
+                "symbol": "9204",
+                "name": "示範生技",
+                "on_today_list": False,
+                "action_text": "暫緩",
+                "reasons": [],
+            },
+        ],
+        "input_gaps": ["台指期夜盤無資料"],
+    }
+    return {**data, **change}
+
+
+PREMARKET_BLOCK = (
+    "早盤 AI 判讀\nAI 推論\n2026/10/19 開盤前 · 模型 claude-sonnet-5-5 · 提示 premarket_v1\n"
+    "大盤 偏多（把握中）\n根據美股，推論偏多\n示範新聞標題\n"
+    "今日名單的股票（1 檔）\n9100 示範一 · 維持\n規則價位 進場 21.10｜停損 20.05｜目標一 22.78\n"
+    "候選池其他股票（1 檔）\n9204 示範生技 · 暫緩\n根據缺資料，推論暫緩\n"
+    "資料缺口\n夜盤缺 12.50 點的資料\n判讀輸入的資料缺口：台指期夜盤無資料\n"
+)
+
+
+def _t30_run(tmp_path, block=PREMARKET_BLOCK, data=None):
+    page = TODAY_CANDIDATES.replace("熱門族群\n", block + "熱門族群\n", 1)
+    return FakeRun(
+        tmp_path,
+        {
+            "candidates": _candidates(),
+            "premarket-ai?list_date=2026-10-16": data or _premarket(),
+        },
+        {"today-1280": page},
+        {"candidate_run_latest_trading_date": "2026-10-16"},
+    )
+
+
+def test_t30_passes_and_t8_leaves_the_blocks_badge_out(tmp_path):
+    run = _t30_run(tmp_path)
+    result = page_checks.t30(run)
+    assert (
+        "`AI 推論` 1 行" in result
+        and "2 檔（今日名單 1 檔有規則價位、其他沒有價位）" in result
+    )
+    # T8 still counts one badge per candidate note: the block's own is T30's.
+    assert "`AI 推論` 2 行" in page_checks.t8(run)
+    # The list's rank rows are not counted again (T7).
+    assert "名次列 2" in page_checks.t7(run)
+
+
+@pytest.mark.parametrize(
+    ("block", "message"),
+    [
+        (PREMARKET_BLOCK.replace("AI 推論\n", "", 1), r"`AI 推論` 0 行"),
+        (
+            PREMARKET_BLOCK.replace("AI 推論\n", "AI 推論\nAI 推論\n", 1),
+            r"`AI 推論` 2 行",
+        ),
+        (
+            PREMARKET_BLOCK.replace(" · 提示 premarket_v1", ""),
+            "缺 `模型 claude-sonnet-5-5 · 提示",
+        ),
+        (
+            PREMARKET_BLOCK.replace(
+                "· 暫緩\n", "· 暫緩\n規則價位 進場 50.00｜停損 48.00｜目標一 53.00\n", 1
+            ),
+            "9204 示範生技 不在今日名單卻有價位",
+        ),
+        (
+            PREMARKET_BLOCK.replace("規則價位 進場 21.10", "規則價位 進場 21.00"),
+            "9100 示範一 缺 `規則價位",
+        ),
+        (
+            PREMARKET_BLOCK.replace("9100 示範一 · 維持", "9100 示範一 · 暫緩"),
+            "9100 示範一 的動作不是 `維持`",
+        ),
+        (PREMARKET_BLOCK.replace("示範新聞標題\n", ""), "缺引用的新聞 `示範新聞標題`"),
+        (
+            PREMARKET_BLOCK.replace("判讀輸入的資料缺口：台指期夜盤無資料\n", ""),
+            "缺 `判讀輸入的資料缺口",
+        ),
+    ],
+)
+def test_t30_fails(tmp_path, block, message):
+    with pytest.raises(
+        page_checks.Fail, match=re.escape(message) if "`AI" not in message else message
+    ):
+        page_checks.t30(_t30_run(tmp_path, block))
+
+
+def test_t30_fails_without_its_end_or_its_title(tmp_path):
+    run = _t30_run(tmp_path)
+    run.pages["today-1280"] = run.pages["today-1280"].replace(
+        "熱門族群\n#1\n半導體\n", ""
+    )
+    with pytest.raises(page_checks.Fail, match="段落沒有終點"):
+        page_checks.t30(run)
+    with pytest.raises(page_checks.Fail, match="缺整行 `早盤 AI 判讀`"):
+        page_checks.t30(_t30_run(tmp_path, ""))
+
+
+@pytest.mark.parametrize(
+    ("data", "line"),
+    [
+        (_premarket("failed", reason_text="呼叫逾時"), "早盤 AI 判讀失敗：呼叫逾時"),
+        (
+            _premarket("rejected", reason_text="判讀格式不符"),
+            "早盤 AI 判讀失敗：判讀格式不符",
+        ),
+        (_premarket("missing"), "尚無早盤 AI 判讀（每個交易日 08:21 判讀）"),
+    ],
+)
+def test_t30_a_reading_not_done_is_one_line(tmp_path, data, line):
+    assert page_checks.t30(
+        _t30_run(tmp_path, f"早盤 AI 判讀\nAI 推論\n{line}\n", data)
+    ) == (f"status={data['status']}：`{line}`")
+    with pytest.raises(page_checks.Fail, match="段內缺"):
+        page_checks.t30(_t30_run(tmp_path, "早盤 AI 判讀\nAI 推論\n別的字\n", data))

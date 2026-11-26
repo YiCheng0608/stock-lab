@@ -10,7 +10,9 @@ import { NOTE_DISCLAIMER, NOTE_MISSING_TEXT, NOTE_PENDING_TEXT, NOT_COMPUTED_TEX
 import { completeItem, listResponse, longList, notComputedResponse, partialItem, zeroResponse } from '../candidates/candidates.fixtures'
 import type { ActionSummary } from '../types'
 import * as TodayModule from './TodayViews'
-import { overviewBoth, overviewNone, overviewTwseOnly, riskActions } from './today.fixtures'
+import { overviewBoth, overviewNone, overviewTwseOnly, premarketAiDone, premarketAiNotDone, riskActions } from './today.fixtures'
+import * as PremarketModule from './PremarketAiSection'
+import { PREMARKET_AI_FAILED, PREMARKET_AI_MISSING, PREMARKET_AI_TITLE, premarketAiShown } from './premarketAi'
 import { StrategyBoardPanel } from '../stock/StrategyBoardPanel'
 import { board, conditionalBreakout, observationPullback } from '../stock/strategyBoard.fixtures'
 import { removedCopyIn } from '../removedCopy.fixtures'
@@ -237,5 +239,42 @@ check(/<b class="level-stop">20\.10<\/b>/.test(actionDetail) && /<b class="level
 const held = { ...conditional, action_state: 'reduce_exit', held: true, stop_price: 19.5, stop_price_semantics: { kind: 'user_position_risk_input' } } as unknown as ActionSummary
 const heldCard = render('ActionTierSectionView held', () => { const View = component(ActionModule as Record<string, unknown>, 'ActionTierSectionView'); return <View section={tierSection(0, held)} canLoadMore onMore={() => {}} /> })
 check(/<td class="num level-stop">19\.50<\/td>/.test(heldCard), '行動頁列表: a holding stop is a stop level too')
+
+// ---- 早盤 AI 判讀 (#1042, UI_COPY_SPEC §10): the inference block, the news it cites linked, the gaps as they are, prices on the today list only ----
+const PremarketAiView = component(PremarketModule as Record<string, unknown>, 'PremarketAiView')
+const ai = render('PremarketAiView done', () => <PremarketAiView data={premarketAiDone()} />)
+const aiText = text(ai)
+check(ai.startsWith('<section class="ai-inference premarket-ai"') && count(ai, 'AI 推論') === 1 && count(ai, 'badge-accent') === 1, `早盤 AI 判讀: one §7 block with one AI 推論 badge, got ${ai.slice(0, 200)}`)
+check(aiText.includes(PREMARKET_AI_TITLE) && aiText.includes('模型 claude-sonnet-5-5') && aiText.includes('提示 premarket_v1') && !aiText.includes('提示版本') && aiText.includes('2026/11/30 開盤前') && aiText.includes('判讀於 2026/11/30 08:24'), `早盤 AI 判讀: the model, the prompt version and the time, got ${aiText}`)
+check(aiText.includes('大盤 偏多（把握中）') && aiText.includes('半導體 · 可能正向') && aiText.includes('1101 台泥 · 依開盤價重算（開盤漲幅逾 5.0%、跌幅逾 3.0%或重算後 RR 低於 1.5 倍即暫緩）'), `早盤 AI 判讀: market, sectors and actions, got ${aiText}`)
+check(ai.includes('href="/news/777"') && ai.includes('href="/news/501"') && aiText.includes('台泥擴產') && aiText.includes('美股收高 費半大漲'), '早盤 AI 判讀: a cited news links to its news page with its title')
+check(aiText.includes('依據 1101 籌碼') && !aiText.includes('weird'), '早盤 AI 判讀: other refs by their label, an unknown one left out')
+check(aiText.includes('資料缺口台指期夜盤沒有資料，大盤判讀信心降低') && aiText.includes('判讀輸入的資料缺口：台指期夜盤無資料；2330 台積電 名單日無日線'), `早盤 AI 判讀: the AI's and the input's data gaps as they are, got ${aiText}`)
+const listedStock = slice(ai, 'data-symbol="1101"', '</li><li')
+const otherStock = slice(ai, 'data-symbol="2330"', '</ul>')
+check(text(listedStock).includes('規則價位 進場 101.00｜停損 98.00｜目標一 103.20') && text(listedStock).includes('1101 台泥 · ') && !text(ai).includes('#1'), `早盤 AI 判讀: a today-list stock has the rule's levels, got ${text(listedStock)}`)
+check(otherStock !== '' && !/\d+\.\d{2}|規則價位|進場|停損|目標/.test(text(otherStock)), `早盤 AI 判讀: a pool stock has no price (3a), got ${text(otherStock)}`)
+// A pool stock with levels in the response still shows none: only the today list's are prices.
+const leaky = premarketAiDone()
+leaky.stocks[1] = { ...leaky.stocks[1], levels: leaky.stocks[0].levels, rank: 9 }
+check(!/\d+\.\d{2}/.test(text(slice(render('PremarketAiView leaky', () => <PremarketAiView data={leaky} />), 'data-symbol="2330"', '</ul>'))), '早盤 AI 判讀: never a price on a pool stock')
+check(aiText.indexOf('今日名單的股票（1 檔）') < aiText.indexOf('候選池其他股票（1 檔）'), '早盤 AI 判讀: the today list first, then the pool')
+// AC-3: no order wording in the block (the job's check, backend premarket_reading.directive_words, in short).
+const ORDER = /下單|掛單|(?:建議|可以|宜|應該|應|請|今日|今天|明日|明天|立即|馬上|逢低|逢高|開盤|分批|考慮|不宜|暫不)\s*(?:買進|買入|賣出|進場|出場)/
+check(!ORDER.test(aiText), `早盤 AI 判讀: no order wording, got ${aiText}`)
+check(ORDER.test('建議買進') && ORDER.test('下單'), 'the order pattern catches an order')
+for (const [name, data, line] of [
+  ['failed', premarketAiNotDone('failed', '呼叫逾時'), `${PREMARKET_AI_FAILED}呼叫逾時`],
+  ['rejected', premarketAiNotDone('rejected', '判讀漏了或多了股票'), `${PREMARKET_AI_FAILED}判讀漏了或多了股票`],
+  ['missing', premarketAiNotDone('missing'), PREMARKET_AI_MISSING],
+] as const) {
+  const markup = render(`PremarketAiView ${name}`, () => <PremarketAiView data={data} />)
+  const body = text(markup)
+  check(body === `${PREMARKET_AI_TITLE}AI 推論${line}`, `早盤 AI 判讀（${name}）: only the title and one line, got ${body}`)
+}
+check(text(render('PremarketAiView loading', () => <PremarketAiView data={undefined} loading />)).includes('早盤 AI 判讀載入中…'), '早盤 AI 判讀: loading')
+check(text(render('PremarketAiView error', () => <PremarketAiView data={undefined} error={new Error('x')} />)).includes('早盤 AI 判讀暫時無法載入'), '早盤 AI 判讀: a failed load')
+check(premarketAiShown(new URLSearchParams(''), '2026-11-27') && !premarketAiShown(new URLSearchParams('list=h2'), '2026-11-27') && !premarketAiShown(new URLSearchParams(''), null), '早盤 AI 判讀: only under the 今日名單 tab, with a list date')
+check(render('PremarketAiSection no list', () => { const Section = component(PremarketModule as Record<string, unknown>, 'PremarketAiSection'); return <Section listDate={null} /> }) === '', '早盤 AI 判讀: nothing without a list date')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} today checks failed:\n- ${failures.join('\n- ')}`)

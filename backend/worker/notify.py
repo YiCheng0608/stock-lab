@@ -25,6 +25,16 @@ the text have the same rows, sections, levels and US lines, word for word:
   page's line (``overnight_us``, #681), each up, down or flat in the Taiwan colours, with
   its freshness (美股休市, 非最新, 美股尚未更新), the close date and the source's name.
 
+- 早盤 AI 判讀 (#1042): ``app.premarket_ai.view`` for today, the champion of the current
+  prompt version only (a shadow is never sent). ``done``: after the US block, a section of
+  its own marked 「AI 推論」 with the model and the prompt version: 大盤 (stance, confidence
+  and its first reasons), 族群 (each with its direction and first reason) and each stock's
+  action and first reason, the today-list stocks first (their prices are the rule's, in the
+  list above; 3a), then the rest of the pool without any price. ``failed``／``rejected``:
+  no section, one line under the head 「今日 AI 判讀失敗：<reason>」; no reading yet (not
+  run, still running) 「今日 AI 判讀尚未完成」. notify neither waits for the reading nor
+  takes its lock.
+
 The picture (``worker.notify_card``): an HTML page in the dark terminal layout of
 docs/DESIGN_SYSTEM.md, a table per section and the US block (red up, green down), drawn to
 a PNG by the image's Chromium in a temporary directory that is removed afterwards, killed
@@ -144,6 +154,16 @@ PREOPEN_NEWS = "隔夜新聞"
 PREOPEN_NEGATIVE = "可能負向"
 PREOPEN_PENDING = "開盤前檢查：尚未完成"
 PARSE_MODE = "HTML"
+AI_TITLE = "早盤 AI 判讀"
+AI_MARK = "AI 推論"
+AI_FAILED = "今日 AI 判讀失敗："
+AI_PENDING = "今日 AI 判讀尚未完成"
+AI_LISTED = "今日名單的股票"
+AI_OTHERS = "候選池其他股票"
+# What the message shows of a done reading; the page has all of it.
+AI_MAX_STOCKS = 20
+AI_MAX_SECTORS = 5
+AI_MARKET_REASONS = 2
 # Telegram's 400 for a text its HTML parser refuses.
 PARSE_ERROR_TEXT = "can't parse entities"
 
@@ -311,6 +331,139 @@ class UsView:
 
 
 @dataclass(frozen=True)
+class AiStock:
+    """One stock of a done reading (raw text): its action, the reprice rule and the
+    first reason. No price: a today-list stock's prices are the rule's, in the list."""
+
+    name: str
+    listed: bool
+    action: str
+    rule: str | None = None
+    reason: str | None = None
+
+    @property
+    def action_line(self) -> str:
+        return f"{self.action}（{self.rule}）" if self.rule else self.action
+
+
+@dataclass(frozen=True)
+class AiView:
+    """The day's pre-market AI reading as the message shows it (#1042)."""
+
+    status: str  # done, failed, rejected, missing
+    line: str | None = None  # failed, rejected, missing: the one line instead
+    meta: str = ""  # 「模型 claude-sonnet-5-5・提示 premarket_v1」
+    market: str | None = None  # 「偏多（把握中）」
+    market_reasons: tuple[str, ...] = ()
+    sectors: tuple[tuple[str, str | None], ...] = ()  # (「半導體 可能正向」, reason)
+    stocks: tuple[AiStock, ...] = ()
+    total: int = 0  # the reading's stocks (past AI_MAX_STOCKS too)
+
+    @property
+    def done(self) -> bool:
+        return self.status == "done"
+
+
+def _first(reasons: Any) -> str | None:
+    for reason in reasons or []:
+        text = (reason.get("text") or "").strip()
+        if text:
+            return text
+    return None
+
+
+def ai_view(reading: dict[str, Any] | None) -> AiView | None:
+    """The message's AI part from ``app.premarket_ai.view``; None without one."""
+
+    if reading is None:
+        return None
+    status = reading.get("status")
+    if status != "done":
+        if status in ("failed", "rejected"):
+            return AiView(
+                status, f"{AI_FAILED}{reading.get('reason_text') or '其他原因'}"
+            )
+        return AiView("missing", AI_PENDING)
+    meta = f"模型 {reading.get('llm_model') or '未記錄'}・提示 {reading.get('prompt_version')}"
+    market = reading.get("market") or {}
+    stance = market.get("stance_text") or "—"
+    confidence = market.get("confidence_text")
+    reasons = [
+        (reason.get("text") or "").strip() for reason in market.get("reasons") or []
+    ]
+    stocks = reading.get("stocks") or []
+    shown = []
+    for stock in stocks[:AI_MAX_STOCKS]:
+        name = f"{stock.get('symbol', '')} {stock.get('name') or ''}".strip()
+        shown.append(
+            AiStock(
+                name=name,
+                listed=bool(stock.get("on_today_list")),
+                action=stock.get("action_text") or stock.get("action") or "",
+                rule=stock.get("reprice_text"),
+                reason=_first(stock.get("reasons")),
+            )
+        )
+    return AiView(
+        "done",
+        meta=meta,
+        market=f"{stance}（{confidence}）" if confidence else stance,
+        market_reasons=tuple(text for text in reasons if text)[:AI_MARKET_REASONS],
+        sectors=tuple(
+            (
+                f"{sector.get('name') or ''} {sector.get('direction_text') or ''}".strip(),
+                _first(sector.get("reasons")),
+            )
+            for sector in (reading.get("sectors") or [])[:AI_MAX_SECTORS]
+        ),
+        stocks=tuple(shown),
+        total=len(stocks),
+    )
+
+
+def ai_groups(stocks: Iterable[AiStock]) -> list[tuple[str, list[AiStock]]]:
+    """The stocks by group: the today-list ones, then the rest of the pool."""
+
+    stocks = list(stocks)
+    out = []
+    for title, listed in ((AI_LISTED, True), (AI_OTHERS, False)):
+        members = [stock for stock in stocks if stock.listed is listed]
+        if members:
+            out.append((title, members))
+    return out
+
+
+def ai_lines(ai: AiView | None, shown: int | None = None) -> list[str]:
+    """The text's AI section (done only), its first SHOWN stocks."""
+
+    if ai is None or not ai.done:
+        return []
+    stocks = ai.stocks if shown is None else ai.stocks[:shown]
+    lines = [
+        "",
+        f"🤖 {bold(AI_TITLE)}（{AI_MARK}）",
+        esc(ai.meta),
+        f"{bold('大盤')} {esc(ai.market)}",
+    ]
+    lines += [f"{INDENT}{esc(reason)}" for reason in ai.market_reasons]
+    if ai.sectors:
+        lines.append(bold("族群"))
+        for head, reason in ai.sectors:
+            lines.append(
+                f"{INDENT}{esc(head)}" + (f"：{esc(reason)}" if reason else "")
+            )
+    for title, members in ai_groups(stocks):
+        lines.append(bold(title))
+        for stock in members:
+            lines.append(f"{bold(esc(stock.name))}{INDENT}{esc(stock.action_line)}")
+            if stock.reason:
+                lines.append(f"{INDENT}{esc(stock.reason)}")
+    if len(stocks) < ai.total:
+        lines.append(f"另 {ai.total - len(stocks)} 檔的 AI 判讀見今日名單頁")
+    return lines
+
+
+@dataclass(frozen=True)
 class Content:
     """The day's message, read once (#754): the text and the card are drawn from it."""
 
@@ -327,6 +480,14 @@ class Content:
     us: UsView
     # The list has rows and no check of its own (#759): 「開盤前檢查：尚未完成」.
     preopen_pending: bool = False
+    # The day's pre-market AI reading (#1042); None when it was not read (the tests).
+    ai: AiView | None = None
+
+    @property
+    def ai_line(self) -> str | None:
+        """The one line of a reading that is not done (failed, rejected, missing)."""
+
+        return self.ai.line if self.ai is not None and not self.ai.done else None
 
     @property
     def preopen_line(self) -> str | None:
@@ -531,8 +692,10 @@ def content(
     listing: dict[str, Any],
     indexes: list[dict[str, Any]],
     daily_status: str | None = None,
+    reading: dict[str, Any] | None = None,
 ) -> Content:
-    """The day's message from the API's shapes (``candidate_list``, ``foreign_indices``)."""
+    """The day's message from the API's shapes (``candidate_list``, ``foreign_indices``,
+    ``app.premarket_ai.view``)."""
 
     computed = listing.get("status") != "not_computed"
     rows = list_rows(listing) if computed else ()
@@ -549,26 +712,34 @@ def content(
         total=max(len(rows), count),
         us=us_view(indexes),
         preopen_pending=bool(rows) and not preopen_checked(listing),
+        ai=ai_view(reading),
     )
 
 
 def text(card: Content) -> str:
-    """The text message (Telegram HTML), at most MAX_CHARS with its tags: rows are cut
-    from the end of the list (the lowest ranks) with 「另 N 檔」."""
+    """The text message (Telegram HTML), at most MAX_CHARS with its tags: the AI
+    section's stocks are cut first, then the list's rows from the end (the lowest
+    ranks), each with 「另 N 檔」."""
 
     top = [f"📋 {bold(f'今日名單｜{day_label(card.today)}')}", esc(card.head)]
     if card.preopen_line:
         top.append(card.preopen_line)
+    if card.ai_line:
+        top.append(esc(card.ai_line))
     bottom = ["", *us_lines(card.us)]
     shown = len(card.rows)
+    ai_shown = len(card.ai.stocks) if card.ai is not None else 0
     while True:
         lines = [*top, *section_lines(card.rows[:shown])]
         if shown < card.total:
             lines.append(f"另 {card.total - shown} 檔見今日名單頁")
-        message_text = "\n".join([*lines, *bottom])
-        if length(message_text) <= MAX_CHARS or shown == 0:
+        message_text = "\n".join([*lines, *bottom, *ai_lines(card.ai, ai_shown)])
+        if length(message_text) <= MAX_CHARS or (shown == 0 and ai_shown == 0):
             return message_text[:MAX_CHARS]
-        shown -= 1
+        if ai_shown > 0:
+            ai_shown -= 1
+        else:
+            shown -= 1
 
 
 def caption(card: Content) -> str:
@@ -591,10 +762,11 @@ def compose(
     listing: dict[str, Any],
     indexes: list[dict[str, Any]],
     daily_status: str | None = None,
+    reading: dict[str, Any] | None = None,
 ) -> str:
     """The text message of the API's shapes (``content`` then ``text``)."""
 
-    return text(content(today, list_date, listing, indexes, daily_status))
+    return text(content(today, list_date, listing, indexes, daily_status, reading))
 
 
 # --- the database reads --------------------------------------------------------------
@@ -646,11 +818,12 @@ def daily_status(db, day: date) -> str | None:
 
 
 def read(db, today: date) -> Content:
-    """Today's message from the database (the list of D - 1 and the overnight US
-    indexes), read once for the card and the text."""
+    """Today's message from the database (the list of D - 1, the overnight US indexes
+    and the pre-market AI reading), read once for the card and the text."""
 
     from app.candidate_view import candidate_list
     from app.market_overview import foreign_indices
+    from app.premarket_ai import view as premarket_view
 
     list_date = previous_session(db, today)
     listing = candidate_list(db, list_date, limit=MAX_ITEMS)
@@ -658,7 +831,12 @@ def read(db, today: date) -> Content:
         daily_status(db, list_date) if listing["status"] == "not_computed" else None
     )
     return content(
-        today, list_date, listing, foreign_indices(db, today.isoformat()), status
+        today,
+        list_date,
+        listing,
+        foreign_indices(db, today.isoformat()),
+        status,
+        premarket_view(db, session_date=today),
     )
 
 

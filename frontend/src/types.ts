@@ -1889,3 +1889,37 @@ export type X4Response = {
   // null on missing.
   recent_picks?: StrategyRecentPicks | null
 }
+
+// GET /api/premarket-ai (#1042, docs/spec/premarket_ai.md#顯示): the pre-market AI reading (inference) of a list.
+export type PremarketAiRef = { ref: string; kind: 'news' | 'us' | 'tx' | 'taiex' | 'stock' | 'other' | string; label: string | null; news_id?: number }
+export type PremarketAiReason = { text: string; refs: PremarketAiRef[] }
+export type PremarketAiStock = {
+  symbol: string
+  exchange: string | null
+  name: string | null
+  on_today_list: boolean
+  action: 'keep' | 'reprice' | 'defer' | string
+  action_text: string
+  reprice_rule: { max_gap_pct: number; max_gap_down_pct: number; min_risk_reward: number } | null
+  reprice_text: string | null
+  reasons: PremarketAiReason[]
+  // Only on a today-list stock (3a): the rule's levels; any other stock has no price at all.
+  rank?: number | null
+  levels?: (CandidateLevels & { rank?: number; strategy?: string }) | null
+}
+export type PremarketAiResponse = {
+  status: 'done' | 'failed' | 'rejected' | 'missing' | string
+  session_date: string | null
+  list_date: string | null
+  prompt_version: string
+  llm_model: string | null
+  cutoff_at?: string | null
+  finished_at?: string | null
+  reason: string | null
+  reason_text: string | null
+  market: { stance: string; stance_text: string; confidence: string; confidence_text: string; reasons: PremarketAiReason[] } | null
+  sectors: { group_id: string; name: string; direction: string; direction_text: string; reasons: PremarketAiReason[] }[]
+  stocks: PremarketAiStock[]
+  data_gaps: string[]
+  input_gaps: string[]
+}

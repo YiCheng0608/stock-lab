@@ -2325,6 +2325,236 @@ def _theme_heat_score_rows() -> list[dict[str, Any]]:
 
 # ---- assembled tables (insertion order respects foreign keys) ----
 
+
+# ---- the pre-market AI reading of T's list (#1042) ----
+#
+# Session NEXT_SESSION (Monday) reads T's list: a failed champion run (sequence 1),
+# then the done one (sequence 2) the page shows, and a done shadow run of another
+# version that is never shown. The pool is T's three today-list stocks and 9204
+# (no chips: the no-data case), which is no today-list stock and has no price.
+PREMARKET_PROMPT_VERSION = "premarket_v1"  # worker.premarket_reading.PROMPT_VERSION
+PREMARKET_SESSION = NEXT_SESSION
+PREMARKET_NEWS_ID = 1
+PREMARKET_SHADOW_TEXT = "影子版本的大盤理由（不顯示）"
+PREMARKET_POOL = (
+    "9101",
+    "9204",
+    "9103",
+    "9201",
+)  # input order; the page puts the list first
+PREMARKET_ACTIONS = {
+    "9101": ("keep", None, "根據示範晶圓營收創新高的新聞與外資買超，推論突破型態維持"),
+    "9204": ("defer", None, "根據示範生技沒有籌碼資料，推論方向不明，暫緩判讀"),
+    "9103": (
+        "reprice",
+        {"max_gap_pct": 0.05, "max_gap_down_pct": 0.03, "min_risk_reward": 1.5},
+        "根據伺服器需求升溫的新聞，推論開盤可能跳空，價位依開盤價重算",
+    ),
+    "9201": ("keep", None, "根據上櫃矽材外資投信同步買超，推論型態維持"),
+}
+
+
+def _premarket_levels() -> dict[str, dict[str, Any]]:
+    """T's today-list rule levels as the job stores them (premarket_input.rule_levels,
+    app.candidate_view._levels; every list stock is a breakout)."""
+
+    signals = {row["id"]: row for row in _signal_rows()}
+    names = {item_id: symbol for symbol, item_id in INSTRUMENT_IDS.items()}
+    out = {}
+    for row in _FROZEN_CANDIDATES["rows"]:
+        signal = signals[row["signal_id"]]
+        entry, invalid, target = (
+            signal["breakout_price"],
+            signal["invalid_price"],
+            signal["target_1"],
+        )
+        out[names[row["instrument_id"]]] = {
+            "rank": row["rank"],
+            "strategy": row["strategy"],
+            "entry_type": signal["entry_type"],
+            "entry": entry,
+            "entry_zone": {"low": entry, "high": entry},
+            "invalid_price": invalid,
+            "target_1": target,
+            "target_2": signal["target_2"],
+            "risk_reward": round((target - entry) / (entry - invalid), 4),
+            "risk_reward_basis": "entry_price",
+            "earliest_execution_date": NEXT_SESSION.isoformat(),
+        }
+    return out
+
+
+def _premarket_input() -> dict[str, Any]:
+    names = {row[2]: row[3] for row in _INSTRUMENTS}
+    levels = _premarket_levels()
+    news_title = next(
+        row["title"] for row in _news_rows() if row["id"] == PREMARKET_NEWS_ID
+    )
+    news = {
+        "id": PREMARKET_NEWS_ID,
+        "time": "2026-10-16 20:00",
+        "source": DOMESTIC_SOURCE,
+        "title": news_title,
+    }
+    candidates = []
+    for symbol in PREMARKET_POOL:
+        item: dict[str, Any] = {
+            "symbol": symbol,
+            "exchange": SYMBOL_EXCHANGE[symbol],
+            "name": names[symbol],
+            "pool_sources": [{"source": f"today_list#{levels[symbol]['rank']}"}]
+            if symbol in levels
+            else [{"source": "watchlist"}],
+            "on_today_list": symbol in levels,
+            "price": {"date": T.isoformat(), "close": SERIES[symbol][-1]["close"]},
+            "chips": {"status": "missing"} if symbol in NO_CHIPS else {"days": 5},
+            "groups": [],
+            "news": [news] if symbol == "9101" else [],
+        }
+        if symbol in levels:
+            item["strategy_levels"] = levels[symbol]
+        candidates.append(item)
+    return {
+        "session_date": PREMARKET_SESSION.isoformat(),
+        "list_date": T.isoformat(),
+        "cutoff_taipei": f"{PREMARKET_SESSION.isoformat()} 08:15",
+        "taiex": {"date": T.isoformat(), "freshness": "latest"},
+        "us_indices": {code: {"freshness": "latest"} for code in US_INDEX_SYMBOLS},
+        "tx_futures": {"day": {"date": T.isoformat()}, "night": {"status": "missing"}},
+        "overnight_news_stats": {"total": 1, "ai_done": 1},
+        "market_news": [news],
+        "groups": {SEMICONDUCTOR_ID: "半導體業"},
+        "candidates": candidates,
+    }
+
+
+def _premarket_output(market_reason: str) -> dict[str, Any]:
+    return {
+        "market": {
+            "stance": "bullish",
+            "confidence": "medium",
+            "reasons": [{"text": market_reason, "refs": ["us:SOX", "tx:day"]}],
+        },
+        "sectors": [
+            {
+                "group_id": SEMICONDUCTOR_ID,
+                "name": "半導體業",
+                "direction": "positive",
+                "reasons": [
+                    {
+                        "text": "根據示範晶圓營收創新高的新聞，推論半導體族群可能正向",
+                        "refs": [f"news:{PREMARKET_NEWS_ID}"],
+                    }
+                ],
+            }
+        ],
+        "candidates": [
+            {
+                "symbol": symbol,
+                "action": PREMARKET_ACTIONS[symbol][0],
+                "reprice_rule": PREMARKET_ACTIONS[symbol][1],
+                "reasons": [{"text": PREMARKET_ACTIONS[symbol][2], "refs": []}],
+            }
+            for symbol in PREMARKET_POOL
+        ],
+        "data_gaps": ["台指期夜盤沒有資料，大盤判讀只依美股與日盤"],
+    }
+
+
+def _premarket_reading_rows() -> list[dict[str, Any]]:
+    payload = _premarket_input()
+    base = {
+        "session_date": PREMARKET_SESSION,
+        "list_date": T,
+        "trigger": "scheduler",
+        "prompt_sha256": _sha("premarket_v1 prompt"),
+        "schema_sha256": _sha("premarket_v1 schema"),
+        "model_alias": "sonnet",
+        "pool_phase": "morning",
+        "cutoff_at": _at(PREMARKET_SESSION, 0, 15),
+        "input_hash": _sha(json.dumps(payload, sort_keys=True)),
+        "input_json": payload,
+        "checks_json": {},
+        "usage_json": {"input_tokens": 9000, "output_tokens": 1500},
+    }
+    failed = {
+        **base,
+        "id": 1,
+        "role": "champion",
+        "sequence": 1,
+        "prompt_version": PREMARKET_PROMPT_VERSION,
+        "llm_model": None,
+        "status": "failed",
+        "reason": "timeout",
+        "error": "timeout: claude -p took over 300 s",
+        "output_json": None,
+        "attempts": 1,
+        "attempts_json": [{"reason": "timeout", "duration_ms": 300000}],
+        "duration_ms": 300000,
+        "started_at": _at(PREMARKET_SESSION, 0, 21),
+        "finished_at": _at(PREMARKET_SESSION, 0, 26),
+    }
+    done = {
+        **base,
+        "id": 2,
+        "role": "champion",
+        "sequence": 2,
+        "prompt_version": PREMARKET_PROMPT_VERSION,
+        "llm_model": LLM_MODEL,
+        "status": "done",
+        "reason": None,
+        "error": None,
+        "output_json": _premarket_output("根據費半與加權日盤收高，推論台股開盤偏多"),
+        "attempts": 1,
+        "attempts_json": [{"reason": None, "duration_ms": 90000}],
+        "duration_ms": 90000,
+        "started_at": _at(PREMARKET_SESSION, 0, 27),
+        "finished_at": _at(PREMARKET_SESSION, 0, 29),
+    }
+    shadow = {
+        **done,
+        "id": 3,
+        "role": "shadow",
+        "sequence": 1,
+        "prompt_version": "premarket_v2",
+        "output_json": _premarket_output(PREMARKET_SHADOW_TEXT),
+    }
+    return [failed, done, shadow]
+
+
+def _premarket_stock_rows() -> list[dict[str, Any]]:
+    levels = _premarket_levels()
+    rows = []
+    for reading_id, version, role in (
+        (2, PREMARKET_PROMPT_VERSION, "champion"),
+        (3, "premarket_v2", "shadow"),
+    ):
+        for position, symbol in enumerate(PREMARKET_POOL, start=1):
+            action, rule, text = PREMARKET_ACTIONS[symbol]
+            item_id = INSTRUMENT_IDS[symbol]
+            rows.append(
+                {
+                    "id": len(rows) + 1,
+                    "reading_id": reading_id,
+                    "session_date": PREMARKET_SESSION,
+                    "prompt_version": version,
+                    "role": role,
+                    "instrument_id": item_id,
+                    "symbol": symbol,
+                    "position": position,
+                    "on_today_list": symbol in levels,
+                    "pool_sources_json": _premarket_input()["candidates"][position - 1][
+                        "pool_sources"
+                    ],
+                    "levels_json": levels.get(symbol),
+                    "action": action,
+                    "reprice_rule_json": rule,
+                    "reasons_json": [{"text": text, "refs": []}],
+                }
+            )
+    return rows
+
+
 TABLES: dict[str, list[dict[str, Any]]] = {
     "ingestion_runs": _ingestion_rows(),
     "raw_payloads": _raw_payload_rows(),
@@ -2359,9 +2589,21 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "tracking_plans": _tracking_plan_rows(),
     "tracking_plan_sessions": _tracking_plan_session_rows(),
     "portfolio_positions": _portfolio_rows(),
+    "premarket_ai_readings": _premarket_reading_rows(),
+    "premarket_ai_stocks": _premarket_stock_rows(),
 }
 
 INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
+    "premarket_ai_readings": {
+        "ingestion_run_id": "假資料不寫 premarket_ai 的 ingestion run；頁面不讀它",
+    },
+    "premarket_ai_stocks": {
+        "pool_item_id": "假資料沒有候選池（candidate_pool_items 在 OMITTED_TABLES）",
+        "daily_candidate_id": (
+            "freeze_candidates.py 重算時不寫 daily_candidates，指回它會違反外鍵；"
+            "頁面以 on_today_list 與 levels_json 判斷今日名單"
+        ),
+    },
     "candidate_llm_notes": {
         "llm_error": "三則筆記都是 done，沒有錯誤",
         "raw_payload_id": "LLM 筆記不保存原始回應檔",
@@ -2438,12 +2680,7 @@ OMITTED_TABLES: dict[str, str] = {
         "台指期夜盤（#1040）只給早盤判讀讀；五頁的 API 不讀，"
         "由後端 test_futures_night 驗"
     ),
-    "premarket_ai_readings": (
-        "早盤 AI 判讀紀錄（#1041）只給 job 與之後的 Telegram、對答案讀；五頁的 API 不讀，"
-        "由後端 test_premarket_ai 驗"
-    ),
-    "premarket_ai_scores": "同 premarket_ai_readings（對答案表，#1043 寫入）",
-    "premarket_ai_stocks": "同 premarket_ai_readings（每檔判讀）",
+    "premarket_ai_scores": "對答案表（#1043 寫入）；今日名單頁的早盤 AI 判讀不讀它",
     "theme_cluster_members": "同 theme_cluster_runs",
     "theme_cluster_runs": (
         "量價共振分群（#1018）只給候選題材的提案；五頁的 API 不讀，"
@@ -2479,6 +2716,41 @@ TARGET_PLAN = next(row for row in TABLES["tracking_plans"] if row["id"] == 3)
 EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "today": [
         ("dashboard", "as_of", D),
+        # The pre-market AI reading of T's list (#1042): the champion's done run (sequence
+        # 2, not the failed sequence 1 or the shadow), the today list first, 9204 without
+        # a levels key (3a).
+        (f"premarket-ai?list_date={T.isoformat()}", "status", "done"),
+        (
+            f"premarket-ai?list_date={T.isoformat()}",
+            "session_date",
+            PREMARKET_SESSION.isoformat(),
+        ),
+        (f"premarket-ai?list_date={T.isoformat()}", "llm_model", LLM_MODEL),
+        (
+            f"premarket-ai?list_date={T.isoformat()}",
+            "prompt_version",
+            PREMARKET_PROMPT_VERSION,
+        ),
+        (
+            f"premarket-ai?list_date={T.isoformat()}",
+            "stocks[].symbol",
+            ["9101", "9103", "9201", "9204"],
+        ),
+        (
+            f"premarket-ai?list_date={T.isoformat()}",
+            "stocks[].on_today_list",
+            [True, True, True, False],
+        ),
+        (
+            f"premarket-ai?list_date={T.isoformat()}",
+            "sectors.0.reasons.0.refs.0.news_id",
+            PREMARKET_NEWS_ID,
+        ),
+        (
+            f"premarket-ai?list_date={T.isoformat()}",
+            "input_gaps",
+            ["台指期夜盤無資料", "9204 示範生技 無籌碼資料"],
+        ),
         # The navbar date (#601) is the dashboard as_of; groups ship on include only.
         ("data-date", "as_of", D),
         ("dashboard?include=groups", "groups", len(GROUPS)),

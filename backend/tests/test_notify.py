@@ -468,10 +468,12 @@ def _list_of_t(db):
 def test_the_message_reads_the_list_of_the_session_before_and_todays_us_indexes(db):
     _list_of_t(db)
     lines = notify.message(db, MONDAY).splitlines()
-    assert lines[1:7] == [
+    assert lines[1:8] == [
         "09/04（五）收盤後產生・1 檔",
         # No pre-open check of the list was stored (#759).
         "開盤前檢查：尚未完成",
+        # Nor a pre-market AI reading (#1042).
+        "今日 AI 判讀尚未完成",
         "",
         "🚀 <b>突破（1 檔）</b>",
         "<b>1101 名1101</b>",
