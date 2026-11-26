@@ -1724,3 +1724,142 @@ class CandidatePoolItem(Base):
     sources_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     themes_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     features_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class PremarketAiReading(Base):
+    """One pre-market AI reading of a trading day (Issue #1041, docs/spec/premarket_ai.md).
+
+    ``worker.premarket_ai`` writes a row once its calls are over, with the
+    whole input snapshot sent to the model, the output and the check result;
+    a row is never changed or deleted.  ``sequence`` counts the runs of one
+    ``session_date``, ``prompt_version`` and ``role``: a run after a ``done``
+    one is skipped, a run after a ``failed`` or ``rejected`` one adds the next
+    sequence.  ``role`` is ``champion`` (the version 08:45 shows) or
+    ``shadow`` (a new version read on the same input, recorded only).
+    """
+
+    __tablename__ = "premarket_ai_readings"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_date",
+            "prompt_version",
+            "role",
+            "sequence",
+            name="uq_premarket_ai_reading_run",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_date: Mapped[date] = mapped_column(Date, index=True)
+    list_date: Mapped[date] = mapped_column(Date)
+    role: Mapped[str] = mapped_column(String(20))
+    sequence: Mapped[int] = mapped_column(Integer)
+    trigger: Mapped[str] = mapped_column(String(20))
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    prompt_sha256: Mapped[str] = mapped_column(String(64))
+    schema_sha256: Mapped[str] = mapped_column(String(64))
+    model_alias: Mapped[str] = mapped_column(String(40))
+    # The model the CLI reported (``modelUsage``); null when no call answered.
+    llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # morning / evening (candidate_pool_v1's rounds read) or interim (the
+    # stand-in pool: no evening round of the list date).
+    pool_phase: Mapped[str] = mapped_column(String(20))
+    # UTC-naive: D 08:15 Taipei.
+    cutoff_at: Mapped[datetime] = mapped_column(DateTime)
+    input_hash: Mapped[str] = mapped_column(String(64))
+    input_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # done | failed | rejected
+    status: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    checks_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    attempts: Mapped[int] = mapped_column(Integer)
+    attempts_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    usage_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    ingestion_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ingestion_runs.id"), nullable=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    finished_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class PremarketAiStock(Base):
+    """One stock of a ``done`` pre-market AI reading (Issue #1041).
+
+    Unpacked from ``output_json`` with the stock's pool sources and, for a
+    today-list stock only, the rule levels as the input had them.  Written
+    with its reading, never changed.
+    """
+
+    __tablename__ = "premarket_ai_stocks"
+    __table_args__ = (
+        UniqueConstraint(
+            "reading_id", "instrument_id", name="uq_premarket_ai_stock_reading"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reading_id: Mapped[int] = mapped_column(
+        ForeignKey("premarket_ai_readings.id"), index=True
+    )
+    session_date: Mapped[date] = mapped_column(Date, index=True)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    role: Mapped[str] = mapped_column(String(20))
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30))
+    # The stock's place in the input's candidates, from 1.
+    position: Mapped[int] = mapped_column(Integer)
+    on_today_list: Mapped[bool] = mapped_column(Boolean)
+    daily_candidate_id: Mapped[int | None] = mapped_column(
+        ForeignKey("daily_candidates.id"), nullable=True
+    )
+    # candidate_pool_items.id when the pool was candidate_pool_v1.
+    pool_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pool_sources_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    levels_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # keep | reprice | defer
+    action: Mapped[str] = mapped_column(String(20))
+    reprice_rule_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    reasons_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+
+
+class PremarketAiScore(Base):
+    """One scored outcome of a pre-market AI reading (Issue #1041; computed by #1043).
+
+    ``scope`` is ``market``, ``stock`` or ``overall``; ``subject`` is
+    ``market``, ``overall`` or the stock's symbol.  Append only: a new
+    ``score_version`` adds rows.
+    """
+
+    __tablename__ = "premarket_ai_scores"
+    __table_args__ = (
+        UniqueConstraint(
+            "reading_id",
+            "scope",
+            "subject",
+            "horizon",
+            "score_version",
+            name="uq_premarket_ai_score",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reading_id: Mapped[int] = mapped_column(
+        ForeignKey("premarket_ai_readings.id"), index=True
+    )
+    stock_id: Mapped[int | None] = mapped_column(
+        ForeignKey("premarket_ai_stocks.id"), nullable=True
+    )
+    session_date: Mapped[date] = mapped_column(Date, index=True)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    role: Mapped[str] = mapped_column(String(20))
+    scope: Mapped[str] = mapped_column(String(20))
+    subject: Mapped[str] = mapped_column(String(40))
+    horizon: Mapped[str] = mapped_column(String(20))
+    score_version: Mapped[str] = mapped_column(String(40))
+    outcome_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(DateTime)

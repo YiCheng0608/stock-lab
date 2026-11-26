@@ -72,6 +72,9 @@ NOTIFY_AFTER_HM=910
 # preopen (#760): Monday to Friday 08:20, at most 15 minutes plus serve's 5-minute
 # backstop; judged from 09:00, so the 09:15 run reports it.
 PREOPEN_AFTER_HM=900
+# premarket-ai (#1041): Monday to Friday 08:21, at most 12 minutes plus serve's 5-minute
+# backstop, only between 08:21 and 08:45; judged from 09:15 (the 09:15 run).
+PREMARKET_AI_AFTER_HM=915
 # intraday (#801): Monday to Friday 08:59 to 13:31, a round a minute from 09:00 to 13:30;
 # judged from 13:45 (the 13:45 run), after its last round.
 INTRADAY_AFTER_HM=1345
@@ -585,6 +588,41 @@ if compgen -G "$logs/preopen-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
           "$preopen_log" | tail -n 1)"
         if [ -n "$preopen_late" ]; then
           anomaly preopen_missed "開盤前檢查：今天（$taipei_iso）08:20～13:30 scheduler 沒有跑到（\`too_late at=$preopen_late\`：排程到 $preopen_late 才跑，主機可能睡眠或 scheduler 停過），今日名單頁會寫「尚未檢查」；請查主機與 \`docker logs\` 的 scheduler 是否在 08:20 前後運作，要補可用 $preopen_rerun 手動跑（\`--trigger manual\` 不受時段限制）。"
+        fi
+        ;;
+    esac
+  fi
+fi
+
+# premarket-ai (#1041): Monday to Friday from 09:15, the day's premarket-ai log is missing
+# or has a run without its end line (premarket_ai_missing), its last outcome that is not
+# a skip is failed or rejected and no run of the day is done (premarket_ai_failed), or it
+# has only skips and one is too_late (premarket_ai_missed). The other skips
+# (non_trading_day, already_done, already_running, maintenance, low_memory) are no
+# anomaly. Only once premarket-ai logs exist.
+premarket_log="$logs/premarket-ai-$taipei_date.log"
+if compgen -G "$logs/premarket-ai-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
+  && [ $((10#$taipei_hm)) -ge "$PREMARKET_AI_AFTER_HM" ]; then
+  premarket_rerun="\`docker compose -p <P> exec scheduler python -m worker.cli premarket-ai --trigger manual\`"
+  if [ ! -f "$premarket_log" ]; then
+    anomaly premarket_ai_missing "早盤 AI 判讀：今天（$taipei_iso）沒有 08:21 早盤 AI 判讀的日誌（\`logs/premarket-ai-$taipei_date.log\` 不存在），scheduler 可能沒在跑，08:45 的通知不會有 AI 段；確認 scheduler 後要補可用 $premarket_rerun（開盤後補跑的判讀只供紀錄）。"
+  elif unfinished_run "$premarket_log"; then
+    anomaly premarket_ai_missing "早盤 AI 判讀：今天（$taipei_iso）的判讀開始了但沒有跑完（\`logs/premarket-ai-$taipei_date.log\` 有 start 沒有對應的 end 列），可能卡住或被 serve 的保險時間結束；查 \`docker logs\` 的 \`serve killed job=premarket-ai\` 與該日誌。"
+  else
+    premarket_last="$(sed -nE 's/^--- result (status=[a-z_]+.*)$/\1/p' "$premarket_log" \
+      | grep -v '^status=skipped' | tail -n 1)"
+    case "$premarket_last" in
+      status=failed* | status=rejected*)
+        # A manual run that was done later the same day ends it.
+        if ! grep -qE '^--- result status=done( |$)' "$premarket_log"; then
+          anomaly premarket_ai_failed "早盤 AI 判讀：今天（$taipei_iso）的判讀沒有完成（\`${premarket_last:0:300}\`），08:45 的通知只送規則名單；\`rate_limited\`／\`not_logged_in\` 是訂閱額度或登入，\`rejected\` 是 AI 回應沒過核對；請查 \`logs/premarket-ai-$taipei_date.log\` 與 \`premarket_ai_readings\` 當天的列。"
+        fi
+        ;;
+      "")
+        premarket_late="$(sed -nE 's/^--- result status=skipped reason=too_late at=([0-9:]+).*/\1/p' \
+          "$premarket_log" | tail -n 1)"
+        if [ -n "$premarket_late" ]; then
+          anomaly premarket_ai_missed "早盤 AI 判讀：今天（$taipei_iso）08:21～08:45 scheduler 沒有跑到（\`too_late at=$premarket_late\`：排程到 $premarket_late 才跑，主機可能睡眠或 scheduler 停過），08:45 的通知沒有 AI 段，錯過不補；請查主機與 \`docker logs\` 的 scheduler 是否在 08:21 前後運作。"
         fi
         ;;
     esac

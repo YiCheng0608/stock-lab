@@ -8,6 +8,7 @@ from datetime import date, datetime, time, timezone
 
 from . import job as scheduled_job, notify as daily_notify, serve as scheduler
 from . import intraday as intraday_alerts, preopen as preopen_check
+from . import premarket_ai as premarket_job
 
 # Before app.config is imported: it reads STOCK_DATA_DIR and creates that
 # directory, and a scheduled `job` (or `serve`) has only --data-dir.
@@ -260,6 +261,11 @@ def main() -> None:
         help="開盤前檢查（#755）：今日名單每檔在名單產生之後才收到的新聞與 AI 判讀，存進 preopen_news_checks",
     )
     preopen_check.add_arguments(preopen_parser)
+    premarket_parser = subparsers.add_parser(
+        "premarket-ai",
+        help="早盤 AI 判讀（#1041）：截止 08:15 的輸入快照、claude -p（sonnet）、核對，存進 premarket_ai_readings",
+    )
+    premarket_job.add_arguments(premarket_parser)
     intraday_parser = subparsers.add_parser(
         "intraday",
         help="盤中即時通知（#801）：今日名單與我的追蹤觸及規則價位時傳 Telegram（富果行情）；--dry-run 不送、--send 送出",
@@ -876,6 +882,11 @@ def main() -> None:
         if problem:
             parser.error(problem)
         sys.exit(preopen_check.run(args))
+    if args.command == "premarket-ai":
+        problem = premarket_job.argument_problem(args)
+        if problem:
+            parser.error(problem)
+        sys.exit(premarket_job.run(args))
     if args.command == "intraday":
         problem = intraday_alerts.argument_problem(args)
         if problem:
