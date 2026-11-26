@@ -534,7 +534,9 @@ def test_another_feature_evidence_version_is_not_compared():
     assert names(items) == ["feature_evidence"]
     assert "判定規則改版" in items[0]["text"]
     previous = {"features": None}
-    assert "上個月 feature_evidence 失敗" in mr.worse(made_review(), previous)[0]["text"]
+    assert (
+        "上個月 feature_evidence 失敗" in mr.worse(made_review(), previous)[0]["text"]
+    )
 
 
 def test_a_failed_entry_is_listed_as_not_judged():
@@ -544,7 +546,9 @@ def test_a_failed_entry_is_listed_as_not_judged():
     assert items[0]["text"] == "H2 失敗，未判"
 
 
-def test_the_previous_review_feeds_the_next_month(review_run, copy_db, tmp_path, monkeypatch):
+def test_the_previous_review_feeds_the_next_month(
+    review_run, copy_db, tmp_path, monkeypatch
+):
     _code, last = review_run
     previous = read_json(last / "review.json")
     assert previous["format"] == mr.REVIEW_FORMAT
@@ -556,7 +560,9 @@ def test_the_previous_review_feeds_the_next_month(review_run, copy_db, tmp_path,
             target.mkdir(parents=True)
             tables = read_json(last / "feature_evidence" / "tables.json")
             part = tables["horizons"]["20"]["conditions"]["breakout_rule"]
-            part["verdict"] = "reversed" if part["verdict"] != "reversed" else "evidence"
+            part["verdict"] = (
+                "reversed" if part["verdict"] != "reversed" else "evidence"
+            )
             (target / "tables.json").write_text(json.dumps(tables), encoding="utf-8")
             return 0, "", ""
         return 1, json.dumps({"refused": ["skipped here"]}), ""
@@ -573,3 +579,18 @@ def test_the_previous_review_feeds_the_next_month(review_run, copy_db, tmp_path,
     assert [row["key"] for row in review["feature_changes"]] == ["breakout_rule"]
     summary = (out / "summary.md").read_text(encoding="utf-8")
     assert "### 判定有變（和上個月比）" in summary
+
+
+def test_a_copy_without_the_premarket_tables_says_so(copy_db, tmp_path):
+    import sqlite3
+    import shutil
+
+    older = tmp_path / "older.db"
+    shutil.copy(copy_db, older)
+    con = sqlite3.connect(older)
+    con.execute("drop table premarket_ai_readings")
+    con.commit()
+    con.close()
+    status = mr.run_premarket(older, MONTH, tmp_path / "out", mr.premarket_text)
+    assert status["status"] == "failed"
+    assert status["reason"].startswith("副本沒有 `premarket_ai_readings` 表")

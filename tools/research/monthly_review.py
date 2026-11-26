@@ -17,11 +17,10 @@ The entries are run as they are, each as its own command in a child process
 (``subprocess_runner``), their definitions, versions and ``definitions_sha256``
 untouched: an entry's own refusal (a frozen check, the daily window) is that
 entry's failure, the others still run, and the command ends non-zero.  Every
-entry's raw output goes to ``<out>/<name>/`` as it would alone (``H1/`` is
-what goes to pr-assets/691's ``run-<日>/``, ``<WATCHES 的鍵>/`` what goes to
-pr-assets/868's ``run-<日>/<鍵>/``); the review writes ``summary.md`` and
-``review.json``, the machine-readable half the next month's ``--previous``
-reads.
+entry's raw output goes to ``<out>/<name>/`` as it would alone; the review
+writes ``summary.md`` and ``review.json``, the machine-readable half the next
+month's ``--previous`` reads.  The whole ``<out>`` goes to pr-assets/699's
+``run-<YYYYMMDD>/``, nowhere else (#1062 決定 7200751860).
 
 ``--month`` is a cutoff: the copy's last session on or before the month's
 last day is every entry's ``--cutoff``／``--end``, so a copy taken on the 2nd
@@ -215,10 +214,19 @@ def run_premarket(
     try:
         text = render(db, month)
     except Exception as exc:  # noqa: BLE001 - its failure is its section's only
+        reason = f"{type(exc).__name__}: {exc}"
+        missing = re.search(r"no such table: (\w+)", str(exc))
+        if missing:
+            # a copy of a database the migration has not reached yet
+            reason = (
+                f"副本沒有 `{missing.group(1)}` 表（alembic "
+                f"`{pr.copy_facts(db)['alembic']}`）：建它的 migration 還沒部署到"
+                "正式 DB"
+            )
         return {
             **status,
             "status": FAILED,
-            "reason": f"{type(exc).__name__}: {exc}",
+            "reason": reason,
             "elapsed_seconds": round(time.monotonic() - started, 1),
         }
     folder = out / PREMARKET
@@ -667,7 +675,7 @@ def markdown(review: dict[str, Any], out: Path) -> str:
             f"- 對加權指數超額（只列出，至今全部）：日均 {lib.pct(e['mean'], 3)}，t "
             f"{lib.num(e['t'], 2)}，{e['days']} 日",
             *[line for line in _head(out / H1 / "summary.md", 1)],
-            f"- 原始輸出：`{H1}/`（推 `pr-assets/691` 的 `run-<YYYYMMDD>/`）",
+            f"- 原始輸出：`{H1}/`（整個 `--out` 推 `pr-assets/699` 的 `run-<YYYYMMDD>/`）",
             "",
         ]
     else:
@@ -684,7 +692,7 @@ def markdown(review: dict[str, Any], out: Path) -> str:
             f"- {title}",
             *_head(summary, 3),
             f"- 第一個有名單的訊號日：{fact['first_signal'] or '沒有名單'}",
-            f"- 原始輸出：`{key}/`（推 `pr-assets/868` 的 `run-<YYYYMMDD>/{key}/`）",
+            f"- 原始輸出：`{key}/`（`pr-assets/699` 的 `run-<YYYYMMDD>/{key}/`）",
             "",
         ]
     lines += ["## 候選成績單", ""]
