@@ -35,6 +35,7 @@ from .candidate_view import (
     MAX_LIMIT as CANDIDATES_MAX_LIMIT,
 )
 from .candidate_pool import candidate_pool as stored_candidate_pool
+from .premarket_ai import view as premarket_ai_view
 from .candidate_runs import read_run as read_candidate_run
 from .candidate_view import (
     candidate_for_instrument,
@@ -2855,6 +2856,19 @@ def theme_heat(
     Not a buy or sell signal (docs/spec/theme_heat.md).
     """
     return stored_theme_heat(db, date_)
+
+
+@router.get("/premarket-ai")
+def premarket_ai(
+    date_: date | None = Query(default=None, alias="date"),
+    list_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The pre-market AI reading (#1041/#1042, inference): the champion of the
+    current prompt version of session ``date``, or of the latest session of
+    ``list_date``, or the latest; ``status=missing`` without one.  Not a buy or
+    sell signal (docs/spec/premarket_ai.md#顯示)."""
+    return premarket_ai_view(db, date_, list_date)
 
 
 def _news_symbol_filter(instrument: Instrument):

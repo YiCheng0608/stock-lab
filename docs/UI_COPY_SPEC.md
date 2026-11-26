@@ -397,6 +397,24 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
 - **分數**：總分與分項為 0–1，日常以 0–100 整數呈現；分項為 null 顯示「—」並附 API 的 `null_explanation`，不寫 0。`partial_components=true` 時在總分旁註明「部分分項無資料，以有資料的分項計分」。
 - **聲明**：#729 起今日名單與個股頁候選列都不放聲明句「評分只用於排序，不代表勝率或預期報酬」與「現行規則尚無證據」標示；總分詞條（§7）仍寫分數只用於排序。
 - **AI 進出點說明**（`llm_note`，[候選 AI 進出點說明](spec/candidate_score.md#候選-ai-進出點說明)）：個股頁候選列在理由之後、「評分細節」之前，今日名單在展開內容的最上方（#510），放 AI 推論樣式的區塊（左側強調色豎線，[DESIGN_SYSTEM §7](DESIGN_SYSTEM.md#7-資料與狀態的視覺語言)），標題「AI 進出點說明」，右側「AI 推論」（accent badge）。`status=done` 且三段都有字時依序列「為何入選」「進場區、停損與目標」「需留意的風險」與 API 文字；沒有說明（`llm_note` 為 null 或欄位不存在）寫「此檔尚未產生 AI 說明」，`pending` 寫「AI 說明這次未能產生」（不承諾自動重試，補跑見 [日誌與 run 記錄](ops/SCHEDULING.md#日誌與-run-記錄)）。區塊內固定一句「由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。」；有 `llm_note` 時底部「產生於 YYYY/MM/DD HH:mm」（`generated_at` 換算台北時間，沒有時區時整行不寫；#729 起不寫模型與提示版本）；`pending` 寫「嘗試於」。今日頁與個股頁相同。
+- **早盤 AI 判讀**（[#1042](https://github.com/YiCheng0608/stock-lab/issues/1042)，[premarket_ai_v1 顯示](spec/premarket_ai.md#顯示)；讀 `/api/premarket-ai?list_date={名單的 trading_date}`）：只在「今日名單」分頁、名單之後、「熱門族群」之前；一個 AI 推論樣式的區塊（左側強調色豎線，[DESIGN_SYSTEM §7](DESIGN_SYSTEM.md#7-資料與狀態的視覺語言)），標題「早盤 AI 判讀」，右側一個「AI 推論」accent badge，區塊內不再逐項標推論。
+  - **done**：標題下一行小字「{YYYY/MM/DD} 開盤前 · 模型 {llm_model} · 提示 {prompt_version} · 判讀於 {YYYY/MM/DD HH:mm}」（`session_date`、`finished_at` 台北時間；沒有模型寫「未記錄」；寫「提示」不寫「提示版本」：後者是 #729 拿掉的字句）。其下依序：「大盤 {偏多／偏空／中性}（{把握高／把握中／把握低}）」與理由；「族群」每個「{名稱} · {可能正向／可能負向／正負互見}」與理由；「今日名單的股票（{N} 檔）」與「候選池其他股票（{N} 檔）」兩組，每檔一行「{代號} {名稱} · {動作}」（動作「維持」「依開盤價重算」「暫緩」；依開盤價重算接「（{reprice_text}）」），不寫名次 `#n`（名單的列已有）；今日名單的股票下一行「規則價位 進場 {價}｜停損 {價}｜目標一 {價}」（回踩「進場區 {低}～{高}」，價位兩位小數、千分位，缺價位寫「規則價位不完整」），候選池其他股票不寫任何價位（3a）；再下是理由，每條一列；理由引用的新聞以標題連到新聞頁（`/news/{id}`），其他引用寫一行「依據 {名稱、名稱}」（美股 費半、台指期夜盤、加權指數、{代號} 價量／籌碼…）；「資料缺口」列 AI 的 `data_gaps`；區塊最後一行小字「判讀輸入的資料缺口：{以「；」連接}」（`input_gaps`，輸入快照標缺漏的事實，沒有就不寫）。
+  - **沒有判讀**：`failed`／`rejected` 寫「早盤 AI 判讀失敗：{reason_text}」，`missing` 寫「尚無早盤 AI 判讀（每個交易日 08:21 判讀）」，載入中「早盤 AI 判讀載入中…」，載入失敗「早盤 AI 判讀暫時無法載入」。08:45 的 Telegram 同一份判讀：`failed`／`rejected` 一行「今日 AI 判讀失敗：{reason_text}」，還沒有判讀「今日 AI 判讀尚未完成」，讀判讀時出錯（判讀的形狀不對等）「今日 AI 判讀無法讀取」，`done` 時另一段「早盤 AI 判讀（AI 推論）」（[SETUP 每日 Telegram 通知](ops/SETUP.md#每日-telegram-通知)）。
+  - **`reason_text`**（`app.premarket_ai.REASON_TEXT`；不認得的 `reason` 寫「其他原因」）：
+
+    | `reason` | 文案 | `reason` | 文案 |
+    | --- | --- | --- | --- |
+    | `timeout` | 呼叫逾時 | `additions_present` | 判讀加了候選池以外的股票 |
+    | `invalid_json` | 回應格式無法解析 | `schema` | 判讀格式不符 |
+    | `cli_error` | 呼叫出錯 | `coverage` | 判讀漏了或多了股票 |
+    | `rate_limited` | 訂閱用量已達上限 | `reprice_without_levels` | 沒有規則價位的股票被判依開盤價重算 |
+    | `not_logged_in` | Claude Code 未登入 | `unknown_news_ref` | 判讀引用了不在輸入裡的新聞 |
+    | `cli_not_started` | Claude Code 無法啟動 | `directive_words` | 判讀含交易指示用語 |
+    | `cli_not_found` | 找不到 Claude Code | `no_time` | 判讀時間不足，未呼叫 |
+    | `cli_config_invalid` | Claude Code 設定有誤 | `prompt_hash_mismatch` | 提示詞與版本不符，未呼叫 |
+    | `api_key_env_refused` | 環境設了 API 金鑰，拒絕呼叫 | | |
+
+  - **寫法**：AI 的理由是「根據……，推論……」（4A），沒有「買進」「賣出」「下單」「掛單」的指示用法；頁面與 Telegram 自己的字（動作、方向、暫緩條件、原因）也不用（後端與前端測試以 `premarket_reading.directive_words` 的規則驗）。
 - **零候選**：顯示 API 的 `zero_reason_text`；`no_actionable_signals`「當日沒有成立（條件成立）的策略訊號」、`all_excluded`「成立的訊號都因 ETF、價位不合法、成交量低於門檻或評分資料不足被排除」。`status=not_computed` 寫「此交易日尚未產生候選清單」。空狀態標題分別為「當日零候選」與「尚無候選清單」，零候選保留資料日期 badge、not_computed 不顯示日期。
 
 ### 10.1 個股策略總表

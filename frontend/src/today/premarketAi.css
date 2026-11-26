@@ -1,0 +1,20 @@
+/* 早盤 AI 判讀 on the today page (#1042, UI_COPY_SPEC §10 早盤 AI 判讀, DESIGN_SYSTEM §7 LLM 推論): the shared .ai-inference block. */
+.premarket-ai { margin-top: var(--space-block); padding: var(--space-4) var(--space-5); }
+.premarket-ai .ai-inference-head { margin-bottom: var(--space-1); }
+.premarket-ai-meta { margin: 0 0 var(--space-2); }
+.premarket-ai-empty { margin: 0; font-size: var(--text-md); color: var(--color-text-muted); }
+.premarket-ai-block { padding-top: var(--space-3); margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.premarket-ai-block h3 { margin: 0 0 var(--space-2); font-size: var(--text-base); font-weight: 600; }
+.premarket-ai-value { margin-left: var(--space-2); font-weight: 600; }
+.premarket-ai-list { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.premarket-ai-stock-head { margin: 0; font-size: var(--text-md); color: var(--color-text); }
+.premarket-ai-stock-name { font-size: var(--text-md); font-weight: 600; }
+.premarket-ai-action { font-size: var(--text-md); }
+.premarket-ai-levels { margin-top: 2px; font-size: var(--text-sm); color: var(--color-text-muted); }
+/* DESIGN_SYSTEM §5 進場卡片: a price is mono, 600 and does not break; its label stays with it. */
+.premarket-ai-level { white-space: nowrap; }
+.premarket-ai-level b { font-family: var(--font-mono); font-weight: 600; }
+.premarket-ai-reasons { display: grid; gap: var(--space-1); margin: var(--space-1) 0 0; padding-left: var(--space-4); font-size: var(--text-md); }
+.premarket-ai-reason > span { overflow-wrap: anywhere; }
+.premarket-ai-refs { display: flex; flex-wrap: wrap; gap: 0 var(--space-3); font-size: var(--text-sm); }
+.premarket-ai-input-gaps { margin: var(--space-3) 0 0; }

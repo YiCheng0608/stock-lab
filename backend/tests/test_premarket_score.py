@@ -299,7 +299,7 @@ def tracked(entry_raw, exit_, *, sell=False):
 PINNED = {
     "premarket_score_v1": (
         "1975afd837382f2fcfab3467bd4630a36d175bd42cffd50c82a2705fb7afd42e",
-        "30157c112a817fa7d526c0fc9ca9d9d77cf1ec9ff1df9ee106eb4d48b64f3c41",
+        "7c612eeb869b9e016c2bc3ab8146eec6b8c0bfbd8dc081fa80d9c60ba23f1fa3",
     ),
 }
 
