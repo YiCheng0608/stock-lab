@@ -16,6 +16,7 @@
 | `mainstream.json` | `/mainstream`（今日名單頁的第二份名單「主流族群前 20」，`?list=mainstream`，#769；計算與回應形狀見 #768） |
 | `h2.json` | `/strategy-lists/h2`（今日名單頁的第三份名單「接近年高前 20」，`?list=h2`，#882；計算與回應形狀見 #881；#1021 起頁面讀這支，是 `/h2` 加上 `recent_picks`） |
 | `x4.json` | `/strategy-lists/x4`（今日名單頁的第四份名單「盈餘殖利率前 20」，`?list=x4`，#1019；計算與回應形狀見 #1016） |
+| `premarket-ai.json` | `/premarket-ai?list_date=<candidates.json 的 trading_date>`（今日名單之後的早盤 AI 判讀，#1042；回應形狀見 [premarket_ai_v1 顯示](../../../../docs/spec/premarket_ai.md#顯示)） |
 | `taiex-bars.json` | `/stocks/TWSE/TAIEX/bars?interval=day&limit=250`（大盤頁預設的加權指數日線） |
 | `tpex-bars.json` | `/stocks/TPEx/TPEX/bars?interval=day&limit=250`（`/market?index=tpex` 的櫃買指數日線，#552、#564） |
 | `tx-bars.json` | `/stocks/TAIFEX/TX/bars?interval=day&limit=250`（`/market?index=tx` 的台指期近月日線，#552、#564） |
@@ -29,6 +30,8 @@
 | 前端檔 | `frontend/src/candidates/CandidateViews.tsx` |
 | 前端檔 | `frontend/src/today/TodayViews.tsx` |
 | 前端檔 | `frontend/src/today/CandidateChart.tsx` |
+| 前端檔 | `frontend/src/today/PremarketAiSection.tsx` |
+| 前端檔 | `frontend/src/today/premarketAi.ts` |
 | 前端檔 | `frontend/src/candidates/MainstreamViews.tsx` |
 | 前端檔 | `frontend/src/candidates/MainstreamChart.tsx` |
 | 前端檔 | `frontend/src/candidates/H2Views.tsx` |
@@ -50,6 +53,7 @@
 | API route | `GET /mainstream` |
 | API route | `GET /h2` |
 | API route | `GET /strategy-lists/{strategy}` |
+| API route | `GET /premarket-ai` |
 | API route | `GET /stocks/{exchange}/{symbol}/bars` |
 
 ## 截圖
@@ -86,7 +90,7 @@
 | T4 | CI | 熱門族群日期 | `B` 不等於 `D` 時，整行 `熱門族群` 之後第一個 `資料 ` 開頭的行是 `資料 <B/>`；等於 `D` 時之後沒有 `資料 ` 開頭的行（#661）；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date`。`B` 缺少時：`group_scores_latest_trading_date` 非 null 判失敗，兩邊都沒有才查整行 `資料日期未提供`。`B` 的上游 |
 | T5 | CI | 熱門族群列 | 整行 `資料 <B/> · 相對加權指數` 的行數 = `min(5, items 數)`（今日頁各榜前 5）；`items[0].display_name` 為整行出現。`items` 空時：`facts.json` 的 `group_scores_latest_trading_date` 非 null 且等於該榜 `meta.trading_date`（或後者為 null），或 `dashboard-groups.json` 的 `groups` 有該日 `rank` 非 null 的族群，判失敗；都沒有才查空資料文案。`T` 的上游；`B` 用 T4 |
 | T7 | CI | 今日名單日期、名次列與來源 | `status` 不是 `not_computed` 且 `items` 非空時：標題 `今日名單`（整行 `條件已成立 · 依評分排序` 之後的第一個整行 `今日名單`；導覽列也有一行 `今日名單`）的下一行是 `資料 <C/>`、再下一行 `<candidate_count> 檔`（#661：與頁面日期 `D` 同一天時這一行不能是 `資料 ` badge，不同天才要求這個 badge；`D` 讀不到時一律要求）；同天時下一行就是 `<candidate_count> 檔`；標題與 `熱門族群` 之間以 `#<n> <代號> ` 開頭的名次列（表格股票欄的第一行，#493；熱門族群列的 `#<n>` 自成一行，不算）依序等於 `items[].rank`（收合的其餘幾檔在截圖展開 `<details>` 後也列出）；`^來源：` 行數 = `items` 數，且 `C` 等於 `facts.json` 的 `candidate_run_latest_trading_date`。`items` 空時整行 `當日零候選`，`not_computed` 時整行 `尚無候選清單`；但 `facts.json` 的 `candidate_count_latest` > 0 且 `candidate_run_latest_trading_date` 等於 `candidates.json` 的 `trading_date`（或後者為 null）時判失敗 |
-| T8 | CI | 今日名單推論標記 | 在 T7 之後（T7 沒通過時 T8 的失敗記「無法判定（上游 T7）」）。第 i 個 `^來源：` 行對應 `items[i]`（卡片依名次排列）；來源行都不含 `推論`（來源是事實，#661）；整行 `AI 推論` 的行數 = `items` 數（每個 AI 進出點說明區塊一個，#661）；沒有以 `（推論）` 結尾的行緊接一行 `推論`（推論理由不重複標，#661）；免責句 `由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。` 的行數 = `items` 數；AI 入口 `AI 推論 ▸` 的個數 = `llm_note` 不為 null 的檔數，`AI 說明 ▸` 的個數 = 其餘檔數 |
+| T8 | CI | 今日名單推論標記 | 在 T7 之後（T7 沒通過時 T8 的失敗記「無法判定（上游 T7）」）。第 i 個 `^來源：` 行對應 `items[i]`（卡片依名次排列）；來源行都不含 `推論`（來源是事實，#661）；整行 `AI 推論` 的行數 = `items` 數（不數早盤 AI 判讀段：從整行 `早盤 AI 判讀` 到整行 `熱門族群`，那段的 badge 由 T30 驗，#1042）（每個 AI 進出點說明區塊一個，#661）；沒有以 `（推論）` 結尾的行緊接一行 `推論`（推論理由不重複標，#661）；免責句 `由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。` 的行數 = `items` 數；AI 入口 `AI 推論 ▸` 的個數 = `llm_note` 不為 null 的檔數，`AI 說明 ▸` 的個數 = 其餘檔數 |
 | T9 | CI | 首頁只有一份名單 | 沒有整行 `關注標的`、`查看個股詳情 →`、`查看行動中心 →`、`明日候選`（#493：關注標的移到我的追蹤，持倉風險提示列連到 `查看我的追蹤 →`） |
 | T10 | 人工 | 候選進出點說明 | 樣本：`candidates.json` 依名次前 3 檔（`manual/T10.json`）。每檔 `llm_note` 寫到的價位（進場、突破、拉回區間、停損、目標）都等於 `levels` 的對應值，進場方式與 `levels.entry_type` 一致，沒有 `levels` 以外的價位、保證或買賣指示；`llm_note` 未完成的那檔記無法判定。一檔不符即失敗，證據寫代號、說明原句與 `levels` 值 |
 | T11 | CI | 大盤頁的大盤概況 | 讀 `market-1280.txt`（#549 起大盤概況在大盤頁）。整行 `大盤概況` 的下一行是 `資料 <market_overview.trading_date 換成 YYYY/MM/DD>`（日期為 null 時 `資料日期未提供`）（#661：與頁面日期 `D` 同一天時這一行不能是 `資料 ` badge，不同天才要求這個 badge；`D` 讀不到時一律要求）。`dashboard.market_overview` 每個交易所：`available` 時，`facts.json` 的 `market_summary_latest` 該交易所列的 `trading_date` 等於 `market_overview.trading_date`，且指數收盤、漲跌、成交金額、上漲與下跌家數與 API 相同；頁面有整行指數收盤（兩位小數、千分位；四捨五入同前端 `toFixed`，剛好 .5 時遠離零）、`<±漲跌>（<±漲跌幅>%）`、`<上市／上櫃> <成交金額÷1 億，兩位小數> <短範圍>`（`twse_all_securities` 為 `集中市場總計`、`tpex_stocks` 為 `上櫃股票`，其他值為 `scope_label`）、`<上市／上櫃> 上漲 n · 下跌 n · 平盤 n（漲停／跌停）`；「資料說明」有整行 `成交金額範圍：上市為<scope_label>；上櫃為<scope_label>`（只列 available 的交易所）。`unavailable` 時頁面有整行 `上市大盤資料未取得`／`上櫃大盤資料未取得`，但 `market_summary_latest` 該交易所列的日期等於 `market_overview.trading_date` 時判失敗 |
@@ -108,6 +112,7 @@
 | T27 | CI | 接近年高前 20（#882） | 讀 `h2.json`、`candidates.json` 的 `trading_date` 與 `today-h2-1280.txt`、`today-h2-390` 截圖 JSON 的 `candidateRows`；判法與 T26 共用（`page_checks.screen_list`）。最後一個整行 `接近年高前 20` 是標題。`status` 不是 `computed` 或 `items` 空時：`missing` 有整行 `尚無接近年高名單`、其他有 `當日沒有股票進入母體`，且標題之後沒有名次列。有名單時：日期 badge 同 T7（`H` 與 `D` 同一天時沒有），之後依序 `<items 數> 檔` 與定義句 `收盤最接近一年高點（近 <window> 個交易日最高價，價格還原除權息）的 20 檔；母體 <universe_count 千分位> 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期`；名次列數 = `items` 數，每列依序是 `#<rank> <代號> <名稱> <上市／上櫃>`、`距一年高點 <high_gap_240>`（百分比兩位小數、持平 `0.00%`、null 寫 `—`），`today_list` 非 null 時再一行 `今日名單 #<rank>`（`H` 與 `C` 不同天時帶 `<H/> ` 前綴）；標記行數 = `today_list` 非 null 的筆數。標題到 `熱門族群` 之間沒有 T26 的點位用詞，也沒有 `持有`、`回測`、`t 值`、`H2`、`X2`（#1 決定 7044998169、6881314294），沒有 `規則價位線：` 開頭的行。390 量到的列數 = `items` 數，收盤欄不被切、不溢出。鏡像 `frontend/src/candidates/h2.ts`，改其一要同步 |
 | T28 | CI | 盈餘殖利率前 20（#1019） | 讀 `x4.json`（`/strategy-lists/x4`）、`candidates.json` 的 `trading_date` 與 `today-x4-1280.txt`、`today-x4-390` 截圖 JSON 的 `candidateRows`；判法與 T26、T27 共用（`page_checks.screen_list`）。最後一個整行 `盈餘殖利率前 20` 是標題；標題之後三行內要有整行 `前瞻觀察（未通過驗證）`（空狀態也要）。`status` 不是 `computed` 或 `items` 空時：`missing` 有整行 `尚無盈餘殖利率名單`；`zero` 依 `zero_reason`：`none_passed`（沒有 `zero_reason` 而 `universe_count` > 0 也算，同前端 `x4State`）有整行 `當日沒有月營收年增與 EPS 年增都為正的股票`，其他有 `當日沒有股票進入母體`；且標題之後沒有名次列。有名單時：日期 badge 同 T7（`X` 與 `D` 同一天時沒有），之後依序 `<items 數> 檔`、`前瞻觀察（未通過驗證）` 與定義句 `月營收年增與單季 EPS 年增都為正的股票中，盈餘殖利率（最新一季 EPS × 4 ÷ 收盤）最高的 <list_size> 檔（通過的不到 <list_size> 檔時只放那幾檔）；母體 <universe_count 千分位> 檔，20 日均量 1,000 張以上的上市櫃股票；以入選後 60 個交易日為觀察期`；名次列數 = `items` 數，每列依序是 `#<rank> <代號> <名稱> <上市／上櫃>`、`盈餘殖利率 <eps_yield_raw×100 兩位小數>% · 營收年增（<revenue_month 的月> 月）<revenue_yoy 帶號兩位小數> · <quarter_eps.quarter> EPS <eps 兩位小數>（去年同季 <year_before_eps 兩位小數>）`（缺值寫 `—`；沒有月份時 `營收年增 …`、沒有季別時 `EPS —`），`today_list` 非 null 時再一行 `今日名單 #<rank>`（`X` 與 `C` 不同天時帶 `<X/> ` 前綴）；標記行數 = `today_list` 非 null 的筆數。標題到 `熱門族群` 之間除了那一行 badge，沒有 T26 的點位用詞，也沒有 `持有`、`回測`、`t 值`、`X4`、`H2`、`研究`、`勝率`、`驗證`（#1 決定 7106346106），沒有 `規則價位線：` 開頭的行。390 量到的列數 = `items` 數，收盤欄不被切、不溢出。鏡像 `frontend/src/candidates/x4.ts`，改其一要同步 |
 | T29 | CI | 近 60 日入選過（#1021） | 讀 `h2.json`、`x4.json` 的 `recent_picks` 與 `today-h2-recent-1280.txt`、`today-x4-recent-1280.txt`。最後一個整行標題（`接近年高前 20`／`盈餘殖利率前 20`）之後：`status` 是 `missing`、`recent_picks` 是 null 或 `days` 0 時沒有 `入選 … 次 · 首次 ` 開頭的行。其他時候要有整行 `近 60 日入選過 <recent_picks.items 數> 檔`（選中的膠囊）與窗口行（`days` ≥ `sessions` 時 `近 <sessions> 個交易日`，否則 `近 <days> 個交易日（名單從 <since 的 MM/DD> 起）`）；窗口行之後 `入選 ` 開頭的行數 = `items` 數，依前端 `recentPickRows` 的順序（`count` 多者先、`last_date` 晚者先、代號），每檔的前一行是 `<代號> <名稱> <上市／上櫃>`、該行是 `入選 <count> 次 · 首次 <MM/DD> · 最近 <MM/DD>`，`today_rank` 是 null 時下一行 `今日未入選`；整行 `今日未入選` 的數目 = `today_rank` 為 null 的筆數；沒有 `#<名次> ` 開頭的名次列；標題到 `熱門族群` 之間沒有 `持有`、`買進`、`賣出`、`該賣`、`權重`、`部位`。鏡像 `frontend/src/candidates/recentPicks.ts`，改其一要同步 |
+| T30 | CI | 早盤 AI 判讀（#1042） | 讀 `candidates.json` 的 `trading_date`、`premarket-ai.json` 與 `today-1280.txt`；沒有名單日時頁面不放這段（通過）。段落從整行 `早盤 AI 判讀` 起、到其後的整行 `熱門族群` 止（找不到 `熱門族群` 就失敗，不數到頁尾），在最後一個整行 `今日名單` 之後；段內整行 `AI 推論` 恰好 1 行（DESIGN_SYSTEM §7）。`status` 不是 `done` 時段內有那一行：`failed`／`rejected` 是 `早盤 AI 判讀失敗：<reason_text>`，`missing` 是 `尚無早盤 AI 判讀（每個交易日 08:21 判讀）`。`done` 時：有一行含 `模型 <llm_model> · 提示 <prompt_version>`（不寫「提示版本」：那是 #729 拿掉的字句，T23）；`stocks` 每檔有以 `<代號> <名稱> · <action_text>` 開頭的行（名稱不自成一行，否則 T20 會當成 K 線卡標題）、依 API 順序；那一行起到下一檔、群組標題、`資料缺口` 或輸入資料缺口行為止是該檔的行；今日名單的股票有 `規則價位 進場 …｜停損 …｜目標一 …`（價位兩位小數、千分位），其他股票沒有任何兩位小數的數字與 `規則價位`（3a）；理由引用的新聞（`refs` 的 `kind=news`）標題都是整行；`input_gaps` 非空時有整行 `判讀輸入的資料缺口：<以「；」連接>`。文案與價位寫法鏡像 `frontend/src/today/premarketAi.ts`（`PREMARKET_AI_*`、`premarketAiMeta`、`premarketAiLevels`、`premarketAiStockName`、`PREMARKET_AI_JOIN`）；只在「今日名單」分頁顯示（`premarketAiShown`），另外三個分頁不放，T26～T28 的點位用詞檢查才不會數到它；非 `done` 三種的畫面由前端 `today.test.tsx` 涵蓋，CI 假資料只有 `done`（另有同日先失敗的一列與不顯示的 shadow 列） |
 
 ## 陷阱
 
@@ -118,7 +123,7 @@
 
 ## 判定
 
-- 通過：T1～T9、T11～T28 全部通過；T10 由人工判讀另記。
+- 通過：T1～T9、T11～T30 全部通過；T10 由人工判讀另記。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（API 非 200、截圖未 ready，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 

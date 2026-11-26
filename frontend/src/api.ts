@@ -2,6 +2,7 @@ import type {
   BacktestSummary,
   BackfillRun,
   CandidatesResponse,
+  PremarketAiResponse,
   CoverageReport,
   Dashboard,
   MainstreamResponse,
@@ -111,6 +112,8 @@ export const getDashboard = () => get<Dashboard>('/dashboard')
 export const getDataDate = () => get<DataDate>('/data-date')
 // Without a date the API returns the latest candidate run; limit is 1–20 (default 20).
 export const getCandidates = (date?: string, limit?: number) => get<CandidatesResponse>(candidatesPath(date, limit))
+// The pre-market AI reading of a list (#1042): the champion reading whose list date is LIST_DATE; status=missing without one.
+export const getPremarketAi = (listDate: string) => get<PremarketAiResponse>(`/premarket-ai${queryString({ list_date: listDate })}`)
 // 主流族群前 20 (#768): the latest stored list without a date.
 export const getMainstream = (date?: string) => get<MainstreamResponse>(`/mainstream${queryString({ date })}`)
 // 接近年高前 20 (#881/#882): the latest stored H2 list without a date; /api/strategy-lists/h2 is /api/h2 with the

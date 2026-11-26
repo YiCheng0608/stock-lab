@@ -468,10 +468,12 @@ def _list_of_t(db):
 def test_the_message_reads_the_list_of_the_session_before_and_todays_us_indexes(db):
     _list_of_t(db)
     lines = notify.message(db, MONDAY).splitlines()
-    assert lines[1:7] == [
+    assert lines[1:8] == [
         "09/04（五）收盤後產生・1 檔",
         # No pre-open check of the list was stored (#759).
         "開盤前檢查：尚未完成",
+        # Nor a pre-market AI reading (#1042).
+        "今日 AI 判讀尚未完成",
         "",
         "🚀 <b>突破（1 檔）</b>",
         "<b>1101 名1101</b>",
@@ -1190,3 +1192,43 @@ def test_serve_reads_the_day_results_from_the_log(tmp_path):
     assert not notify.day_done(logs, MONDAY)
     assert notify.day_results(logs, date(2026, 9, 8)) == []
     assert Path(path).name == "notify-20260907.log"
+
+
+# --- the pre-market AI reading cannot break the message (#1042 review 7198038610, 1) ----
+
+
+def _broken(*args, **kwargs):
+    raise KeyError("output_json of another shape")
+
+
+@pytest.mark.parametrize("where", ["view", "ai_view"])
+def test_an_ai_reading_that_cannot_be_read_still_sends_the_list(db, monkeypatch, where):
+    import app.premarket_ai
+
+    if where == "view":
+        monkeypatch.setattr(app.premarket_ai, "view", _broken)
+    else:
+        monkeypatch.setattr(notify, "_ai_view", _broken)
+    _list_of_t(db)
+    card = notify.read(db, MONDAY)
+    message = notify.text(card)
+    assert card.ai.status == notify.AI_ERROR and card.ai.error == "KeyError"
+    assert notify.AI_UNREADABLE in message.splitlines()
+    assert "<b>1101 名1101</b>" in message and "隔夜美股" in message
+    html = notify_card.card_html(card)
+    assert f'<div class="ai-line line">{notify.AI_UNREADABLE}</div>' in html
+    assert "1101" in html and notify_card.card_height(card) > 0
+
+
+@linux_only
+def test_a_run_with_an_unreadable_ai_reading_is_sent(run_env, monkeypatch):
+    import app.premarket_ai
+
+    monkeypatch.setattr(app.premarket_ai, "view", _broken)
+    server = run_env.telegram()
+    assert _send(run_env) == 0
+    assert len(server.requests) == 1
+    log = _log(run_env)
+    assert "--- result status=sent mode=photo" in log
+    assert "--- premarket_ai unreadable error=KeyError" in log
+    assert notify.AI_UNREADABLE in log
