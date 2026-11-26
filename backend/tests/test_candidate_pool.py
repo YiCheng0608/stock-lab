@@ -841,7 +841,9 @@ def test_the_daily_writes_the_evening_last(factory, monkeypatch):
     result = pipeline.run_daily(T)
     assert result["status"] == "success"
     assert result["candidate_pool"]["status"] == "success"
-    assert steps.calls[-1] == "theme_discovery"
+    # The real step is not a recorded fake: it runs between theme_discovery and
+    # premarket_score (#1043).
+    assert steps.calls[-2:] == ["theme_discovery", "premarket_score"]
     rows, by_run = runs(factory)
     step = by_run[rows[0].id]["candidate_pool"]
     assert (step.status, step.sequence) == ("success", 17)
