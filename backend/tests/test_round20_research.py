@@ -347,6 +347,11 @@ def test_the_docs_tool_section_says_what_the_code_judges():
     assert "t < 3.384 判「前瞻觀察」，沒有 t 下限" in section
     assert "tools/research/round20_research.py" in section
     assert "本輪 2 個、累計 70 個" in section
+    # #1057 決定 7198741459: the registration says from 2014, the coverage
+    # found it from 2008 (the registration's own text is left as it is)
+    for text in (tool.OVERLAP_NOTE["AB2_survivor"], tool.LIMITS["AB2"]):
+        assert "登記段寫 2014 年起才有，`--coverage-only` 查到 2008 年起就有" in text
+    assert "驗證段（2020～2024 年" in tool.OVERLAP_NOTE["AB2_survivor"]
 
 
 # --- hand-made series -------------------------------------------------------------
