@@ -364,6 +364,23 @@ def product_features() -> dict[str, list[str]]:
     return used
 
 
+def product_unmatched() -> dict[str, list[str]]:
+    """The 已進產品 ``WATCHES`` keys' sort and filter keys that are no
+    ``FEATURES`` key (X4's ``eps_yield_raw``): nothing to compare, said so."""
+
+    names = {key for key, *_ in fe.FEATURES}
+    out: dict[str, list[str]] = {}
+    for key, entry in fw.WATCHES.items():
+        if entry["kind"] != fw.PRODUCT:
+            continue
+        spec = fw.definition(key)
+        keys = [*spec.get("keys", ()), *(part[0] for part in spec.get("filters", ()))]
+        missing = sorted({name for name in keys if name not in names})
+        if missing:
+            out[key] = missing
+    return out
+
+
 def registered_features(
     ledger: Path = HERE / "explore_ledger.json",
 ) -> dict[str, list[str]]:
@@ -424,6 +441,46 @@ def _changes(
                 continue
             moved.append((key, horizon, then, now))
     return moved
+
+
+def feature_changes(
+    current: dict[str, Any] | None, previous: dict[str, Any] | None
+) -> list[dict[str, str]]:
+    """Every verdict that differs from last month's, 無法判定 included (Q1:
+    those are listed here only, neither up nor down)."""
+
+    if _comparison(current, previous):
+        return []
+    rows = []
+    before = previous["features"]["verdicts"]
+    for kind in ("conditions", "features"):
+        for key, by in current["verdicts"][kind].items():
+            for horizon, now in sorted(by.items()):
+                then = before.get(kind, {}).get(key, {}).get(horizon)
+                if then is not None and then != now:
+                    rows.append(
+                        {
+                            "kind": kind,
+                            "key": key,
+                            "horizon": horizon,
+                            "from": then,
+                            "to": now,
+                            "direction": (
+                                "不排序"
+                                if UNRANKED in (then, now)
+                                else ("升級" if RANKS[now] > RANKS[then] else "降級")
+                            ),
+                        }
+                    )
+    return rows
+
+
+USED_NOTE = (
+    "「用過」從登記的定義自動查：`explore_ledger.json` 每一筆的工具的 "
+    "`HYPOTHESES[代號]`、`portfolio_research.HYPOTHESES` 與 `forward_watch.WATCHES` "
+    "的定義裡出現特徵鍵（整字）就算；只用中文標籤描述、沒寫鍵名的假設比對不到，"
+    "可能被誤列成沒用過，統籌看清單時刪掉"
+)
 
 
 def _verdict(code: str) -> str:
@@ -589,7 +646,19 @@ def markdown(review: dict[str, Any], out: Path) -> str:
         "",
     ]
     lines += _list_lines("變差", review["lists"]["worse"])
+    unmatched = product_unmatched()
+    if unmatched:
+        lines[-1:] = [
+            "",
+            "- 已進產品策略用到、不在 `feature_evidence.FEATURES` 的鍵（沒得比）："
+            + "；".join(
+                f"{key} " + "、".join(f"`{name}`" for name in names)
+                for key, names in unmatched.items()
+            ),
+            "",
+        ]
     lines += _list_lines("變強", review["lists"]["better"])
+    lines[-1:] = ["", f"- {USED_NOTE}", ""]
     lines += [f"## {H1}", ""]
     if status[H1]["status"] == OK:
         fact = review["forward"][H1]
@@ -653,6 +722,24 @@ def markdown(review: dict[str, Any], out: Path) -> str:
             for key, by in current["verdicts"][kind].items():
                 cells = [_verdict(by[h]) if h in by else "—" for h in ("5", "20")]
                 lines.append(f"| {label} | `{key}` | {' | '.join(cells)} |")
+        lines += ["", "### 判定有變（和上個月比）", ""]
+        why = review["feature_comparison"]
+        if why:
+            lines.append(why)
+        elif not review["feature_changes"]:
+            lines.append("（沒有）")
+        else:
+            lines += [
+                "| 類 | 鍵 | 期間 | 上個月 | 本月 | 升降 |",
+                "| --- | --- | --- | --- | --- | --- |",
+            ]
+            for row in review["feature_changes"]:
+                label = "條件" if row["kind"] == "conditions" else "特徵"
+                lines.append(
+                    f"| {label} | `{row['key']}` | T+{row['horizon']} "
+                    f"| {_verdict(row['from'])} | {_verdict(row['to'])} "
+                    f"| {row['direction']} |"
+                )
         lines += ["", f"- 原始輸出：`{FEATURES}/`", ""]
     lines += ["## 早盤 AI 判讀月報", ""]
     if status[PREMARKET]["status"] != OK:
@@ -742,6 +829,8 @@ def run_review(
         "scorecard": scorecard_facts(out, status),
         "features": feature_facts(out, status),
     }
+    review["feature_comparison"] = _comparison(review["features"], previous)
+    review["feature_changes"] = feature_changes(review["features"], previous)
     review["lists"] = {
         "worse": worse(review, previous),
         "better": better(review, previous, registered_features()),
