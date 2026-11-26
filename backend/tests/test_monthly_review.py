@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import sqlite3
 import sys
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
@@ -820,3 +821,39 @@ def test_a_copy_without_the_premarket_tables_says_so(copy_db, tmp_path):
     status = mr.run_premarket(older, MONTH, tmp_path / "out", mr.premarket_text)
     assert status["status"] == "failed"
     assert status["reason"].startswith("副本沒有 `premarket_ai_readings` 表")
+
+
+def test_an_entry_on_a_copy_without_its_table_says_so(copy_db, tmp_path):
+    """Before 0039/0040 reach production the pool and the AI's misses have no
+    table: their section says the migration is not deployed yet."""
+
+    older = tmp_path / "older.db"
+    older.write_bytes(copy_db.read_bytes())
+    con = sqlite3.connect(older)
+    con.execute("drop table candidate_pool_items")
+    con.commit()
+    con.close()
+    step = next(
+        s
+        for s in mr.steps(older, tmp_path, CUTOFF, 0)
+        if s["name"] == "candidate_pool_score"
+    )
+
+    def runner(tool, argv):
+        return in_process_no_window(tool, argv)
+
+    status = mr.run_tool_step(step, tmp_path / "out", runner, older)
+    assert status["status"] == "failed"
+    assert status["reason"].startswith("副本沒有 `candidate_pool_items` 表（alembic")
+
+
+def in_process_no_window(tool: str, argv: list[str]) -> tuple[int, str, str]:
+    patch = pytest.MonkeyPatch()
+    fwt.no_window(patch)
+    try:
+        code, out, err = in_process(tool, argv)
+    except Exception as exc:  # noqa: BLE001 - the subprocess would print it
+        code, out, err = 1, "", f"{type(exc).__name__}: {exc}"
+    finally:
+        patch.undo()
+    return code, out, err

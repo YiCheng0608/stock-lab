@@ -206,7 +206,22 @@ def _reason(code: int, stdout: str, stderr: str) -> str:
     return f"exit {code}" + (f"：{tail[-1].strip()}" if tail else "")
 
 
-def run_tool_step(step: dict, out: Path, runner: Runner) -> dict[str, Any]:
+def missing_table(text: str, db: Path | None) -> str | None:
+    """A copy of a database the migration has not reached yet, said plainly."""
+
+    missing = re.search(r"no such table: (\w+)", text)
+    if not missing:
+        return None
+    alembic = pr.copy_facts(db)["alembic"] if db is not None else "?"
+    return (
+        f"副本沒有 `{missing.group(1)}` 表（alembic `{alembic}`）：建它的 migration "
+        "還沒部署到正式 DB"
+    )
+
+
+def run_tool_step(
+    step: dict, out: Path, runner: Runner, db: Path | None = None
+) -> dict[str, Any]:
     started = time.monotonic()
     try:
         code, stdout, stderr = runner(step["tool"], step["argv"])
@@ -224,7 +239,8 @@ def run_tool_step(step: dict, out: Path, runner: Runner) -> dict[str, Any]:
         "elapsed_seconds": round(time.monotonic() - started, 1),
     }
     if code != 0:
-        return {**status, "status": FAILED, "reason": _reason(code, stdout, stderr)}
+        reason = missing_table(stderr, db) or _reason(code, stdout, stderr)
+        return {**status, "status": FAILED, "reason": reason}
     if not tables.is_file():
         return {**status, "status": FAILED, "reason": f"exit 0 但沒有 {tables.name}"}
     return {**status, "status": OK}
@@ -259,15 +275,7 @@ def run_premarket(
     try:
         text = render(db, month)
     except Exception as exc:  # noqa: BLE001 - its failure is its section's only
-        reason = f"{type(exc).__name__}: {exc}"
-        missing = re.search(r"no such table: (\w+)", str(exc))
-        if missing:
-            # a copy of a database the migration has not reached yet
-            reason = (
-                f"副本沒有 `{missing.group(1)}` 表（alembic "
-                f"`{pr.copy_facts(db)['alembic']}`）：建它的 migration 還沒部署到"
-                "正式 DB"
-            )
+        reason = missing_table(str(exc), db) or f"{type(exc).__name__}: {exc}"
         return {
             **status,
             "status": FAILED,
@@ -1057,7 +1065,7 @@ def run_review(
         if step["tool"] is None:
             status[step["name"]] = run_premarket(db, month, out, premarket)
         else:
-            status[step["name"]] = run_tool_step(step, out, runner)
+            status[step["name"]] = run_tool_step(step, out, runner, db)
     _first, last_day = month_bounds(month)
     copy = pr.copy_facts(db)
     review: dict[str, Any] = {
