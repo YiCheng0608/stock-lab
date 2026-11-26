@@ -1,0 +1,448 @@
+{
+  "tool": "round20_research",
+  "version": 1,
+  "design": "1057",
+  "definitions_sha256": "c0274f4166204624fe02a090adaf95d81688c869049bc362620cfca04436f854",
+  "label": "`no_news_20`（近 20 個交易日的日曆區間內沒有任何一則重大訊息）成立，依 `momentum_20`（20 日報酬）小者先",
+  "direction": "短期反轉：無消息",
+  "parameters": {
+    "engine": "portfolio",
+    "rule": "daily",
+    "condition": "no_news_20",
+    "keys": [
+      [
+        "momentum_20",
+        "low"
+      ]
+    ],
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2007-12-03",
+      21
+    ]
+  },
+  "hypothesis": "AB2",
+  "engine": "portfolio",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2007-12-31",
+    "first_session": "2008-01-02",
+    "last_session": "2019-12-31",
+    "days": 2965,
+    "signal_days": 2965,
+    "event_days": 0
+  },
+  "prerequisites": {
+    "days": 2965,
+    "min_days": 500,
+    "delisted": 152,
+    "ok": true
+  },
+  "coverage": {
+    "2007": {
+      "days": 1,
+      "members": 426,
+      "hits": 135,
+      "hits_delisted": 56,
+      "momentum_missing": 0,
+      "names": 20,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2008": {
+      "days": 249,
+      "members": 109905,
+      "hits": 30170,
+      "hits_delisted": 13602,
+      "momentum_missing": 5,
+      "names": 4980,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2009": {
+      "days": 251,
+      "members": 146889,
+      "hits": 45422,
+      "hits_delisted": 16728,
+      "momentum_missing": 7,
+      "names": 5020,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2010": {
+      "days": 251,
+      "members": 157930,
+      "hits": 43228,
+      "hits_delisted": 17824,
+      "momentum_missing": 3,
+      "names": 5020,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2011": {
+      "days": 247,
+      "members": 117840,
+      "hits": 31639,
+      "hits_delisted": 14155,
+      "momentum_missing": 7,
+      "names": 4940,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2012": {
+      "days": 250,
+      "members": 99281,
+      "hits": 29651,
+      "hits_delisted": 12534,
+      "momentum_missing": 5,
+      "names": 5000,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2013": {
+      "days": 246,
+      "members": 114078,
+      "hits": 34179,
+      "hits_delisted": 12258,
+      "momentum_missing": 9,
+      "names": 4920,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2014": {
+      "days": 248,
+      "members": 130171,
+      "hits": 39520,
+      "hits_delisted": 13910,
+      "momentum_missing": 2,
+      "names": 4960,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2015": {
+      "days": 244,
+      "members": 104887,
+      "hits": 29091,
+      "hits_delisted": 10556,
+      "momentum_missing": 2,
+      "names": 4880,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2016": {
+      "days": 244,
+      "members": 94193,
+      "hits": 24724,
+      "hits_delisted": 7809,
+      "momentum_missing": 3,
+      "names": 4880,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2017": {
+      "days": 246,
+      "members": 116000,
+      "hits": 32490,
+      "hits_delisted": 8944,
+      "momentum_missing": 2,
+      "names": 4920,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2018": {
+      "days": 247,
+      "members": 109430,
+      "hits": 27991,
+      "hits_delisted": 7800,
+      "momentum_missing": 1,
+      "names": 4940,
+      "short_days": 0,
+      "empty_days": 0
+    },
+    "2019": {
+      "days": 241,
+      "members": 100632,
+      "hits": 22467,
+      "hits_delisted": 4811,
+      "momentum_missing": 1,
+      "names": 4811,
+      "short_days": 4,
+      "empty_days": 0
+    }
+  },
+  "seconds": {
+    "plan": 60.77654746500775,
+    "no_news_20": 3.03013506118441,
+    "momentum_20": 1.1665776383015327,
+    "v2_order": 15.58026883925777,
+    "y4_order": 28.180771543236915
+  },
+  "overlap": {
+    "AB2_V2": {
+      "days": 2965,
+      "mean": 0.23283305227655987,
+      "years": {
+        "2007": {
+          "days": 1,
+          "mean": 0.35
+        },
+        "2008": {
+          "days": 249,
+          "mean": 0.23453815261044175
+        },
+        "2009": {
+          "days": 251,
+          "mean": 0.20697211155378487
+        },
+        "2010": {
+          "days": 251,
+          "mean": 0.21912350597609562
+        },
+        "2011": {
+          "days": 247,
+          "mean": 0.2937246963562753
+        },
+        "2012": {
+          "days": 250,
+          "mean": 0.2396
+        },
+        "2013": {
+          "days": 246,
+          "mean": 0.23008130081300815
+        },
+        "2014": {
+          "days": 248,
+          "mean": 0.23568548387096774
+        },
+        "2015": {
+          "days": 244,
+          "mean": 0.23709016393442622
+        },
+        "2016": {
+          "days": 244,
+          "mean": 0.2741803278688525
+        },
+        "2017": {
+          "days": 246,
+          "mean": 0.20121951219512196
+        },
+        "2018": {
+          "days": 247,
+          "mean": 0.23643724696356275
+        },
+        "2019": {
+          "days": 241,
+          "mean": 0.18464730290456433
+        }
+      }
+    },
+    "AB2_Y4": {
+      "days": 2965,
+      "mean": 0.12293423271500843,
+      "years": {
+        "2007": {
+          "days": 1,
+          "mean": 0.1
+        },
+        "2008": {
+          "days": 249,
+          "mean": 0.04096385542168675
+        },
+        "2009": {
+          "days": 251,
+          "mean": 0.034262948207171316
+        },
+        "2010": {
+          "days": 251,
+          "mean": 0.03147410358565737
+        },
+        "2011": {
+          "days": 247,
+          "mean": 0.043927125506072875
+        },
+        "2012": {
+          "days": 250,
+          "mean": 0.0504
+        },
+        "2013": {
+          "days": 246,
+          "mean": 0.15609756097560976
+        },
+        "2014": {
+          "days": 248,
+          "mean": 0.19959677419354838
+        },
+        "2015": {
+          "days": 244,
+          "mean": 0.18545081967213115
+        },
+        "2016": {
+          "days": 244,
+          "mean": 0.2387295081967213
+        },
+        "2017": {
+          "days": 246,
+          "mean": 0.1469512195121951
+        },
+        "2018": {
+          "days": 247,
+          "mean": 0.19939271255060728
+        },
+        "2019": {
+          "days": 241,
+          "mean": 0.1553941908713693
+        }
+      }
+    }
+  },
+  "delisted": {
+    "names": 59291,
+    "delisted": 26635,
+    "share": 0.44922500885463224,
+    "years": {
+      "2007": {
+        "names": 20,
+        "delisted": 8,
+        "share": 0.4
+      },
+      "2008": {
+        "names": 4980,
+        "delisted": 2725,
+        "share": 0.5471887550200804
+      },
+      "2009": {
+        "names": 5020,
+        "delisted": 2387,
+        "share": 0.47549800796812747
+      },
+      "2010": {
+        "names": 5020,
+        "delisted": 2650,
+        "share": 0.5278884462151394
+      },
+      "2011": {
+        "names": 4940,
+        "delisted": 2916,
+        "share": 0.5902834008097166
+      },
+      "2012": {
+        "names": 5000,
+        "delisted": 2724,
+        "share": 0.5448
+      },
+      "2013": {
+        "names": 4920,
+        "delisted": 2151,
+        "share": 0.4371951219512195
+      },
+      "2014": {
+        "names": 4960,
+        "delisted": 2053,
+        "share": 0.41391129032258067
+      },
+      "2015": {
+        "names": 4880,
+        "delisted": 2197,
+        "share": 0.4502049180327869
+      },
+      "2016": {
+        "names": 4880,
+        "delisted": 2030,
+        "share": 0.41598360655737704
+      },
+      "2017": {
+        "names": 4920,
+        "delisted": 1680,
+        "share": 0.34146341463414637
+      },
+      "2018": {
+        "names": 4940,
+        "delisted": 1767,
+        "share": 0.3576923076923077
+      },
+      "2019": {
+        "names": 4811,
+        "delisted": 1347,
+        "share": 0.279983371440449
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 2965,
+      "mean": -6.251686599971058e-05,
+      "annual": -0.015754250231927065,
+      "t": -0.5349540730557892
+    },
+    "taiex": {
+      "days": 2965,
+      "mean": -0.0003856167838529412,
+      "annual": -0.09717542953094117,
+      "t": -2.4461542289462597
+    }
+  },
+  "absolute": {
+    "days": 2965,
+    "mean": -0.0002054858980933945
+  },
+  "curves": {
+    "AB2": {
+      "days": 2965,
+      "total": -0.5589044294275687,
+      "annual": -0.06720056059617474,
+      "volatility": 0.18974319524551292,
+      "max_drawdown": -0.6556886589370817,
+      "invested": 0.9620549601700752,
+      "turnover": 7.472814818391817
+    },
+    "population": {
+      "days": 2965,
+      "total": -0.47900176384278836,
+      "annual": -0.05390778458952261,
+      "volatility": 0.19626237956710466,
+      "max_drawdown": -0.6328038769083637,
+      "invested": 0.9490216364611183,
+      "turnover": 11.366009538009768
+    },
+    "taiex": {
+      "days": 2965,
+      "total": 0.4103862087775123,
+      "annual": 0.02965676044645793,
+      "volatility": 0.1795998279478326,
+      "max_drawdown": -0.559995481538859,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 59075,
+    "won": 27128,
+    "rate": 0.45921286500211594,
+    "unsold": 770
+  },
+  "counts": {
+    "AB2": {
+      "bought": 59075,
+      "sale_held": 443,
+      "limit_up": 172,
+      "not_tradable": 44,
+      "limit_down": 318,
+      "unsold": 770
+    },
+    "population": {
+      "bought": 1398850,
+      "limit_up": 2443,
+      "not_tradable": 369,
+      "sale_held": 3190,
+      "limit_down": 1921,
+      "unsold": 9490
+    }
+  },
+  "unsold_share": 0.013034278459585272,
+  "min_t": 2.0
+}
