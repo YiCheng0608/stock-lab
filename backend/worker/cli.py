@@ -412,7 +412,11 @@ def main() -> None:
     )
     pool_parser.add_argument(
         "--now",
-        help="morning 的檢查時刻：ISO 8601，沒有時區時為台北時間；預設現在",
+        help=(
+            "morning 的檢查時刻：ISO 8601，沒有時區時為台北時間；預設現在。"
+            "窗口收到這個時刻為止的新聞，晚於下一個交易日開盤就含開盤後的新聞，"
+            "寫了不改：不要拿它補過去的日期"
+        ),
     )
     pool_parser.add_argument(
         "--dry-run", action="store_true", help="只計算並印出結果，不寫 DB"
@@ -1037,9 +1041,13 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
                 parser.error("candidate-pool 的 --now 只給 --phase morning")
             result = run_candidate_pool(pool_date, dry_run=args.dry_run)
         else:
-            result = run_morning_pool(
-                pool_date, _utc_naive_moment(args.now), dry_run=args.dry_run
-            )
+            try:
+                moment = _utc_naive_moment(args.now)
+            except ValueError:
+                parser.error(
+                    f"candidate-pool 的 --now 要是 ISO 8601，收到 {args.now!r}"
+                )
+            result = run_morning_pool(pool_date, moment, dry_run=args.dry_run)
     elif args.command == "news-project":
         result = run_news_project()
     elif args.command == "trading-calendar":

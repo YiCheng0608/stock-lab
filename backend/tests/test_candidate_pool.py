@@ -600,6 +600,29 @@ def test_selection_follows_the_tiers_and_records_cap_and_theme_cap():
     assert [e.instrument_id for e in ordered if e.selected] == [8, 7, 3]
 
 
+def test_tier_five_ranks_by_sources_then_the_five_day_move_only():
+    # chips and cluster carry an order (their rank, the cluster number); tier 5
+    # does not read it, so the bigger 5-day move goes first (review 7190403114).
+    entries = [
+        _entry(1, ["gap"], move=0.01),
+        _entry(2, ["chips"], move=0.20, order=1),
+        _entry(3, ["cluster"], move=-0.15, order=10),
+        _entry(4, ["news"], move=0.05),
+        _entry(5, ["mops_event", "chips"], move=0.0, order=30),
+    ]
+    ordered = select_entries(entries, cap=10, theme_cap=4)
+    assert [e.instrument_id for e in ordered] == [5, 2, 3, 4, 1]
+    # The morning's one source keeps its order: more news first.
+    morning = [
+        _entry(6, ["morning_news"], move=0.30, order=-1),
+        _entry(7, ["morning_news"], move=0.01, order=-3),
+    ]
+    assert [e.instrument_id for e in select_entries(morning, 10, 4)] == [7, 6]
+    # Tiers 2-4 still read theirs: the H2 rank before the move.
+    lists = [_entry(8, ["h2"], move=0.5, order=9), _entry(9, ["h2"], order=1)]
+    assert [e.instrument_id for e in select_entries(lists, 10, 4)] == [9, 8]
+
+
 def test_tier_one_and_two_are_not_held_by_the_theme_cap():
     entries = [
         _entry(1, ["hot_theme"], themes=["t"], order=1),
@@ -768,6 +791,28 @@ def test_the_morning_cap_is_ten_by_default_and_skips_without_an_evening(factory)
     assert Counter(i.reject_reason for i in items.values()) == {None: 10, CAP: 2}
 
 
+def test_a_morning_not_after_the_evening_fails_and_writes_nothing(factory):
+    from worker.candidate_pool import run_morning_pool
+
+    with factory() as db:
+        build(db)
+        compute_evening(db, T, CONFIG)
+        with pytest.raises(candidate_pool.CandidatePoolDataError):
+            compute_morning(db, T, EVENING_AT, CONFIG)
+    result = run_morning_pool(T, EVENING_AT - timedelta(minutes=1))
+    assert result["status"] == "failed" and "is not after" in result["error"]
+    with factory() as db:
+        assert cp_runs(db, MORNING) == 0
+
+
+def cp_runs(db, phase) -> int:
+    return db.scalar(
+        select(func.count())
+        .select_from(CandidatePoolRun)
+        .where(CandidatePoolRun.phase == phase)
+    )
+
+
 def test_the_morning_counts_the_evening_toward_the_theme_cap(factory):
     with factory() as db:
         w = build(db)
@@ -863,6 +908,24 @@ def test_the_cli_dispatches_both_phases(factory, monkeypatch, capsys):
     assert exited.value.code == 1
     assert calls == [("evening", T, False), ("morning", T, CHECKED, True)]
     assert '"reason": "no_evening_run"' in capsys.readouterr().out
+    # Not ISO 8601: a usage error, not a traceback.
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "worker.cli",
+            "candidate-pool",
+            "--date",
+            T.isoformat(),
+            "--phase",
+            "morning",
+            "--now",
+            "8:20 tomorrow",
+        ],
+    )
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    assert exited.value.code == 2
     # --now is the morning's only.
     monkeypatch.setattr(
         sys,

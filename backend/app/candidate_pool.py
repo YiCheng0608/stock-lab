@@ -94,6 +94,10 @@ SOURCE_TIERS: dict[str, int] = {
 }
 SOURCES = tuple(SOURCE_TIERS)
 EVENING_SOURCES = tuple(source for source in SOURCES if source != "morning_news")
+# Tier 5 ranks by sources and the 5-session move only, except the morning's
+# source, whose order is its news count (review 7190403114).
+ORDERLESS_TIER = 5
+ORDERED_TIER_5 = frozenset({"morning_news"})
 # Tiers the theme cap does not limit (they still count toward it).
 THEME_CAP_EXEMPT_TIERS = frozenset({1, 2})
 
@@ -203,12 +207,16 @@ class Entry:
         return len(self.hits)
 
     def sort_key(self) -> tuple:
+        # Tier 5's sources have no common order (#1003 AC-3 §3: more sources,
+        # then the 5-session move), so only tiers 2-4 and the morning's one
+        # source (more news first) read it.
         tier = self.tier
         order = min(
             (
                 hit.order
                 for hit in self.hits.values()
                 if SOURCE_TIERS[hit.source] == tier
+                and (tier < ORDERLESS_TIER or hit.source in ORDERED_TIER_5)
             ),
             default=0.0,
         )
@@ -1501,6 +1509,12 @@ def compute_morning(
     evening = stored_run(db, day, EVENING)
     if evening is None:
         return None, False
+    if checked_at <= evening.computed_at:
+        # An empty window would be stored for good (review 7190403114).
+        raise CandidatePoolDataError(
+            f"checked_at {checked_at.isoformat()} is not after the evening run's"
+            f" computed_at {evening.computed_at.isoformat()}"
+        )
     computed_at = utcnow() if write else checked_at
     entries, summary = morning_entries(db, evening, checked_at, config)
     counts = Counter(
