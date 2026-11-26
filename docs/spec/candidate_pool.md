@@ -1,4 +1,4 @@
-<!-- owns: candidate_pool_v1 -->
+<!-- owns: candidate_pool_v1、候選池的對答案 -->
 # candidate_pool_v1
 
 候選池：每個交易日 T 從多個來源取聯集，列出「今天值得 AI 看的」股票，每檔標出為什麼進池（`source`），交給早盤 AI 判讀（[#1041](https://github.com/YiCheng0608/stock-lab/issues/1041)）讀。候選池**不是買賣訊號**，也不是「規則選出可以買的」：今日名單照常產出、不讀它，也不被它取代。依據是 [#1003 AC-3](https://github.com/YiCheng0608/stock-lab/issues/1003#issuecomment-7108004301) 第 2～4 節與 #1 的決定（[7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228) Q3：晚上 40、早上最多補 10、同一題材最多 4；[7187528140](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187528140)：AI 不從池外補股）。程式在 `backend/app/candidate_pool.py`，門檻是 `PoolConfig`，每個 run 存進 `config_json`；三個上限是設定值，改預設值要在 #1020 或後續單留 `決定：`。
@@ -62,6 +62,18 @@
 - **`candidate_pool_runs`**：`trading_date`、`version`、`phase`、`status`（`computed`／`zero`）、`cap`、`union_count`、`selected_count`、`source_counts_json`（聯集中每個來源的檔數）、`summary_json`（入選的來源組成 `selected_sources`、被 ≥ 2 個來源點到的檔數 `multi_source`、`by_source_count`、`rejected`、入選的層級分布 `tiers`、`inputs`、晚上的 `liquid_universe`、早上的 `window_start`／`checked_at`／`news_items`／`themes`）、`config_json`、`base_run_id`（早上那輪指向晚上那輪）、`computed_at`。
 - **`candidate_pool_items`**：`run_id`、`trading_date`、`version`、`phase`、`instrument_id`、`rank`、`tier`、`selected`、`reject_reason`、`source_count`、`sources_json`（上表每個來源一列：`source`、`value`、`data_date`、`source_ids`）、`themes_json`（`theme_id`、`name`）、`features_json`（收盤、1／5／20 日報酬、5／20 日超額、20 日均量張數、量比、法人 5 日比率、`high_gap_240`、跳空）。#1041 的判讀用 `candidate_pool_items.id` 對回來。
 - **API**：`GET /api/candidate-pool?date=YYYY-MM-DD[&include_rejected=true]`（沒有 `date` 時取最新一個有晚上那輪的日子）。`meta.phases.evening`／`meta.phases.morning` 是各輪的 run（沒有時 null）：**早上那輪還沒寫時 `morning` 是 null，不拿晚上那輪頂替**；寫了但沒有補股時是 `status=zero`。`items` 是入選的股票，晚上在前、早上在後，各依 `rank`；`include_rejected=true` 連沒選入的一起回。每檔有 `id`、`phase`、`instrument`（id、exchange、symbol、名稱、官方產業）、`rank`、`tier`、`selected`、`reject_reason`、`source_count`、`sources`、`themes`、`features`。`meta.not_a_signal` 是「不是買賣訊號」。價量籌碼的細節、規則價位與新聞內文由 #1041 組輸入時自己讀（#1020 [決定 7188059266](https://github.com/YiCheng0608/stock-lab/issues/1020#issuecomment-7188059266)）。
+
+## 對答案
+
+候選池每個來源入選的股票之後怎麼走（[#1069](https://github.com/YiCheng0608/stock-lab/issues/1069)，#1004 第 1 點；題材熱度用 `hot_theme` 這個來源量）。規則由統籌在第一次真跑前決定（[決定 7203530697](https://github.com/YiCheng0608/stock-lab/issues/1069#issuecomment-7203530697)），寫死在 `tools/research/candidate_pool_score.py` 的常數與函式，要改就加 `candidate_pool_score.VERSION`。只讀、不改池：`python tools/research/candidate_pool_score.py --db <副本> --out <目錄> [--end YYYY-MM-DD]`，每月檢討的子入口（[evidence 每月檢討](evidence.md#每月檢討)）；拒絕同 `exit_research`（正式 DB、台北 21:30～23:30、可用記憶體不足）。輸出 `summary.md` 與 `tables.json`（不含時間，同一份副本單獨跑和在每月檢討裡跑相同）。
+
+- **對象**：`candidate_pool_v1` 晚上、早上兩輪的入選股（`selected=true`），池的交易日 T ≤ `--end`。早上那輪只有 `morning_news`，自成一組。T 沒有早盤判讀也照算。
+- **D 與報酬**：D 是 T 之後的第一個台股交易日（`pipeline.taiwan_bar_dates`），也就是讀這個池的早盤判讀的 `session_date`。報酬與母體都直接用早盤 AI 對答案的函式（[premarket_ai 對答案](premarket_ai.md#對答案)），候選池和 AI 判讀對同一個母體：每檔 `pipeline._tracking_inputs`＋`app.premarket_score.open_hold`（D 開盤 +5 bps 買、T+N 收盤 −5 bps 賣、再扣 30 bps，除權息因子換回 T 的基準），母體 `worker.premarket_score.population`（D 有日 K、沒停牌的 `stock`／`ipo` 等權，沒有流動性門檻）。T+N 的日 K 還沒到的池日記「未到期」。
+- **組**：16 個來源各一組，一檔有幾個來源就在每個來源各算一次（另列「只有這個來源」的檔數，不另判）。另列 11 組：全池、層級 1～5、來源數 1／2／≥3、被上限擋掉（`selected=false`，`cap` 與 `theme_cap` 合成一組、另列各自檔數）、AI 判 keep／reprice（以 `premarket_ai_stocks.pool_item_id` 對回，有效動作取 champion、當時的 `PROMPT_VERSION`、`done` 判讀的 stock 分數列的 `effective_action`；`reprice_deferred` 算 defer，不在這組；分數列還沒寫的那天不算）。
+- **每日超額與判定**：每個 T，組內可比股票的 `open_hold` 平均減母體平均；組那天沒有可比的股票就不算那天。t 是 `evidence_lib.t_stat(values, overlap=N)`；判定 `portfolio_research.forward_judge`（`MIN_T` 2.0），滿 `MIN_DAYS` 60 日才判，從池的第一天起累積、不分月。T+5、T+20 各判，共比較 27 組 × 2 個期間＝54 組，報告寫明組數，並寫明其中大約 1 組會純屬偶然達標。
+- **核對**：AI 組每天的超額要等於 champion 那份判讀 `overall` 列的 `ai_version.excess`（`ai_check` 列比對天數與不同的天）；對不上先在 Issue 提問，不調成一樣。
+- **對流動母體（參考）**：市場面的來源只收流動股，等權母體含非流動股。另列每組對流動母體的超額日均，只列出、不判定、不算進比較組數：流動母體是 T 晚上那輪 `config_json` 的 `liquidity_days`、`min_average_lots`（`app.candidate_pool.liquid_ids`，早上那輪也用同一個 T 的晚上那輪）下，D 有日 K、沒停牌的股票；那天沒有晚上那輪（或 `config_json` 沒有這兩個值）寫「無資料」，不改用預設值。`liquid_ids` 看的是 `instruments` 現在的 `status=active`，之後才下市的股票不在流動母體裡。
+- **清單**（[evidence 每月檢討](evidence.md#每月檢討)，`monthly_review` 第 2 版）：16 個來源中任一期間判「輸給基準」的列進變差，動作「候選池只決定 AI 看哪些股票：統籌在 #1 提案調整來源或上限；改 `PoolConfig` 預設值要留 `決定：`」；判「通過」的列進變強，只當紀錄。另列的 11 組不進清單。
 
 ## 限制
 

@@ -1,4 +1,4 @@
-<!-- owns: premarket_ai_v1、早盤 AI 判讀的輸入快照、早盤 AI 判讀的核對、早盤 AI 判讀紀錄表、早盤 AI 判讀的顯示、premarket_score_v1、早盤 AI 判讀的對答案 -->
+<!-- owns: premarket_ai_v1、早盤 AI 判讀的輸入快照、早盤 AI 判讀的核對、早盤 AI 判讀紀錄表、早盤 AI 判讀的顯示、premarket_score_v1、早盤 AI 判讀的對答案、早盤 AI 判錯清單、早盤提示詞改版提案 -->
 # premarket_ai_v1
 
 早盤 AI 判讀：每個交易日 D 08:21（台北），用截止 D 08:15 的隔夜新聞、美股、台指期夜盤，以及候選池每檔的價量籌碼、產業題材（今日名單的股票另附規則價位），呼叫一次 `claude -p`（sonnet），產出大盤、族群與每檔「維持／依開盤價重算／暫緩」與理由；核對後存檔，存了不改。判讀是**推論**，不是買賣訊號，也不改今日名單、分數或規則價位。依據：#1002 的評估（[AC-2 1/2](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7118193790)、[AC-2 2/2](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7118209417)、[AC-3](https://github.com/YiCheng0608/stock-lab/issues/1002#issuecomment-7108600534)）與 #1 決定 [7187492081](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187492081)（3a、4A）、[7187528140](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187528140)（不從池外補股）。程式：job `backend/worker/premarket_ai.py`、輸入 `backend/worker/premarket_input.py`、呼叫與核對 `backend/worker/premarket_reading.py`、讀取 `backend/app/premarket_ai.py`；排程與日誌見 [SCHEDULING](../ops/SCHEDULING.md#scheduler-容器的排程serve)，看門狗見 [WATCHDOG](../ops/WATCHDOG.md)。08:45 的 Telegram 與今日名單頁怎麼顯示見[顯示](#顯示)（#1042）；對答案見[對答案](#對答案)（#1043）。
@@ -158,6 +158,54 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 - 統籌每月第一個交易日（和 #1004 的每月檢討同一天）跑它，以 `回報：` 貼 #1；CLI 不自己貼。
 - 60 個交易日滿才給「AI 版本比規則版本好、差或分不出」的結論，由使用者決定去留；中途不改口徑。
 - **換版**（#1002 AC-3 D）：shadow 上線後，同一批交易日上，新版本的大盤當日判對率不低於舊版本，**而且** `value_open_hold` 的 T+5 平均高於舊版本，兩項都過才換；同一批交易日未滿 20 天標 `insufficient_sample`。月報有 shadow 時列這兩項。換版由統籌在 #1 提案、使用者決定。
+
+## 判錯清單與改版提案
+
+每月檢討挑出上個月判錯的案例，再讓 AI 讀這些案例提出提示詞的修改（[#1069](https://github.com/YiCheng0608/stock-lab/issues/1069)，#1004 第 3、4 點）。規則由統籌在第一次真跑前決定（[決定 7203530697](https://github.com/YiCheng0608/stock-lab/issues/1069#issuecomment-7203530697)，回覆[提問 7203458168](https://github.com/YiCheng0608/stock-lab/issues/1069#issuecomment-7203458168)），寫死在 `tools/research/premarket_errors.py` 與 `tools/research/prompt_proposal.py` 的常數與函式；要改就加各自的 `VERSION`。只讀[對答案](#對答案)已寫好的 `premarket_score_v1` 列，不重算；不改口徑、不改 `premarket_v1` 與 `OUTPUT_SCHEMA`。清單與提案只負責列出：上線 shadow、換版由統籌在 #1 提案，使用者決定。
+
+### 判錯清單（`premarket_errors.py`）
+
+`python tools/research/premarket_errors.py --db <副本> --month YYYY-MM --out <目錄>`：每月檢討的子入口（[evidence 每月檢討](evidence.md#每月檢討)），寫 `cases.json`（提案命令讀它）與 `cases.md`。只讀，拒絕同 `exit_research`。
+
+- **哪些判讀**：`role=champion`、`prompt_version` 等於跑的時候程式裡的 `premarket_reading.PROMPT_VERSION`、`done` 的判讀。提案改的是現在這一版，舊版的案例不拿來改新版：換版那個月，其他版本的 champion 判讀只列版本與天數（`other_versions`）。shadow 不收（shadow 只用它上線之後的日子比，不拿提出修改時看過的案例）。`failed`／`rejected` 只列天數，取法同月報：當天有 `done` 就算 done，沒有時取最新一列。
+- **判錯**（每份判讀的每檔最多一個案例；常數 `ERROR_EXCESS = 0.03`、`STOP_TRIGGER = "invalidated"`、`TARGET_TRIGGER = "target_1_hit"`）：
+
+  | 類 | 判錯 | 判對（對照） |
+  | --- | --- | --- |
+  | `market` 大盤 | `d0`、`status=scored`、`hit=false`（`t5` 只列，不收） | `hit=true` |
+  | `defer` 暫緩卻漲 | 有效動作 `defer`（含 `reprice_deferred`，另標）、T+5 `open_hold` 減同一份判讀 `overall` T+5 的 `population.mean` ≥ +3 個百分點 | ≤ −3 個百分點 |
+  | `levels_stop` 維持卻觸停損 | 有規則價位（`app.premarket_score.has_levels`）、有效動作 `keep` 看 T+20 `levels.original`，`reprice` 看 `levels.repriced_result`：`first_trigger` 是 `invalidated` | 先觸 `target_1_hit` |
+  | `no_levels_keep` 沒有規則價位的維持卻跌 | 有效動作 `keep`、T+5 對母體超額 ≤ −3 個百分點（沒有規則價位不能判 `reprice`，核對會擋） | ≥ +3 個百分點 |
+
+  - 有規則價位的 `keep`／`reprice` 只看停損那一條，不再套 ±3 個百分點；介於兩個門檻之間的不算對也不算錯。
+  - 族群不收：`premarket_score_v1` 沒有對族群對答案。
+  - `open_hold` 或 `levels` 結果是 `incomparable` 的記「不能比」筆數；分數列還沒寫的記「尚未對答案」筆數；兩種都只在判讀所在的月份計數，不收也不算判對。
+- **歸哪個月**：案例歸**結果出來的那個月**：大盤是 D（`close_date`），個股是那個期間的最後一個交易日（`open_hold.exit_date`）。T+20 的結果約一個月後才寫，照判讀日歸月的話，月底那些判讀到月初跑時大多還沒對答案、下個月也不再收；照結果月歸，每筆剛好收一次，而且月初跑時都已寫好。判讀天數、`failed`／`rejected` 天數與提案門檻的大盤天數，則照 `session_date` 在該月的判讀算。
+- **筆數與排序**（`MAX_CASES = 30`）：判錯最多 30 筆，大盤全收（依日期），個股依排序鍵的絕對值大的先（同值依日期、代號）；排序鍵是案例那個期間的 `open_hold` 對母體超額（停損類用 T+20，其他用 T+5；不能比時當 0）。另附對照：每一類取和收進來的判錯同樣筆數的判對案例，排序相同（大盤依 `|return|`），讓 AI 不會只看錯的就改（#1004 第 4 點）。
+- **每筆案例**：`case_id`（`<session_date>:<market|代號>:<類>`）、`kind`（`error`／`control`）、當時的輸入（那檔在 `input_json.candidates` 的資料；`sessions[<日期>].market_input` 是大盤用到的部分：加權指數、美股、台指期、隔夜新聞統計與大盤理由引用的新聞）、AI 的動作、`reprice_rule`、規則價位與理由，以及結果（`outcome`）。
+- **理由引用的種類**（#1004 第 3 點）：`cases.md` 附一張表，不進清單：列是 `refs` 的種類（`news`、`us:<代號>`、`tx:night`、`tx:day`、`taiex`、`stock:<欄位>`），欄是引用的理由數與判對率。判對率的分母是該月 champion `done` 判讀的全部判斷：大盤看 `hit`，每檔看 T+5 對母體超額的正負（`keep`／`reprice` 為正、`defer` 為負算對），和判錯的 ±3 個百分點不是同一個口徑。要不要列成研究候選另議。
+- **提案門檻**（`proposal_gate`，`MIN_MARKET_DAYS = 15`、`MIN_ERRORS = 10`）：`SHADOW_PROMPT_VERSION` 有值時是 `shadow_exists`「已有 shadow，不提案」（同時最多一個 shadow）；否則該月 champion 大盤 `d0` 已對答案的交易日 ≥ 15、而且判錯 ≥ 10 筆才是 `ok`，不到是 `insufficient_sample`「樣本不足，不提案」。`cases.json` 另記 `month_stats`（大盤 `d0` 判對率、各有效動作 T+5 `open_hold` 平均），給提案用。
+
+### 改版提案（`prompt_proposal.py`）
+
+`python tools/research/prompt_proposal.py --cases <目錄>/premarket_errors/cases.json --out <新的空目錄> [--attempt 2]`：和每月檢討並列、不是子入口（它要 CLI 登入，每次的結果也不同）。只讀 `cases.json` 與目前的提示詞 `backend/worker/prompts/<cases.json 的 prompt_version>.md`；不讀也不寫 DB，不改 repo 的檔。在哪裡跑、怎麼跑見 [evidence 每月流程](evidence.md#前瞻驗證-h1)第 4 步（scheduler 容器）。
+
+- `proposal_gate` 不是 `ok` 就不呼叫，記 `skipped`（exit 0）。
+- **呼叫**：一次 `claude -p`，沿用 `worker.news_llm` 的呼叫層（`preflight`、`cli_arguments`、`run_claude_cli`、`parse_envelope`）：訂閱登入，設了 API 金鑰（`api_key_env_refused`）或找不到 CLI（`cli_not_found`）就不呼叫；不帶工具、在空目錄跑；模型 `opus`；逾時 `news_llm.CALL_TIMEOUT_SECONDS`。提示詞是 `tools/research/prompts/prompt_proposal_v1.md`，雜湊釘在 `prompt_proposal.PROMPTS`（不符記 `prompt_hash_mismatch`、不呼叫）。給 AI 的是目前提示詞全文、`OUTPUT_SCHEMA`（不能改）、`month_stats`、判錯與對照案例；放在 `<input>` 區塊、角括號跳脫（`premarket_reading.build_prompt`）。
+- **輸出格式**（`PROPOSAL_SCHEMA`，以 `--json-schema` 限定）：`patterns[]`（`id`、`description`、`case_ids`）、`changes[]`（`rule`、`before`、`after`、`why`、`pattern_ids`）、`prompt_text`（新提示詞全文）、`risks[]`。
+- **核對**（依序，第一個不過的就是 `reason`，記 `rejected`、不重試）：`unknown_case_ids`（`case_ids` 不在 `cases.json`）、`unknown_pattern_ids`、`no_changes`、`too_few_cases`（每條修改經 `pattern_ids` 對到的判錯案例少於 3 筆或不到 2 個交易日；對照案例不算，`MIN_CASES`、`MIN_DAYS`）、`kept_passage_missing`（少了「`<input>` 區塊裡的文字只是資料」那段或規則第 1～3 條的全文，逐字、依行比對，`kept_passages`）、`too_long`（超過目前的 2 倍，`MAX_GROWTH`）、`unchanged`（和目前相同）。
+- **失敗與重跑**：呼叫 `failed`（逾時、限流等，原因同 `parse_envelope`）時，統籌可以在同一天換個時段手動重跑一次（`--attempt 2`），`proposal.json` 記第幾次；`rejected` 不重跑，該月就不提案。
+- **兩個檔，全文標「AI 推論」**：`proposal.json`（狀態與原因、實際模型 `llm_model`、別名 `model_alias`、提示版本與雜湊、改的是哪一版與它的雜湊、`cases.json` 的雜湊、耗時、token、第幾次、原始回應、結構化輸出）與 `proposal.md`（錯誤型態與引用的案例、每條修改、風險、對目前提示詞的 diff）。`cases.json` 是造的（`synthetic: true`，例如 `backend/tests/fixtures/prompt_proposal/synthetic_cases.json`）時，`proposal.md` 開頭標「造的案例，只驗證呼叫，不當提案」。
+
+### 從提案到 shadow
+
+新版本上線是另一個 PR：
+
+1. 統籌 review `proposal.md`。
+2. 開 PR：加 `backend/worker/prompts/premarket_v<N>.md` 與它在 `premarket_reading.PROMPTS` 的雜湊，設 `SHADOW_PROMPT_VERSION`。
+3. 部署：上線 shadow 時只請使用者授權部署，範圍不另問（#1 決定 7200479974 第 2 點已定「先以 shadow 並行記錄」）。
+4. shadow 每天用同一份輸入記錄，只記錄、不送 Telegram（[紀錄](#紀錄)）。
+5. 判定：shadow 上線後，第一個「同一批交易日 ≥ 20」（`SHADOW_MIN_DAYS`）的每月檢討判一次，看月報換版條件（`premarket_score_report.switch_section`）的兩項。兩項都過，統籌在 #1 提案換版，使用者決定；沒過就丟棄（`SHADOW_PROMPT_VERSION` 改回 `None`），不延長再看（研究規則第 3 條）。
 
 ## 限制
 
