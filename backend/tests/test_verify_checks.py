@@ -4346,3 +4346,38 @@ def test_t30_takes_percents_ratios_and_news_titles_for_no_price(tmp_path):
     priced = block.replace("推論暫緩\n", "收盤 85.30，推論暫緩\n", 1)
     with pytest.raises(page_checks.Fail, match="9204 示範生技 不在今日名單卻有價位"):
         page_checks.t30(_t30_run(tmp_path, priced, data))
+
+
+def test_t30_and_the_readings_check_share_one_price_test(tmp_path):
+    # #1058 AC-4: T30 loads backend/worker/price_mentions.py by path, the function the
+    # reading's check (premarket_reading.prices_without_levels) calls; same examples, same
+    # answers on both sides.
+    from test_premarket_ai import PRICE_EXAMPLES, PRICE_TITLES
+    from worker.price_mentions import price_mentions
+
+    shared = ROOT / "backend" / "worker" / "price_mentions.py"
+    assert Path(page_checks.price_mentions.__code__.co_filename) == shared
+    for text, want in PRICE_EXAMPLES:
+        assert page_checks.premarket_prices(text, PRICE_TITLES) == want, text
+        assert price_mentions(text, PRICE_TITLES) == want, text
+
+
+@pytest.mark.parametrize(
+    ("line", "priced"),
+    [
+        ("推論 85 元附近有賣壓", True),
+        ("目標價 85 元的報告", True),
+        ("2026.11.26 公布，EPS 3.25 元，推論暫緩", False),
+        ("理由含價位，未顯示", False),
+    ],
+)
+def test_t30_uses_the_shared_test_on_a_stock_off_the_list(tmp_path, line, priced):
+    block = PREMARKET_BLOCK.replace("根據缺資料，推論暫緩\n", line + "\n", 1)
+    run = _t30_run(tmp_path, block)
+    if priced:
+        with pytest.raises(
+            page_checks.Fail, match="9204 示範生技 不在今日名單卻有價位"
+        ):
+            page_checks.t30(run)
+    else:
+        page_checks.t30(run)

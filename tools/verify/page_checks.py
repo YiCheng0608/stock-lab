@@ -2832,15 +2832,18 @@ PREMARKET_GAPS = "資料缺口"
 PREMARKET_JOIN = " · "
 PREMARKET_LISTED = "今日名單的股票"
 PREMARKET_OTHERS = "候選池其他股票"
-# 3a forbids prices, not percents or ratios (「5 日漲 3.25%」「量比 1.85 倍」): they go first, as
-# NOT_PRICE does for the near cards, also written without the space (#1042 review 7198038610, 2).
-PREMARKET_NOT_PRICE = re.compile(r"[0-9][0-9.,]*(?:～[0-9][0-9.,]*)?\s*(?:倍|%)")
+# 3a forbids prices, not percents, ratios, amounts, dates or a quoted news title: the same test
+# as the reading's check (premarket_reading.prices_without_levels, #1058), shared by path so
+# that page_checks imports nothing of the worker package (as db_facts).
+price_mentions = _load(
+    ROOT / "backend" / "worker" / "price_mentions.py", "price_mentions"
+).price_mentions
 
 
-def premarket_prices(line: str) -> list[str]:
-    """The two-decimal numbers of LINE that are no percent or ratio."""
+def premarket_prices(line: str, titles=()) -> list[str]:
+    """The price wordings of LINE (price_mentions); TITLES are the cited news titles."""
 
-    return PRICE_NUMBER.findall(PREMARKET_NOT_PRICE.sub("", NOT_PRICE.sub("", line)))
+    return price_mentions(line, titles)
 
 
 def premarket_section(text: Text) -> tuple[int, int]:
@@ -2967,7 +2970,8 @@ def t30(run: Run) -> str:
             priced = [
                 line
                 for line in block
-                if line not in news and (premarket_prices(line) or "規則價位" in line)
+                if line not in news
+                and (premarket_prices(line, news) or "規則價位" in line)
             ]
             if priced:
                 problems.append(f"{name} 不在今日名單卻有價位：{priced[0]!r}")

@@ -15,7 +15,9 @@ decision 7118246729, 5).
   7187528140), the schema, each input stock exactly once and no other, every
   ``news:<id>`` in the input, and no order wording (``directive_words``:
   rating quotes and nouns such as 進場區 are not orders, #1002 AC-2 2/2
-  observation 2).  A failed check is ``rejected``.
+  observation 2).  A failed check is ``rejected``.  Kept in ``checks_json``
+  without a rejection: a price in the reasons of a stock without usable rule
+  levels (``prices_without_levels``, 3a, #1058; the view hides those texts).
 - **Retries**: a timeout, an answer that is not the CLI's JSON, a CLI error
   or a schema mismatch is called once more; ``rate_limited``,
   ``not_logged_in`` and ``cli_not_started`` are not (``news_llm.FATAL_REASONS``),
@@ -62,6 +64,7 @@ from .news_llm import (
 )
 from .pipeline import _upsert_raw_payload
 from .premarket_input import Snapshot, StockMeta
+from .price_mentions import price_mentions
 
 PROMPT_VERSION = "premarket_v1"
 PROMPT_DIR = Path(__file__).with_name("prompts")
@@ -344,6 +347,73 @@ def _all_reasons(output: dict[str, Any]) -> list[dict[str, Any]]:
     return reasons
 
 
+def cited_titles(output: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    """The input titles of the news any reason of OUTPUT cites: the ones a reason may
+    quote (the same set T30 has on the page, #1058)."""
+
+    titles: dict[int, str] = {}
+    for item in list(payload.get("market_news", [])) + [
+        news
+        for stock in payload.get("candidates", [])
+        for news in stock.get("news", [])
+    ]:
+        if isinstance(item.get("id"), int) and item.get("title"):
+            titles.setdefault(item["id"], item["title"])
+    cited = {
+        int(match.group(1))
+        for reason in _all_reasons(output)
+        for ref in reason["refs"]
+        if (match := _NEWS_REF.match(ref))
+    }
+    return [titles[news_id] for news_id in sorted(cited) if news_id in titles]
+
+
+def prices_without_levels(
+    output: dict[str, Any], payload: dict[str, Any], with_levels: set[str]
+) -> list[dict[str, Any]]:
+    """3a (#1058): the price wordings (``price_mentions``) in the reasons of a stock
+    without usable rule levels, and in the data gaps that name such a stock.  Not a
+    rejection: ``app.premarket_ai.view`` shows those texts as one fixed line."""
+
+    titles = cited_titles(output, payload)
+    found: list[dict[str, Any]] = []
+    for item in output["candidates"]:
+        if item["symbol"] in with_levels:
+            continue
+        for index, reason in enumerate(item["reasons"]):
+            prices = price_mentions(reason["text"], titles)
+            if prices:
+                found.append(
+                    {
+                        "symbol": item["symbol"],
+                        "where": f"reasons[{index}]",
+                        "prices": prices,
+                    }
+                )
+    names = [
+        (stock["symbol"], stock.get("name") or "")
+        for stock in payload["candidates"]
+        if stock["symbol"] not in with_levels
+    ]
+    for index, gap in enumerate(output["data_gaps"]):
+        for symbol, name in names:
+            named = re.search(
+                rf"(?<![0-9A-Za-z]){re.escape(symbol)}(?![0-9A-Za-z])", gap
+            )
+            if named or (name and name in gap):
+                prices = price_mentions(gap, titles)
+                if prices:
+                    found.append(
+                        {
+                            "symbol": symbol,
+                            "where": f"data_gaps[{index}]",
+                            "prices": prices,
+                        }
+                    )
+                break
+    return found
+
+
 @dataclass
 class Checked:
     reason: str | None
@@ -414,6 +484,9 @@ def check(output: Any, payload: dict[str, Any]) -> Checked:
     )
     checks["long_reasons"] = sum(
         1 for reason in _all_reasons(output) if len(reason["text"]) > REASON_MAX_CHARS
+    )
+    checks["prices_without_levels"] = prices_without_levels(
+        output, payload, with_levels
     )
     if any(coverage.values()):
         return Checked("coverage", json.dumps(coverage, ensure_ascii=False), checks)

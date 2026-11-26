@@ -66,6 +66,10 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 
 - **不算指令**（#1002 AC-2 2/2 觀察 2）：引述評等（動詞前 8 個字內有「評等、初評、調升、調降、券商、投顧、分析師、目標價……」，或後面接「評等」），以及名詞用法（後面接「區、價、點」，例如「進場區」）。法人「賣出」「連三日買進」這類事實沒有指令前綴，也不算；單字前綴其實是複合詞的尾字時也不算（`COMPOUND_PREFIXES`：率先、首先、搶先、優先、事先、預先、原先、特別、分別、反應、回應、因應、供應……，例如「外資率先買進」「市場反應賣出壓力」）；但複合詞前面又接著指令前綴時照算（「建議優先買進」「應優先賣出」「可以率先買進」）。「今日」「明日」前綴照算：08:21 的「今日」指還沒開盤的那一盤。
 - 另外記、但不判 `rejected`：`unknown_group_ids`（`sectors` 用了 `groups` 以外的 id）、`long_reasons`（超過 120 字的理由數）。
+- **非名單股的價位**（3a，`prices_without_levels`，[#1058](https://github.com/YiCheng0608/stock-lab/issues/1058)）：另外記、不判 `rejected`、不重試，`done` 照存；顯示時換掉那幾條（見[顯示](#顯示)）。查的是沒有可用規則價位的股票（同 `reprice_without_levels`：沒有 `strategy_levels`，或 `status=no_levels`）每條理由，以及 `data_gaps` 裡提到這些股票代號（前後不是英數字）或名稱的那幾條；`market`、`sectors` 的理由與有規則價位的股票不查。每筆記 `{symbol, where: "reasons[<i>]"|"data_gaps[<i>]", prices}`，沒有時是 `[]`。
+  - 判準只有一個函式 `backend/worker/price_mentions.py` 的 `price_mentions`（只用標準函式庫；verify T30 以路徑載入同一個檔）。先拿掉不算價位的片段，再找**價位**：兩位小數的數字（「收盤 85.30」「1,234.50」），或「元」前面的數字（「85 元附近」「85元」「目標價 85 元」）。
+  - **不算價位**：百分比（`3.25%`、`3.25 ％`、`0.50 個百分點`）、倍數（`1.85 倍`、`0.60～1.20 倍`）、數字後接兆／億／萬／千或張／股（`營收 12.34 億`、`12.34 億元`、`3.5 萬張`、`1,234 張`、`1,000 股`）、點數（`23,456.78 點`）、日期（`2026-11-26`、`2026/11/26`、`2026.11.26`、`11/26`、`11 月 26 日`）、每股數字（數字前 6 個字內有 EPS／每股盈餘／每股純益／股利／配息／配股：`EPS 3.25 元`、`現金股利 2.50 元`），以及引述的新聞標題（整段等於、或「」『』“”裡的內容是**整份輸出任一條理由引用的** `news:<id>` 在輸入裡的標題的一部分）。單獨寫的 `11.26` 分不出是日期，照算價位。
+  - 判準改了，`checks_json` 跟著變；舊判讀列不重算，照它存的 `checks_json` 顯示。
 - **呼叫失敗**記 `failed`：`timeout`、`invalid_json`（不是 CLI 的 JSON）、`cli_error` 重試 1 次；`rate_limited`、`not_logged_in`、`cli_not_started` 不重試（`news_llm.FATAL_REASONS`）；找不到 CLI（`cli_not_found`）、設了 API 金鑰（`api_key_env_refused`）、提示詞與釘住的雜湊不符（`prompt_hash_mismatch`）都不呼叫；剩下的時間不到 CLI 的 300 秒逾時就不再開始新的呼叫（第一次就不夠記 `no_time`，重試不夠記 `checks_json.retry_skipped=no_time`，保留第一次的結果）。
 
 ## 紀錄
@@ -97,6 +101,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 
 - 每條理由 `{text, refs}`：`refs` 每個是 `{ref, kind, label}`；`news:<id>` 是 `kind=news`、`news_id` 與輸入快照裡那則的標題（頁面連到 `/news/<id>`），`us:<代號>`、`tx:night`、`tx:day`、`taiex`、`stock:<代號>:<欄位>` 是給人看的名稱，其他是 `kind=other`、`label` null（頁面不列）。
 - 價位（3a）：頁面只在今日名單的股票寫「規則價位 進場／進場區 …｜停損 …｜目標一 …」（`levels`，事實，不標推論），其他股票不寫任何價位；依開盤價重算的價位由程式在開盤後算，08:45 還沒有。
+- 價位被核對記下的理由（`checks_json.prices_without_levels`，見[核對](#核對)）：`view` 把那幾條理由的 `text` 換成「理由含價位，未顯示」（`PRICE_HIDDEN_TEXT`）、`refs` 清空，提到該股的 `data_gaps` 那條也換成同一句；API、Telegram（文字版與卡片）與今日名單頁都讀 `view`，拿不到原文。原文仍在 `output_json`。
 - **Telegram**：`done` 時在隔夜美股之後一段「早盤 AI 判讀（AI 推論）」：模型與提示、大盤與前 2 條理由、族群（前 5 個，各第一條理由）、每檔動作與第一條理由（今日名單的股票在前，最多 20 檔，其餘寫「另 N 檔的 AI 判讀見今日名單頁」），段內不寫價位（今日名單的價位在上面的名單）。文字版超過 4096 字時先從 AI 段最後一檔往前刪，再刪名單的列。`failed`／`rejected` 不送這段，名單標題下一行「今日 AI 判讀失敗：<reason_text>」；`missing` 寫「今日 AI 判讀尚未完成」。讀判讀或組 AI 段時出錯（`view` 或 `notify.ai_view` 丟例外，例如判讀的形狀和這一版不同）寫「今日 AI 判讀無法讀取」，日誌記 `--- premarket_ai unreadable error=<例外型別>`，規則名單與隔夜美股照送。notify 不等判讀、不拿判讀的鎖。
 - **今日名單頁**：只在「今日名單」分頁、名單之後、熱門族群之前（[PRODUCT_SPEC §2](../PRODUCT_SPEC.md#2-主導航與資訊順序)），讀頁面那份名單的 `list_date`；verify 由 today T30 檢查。
 

@@ -45,6 +45,7 @@ from app.models import (
 )
 from worker import premarket_ai, premarket_input, premarket_reading, sources
 from worker.news_llm import CliResult
+from worker.price_mentions import price_mentions
 
 ON_LINUX = sys.platform.startswith("linux")
 linux_only = pytest.mark.skipif(not ON_LINUX, reason="fcntl lock: Linux only (#333)")
@@ -1467,3 +1468,114 @@ def test_the_migration_goes_down_and_up_again(tmp_path):
         assert version == [(revision,)] and fk == []
     finally:
         engine.dispose()
+
+
+# --- #1058: no price in the reasons of a stock without rule levels (3a) ------------------
+
+# (text, the price wordings) — the same examples T30 runs (test_verify_checks, AC-4).
+PRICE_EXAMPLES = [
+    ("根據籌碼，推論收盤 85.30 附近有撐。", ["85.30"]),
+    ("推論 85 元附近有賣壓。", ["85 元"]),
+    ("收盤 1,234.50 元。", ["1,234.50 元"]),
+    ("推論股價 85.5元。", ["85.5元"]),
+    ("目標價 85 元的報告。", ["85 元"]),
+    ("單獨的 11.26 照算價位。", ["11.26"]),
+    ("5 日漲 3.25%，推論偏強。", []),
+    ("量比 1.85 倍。", []),
+    ("跌 1.20 ％、0.50 個百分點、0.60～1.20 倍、-1.20%。", []),
+    ("營收 12.34 億、12.34 億元、3.5 萬張、外資買超 1,234 張、1,000 股。", []),
+    ("加權 23,456.78 點。", []),
+    ("名單日 2026-11-26、2026/11/26、2026.11.26、11/26、11 月 26 日。", []),
+    ("EPS 3.25 元、每股盈餘 12.35 元、現金股利 2.50 元、配息 1.20 元。", []),
+    ("根據「XX 10 月營收 12.34 億 年增 85.30」，推論營收動能佳。", []),
+    ("XX 10 月營收 12.34 億 年增 85.30", []),
+    ("根據「沒引用的 85.30」，推論。", ["85.30"]),
+]
+PRICE_TITLES = ["XX 10 月營收 12.34 億 年增 85.30"]
+
+
+@pytest.mark.parametrize("text,want", PRICE_EXAMPLES)
+def test_price_mentions_finds_prices_and_not_percents_amounts_dates_or_titles(
+    text, want
+):
+    assert price_mentions(text, PRICE_TITLES) == want
+
+
+def _with_reasons(payload, texts, gaps=()):
+    output = answer(payload)
+    for item in output["candidates"]:
+        item["reasons"] = [{"text": text, "refs": []} for text in texts]
+    output["data_gaps"] = list(gaps)
+    return output
+
+
+def test_a_price_off_the_list_is_recorded_and_the_reading_stays_done(db, world):
+    shot = snapshot(db)
+    payload = shot.payload
+    output = _with_reasons(
+        payload, ["根據籌碼，推論維持。", "收盤 85.30，推論 85 元附近有撐。"]
+    )
+    checked = premarket_reading.check(output, payload)
+    assert checked.reason is None
+    # 2330 and 2412 are on the list with levels: their reasons may cite the levels.
+    assert checked.checks["prices_without_levels"] == [
+        {"symbol": symbol, "where": "reasons[1]", "prices": ["85.30", "85 元"]}
+        for symbol in ("1101", "2603", "3711")
+    ]
+
+
+def test_a_listed_stock_without_levels_is_checked_and_one_with_levels_is_not(db, world):
+    payload = json.loads(json.dumps(snapshot(db).payload))
+    payload["candidates"][0]["strategy_levels"] = {"status": "no_levels"}
+    output = _with_reasons(payload, ["進場 125.00，推論維持。"])
+    found = premarket_reading.check(output, payload).checks["prices_without_levels"]
+    assert [item["symbol"] for item in found] == ["2330", "1101", "2603", "3711"]
+
+
+def test_no_price_off_the_list_records_an_empty_list(db, world):
+    payload = snapshot(db).payload
+    output = _with_reasons(
+        payload, ["5 日漲 3.25%、量比 1.85 倍、營收 12.34 億，2026-11-26 公布。"]
+    )
+    checked = premarket_reading.check(output, payload)
+    assert checked.reason is None and checked.checks["prices_without_levels"] == []
+
+
+def test_a_quoted_title_counts_only_when_a_reason_cites_that_news(db, world):
+    payload = json.loads(json.dumps(snapshot(db).payload))
+    item = payload["market_news"][0]
+    item["title"] = "XX 營收 85.30 創高"
+    text = "根據「XX 營收 85.30 創高」，推論維持。"
+    output = _with_reasons(payload, [text])
+    output["market"]["reasons"][0]["refs"] = ["tx:night"]
+    found = premarket_reading.check(output, payload).checks["prices_without_levels"]
+    assert len(found) == 3
+    # Cited by any reason (the market's here): the same set as T30's cited titles.
+    output["market"]["reasons"][0]["refs"] = [f"news:{item['id']}"]
+    found = premarket_reading.check(output, payload).checks["prices_without_levels"]
+    assert found == []
+
+
+def test_only_data_gaps_naming_a_stock_without_levels_are_checked(db, world):
+    payload = snapshot(db).payload
+    name = next(s["name"] for s in payload["candidates"] if s["symbol"] == "2603")
+    gaps = [
+        "加權指數 23,456.78 點以外沒有缺口",
+        "2330 收盤 125.00 之後沒有籌碼",
+        f"{name} 收盤 85.30 之後沒有籌碼",
+        "1101 名單日沒有日線",
+        "11011 收盤 85.30",
+    ]
+    output = _with_reasons(payload, ["根據籌碼，推論維持。"], gaps)
+    found = premarket_reading.check(output, payload).checks["prices_without_levels"]
+    assert found == [{"symbol": "2603", "where": "data_gaps[2]", "prices": ["85.30"]}]
+
+
+def test_a_price_off_the_list_is_stored_done_without_a_retry(db, world):
+    def reply(payload):
+        return envelope(_with_reasons(payload, ["收盤 85.30。"]))
+
+    _shot, outcome = read(db, FakeCli(reply, valid))
+    assert (outcome.status, outcome.reason) == ("done", None)
+    assert len(outcome.attempts) == 1
+    assert len(outcome.checks["prices_without_levels"]) == 3
