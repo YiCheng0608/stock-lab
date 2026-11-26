@@ -13,6 +13,6 @@
    - `keep`：維持。今日名單的股票（`on_today_list` 為 true）表示規則價位照用。
    - `reprice`：只用在有 `strategy_levels` 的股票。預期開盤會明顯跳空，價位要依開盤價重算（系統在開盤後以開盤價重算停損距離與報酬風險比，不是你算）。在 `reprice_rule` 寫重算後暫緩的條件：`max_gap_pct`（開盤相對昨收的漲幅超過多少就暫緩，小數，例如 0.05）、`max_gap_down_pct`（開盤相對昨收的跌幅超過多少就暫緩，正的小數，例如 0.03；開盤價已低於 `invalid_price` 時一律暫緩）與 `min_risk_reward`（重算後低於多少就暫緩）。
    - `defer`：今天暫緩，附理由（例如利空新聞、大盤偏空且個股屬受影響產業、籌碼轉弱）。
-   沒有 `strategy_levels` 的股票只用 `keep` 或 `defer`，理由不寫價位。`reasons` 1～3 條。個股沒有隔夜新聞時，依大盤、所屬產業與籌碼判讀，不要假設有新聞。
+   每檔都要有 `reprice_rule`：`reprice` 時是上面三個數字的物件，`keep` 與 `defer` 時是 `null`。沒有 `strategy_levels` 的股票只用 `keep` 或 `defer`，理由不寫價位。`reasons` 1～3 條。個股沒有隔夜新聞時，依大盤、所屬產業與籌碼判讀，不要假設有新聞。
 7. **資料缺口**（`data_gaps`）：輸入標 `missing`、`stale`、`not_judged_by_cutoff` 或 `no_levels` 的重要項目（例如美股尚未更新、台指期夜盤沒有資料），各列一條，說明對判讀的影響。
 8. 全部用繁體中文、台灣用語；每條理由最多 120 字。

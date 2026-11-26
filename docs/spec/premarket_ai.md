@@ -40,7 +40,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 | --- | --- |
 | `market` | `stance`（`bullish`／`bearish`／`neutral`）、`confidence`（`high`／`medium`／`low`）、`reasons` |
 | `sectors` | 受影響的族群：`group_id`（輸入 `groups` 裡的）、`name`、`direction`（`positive`／`negative`／`mixed`）、`reasons` |
-| `candidates` | 輸入每檔恰好一個：`symbol`、`action`（`keep` 維持／`reprice` 依開盤價重算／`defer` 暫緩）、`reasons`（1～3 條）；`reprice` 一定附 `reprice_rule`：`max_gap_pct`（開盤漲幅超過就暫緩）、`max_gap_down_pct`（開盤跌幅超過就暫緩，正的小數；開盤已低於 `invalid_price` 一律暫緩）、`min_risk_reward`（重算後低於就暫緩） |
+| `candidates` | 輸入每檔恰好一個：`symbol`、`action`（`keep` 維持／`reprice` 依開盤價重算／`defer` 暫緩）、`reprice_rule`、`reasons`（1～3 條）；`reprice_rule` 每檔都要有，`keep`／`defer` 是 `null`，`reprice` 是物件（schema 設成選填時，AC-4 實測模型三檔 `reprice` 都沒給，所以改成必填可為 null）：`max_gap_pct`（開盤漲幅超過就暫緩）、`max_gap_down_pct`（開盤跌幅超過就暫緩，正的小數；開盤已低於 `invalid_price` 一律暫緩）、`min_risk_reward`（重算後低於就暫緩） |
 | `data_gaps` | 輸入標缺漏的項目與對判讀的影響 |
 
 - 每條理由 `{text, refs}`：`refs` 引用輸入，`news:<id>`、`us:<代號>`、`tx:night`、`tx:day`、`taiex`、`stock:<代號>:<欄位>`。
@@ -53,7 +53,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 | `reason` | 不過的情況 | 重試 |
 | --- | --- | --- |
 | `additions_present` | 輸出有 `additions`（#1 決定 7187528140） | 不重試 |
-| `schema` | 不符 schema：缺欄、多欄、型別或列舉值不對、`reprice` 沒有 `reprice_rule` | 重試 1 次 |
+| `schema` | 不符 schema：缺欄、多欄、型別或列舉值不對、`reprice` 的 `reprice_rule` 不是物件或其他動作的不是 `null` | 重試 1 次 |
 | `coverage` | 少了輸入的股票、多了輸入以外的股票或同一檔出現兩次（`missing`／`extra`／`duplicate`） | 不重試 |
 | `reprice_without_levels` | 沒有 `strategy_levels` 的股票判 `reprice` | 不重試 |
 | `unknown_news_ref` | 引用的 `news:<id>` 不在輸入裡 | 不重試 |

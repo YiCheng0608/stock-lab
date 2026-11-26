@@ -68,7 +68,7 @@ PROMPT_DIR = Path(__file__).with_name("prompts")
 # Pinned hashes of the prompt texts (LF line endings).  Editing a prompt
 # without a new version fails the prompt version test.
 PROMPTS = {
-    "premarket_v1": "baa66642b0a92f7f5813791c89ee32a11979d0fcced60ce42ca51a30850b37dd",
+    "premarket_v1": "49ba5b94df3ea63cc5ed15d838676a20afda28f0f22d404039a3428460c33a4c",
 }
 # A new version read beside the champion on the same input (#1002 AC-3 D);
 # at most one, None when there is none.
@@ -130,15 +130,24 @@ OUTPUT_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["symbol", "action", "reasons"],
+                # reprice_rule is required on every stock, null unless reprice: an
+                # optional one was left out of every reprice (#1041 AC-4 run).
+                "required": ["symbol", "action", "reprice_rule", "reasons"],
                 "properties": {
                     "symbol": {"type": "string"},
                     "action": {"enum": list(ACTIONS)},
                     "reprice_rule": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": list(REPRICE_KEYS),
-                        "properties": {key: {"type": "number"} for key in REPRICE_KEYS},
+                        "anyOf": [
+                            {"type": "null"},
+                            {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": list(REPRICE_KEYS),
+                                "properties": {
+                                    key: {"type": "number"} for key in REPRICE_KEYS
+                                },
+                            },
+                        ]
                     },
                     "reasons": {"type": "array", "items": {"$ref": "#/$defs/reason"}},
                 },
@@ -256,17 +265,17 @@ def validate_schema(output: Any) -> None:
         raise LlmBatchError("schema_mismatch", "candidates must be an array")
     for index, item in enumerate(output["candidates"]):
         where = f"candidates[{index}]"
-        keys = ("symbol", "action", "reasons") + (
-            ("reprice_rule",)
-            if isinstance(item, dict) and "reprice_rule" in item
-            else ()
-        )
-        item = _object(item, keys, where)
+        item = _object(item, ("symbol", "action", "reprice_rule", "reasons"), where)
         if not isinstance(item["symbol"], str):
             raise LlmBatchError("schema_mismatch", f"{where}.symbol")
         _enum(item["action"], ACTIONS, f"{where}.action")
         _reasons(item["reasons"], f"{where}.reasons")
-        if "reprice_rule" in item:
+        if (item["action"] == "reprice") != (item["reprice_rule"] is not None):
+            raise LlmBatchError(
+                "schema_mismatch",
+                f"{where} reprice_rule must be an object for reprice and null otherwise",
+            )
+        if item["reprice_rule"] is not None:
             rule = _object(item["reprice_rule"], REPRICE_KEYS, f"{where}.reprice_rule")
             for key in REPRICE_KEYS:
                 value = rule[key]
@@ -274,10 +283,6 @@ def validate_schema(output: Any) -> None:
                     raise LlmBatchError(
                         "schema_mismatch", f"{where}.reprice_rule.{key}"
                     )
-        if item["action"] == "reprice" and "reprice_rule" not in item:
-            raise LlmBatchError(
-                "schema_mismatch", f"{where} reprice without reprice_rule"
-            )
     gaps = output["data_gaps"]
     if not isinstance(gaps, list) or not all(isinstance(gap, str) for gap in gaps):
         raise LlmBatchError("schema_mismatch", "data_gaps must be an array of strings")
@@ -554,7 +559,7 @@ def _stock_row(
         pool_sources_json=meta.pool_sources,
         levels_json=meta.levels,
         action=item["action"],
-        reprice_rule_json=item.get("reprice_rule"),
+        reprice_rule_json=item["reprice_rule"],
         reasons_json=item["reasons"],
     )
 

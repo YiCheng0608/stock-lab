@@ -366,6 +366,7 @@ def answer(payload, *, actions=None, **change):
             {
                 "symbol": item["symbol"],
                 "action": (actions or {}).get(item["symbol"], "keep"),
+                "reprice_rule": None,
                 "reasons": [{"text": "根據籌碼，推論維持。", "refs": []}],
             }
             for item in payload["candidates"]
@@ -591,7 +592,7 @@ def test_the_prompt_and_schema_are_pinned():
     )
     # Changing the output schema needs a new prompt version too.
     assert premarket_reading.SCHEMA_SHA256 == (
-        "8730c2d4cbde413905a8a2ec163fc009a250e0daf622db2e7b49ccee2dad70fc"
+        "4d694082ef7deda8da4b09bdef316bb674e444c7a769310f6824687faf00811d"
     )
     assert "additions" not in premarket_reading.OUTPUT_SCHEMA["properties"]
     assert set(premarket_reading.REPRICE_KEYS) == {
@@ -621,7 +622,12 @@ def _drop_first(payload):
 def _extra(payload):
     output = answer(payload)
     output["candidates"].append(
-        {"symbol": "9999", "action": "keep", "reasons": [{"text": "x", "refs": []}]}
+        {
+            "symbol": "9999",
+            "action": "keep",
+            "reprice_rule": None,
+            "reasons": [{"text": "x", "refs": []}],
+        }
     )
     return envelope(output)
 
@@ -690,6 +696,63 @@ def test_a_failed_content_check_is_rejected_without_a_retry(
     assert reading.output_json is not None
     # A rejected reading has no stock rows.
     assert db.scalar(select(func.count(PremarketAiStock.id))) == 0
+
+
+def _reprice_without_rule(payload):
+    output = answer(payload, actions={"2330": "reprice"})
+    output["candidates"][0]["reprice_rule"] = None
+    return envelope(output)
+
+
+def _keep_with_rule(payload):
+    output = answer(payload)
+    output["candidates"][0]["reprice_rule"] = {
+        "max_gap_pct": 0.05,
+        "max_gap_down_pct": 0.03,
+        "min_risk_reward": 1.2,
+    }
+    return envelope(output)
+
+
+def _rule_left_out(payload):
+    output = answer(payload, actions={"2330": "reprice"})
+    del output["candidates"][0]["reprice_rule"]
+    return envelope(output)
+
+
+@pytest.mark.parametrize(
+    "reply, detail",
+    [
+        (_reprice_without_rule, "reprice_rule must be an object for reprice"),
+        (_keep_with_rule, "reprice_rule must be an object for reprice"),
+        # The AC-4 run's answer: every reprice without the (then optional) rule.
+        (_rule_left_out, "missing ['reprice_rule']"),
+    ],
+)
+def test_reprice_rule_is_an_object_for_reprice_and_null_otherwise(
+    db, world, reply, detail
+):
+    cli = FakeCli(reply, reply)
+    _shot, outcome = read(db, cli)
+    assert (outcome.status, outcome.reason) == ("rejected", "schema")
+    assert detail in outcome.error and len(cli.prompts) == 2
+
+
+def test_a_reprice_rule_is_stored_on_its_stock_row(db, world):
+    cli = FakeCli(
+        lambda payload: envelope(answer(payload, actions={"2330": "reprice"}))
+    )
+    shot, outcome = read(db, cli)
+    assert outcome.status == "done"
+    premarket_reading.store(db, shot, outcome, trigger="manual", ingestion_run_id=None)
+    rows = {row.symbol: row for row in db.scalars(select(PremarketAiStock))}
+    assert rows["2330"].action == "reprice"
+    assert rows["2330"].reprice_rule_json == {
+        "max_gap_pct": 0.05,
+        "max_gap_down_pct": 0.03,
+        "min_risk_reward": 1.2,
+    }
+    assert rows["2412"].reprice_rule_json is None
 
 
 def test_a_schema_mismatch_is_retried_once_then_rejected(db, world):
