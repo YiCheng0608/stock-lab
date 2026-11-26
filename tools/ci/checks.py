@@ -66,6 +66,8 @@ BACKEND_READ_FILES: frozenset[str] = frozenset(
         # backend/tests/test_round8_research.py and test_round9_research.py compare the
         # round8_research (#918) and round9_research (#926) sections.
         "docs/spec/evidence.md",
+        # backend/tests/test_premarket_score.py pins the 對答案 section (#1043).
+        "docs/spec/premarket_ai.md",
         # backend/tests/test_theme_heat.py compares the weights table (#1017).
         "docs/spec/theme_heat.md",
         # backend/tests/test_verify_checks.py runs page_checks.display_title on these (#523).

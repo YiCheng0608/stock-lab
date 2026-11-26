@@ -5,7 +5,7 @@
 
 ## V2 方向
 
-使用者 2026-11-11 核定（雲端 session 的架構檢視後；統籌記入 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 決策索引）。V1 做到每天產出一份名單；V2 的目標是：**每一檔被選出來的股票都說得出依據，而且依據有歷史數字支持。** 產品定位不變：以資料與情報選出下一個交易日可以考慮進場的股票，並給進場區、停損與目標價位。產品保留進場區、停損、目標價，但只顯示通過驗證的策略的點位（點位必須是登記的假設定義的一部分）；驗證過之前，現行規則的點位照常顯示、頁面不加研究狀態標示（使用者 2026-11-15 決定 [#1 6880591509](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880591509)、[6881297699](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881297699)，統籌定案 [6880927520](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880927520)、[#721 6881306136](https://github.com/YiCheng0608/stock-lab/issues/721#issuecomment-6881306136)）。月營收、財報等基本面可以成為條件，但每一項都先有證據才納入。什麼算證據、研究怎麼做見[策略證據](spec/evidence.md)。
+使用者 2026-11-11 核定（雲端 session 的架構檢視後；統籌記入 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 決策索引）。V1 做到每天產出一份名單；V2 的目標是：**每一檔被選出來的股票都說得出依據，而且依據有歷史數字支持。** 產品定位不變：以資料與情報選出下一個交易日可以考慮進場的股票，並給進場區、停損與目標價位。產品保留進場區、停損、目標價，但只顯示通過驗證的策略的點位（點位必須是登記的假設定義的一部分）；驗證過之前，現行規則的點位照常顯示、頁面不加研究狀態標示（使用者 2026-11-15 決定 [#1 6880591509](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880591509)、[6881297699](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881297699)，統籌定案 [6880927520](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880927520)、[#721 6881306136](https://github.com/YiCheng0608/stock-lab/issues/721#issuecomment-6881306136)）。月營收、財報等基本面可以成為條件，但每一項都先有證據才納入。什麼算證據、研究怎麼做見[策略證據](spec/evidence.md)。早盤 AI 判讀不能回測（模型已知道過去的走勢），以上線後 60 個交易日的逐日紀錄判定（[對答案](spec/premarket_ai.md#對答案)，#1043）。
 
 | 階段 | 完成後使用者得到什麼 | 內容 | 前提 |
 | --- | --- | --- | --- |
