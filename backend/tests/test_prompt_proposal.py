@@ -241,6 +241,19 @@ def test_an_api_key_or_no_cli_is_not_called(tmp_path, monkeypatch, env, value, r
             {"changes": [{**proposal()["changes"][0], "pattern_ids": ["p9"]}]},
             "unknown_pattern_ids",
         ),
+        # inner layers --json-schema should have held: rejected, not a crash
+        ({"patterns": [{"id": "p1", "description": "x"}]}, "schema"),  # no case_ids
+        (
+            {"changes": [{**proposal()["changes"][0], "pattern_ids": "p1"}]},
+            "schema",
+        ),
+        (
+            {"patterns": [{"id": "p1", "description": "x", "case_ids": "9901"}]},
+            "schema",
+        ),
+        ({"prompt_text": None}, "schema"),
+        ({"risks": [1]}, "schema"),
+        ({"changes": []}, "no_changes"),
     ],
 )
 def test_each_failed_check_is_rejected_once(tmp_path, override, reason):
