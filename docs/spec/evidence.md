@@ -301,6 +301,8 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 - 一個子入口失敗（拒絕、例外）時其他照跑；`summary.md` 那一段寫失敗原因（子入口的 `refused` 或最後一行錯誤），清單裡寫「`<名稱>` 失敗，未判」，命令 exit 1。每個子入口的 stdout／stderr 在 `logs/`。
 - 輸出：`summary.md`（開頭是變差、變強兩張清單，接著 H1、每個 `WATCHES` 的鍵、成績單、特徵證據、早盤 AI 月報各一段；H1 與前瞻對象那段是[每月流程](#前瞻驗證-h1)第 5 步要貼的欄位）、`review.json`（機器可讀，下個月的 `--previous` 讀它），以及上面各子入口的目錄。
 
+- 實測（[#1062](https://github.com/YiCheng0608/stock-lab/issues/1062) AC-4，2026-11-26 的副本、`--month 2026-11`、容器 `--memory 4g`）：全部 253 秒，峰值記憶體 0.62 GB（子程序與本程序的最大值）；最久的是 feature_evidence 約 87 秒，其餘各 4～40 秒。
+
 **清單的規則**
 規則由統籌決定（[#1062 決定 7200751860](https://github.com/YiCheng0608/stock-lab/issues/1062#issuecomment-7200751860)，回覆提問 [7200594536](https://github.com/YiCheng0608/stock-lab/issues/1062#issuecomment-7200594536) 的 Q1～Q9）：
 
