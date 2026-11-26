@@ -1,0 +1,11 @@
+panel: 2020 instruments, 523 sessions
+50/523 sessions
+100/523 sessions
+150/523 sessions
+200/523 sessions
+250/523 sessions
+300/523 sessions
+350/523 sessions
+400/523 sessions
+450/523 sessions
+500/523 sessions

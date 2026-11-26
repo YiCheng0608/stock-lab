@@ -1,0 +1,1 @@
+{"out": "/out/run-20261127/P2", "watch": "P2", "days": 0, "min_days": 60, "verdict": "樣本不足", "elapsed_seconds": 21.5}

@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "hypothesis": "H1",
+  "design": "691",
+  "label": "H1：全部可交易母體，投信近 5 日買超天數大者先、同分月營收創 12 個月新高先（#689 `trust_rev`-(b)），前 5 名、持有 20 天，只對母體判定",
+  "parameters": {
+    "ranking": "trust_rev",
+    "universe": "all",
+    "keys": [
+      "trust_buy_days_5",
+      "revenue_high_12"
+    ],
+    "top": 5,
+    "hold": 20,
+    "since": "2026-11-14",
+    "min_days": 250,
+    "historical_until": "2024-09-27"
+  },
+  "command": "python tools/research/portfolio_research.py --db /db/stock.db --hypothesis H1 --window forward --out /out/run-20261127/H1 --cutoff 2026-11-26 --min-free-gb 0",
+  "copy": {
+    "latest": "2026-11-26",
+    "alembic": "0038_futures_night_bars",
+    "mtime": "2026-11-26T22:20:08.049648+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "window": "forward",
+  "start": "2026-11-14",
+  "cutoff": "2026-11-26",
+  "first_session": "2026-11-17",
+  "last_session": "2026-11-26",
+  "signal_days": 8,
+  "days": 8,
+  "min_days": 250,
+  "judged_days": 8,
+  "verdict": "樣本不足",
+  "comparisons": 1,
+  "pool_counts": {
+    "days": 8,
+    "members": 4660,
+    "missing_trust_buy_days_5": 0,
+    "missing_revenue_high_12": 16,
+    "missing_eps_yield": 24,
+    "primary_at_most": 201
+  },
+  "curves": {
+    "judged": {
+      "top5": {
+        "days": 8,
+        "total": 0.010702510623108008,
+        "annual": 0.3984126758077138,
+        "volatility": 0.23703147469967034,
+        "max_drawdown": -0.024520060767047824,
+        "invested": 0.21393318192625427,
+        "turnover": 12.033490754711027
+      },
+      "population": {
+        "days": 8,
+        "total": -0.0038326033777047464,
+        "annual": -0.11392966670998872,
+        "volatility": 0.20583956835185058,
+        "max_drawdown": -0.024066922805406676,
+        "invested": 0.20967052494615204,
+        "turnover": 12.058731961661863
+      },
+      "taiex": {
+        "days": 8,
+        "total": -0.04601038789398104,
+        "annual": -0.7732095091968161,
+        "volatility": 0.7973350502984781,
+        "max_drawdown": -0.12199756920551807,
+        "invested": 1.0,
+        "turnover": 0.0
+      }
+    },
+    "extension": {
+      "top5": {
+        "days": 0
+      },
+      "population": {
+        "days": 0
+      },
+      "taiex": {
+        "days": 0
+      }
+    },
+    "all": {
+      "top5": {
+        "days": 8,
+        "total": 0.010702510623108008,
+        "annual": 0.3984126758077138,
+        "volatility": 0.23703147469967034,
+        "max_drawdown": -0.024520060767047824,
+        "invested": 0.21393318192625427,
+        "turnover": 12.033490754711027
+      },
+      "population": {
+        "days": 8,
+        "total": -0.0038326033777047464,
+        "annual": -0.11392966670998872,
+        "volatility": 0.20583956835185058,
+        "max_drawdown": -0.024066922805406676,
+        "invested": 0.20967052494615204,
+        "turnover": 12.058731961661863
+      },
+      "taiex": {
+        "days": 8,
+        "total": -0.04601038789398104,
+        "annual": -0.7732095091968161,
+        "volatility": 0.7973350502984781,
+        "max_drawdown": -0.12199756920551807,
+        "invested": 1.0,
+        "turnover": 0.0
+      }
+    }
+  },
+  "excess": {
+    "judged": {
+      "population": {
+        "days": 8,
+        "mean": 0.0018353107000121383,
+        "annual": 0.46249829640305884,
+        "t": 1.6752108550245481
+      },
+      "taiex": {
+        "days": 8,
+        "mean": 0.0062114886212485815,
+        "annual": 1.5652951325546425,
+        "t": 0.47280813702631647
+      }
+    },
+    "extension": {
+      "population": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      },
+      "taiex": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      }
+    },
+    "all": {
+      "population": {
+        "days": 8,
+        "mean": 0.0018353107000121383,
+        "annual": 0.46249829640305884,
+        "t": 1.6752108550245481
+      },
+      "taiex": {
+        "days": 8,
+        "mean": 0.0062114886212485815,
+        "annual": 1.5652951325546425,
+        "t": 0.47280813702631647
+      }
+    }
+  },
+  "counts": {
+    "top5": {
+      "bought": 38,
+      "limit_up": 2,
+      "unsold": 38
+    },
+    "population": {
+      "bought": 4418,
+      "limit_up": 242,
+      "unsold": 4418
+    }
+  },
+  "elapsed_seconds": 10.032225408998784,
+  "peak_memory_gb": 0.14121627807617188
+}
