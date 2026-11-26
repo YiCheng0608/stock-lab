@@ -22,11 +22,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_forward_watch as fwt  # noqa: E402
 
-lib = fwt.lib
-pr = fwt.pr
-fw = fwt.tool
 mr = fwt._tool("monthly_review")
-fe = sys.modules["feature_evidence"]
+# the module monthly_review holds: another test file may load forward_watch
+# again after test_forward_watch did (its own ``_tool``), so not fwt.tool
+fw = mr.fw
+lib = mr.lib
+pr = mr.pr
+fe = mr.fe
 
 MONTH = "2026-12"
 CUTOFF = date(2026, 12, 31)

@@ -150,7 +150,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 ### 月報與去留
 
 - `worker.cli premarket-score-report --month YYYY-MM` 產 markdown（讀 DB、不寫）：每個 `prompt_version`＋`role` 一節，從上線起累積到該月底的判讀天數（`done`／`failed`／`rejected`）、大盤 `d0`／`t5` 判對率、判讀×實際的 3×3 表與各判讀下的平均漲跌、各有效動作的 `open_hold` 與 `levels` 平均、AI 版本與規則版本對母體的超額、AI 判讀的價值。大盤當日已對答案的交易日未滿 60 天標 `insufficient_sample`。
-- 統籌每月第一個交易日跑它，以 `回報：` 貼 #1；CLI 不自己貼。[每月檢討](evidence.md#每月檢討)的 `monthly_review.py` 在副本上跑同一段程式（`premarket_score_report.render`），輸出 `premarket_score_report/report.md`，所以統籌改從那裡取，不另跑 CLI（#1062）。
+- 統籌每月第一個交易日（和 #1004 的每月檢討同一天）跑它，以 `回報：` 貼 #1；CLI 不自己貼。
 - 60 個交易日滿才給「AI 版本比規則版本好、差或分不出」的結論，由使用者決定去留；中途不改口徑。
 - **換版**（#1002 AC-3 D）：shadow 上線後，同一批交易日上，新版本的大盤當日判對率不低於舊版本，**而且** `value_open_hold` 的 T+5 平均高於舊版本，兩項都過才換；同一批交易日未滿 20 天標 `insufficient_sample`。月報有 shadow 時列這兩項。換版由統籌在 #1 提案、使用者決定。
 
