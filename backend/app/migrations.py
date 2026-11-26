@@ -849,6 +849,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0037_theme_clusters', CURRENT_TIMESTAMP)"
         )
     )
+    # 0038 only adds futures_night_bars (#1040), made by create_all with its
+    # indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0038_futures_night_bars', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

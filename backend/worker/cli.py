@@ -34,7 +34,11 @@ from .corporate_action_sync import (
 from .index_bars import DEFAULT_FIRST_MONTH as INDEX_BARS_FIRST_MONTH
 from .index_bars import run_index_bar_backfill
 from .futures_history import DEFAULT_FIRST_MONTH as FUTURES_HISTORY_FIRST_MONTH
-from .futures_history import run_futures_collect, run_futures_history
+from .futures_history import (
+    run_futures_collect,
+    run_futures_history,
+    run_futures_night,
+)
 from .us_index_bars import run_us_collect
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
@@ -92,6 +96,15 @@ DAILY_EXIT_CODES = {
 US_COLLECT_EXIT_CODES = {
     "success": 0,
     "already_complete": 0,
+    "skipped": 0,
+    "partial": 2,
+}
+# index-bars futures-night (#1040): a closed day, a night already stored and a
+# job's skip are no failure; a night not listed yet is partial.
+FUTURES_NIGHT_EXIT_CODES = {
+    "success": 0,
+    "already_complete": 0,
+    "non_trading_day": 0,
     "skipped": 0,
     "partial": 2,
 }
@@ -677,6 +690,30 @@ def main() -> None:
             "再補今天之前 10 個交易日的缺日（futDataDown 最多 2 個請求，#586）"
         ),
     )
+    index_bars_night_parser = index_bars_subparsers.add_parser(
+        "futures-night",
+        help=(
+            "台指期近月夜盤（期交所 futDataDown 的盤後列，日期是期交所的下一個交易日）"
+            "存進 futures_night_bars：1 個請求（#1040）"
+        ),
+    )
+    night_range = index_bars_night_parser.add_mutually_exclusive_group()
+    night_range.add_argument(
+        "--date",
+        help="YYYY-MM-DD：期交所歸屬的交易日（前一晚的夜盤）；預設今天（台北）",
+    )
+    night_range.add_argument(
+        "--month", help="YYYY-MM：一次讀整月（到今天為止），回補用"
+    )
+    index_bars_night_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="已存的夜盤也重抓，值不同時改寫；休市日也照樣請求",
+    )
+    index_bars_night_parser.add_argument(
+        "--trigger", choices=("scheduler", "manual"), default="manual"
+    )
+    index_bars_night_parser.add_argument("--skip-reason", help=argparse.SUPPRESS)
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -1077,6 +1114,14 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_futures_history(args.from_month, args.to_month, force=args.force)
     elif args.command == "index-bars" and args.index_bars_command == "futures-collect":
         result = run_futures_collect()
+    elif args.command == "index-bars" and args.index_bars_command == "futures-night":
+        result = run_futures_night(
+            args.date,
+            args.month,
+            force=args.force,
+            trigger=args.trigger,
+            skip_reason=args.skip_reason,
+        )
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(
@@ -1170,6 +1215,8 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if args.command == "index-bars" and args.index_bars_command == "us-collect":
         sys.exit(US_COLLECT_EXIT_CODES.get(str(result.get("status")), 1))
+    if args.command == "index-bars" and args.index_bars_command == "futures-night":
+        sys.exit(FUTURES_NIGHT_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command == "revenue" and result.get("status") == "refused":
         raise SystemExit(2)
     if (
