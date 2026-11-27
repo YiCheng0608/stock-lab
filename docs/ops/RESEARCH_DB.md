@@ -574,7 +574,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - **標的**：只寫當天有日線的標的；官方表有、研究 DB 當天沒有日線的代號不建標的，計入 `unmatched`（和 `STOCK_HISTORY_CREATE_UNMATCHED` 一樣，標的只由日線建）。當天有日線、官方表沒有列的計入 `no_row`。
 - **逐日 manifest**：每個 feed 每個交易日一列 `ingestion_runs`（`run_type=valuation_backfill_day`、`request_key=valuation_backfill:<feed>:<日期>`、`metadata_json` 記 raw id 與計數），一天一個 commit。`success` 的日子重跑不再請求（`done_before`）；`failed` 的日子重跑會再請求。`--reapply` 完全不送請求：有已存 raw 的日子（成功的，和回應讀不懂而失敗的）改讀 raw 重寫，沒有差異時 `changed 0`；沒有回應的日子留給一般模式（`not_answered`）。修好 parser 之後先跑 `--reapply`，再跑一次一般模式。
 - **整天失敗、不猜**：欄名不是已知的版面（上市 2017-04-12 前 5 欄、之後 8 欄；上櫃有沒有「財報年/季」；`MI_QFIIS` 的「外資」與「外資及陸資」兩版）、回應日期（上櫃另比表內民國日期）不是請求日、`total`／`totalCount` 和列數不符、表是空的、某格不是數字，都整天記失敗，那天不寫任何列；回應原文照樣存 raw，`metadata_json.raw_payload_id` 指向它。`-`、`--`、`N/A`、文字 `null`、空白寫成 NULL，發行股數 0 也是 NULL，不補零。上櫃 2021-07-26 起 6840 東研信超的本益比、淨值比寫成文字 `null`（其他列沒值時寫 `N/A`），第一次回補因此有 205 天記失敗，修好後以 `--reapply` 補回。財報年/季存成 `2018Q1`（上市 `107/1`、上櫃 `115Q3` 換成西元）。
-- **請求規則**：同一 host 間隔至少 3.5 秒（`REQUEST_INTERVAL_SECONDS`）；台北 21:15～23:30 不送，程序等到 23:30 再接著送（研究 volume 自己的維護模式，正式 daily 不受影響）；連續 5 個請求失敗就停（`aborted`，`partial`）。只在有 `research-db.json` 的 DB 跑，否則 `refused`、exit 2；持有維護模式。
+- **請求規則**：同一 host 間隔至少 3.5 秒（`REQUEST_INTERVAL_SECONDS`）；台北 21:15～23:30 不送，程序等到 23:30 再接著送（研究 volume 自己的維護模式，正式 daily 不受影響）；同一 host 連續 5 個請求失敗就停（`aborted`，`partial`；另一個 host 照常回應也一樣）。只在有 `research-db.json` 的 DB 跑，否則 `refused`、exit 2；持有維護模式。
 - **種子列的 raw**：2024-09-30 以後的上櫃日線是正式 DB 帶來的種子列，引用的 raw 檔只在正式 volume（[建研究 DB](#建研究-db)）。`--fallback-raw-dir /prod/raw` 讓 `tpex-shares` 在本 volume 找不到完整的檔時，到那裡的同一相對路徑找，SHA-256 相符才用。種子列有兩種路徑：`/data/raw/…`，以及 Docker 切換前的舊 Windows 路徑（`C:\Users\YiCheng\stock-lab-data\raw\…`，照 `app.raw_paths.legacy_relative` 換成相對路徑），兩種都認。
 
 **跑法**（2026-11-27，研究 DB 日線截止 2026-11-13）：
@@ -630,7 +630,7 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 
   - 上市 2004、2005 年沒有淨值比是來源的起點；2006-07-03 有 11 檔有日線、但 `BWIBBU_d` 當天的表沒有列（2343 精業、2487 友立資、3012 廣輝、之後轉上櫃的 2410 鼎大與 1807 羅馬等，幾乎都是之後下市或轉板），2007 年起上市每年 100%（2010 年之後下市 1 檔、2018 年現存 1 檔是 `-`）。
   - 上櫃之後下市的缺口是 `N/A`（2008 年 5 檔）與少數沒有列的（例如 2007 年 6287 元隆），照缺值留空。
-- **逐欄核對**（研究 DB 的列對 #1074 另外抓的回應原文，`/Users/yichengchen/stock-lab-data/evidence/1074/raw/`）：上市 1101 台泥 2018-07-02（淨值比 1.19、本益比 18.28、殖利率 5.97、財報年/季 `107/1`→`2018Q1`、發行股數 4,246,509,010）、之後下市的上市 1507 永大 2013-07-01（2.58、15.33、3.79、舊版面沒有財報年/季、410,820,000）、之後下市的上櫃 3068 美磊 2008-07-01（1.54、7.58、8.30；發行股數 73,139,358 對研究 DB 的 `dailyQuotes` 原文），全部相符。
+- **逐欄核對**（研究 DB 的列對 #1074 另外抓的回應原文，`~/stock-lab-data/evidence/1074/raw/`）：上市 1101 台泥 2018-07-02（淨值比 1.19、本益比 18.28、殖利率 5.97、財報年/季 `107/1`→`2018Q1`、發行股數 4,246,509,010）、之後下市的上市 1507 永大 2013-07-01（2.58、15.33、3.79、舊版面沒有財報年/季、410,820,000）、之後下市的上櫃 3068 美磊 2008-07-01（1.54、7.58、8.30；發行股數 73,139,358 對研究 DB 的 `dailyQuotes` 原文），全部相符。
 - **整庫檢查**：補完後 `PRAGMA integrity_check` 是 `ok`（2,160 秒），`PRAGMA foreign_key_check` 沒有列（480 秒）。
 
 **已知限制**（[#1074 決定](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205622705)第 5、6 點）：

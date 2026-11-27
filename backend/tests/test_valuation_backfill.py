@@ -708,3 +708,103 @@ def test_the_managed_stock_table_gives_shares_too():
     renamed["tables"][1]["fields"][13] = "股數"
     with pytest.raises(vb.LayoutError, match="unknown columns"):
         vb.parse_tpex_quote_shares(renamed, date(2011, 11, 1))
+
+
+def test_one_blocked_host_stops_the_run_while_the_other_answers(factory):
+    # TWSE blocked, TPEx answering: per host, the run stops at TWSE's 5th failure.
+    days = [date(2018, 7, 2 + n) for n in range(6)]
+    with factory() as db:
+        add_instrument(db, "TWSE", "1101", days)
+        add_instrument(db, "TPEx", "1240", days)
+        db.commit()
+    fetch = Fetcher(
+        {"twse-pb": sources.OfficialDataError("blocked"), "tpex-pb": PE_NEW}
+    )
+    result = run(factory, fetch, feeds=["twse-pb", "tpex-pb"])
+    twse = [day for feed, day in fetch.calls if feed == "twse-pb"]
+    assert len(twse) == vb.ABORT_AFTER_FAILURES
+    assert "www.twse.com.tw" in result["aborted"]
+    assert result["feeds"]["tpex-pb"]["success"] == vb.ABORT_AFTER_FAILURES - 1
+
+
+def test_a_total_other_than_the_rows_fails_the_day():
+    twse = copy.deepcopy(BW_NEW)
+    twse["total"] = len(twse["data"]) + 1
+    with pytest.raises(vb.LayoutError, match="total"):
+        vb.parse_twse_pb(twse, date(2018, 7, 2))
+    tpex = copy.deepcopy(PE_NEW)
+    tpex["tables"][0]["totalCount"] = 1
+    with pytest.raises(vb.LayoutError, match="totalCount"):
+        vb.parse_tpex_pb(tpex, date(2026, 11, 26))
+
+
+def test_an_empty_table_fails_the_day():
+    empty = copy.deepcopy(PE_OLD)
+    empty["tables"][0]["data"] = []
+    empty["tables"][0]["totalCount"] = 0
+    with pytest.raises(vb.LayoutError, match="no rows"):
+        vb.parse_tpex_pb(empty, date(2007, 4, 23))
+    with pytest.raises(vb.LayoutError, match="no rows"):
+        vb.parse_twse_shares({**redate(Q_NEW, D1), "data": [], "total": 0}, D1)
+
+
+def test_tpex_shares_from_another_capture_replace_the_other_sources_rows(
+    factory, tmp_path
+):
+    day = date(2026, 11, 9)
+    with factory() as db:
+        web = capture(
+            db,
+            tmp_path,
+            redate(DAILY_QUOTES, day),
+            sources.TPEX_HISTORY_API,
+            day,
+            under=tmp_path / "raw",
+        )
+        api = capture(
+            db,
+            tmp_path,
+            OA_QUOTES,
+            sources.TPEX_DAILY_ENDPOINT,
+            day,
+            under=tmp_path / "raw",
+        )
+        item = add_instrument(db, "TPEx", "006201", [day], raw_id=web.id, kind="etf")
+        db.commit()
+    with factory() as db:
+        vb.backfill(
+            db, day, day, feeds=["tpex-shares"], fetch=Fetcher({}), now=lambda: NOON
+        )
+        assert db.scalar(select(SharesOutstandingDaily)).source == "tpex_daily_quotes"
+        # The bars now cite the OpenAPI table (a later capture of the session).
+        db.get(MarketBar, db.scalar(select(MarketBar.id))).raw_payload_id = api.id
+        db.commit()
+    with factory() as db:
+        again = vb.backfill(
+            db,
+            day,
+            day,
+            feeds=["tpex-shares"],
+            reapply=True,
+            fetch=Fetcher({}),
+            now=lambda: NOON,
+        )
+        assert again["feeds"]["tpex-shares"]["removed"] == 1
+        rows = db.scalars(
+            select(SharesOutstandingDaily).where(
+                SharesOutstandingDaily.instrument_id == item.id
+            )
+        ).all()
+        assert [(r.source, r.shares_issued) for r in rows] == [
+            ("tpex_daily_close_quotes", 27_946_000)
+        ]
+
+
+def test_reapply_writes_no_manifest_row_for_a_session_never_asked(factory):
+    with factory() as db:
+        seed(db)
+    result = run(factory, Fetcher({}), reapply=True, feeds=["twse-pb"])
+    assert result["requests"] == 0
+    assert result["feeds"]["twse-pb"]["not_answered"] == 2
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(IngestionRun)) == 0

@@ -36,7 +36,7 @@ whole session; nothing of it is written and nothing is guessed.  ``-``, ``N/A``,
 
 Requests: at least ``REQUEST_INTERVAL_SECONDS`` apart on a host, none between
 ``QUIET_START`` and ``QUIET_END`` Taipei (the run waits), ``ABORT_AFTER_FAILURES``
-failed requests in a row stop it.  Only on the research database
+failed requests in a row to one host stop it (whatever the other host answers).  Only on the research database
 (``quarterly_xbrl.research_refusal``), holding maintenance mode (``worker.cli``).
 """
 
@@ -51,13 +51,13 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as clock_time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session
 
-from app import config
 from app.clock import utcnow
 from app.models import (
     IngestionRun,
@@ -67,7 +67,7 @@ from app.models import (
     SharesOutstandingDaily,
     ValuationDaily,
 )
-from app.raw_paths import legacy_relative, payload_file
+from app.raw_paths import legacy_relative, payload_file, raw_dir
 from worker import pipeline, sources
 from worker.sources import (
     TPEX_DAILY_ENDPOINT,
@@ -521,10 +521,12 @@ def _barred(db: Session, exchange: str, day: date) -> dict[str, int]:
     )
 
 
-def _day_run(db: Session, feed: str, day: date) -> IngestionRun:
+def _day_run(
+    db: Session, feed: str, day: date, *, create: bool = True
+) -> IngestionRun | None:
     key = REQUEST_KEY.format(feed=feed, day=day.isoformat())
     run = db.scalar(select(IngestionRun).where(IngestionRun.request_key == key))
-    if run is None:
+    if run is None and create:
         run = IngestionRun(
             run_type=DAY_RUN_TYPE,
             source=feed,
@@ -630,17 +632,19 @@ def read_raw(row: RawPayload, fallback_raw_dir: Path | None = None) -> Any:
     cutover keep ``C:\\Users\\...\\raw\\...`` (#1075).
     """
 
-    candidates = [payload_file(row.payload_path)]
+    primary = payload_file(row.payload_path)
+    candidates = [primary]
     if fallback_raw_dir is not None and row.payload_path:
-        stored_path = row.payload_path  # only mapped here; payload_file reads it above
-        relative: Any = legacy_relative(stored_path)
+        # The file payload_file gives, relative to its raw directory (as
+        # tools/audit/raw_files.relative_to_raw); an old Windows path by its prefix.
+        relative: PurePosixPath | None = legacy_relative(row.payload_path)
         if relative is None:
             try:
-                relative = Path(stored_path).relative_to(Path(config.RAW_DIR))
+                relative = PurePosixPath(primary.relative_to(raw_dir()).as_posix())
             except ValueError:
                 relative = None
         if relative is not None:
-            candidates.append(Path(fallback_raw_dir) / relative)
+            candidates.append(Path(fallback_raw_dir).joinpath(*relative.parts))
     for path in candidates:
         try:
             content = path.read_bytes()
@@ -760,13 +764,19 @@ def backfill(
                 continue
             plan.setdefault(day, []).append(name)
     requests = 0
-    failures_in_a_row = 0
+    # Failed requests in a row, per host: one host blocking while the other
+    # answers must still stop the run (review of PR #1108).
+    failures_in_a_row: Counter[str] = Counter()
     aborted = None
     for day in sorted(plan):
         for name in plan[day]:
             feed = FEEDS[name]
             counts = result[name]
-            run = _day_run(db, name, day)
+            # reapply asks nothing, so a session never asked gets no manifest row.
+            run = _day_run(db, name, day, create=not (reapply and feed.requests))
+            if run is None:
+                counts["not_answered"] += 1
+                continue
             done = run.status == "success"
             if done and not reapply:
                 counts["done_before"] += 1
@@ -782,14 +792,15 @@ def backfill(
                     if in_quiet_hours(now()):
                         sleep(seconds_to_quiet_end(now()))
                     _method, endpoint, _form = request_of(name, day)
+                    host = urlsplit(endpoint).hostname or ""
                     requests += 1
                     counts["requested"] += 1
                     try:
                         payload = fetch(name, day)
                     except Exception as exc:  # the source's failure, never a crash
-                        failures_in_a_row += 1
+                        failures_in_a_row[host] += 1
                         raise OfficialDataError(f"request failed: {exc}") from exc
-                    failures_in_a_row = 0
+                    failures_in_a_row[host] = 0
                     captured = sources.capture_payload(
                         feed.raw_source, endpoint, payload, day.isoformat()
                     )
@@ -826,8 +837,13 @@ def backfill(
                     counts["failed_days"].append(
                         {"date": day.isoformat(), "error": str(exc)}
                     )
-                if failures_in_a_row >= ABORT_AFTER_FAILURES:
-                    aborted = f"{failures_in_a_row} failed requests in a row"
+                blocked = [
+                    host
+                    for host, count in failures_in_a_row.items()
+                    if count >= ABORT_AFTER_FAILURES
+                ]
+                if blocked:
+                    aborted = f"{ABORT_AFTER_FAILURES} failed requests in a row to {blocked[0]}"
                     break
                 continue
             run.status = "success"
