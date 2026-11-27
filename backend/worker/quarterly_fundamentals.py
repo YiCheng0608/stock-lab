@@ -649,6 +649,8 @@ def backfill_quarterly_fundamentals(
     if end.period_end >= today:
         raise ValueError(f"{end.label} has not ended on {today.isoformat()}")
     targets = quarter_range(end, quarters)
+    # Read before the run row is added: the scan holds no write lock (#1103 review).
+    foreign = foreign_issuers(db)
     now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
@@ -670,7 +672,6 @@ def backfill_quarterly_fundamentals(
     instruments = {
         (item.exchange, item.symbol): item for item in db.scalars(select(Instrument))
     }
-    foreign = foreign_issuers(db)
     db.commit()
     manifest: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []

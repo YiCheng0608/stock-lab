@@ -140,7 +140,16 @@ def test_the_name_rule(name, foreign):
     assert fi.name_marks_foreign(name) is foreign
 
 
-def test_official_markers_come_first_and_the_name_only_fills_the_rest(factory):
+@pytest.mark.parametrize(
+    ("run_type", "field"),
+    [
+        (mrc.RUN_CLASSIFY, "class"),  # company-classify's manifest
+        (mrc.RUN_BACKFILL, "write"),  # company-backfill's manifest
+    ],
+)
+def test_official_markers_come_first_and_the_name_only_fills_the_rest(
+    factory, run_type, field
+):
     with factory() as db:
         for exchange, symbol, name in (
             ("TWSE", "8499", "鼎炫-KY"),  # the _1 page
@@ -172,13 +181,13 @@ def test_official_markers_come_first_and_the_name_only_fills_the_rest(factory):
         )
         db.add(
             IngestionRun(
-                run_type=mrc.RUN_CLASSIFY,
+                run_type=run_type,
                 source="official",
                 run_date=date(2026, 11, 19),
                 metadata_json={
                     "manifest": {
-                        "TPEx:1258:2023-05": {"class": "foreign_exempt"},
-                        "TPEx:1333:2020-04": {"class": "not_public"},
+                        "TPEx:1258:2023-05": {field: "foreign_exempt"},
+                        "TPEx:1333:2020-04": {field: "not_public"},
                     }
                 },
             )
@@ -381,6 +390,48 @@ def test_recompute_leaves_first_seen_rows_and_moves_a_dated_snapshot_row(factory
             date(2026, 8, 31),
         )
         assert (rows[1].announcement_date, rows[1].data_json) == q3_before
+
+
+def test_recompute_leaves_foreign_q2_rows_that_are_not_on_the_deadline(factory):
+    # Two foreign issuers' 2021+ Q2 rows the deadline rule did not date: a
+    # first-seen row and a snapshot row keeping its own 出表日期 (#1103 review).
+    with factory() as db:
+        mark_foreign_page(db, "TWSE", "2330")
+        mark_foreign_page(db, "TPEx", "1240")
+        instruments = {
+            (i.exchange, i.symbol): i for i in db.scalars(select(Instrument))
+        }
+        pipeline._upsert_fundamental(
+            db, snapshot("2330", date(2026, 8, 29), 49.33), instruments, None
+        )
+        db.add(
+            FundamentalSnapshot(
+                instrument_id=instrument(db, "TPEx", "1240").id,
+                period_end=date(2025, 6, 30),
+                fiscal_period="Q2",
+                announcement_date=date(2025, 8, 20),
+                eps=1.0,
+                source=qf.SOURCE,
+                data_json={
+                    "report_format": "general",
+                    "announcement_basis": "first_seen",
+                    "statutory_deadline": "2025-08-14",
+                    "deadline_calendar": "weekend_only",
+                },
+                data_as_of="2025-06-30",
+            )
+        )
+        db.commit()
+        before = stored_rows(db)
+        assert len(before) == 2
+        assert before["2330", date(2026, 6, 30)][1].get("announcement_basis") != (
+            "statutory_deadline"
+        )
+        for _ in range(2):
+            result = qf.recompute_foreign_deadlines(db, apply=True)
+            assert (result["rows"], result["not_deadline"]) == (2, 2)
+            assert (result["changed"], result["unchanged"]) == (0, 0)
+            assert stored_rows(db) == before
 
 
 def test_recompute_never_dates_a_row_after_the_day_it_was_collected(factory):

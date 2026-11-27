@@ -711,7 +711,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
     2. 單一公司月營收頁回「外國發行人免申報本項資訊」（`revenue company-classify`／`company-backfill` run 的 manifest），記成 `t05st10_foreign_exempt`。
     3. 單一公司月營收的雙幣別版面（`data_json` 有 `功能性貨幣`），記成 `t05st10_functional_currency`。
 
-    三種都沒有的，名稱做 NFKC、去掉空白後以 `-KY`、`-KY創` 結尾或以 `F-` 開頭才算，記成 `name_suffix`（[#1101 決定](https://github.com/YiCheng0608/stock-lab/issues/1101#issuecomment-7213332342)）。這種只剩月營收頁都查不到的下市公司；研究 DB 2021 年起是 4803、6404、8427 三家。認錯時的方向是保守的：國內公司被誤認，只會晚看到它的 Q2。
+    三種都沒有的，名稱做 NFKC、去掉空白後以 `-KY`、`-KY創` 結尾或以 `F-` 開頭才算，記成 `name_suffix`（[#1101 決定](https://github.com/YiCheng0608/stock-lab/issues/1101#issuecomment-7213332342)）。這種只剩月營收頁都查不到的下市公司。認錯時的方向是保守的：國內公司被誤認，只會晚看到它的 Q2。
   - **`-DR`（存託憑證）**：是第二上市，適用同辦法第 3 條第 2 款，依註冊地國法令申報，沒有季報列，不處理。
   - **記錄**：規則適用的列，`data_json` 多記 `deadline_rule: foreign_issuer_q2_two_months` 與 `foreign_issuer_basis`（上面四種之一）。沒有這兩個鍵的列照格式期限，所以其他公司、其他季的列不受影響。
   - **既有列**：`fundamentals foreign-deadlines --apply` 重算（[CLI](ops/CLI.md#現有-worker-cli)），規則同下一點的法定期限。
