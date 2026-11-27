@@ -96,7 +96,7 @@ RAW_DIR_NAME = ex.RAW_DIR_NAME
 POPULATION = pr.POPULATION
 TAIEX = pr.TAIEX
 EVENTS = "events"
-HIGH, LOW = r5.HIGH, r5.LOW
+LOW = r5.LOW
 
 # 共同 排序與同分、選股與調倉
 ORDER = (
@@ -246,6 +246,7 @@ OVERLAP_NOTE = {
     "`insurance_legacy`、`insurance` 之一，就記金融業；兩者都認不出的記「未知」。只列出、不影響名單",
     "delisted": "依年（T 的年）列母體裡 `status` 是 `delisted`／`transferred` 的檔次（每個事件日數一次）與其中特徵缺值的檔次，"
     "另列其他檔次（現存股）的缺值比例對照。只列出、不判定",
+    "AF2_foreign": "外國發行人的 Q2 期限從 2021 年起才適用，探索段這一欄都是 0；2021～2024 的值在驗證段的 `summary.md`",
     "listed": "每次調倉的檔數與平均投入比例：名單檔數是取前 20 名之後，投入比例是買進那天收盤時部位占淨值的比例",
     "AF1_survivor": "- 存活者偏差（AF1）：兩個淨值比端點依當天的掛牌名單產生，含之後下市的公司；2008、2013、2018 抽樣日，"
     "上市之後下市的全部有值，上櫃 2008 年 5 檔 `N/A`、2013 年 1 檔沒有列。偏差小，不另列對照基準；"
@@ -254,7 +255,6 @@ OVERLAP_NOTE = {
     "剩下的缺口是日線跨過季底、但整包沒有那一季的下市股，2013～2024 年 16 個公司年，偏差方向事先定不出來。"
     "不另列對照基準；依年的下市、轉板股缺值檔次在 `AF2/summary.md` 的「依年的下市、轉板股」",
 }
-FEATURE_LABELS = {"pb": "股價淨值比", "accruals_4q": "應計項目"}
 PICK_FIELDS = {
     "AF1": ("pb", "financial"),
     "AF2": ("quarter", "accruals_4q", "operating_4q", "cfo_4q", "mean_assets"),
@@ -1482,8 +1482,9 @@ COVERAGE_NOTES = (
     "（只列出、不影響名單）；`x4_order` 是同一個 T 算 X4 名單的時間，`--coverage-only` 不算重疊比例，各段的 "
     "`summary.md` 才列",
     f"- AF2：{DEGENERATE['AF2']}。每個事件日一列；「外國發行人 Q2（8/14）」是 8/14 事件日因最新一季不是對應的那一季缺值、"
-    "而那一季的列照外國發行人的 Q2 期限（`data_json` 的 `deadline_rule`）在 T 之後才可得的檔數，只數、不讀它的值；"
-    "`ab1_order` 是同一個 T 算 AB1 名單的時間，`--coverage-only` 不算重疊比例，各段的 `summary.md` 才列",
+    "而那一季的列照外國發行人的 Q2 期限（`data_json` 的 `deadline_rule`）在 T 之後才可得的檔數，只數、不讀它的值（"
+    + OVERLAP_NOTE["AF2_foreign"]
+    + "）；`ab1_order` 是同一個 T 算 AB1 名單的時間，`--coverage-only` 不算重疊比例，各段的 `summary.md` 才列",
     "- 「依年的下市、轉板股」：" + OVERLAP_NOTE["delisted"],
     "- 各假設用自己的事件日（起日寫在各段標題）",
 )

@@ -6,8 +6,9 @@ are checked on hand-made rows (the expected numbers worked out in the test);
 the gate ("each once") and the reports run on a synthetic copy on a
 compressed calendar (``compressed``): the segments and the floors are moved
 into the fixture's 700 sessions, everything else is the registered one.
-``quarterly_statements`` is PR #1084's table (#1083), not yet in
-``app.models``: the copy creates it with its columns.
+``quarterly_statements`` is PR #1084's table (#1083): ``Base.metadata``
+creates it once that PR is in ``app.models``, before it the copy creates
+it with its columns (``QS_DDL``).
 """
 
 from __future__ import annotations
@@ -907,7 +908,8 @@ def build(path_: Path) -> Path:
             ),
             valuations,
         )
-        db.execute(text(QS_DDL))
+        if "quarterly_statements" not in Base.metadata.tables:
+            db.execute(text(QS_DDL))
         db.execute(
             text(
                 "insert into quarterly_statements (instrument_id, period_end, fiscal_period, "
