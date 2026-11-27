@@ -795,7 +795,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   - 每包所有成員的 zip 時間戳都是同一天，而且都在最近一兩年（2014Q2 包是 2025-05-10，2024Q2 包是 2026-10-13）。所以整包是定期重建的，收的是重建當時那份季報的現行版本，同一份季報更正過就是更正後的值。實例裡沒有修正旗標或申報日，哪幾家更正過看不出來。
   - 之後幾期的重編不會寫回這一季：2014Q2 包和 2015Q2 包裡 2014-06-30 的比較欄比，總資產 208／1,972 家、權益 213、營業現金流 358、EPS 383 家不同（2015 年追溯適用新版 IFRS、股票股利追溯調整 EPS 等），2014Q2 包裡是 2014Q2 那份報告的數字。
 - **可得日與偷看未來**：
-  - 三張表是同一份季報一起申報，可得日用 EPS 那一套，各格式的法定申報期限，遇休市順延。
+  - 三張表是同一份季報一起申報，可得日用 EPS 那一套，各格式的法定申報期限，遇休市順延；外國發行人 2021 年起的 Q2 是 8/31（[季度財報回補](#季度財報回補)「外國發行人」）。
   - 每季讀自己那一包，讀不到後幾期的重編；單季現金流量相減的兩季在本季期限前都已申報。
   - 剩下的偷看是同一份季報的更正，更正後的值會在原期限就被看到。這和 `t163sb04` 的限制相同（[季度財報回補](#季度財報回補)「首見出表日」），比例從整包量不出來。
 - **涵蓋**：
@@ -808,7 +808,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **`quarterly_statements`**（[#1083](https://github.com/YiCheng0608/stock-lab/issues/1083)，實作在 [`worker/quarterly_statements.py`](../backend/worker/quarterly_statements.py)）：
   - **欄位**：唯一鍵 `(instrument_id, period_end, fiscal_period)`。上表 15 科一科一欄：季底的 `total_assets`、`total_liabilities`、`equity_parent`、`equity_total`、`current_assets`、`current_liabilities`、`cash`、`receivables`、`inventories`、`share_capital_common`（普通股）、`share_capital_total`（股本合計），以及 1/1 起累計的 `cfo_ytd`、`capex_ytd`、`gross_profit_ytd`、`operating_income_ytd`。單位千元（XBRL 的元除以 1,000），YTD 照申報值存（資本支出是負數），單季由研究工具相減。營收、EPS 不在這張表，留在 `fundamental_snapshots`。
   - **來源與可得日**：整張表只有 `source=mops_tifrs_zip`。`raw_payload_id` 指向該季整包那列 `raw_payloads`（`mops_tifrs`，和 `xbrl-apply` 共用），`data_as_of` 是季底日。`announcement_date` 照 EPS 的法定期限（產業碼對到格式，遇休市順延；期限還沒到時用抓取日）。
-  - **`data_json`**：成員名稱與 sha256、整包 sha256、產業碼、`cr`／`ir`／`er`、格式、整包的 EPS、`target_rule`（`t163sb04_eps`、`snapshot_eps` 或 `bar_window`）、每欄用的 element 與 context id（`elements`）、`not_applicable` 的欄、可得日依據（`announcement_basis`、`statutory_deadline`、`deadline_calendar`）。
+  - **`data_json`**：成員名稱與 sha256、整包 sha256、產業碼、`cr`／`ir`／`er`、格式、整包的 EPS、`target_rule`（`t163sb04_eps`、`snapshot_eps` 或 `bar_window`）、每欄用的 element 與 context id（`elements`）、`not_applicable` 的欄、可得日依據（`announcement_basis`、`statutory_deadline`、`deadline_calendar`；外國發行人 2021 年起的 Q2 另記 `deadline_rule`、`foreign_issuer_basis`，其他列不記）。
   - **缺值**：沒申報的科目與格式本來就沒有的科目都存 NULL，不補零；後者列在 `not_applicable`（上表最後一欄，依產業碼：銀行 `basi`、金控 `fh`、保險 `ins`、證券 `bd`）。附註 taxonomy（命名空間或 inline 前綴含 `notes`）的 fact 不取。成員裡沒有季底 context（非曆年制）的公司不寫。金融業在資料層不排除。
   - **寫給誰**（`stock`／`ipo` 標的）：
     - 同季有 `t163sb04` 列（`target_rule=t163sb04_eps`）或 daily 的 OpenAPI 快照列 `mops_fundamental`（`snapshot_eps`；2026Q2 起研究 DB 的 active 是這種列，`fundamentals backfill` 不會把它換成 `t163sb04`）的標的，整包 EPS 要和它相同；不同的不寫，計 `eps_different`，代號被新公司重用時舊公司的數字不會寫到新公司上。表的值仍然只取自整包（[#1083 決定](https://github.com/YiCheng0608/stock-lab/issues/1083#issuecomment-7207679098)）。

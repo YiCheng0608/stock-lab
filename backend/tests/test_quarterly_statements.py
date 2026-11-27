@@ -33,6 +33,8 @@ from app.models import (
     QuarterlyStatement,
     RawPayload,
 )
+from worker import foreign_issuers as fi
+from worker import quarterly_fundamentals as qf
 from worker import quarterly_statements as qs
 from worker import quarterly_xbrl as qx
 from worker import sources
@@ -1474,3 +1476,83 @@ def test_post_once_asks_once_and_refuses_anything_but_200(monkeypatch):
     assert posted == [form] and throttled == [qs.CHECK_ENDPOINT]
     assert qs.post_once(qs.CHECK_ENDPOINT, form) == "<html>page</html>"
     assert len(posted) == 2
+
+
+# --- availability: a foreign issuer's Q2 (#1101) -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "quarter, foreign_day, domestic_day",
+    [
+        # Before 2021 a foreign issuer's Q2 is due with everyone's, 8/14.
+        (Quarter(2020, 2), date(2020, 8, 14), date(2020, 8, 14)),
+        # From 2021 it is 8/31; 8/14/2021 was a Saturday, so the others' is 8/16.
+        (Quarter(2021, 2), date(2021, 8, 31), date(2021, 8, 16)),
+        # 8/31/2024 was a Saturday: moved to the next session.
+        (Quarter(2024, 2), date(2024, 9, 2), date(2024, 8, 14)),
+    ],
+)
+def test_a_foreign_issuer_s_q2_is_available_on_its_own_deadline(
+    factory, tmp_path, quarter, foreign_day, domestic_day
+):
+    with factory() as db:
+        for symbol, name in (("8427", "基勝-KY"), ("1234", "國內")):
+            item = Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol=symbol,
+                name=name,
+                instrument_type="stock",
+                status="delisted",
+            )
+            db.add(item)
+            db.flush()
+            db.add(
+                MarketBar(
+                    instrument_id=item.id,
+                    trading_date=quarter.period_end + timedelta(days=10),
+                    open=10,
+                    high=10,
+                    low=10,
+                    close=10,
+                    adj_close=10,
+                    volume=1000,
+                )
+            )
+        survivor = add_instrument(db, "2330", status="active")
+        add_t163sb04(db, survivor, 4.0, quarter=quarter)
+        db.commit()
+    store(
+        tmp_path,
+        quarter,
+        archive(
+            dict(
+                company(symbol, eps=eps, quarter=quarter)
+                for symbol, eps in (
+                    ("8427", "1.00"),
+                    ("1234", "2.00"),
+                    ("2330", "4.00"),
+                )
+            )
+        ),
+        page_html({"2330": ("10000", "6000")}, quarter),
+    )
+    result = apply(factory, tmp_path, quarter, quarter)
+    assert result["status"] == "success", result
+    with factory() as db:
+        rows = written(db)
+    foreign = rows[("TWSE", "8427")]
+    assert foreign.announcement_date == foreign_day
+    assert foreign.data_json["statutory_deadline"] == foreign_day.isoformat()
+    for symbol in ("1234", "2330"):
+        row = rows[("TWSE", symbol)]
+        assert row.announcement_date == domestic_day
+        assert "deadline_rule" not in row.data_json
+        assert "foreign_issuer_basis" not in row.data_json
+    if quarter.year >= 2021:
+        assert foreign.data_json["deadline_rule"] == qf.FOREIGN_RULE
+        assert foreign.data_json["foreign_issuer_basis"] == fi.BASIS_NAME
+    else:
+        assert "deadline_rule" not in foreign.data_json
+    # The run keys its deadline cache by the rule, so a rerun changes nothing.
+    assert apply(factory, tmp_path, quarter, quarter)["changed"] == 0

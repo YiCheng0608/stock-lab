@@ -62,6 +62,7 @@ from app.models import (
 from worker import quarterly_fundamentals as qf
 from worker import sources
 from worker import quarterly_xbrl as qx
+from worker.foreign_issuers import foreign_issuers
 from worker.quarterly_fundamentals import Quarter
 from worker.sources import OfficialDataError, parse_number
 
@@ -556,14 +557,19 @@ def apply_statement_quarter(
     *,
     page_label: str = "t163sb05",
     excluded: frozenset[int] = frozenset(),
+    foreign: dict[int, str] | None = None,
 ) -> QuarterCounts:
     """Check one quarter against t163sb04 and t163sb05, then write it (``run`` None: dry run).
 
     Raises ArchiveError when the archive cannot be trusted and ``MismatchError`` when
     a summary page and the archive differ; nothing of the quarter is written then.
+    ``foreign`` (``foreign_issuers``; read here when None) gives foreign issuers
+    their own Q2 deadline (#1101), as ``xbrl-apply`` does.
     """
 
     counts = QuarterCounts()
+    if foreign is None:
+        foreign = foreign_issuers(db)
     fiscal_period = f"Q{quarter.quarter}"
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
@@ -746,11 +752,16 @@ def apply_statement_quarter(
                     continue
                 if raw is None:
                     raw = qx._raw_row(db, run, quarter, data, digest, fetched_at)
-                if report_format not in deadlines:
-                    deadlines[report_format] = qf.roll_to_session(
-                        db, qf.nominal_deadline(report_format, quarter)
+                foreign_basis = foreign.get(instrument.id)
+                key = qf.deadline_key(report_format, quarter, foreign_basis)
+                if key not in deadlines:
+                    deadlines[key] = qf.roll_to_session(
+                        db,
+                        qf.nominal_deadline(
+                            report_format, quarter, foreign_basis is not None
+                        ),
                     )
-                deadline, calendar = deadlines[report_format]
+                deadline, calendar = deadlines[key]
                 available, basis = qf.availability(deadline, first_seen)
                 details = {
                     "member": member.name,
@@ -766,6 +777,7 @@ def apply_statement_quarter(
                     "announcement_basis": basis,
                     "statutory_deadline": deadline.isoformat(),
                     "deadline_calendar": calendar,
+                    **qf.deadline_details(quarter, foreign_basis),
                 }
                 outcome, existing[instrument.id] = _write_row(
                     db, row, instrument, quarter, available, statement, details, raw.id
@@ -939,6 +951,7 @@ def _apply_each(
     excluded: frozenset[int],
 ) -> str | None:
     aborted: str | None = None
+    foreign = foreign_issuers(db)
     for quarter in targets:
         entry = manifest["quarters"][quarter.label]
         page_entry = pages["quarters"][quarter.label]
@@ -973,6 +986,7 @@ def _apply_each(
                 page,
                 page_label=f"t163sb05 {market}",
                 excluded=excluded,
+                foreign=foreign,
             )
         except MismatchError as exc:
             db.rollback()
