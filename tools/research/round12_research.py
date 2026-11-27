@@ -282,7 +282,7 @@ def definitions() -> dict[str, Any]:
                 "function": "feature_evidence._flow",
                 "columns": list(TRUST_COLUMNS),
                 "window": TRUST_WINDOW,
-                "feature_evidence": features.VERSION,
+                "feature_evidence": features.SHARED_VERSION,
             },
             "subset": {
                 "exclude": "the top LARGE_CAP of the population by turnover_60, high "

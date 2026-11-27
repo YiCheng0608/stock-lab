@@ -62,7 +62,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 ## 工具版本
 
-`feature_evidence.VERSION` 寫在報告標題與 `tables.json` 的 `version`；分組或判定規則一改就加一，並在報告寫明改了什麼、為什麼（研究規則第 3 條）。`explore_research` 與 `trade_research` 的版本表在[第 2 步的工具](#第-2-步的工具)。
+`feature_evidence.VERSION` 寫在報告標題與 `tables.json` 的 `version`；分組或判定規則一改就加一，並在報告寫明改了什麼、為什麼（研究規則第 3 條）。其他工具借用的輔助函式（`INSTITUTIONS`、`_flow`、`_mean_volume`、`_quarter_eps`、`_revenues_known`）另有 `feature_evidence.SHARED_VERSION`，round11～20 把它寫進自己的 `definitions_sha256`；改了這些函式就把 `SHARED_VERSION` 加一，借用它的各輪雜湊會刻意跟著變（#1089）。`explore_research` 與 `trade_research` 的版本表在[第 2 步的工具](#第-2-步的工具)。
 
 | 版本 | 任務 | 改了什麼 |
 | --- | --- | --- |

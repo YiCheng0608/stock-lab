@@ -191,7 +191,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "EVENT_DAY_RULE", "the first session on or after the deadline"),
         (tool, "LATEST_RULE", "the latest quarter within 200 days"),
         (tool, "SALE", "at T'+1's open"),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         (tool, "HYPOTHESES", _swap("K2", "top", 19)),
         (tool, "HYPOTHESES", _swap("K2", "hold", 60)),
         (tool, "HYPOTHESES", _swap("K2", "start", ("date", date(2014, 8, 14)))),

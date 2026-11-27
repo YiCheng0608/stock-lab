@@ -299,7 +299,7 @@ def definitions() -> dict[str, Any]:
         "order": ORDER,
         "short": SHORT_RULE,
         "event_day": EVENT_DAY_RULE,
-        "single_quarter": [SINGLE_QUARTER, features.VERSION],
+        "single_quarter": [SINGLE_QUARTER, features.SHARED_VERSION],
         "deadlines": [r14.DEADLINES, r14.EVENT_DAY_RULE],  # P1's sales, P2's events
         "features": {
             "eps_season_3y": {

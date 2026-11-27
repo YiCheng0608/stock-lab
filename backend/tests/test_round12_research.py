@@ -186,7 +186,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (r5, "VOL_WINDOW", 59),
         (r5, "VOL_DDOF", 0),
         (ex, "TURNOVER_WINDOW", 59),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         (er, "LIMIT_BEFORE_WIDENING", Fraction(1, 10)),
         (er, "LIMIT_WIDENED_ON", date(2015, 6, 2)),
         (er, "LIMIT", Fraction(1, 20)),

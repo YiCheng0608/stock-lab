@@ -159,7 +159,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "PAID_RULE", "a null cash_dividend is paid"),
         (tool, "SHORT_RULE", "filled by the hash"),
         (tool, "MIN_LOTS", 500),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         (ms, "MEMBERS_SHA256", "0" * 64),
         (er, "LIMIT_BEFORE_WIDENING", Fraction(1, 10)),
         (er, "LIMIT_WIDENED_ON", date(2015, 6, 2)),

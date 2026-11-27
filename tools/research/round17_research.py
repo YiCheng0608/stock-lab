@@ -352,7 +352,7 @@ def definitions() -> dict[str, Any]:
                 "base_min": BASE_MIN,
                 "missing": MONTHS_MISSING,
                 "reference": A2_REFERENCE,
-                "revenues": features.VERSION,  # _revenues_known, revenue_yoy
+                "revenues": features.SHARED_VERSION,  # _revenues_known, revenue_yoy
             },
             "vov_240": {
                 "returns": VOV_RETURNS,

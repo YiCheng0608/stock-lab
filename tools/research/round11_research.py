@@ -246,7 +246,7 @@ def definitions() -> dict[str, Any]:
             "institutional_flow_20": {
                 "function": "explore_research.FEATURES (feature_evidence._flow)",
                 "institutions": list(features.INSTITUTIONS),
-                "feature_evidence": features.VERSION,
+                "feature_evidence": features.SHARED_VERSION,
                 "explore_research": [ex.VERSION, ex.DESIGN],
             },
             "margin_flow_20": {

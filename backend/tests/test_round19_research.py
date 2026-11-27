@@ -192,7 +192,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "EPS_DIGITS", 2),
         (tool, "STREAK_MISSING", "a missing quarter is skipped"),
         (tool, "SINGLE_QUARTER", "the cumulative figures"),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         (tool, "HYPOTHESES", _swap("D2", "conditions", (("eps_streak_4", "is", False),))),
         (tool, "HYPOTHESES", _swap("D2", "order", "by eps")),
         (tool, "HYPOTHESES", _swap("D2", "top", 19)),

@@ -251,7 +251,7 @@ def definitions() -> dict[str, Any]:
             },
             "vol_i": {
                 "function": "feature_evidence._mean_volume (20 bars before T, > 0)",
-                "feature_evidence": features.VERSION,
+                "feature_evidence": features.SHARED_VERSION,
             },
             "ind_flow_20": {
                 "groups": "mainstream_research.group_members (snapshot_date <= T)",
