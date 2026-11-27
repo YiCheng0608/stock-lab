@@ -85,6 +85,9 @@ class BarRecord:
     # Parsers and validated direct producers must state availability explicitly.
     turnover_status: str = "unknown"
     turnover_reason: str | None = None
+    # The official trade count (成交筆數) of the same row (Issue #1094); None
+    # when the row had none and on index, futures and US index bars.
+    trade_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -1633,6 +1636,33 @@ def _turnover_from_row(
     return amount, "available", None
 
 
+def _trade_count_from_row(row: dict[str, Any], *keys: str) -> int | None:
+    """The official trade count (成交筆數) of a quote row, by column name (#1094).
+
+    A whole nonnegative number of at most 19 digits, thousands commas allowed
+    (``160,941``); the first key present in the row owns the value.  Blank (the OpenAPI
+    ``STOCK_DAY_ALL`` ``""`` of a day without trades), ``--``, a fraction or
+    anything else is None, never zero.
+    """
+
+    for key in keys:
+        if key not in row:
+            continue
+        raw = row[key]
+        if isinstance(raw, bool):
+            return None
+        if isinstance(raw, int):
+            return raw if 0 <= raw <= 9223372036854775807 else None
+        if not isinstance(raw, str):
+            return None
+        raw = raw.strip()
+        if not re.fullmatch(r"\+?(?:[0-9]{1,19}|[0-9]{1,3}(?:,[0-9]{3}){1,6})", raw):
+            return None
+        number = int(raw.replace(",", ""))
+        return number if number <= 9223372036854775807 else None
+    return None
+
+
 def parse_twse_daily_rows(
     payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None
 ) -> list[BarRecord]:
@@ -1648,6 +1678,7 @@ def parse_twse_daily_rows(
         turnover, turnover_status, turnover_reason = _turnover_from_row(
             row, "TradeValue", "成交金額", "成交值"
         )
+        trade_count = _trade_count_from_row(row, "Transaction", "成交筆數")
         if (
             not symbol
             or not trading_date
@@ -1667,6 +1698,7 @@ def parse_twse_daily_rows(
                 turnover=turnover,
                 turnover_status=turnover_status,
                 turnover_reason=turnover_reason,
+                trade_count=trade_count,
                 exchange="TWSE",
                 source="twse",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1693,6 +1725,7 @@ def parse_tpex_daily_rows(
         turnover, turnover_status, turnover_reason = _turnover_from_row(
             row, "TransactionAmount", "成交金額", "成交金額(元)", "成交值"
         )
+        trade_count = _trade_count_from_row(row, "TransactionNumber", "成交筆數")
         if (
             not symbol
             or not trading_date
@@ -1713,6 +1746,7 @@ def parse_tpex_daily_rows(
                 turnover=turnover,
                 turnover_status=turnover_status,
                 turnover_reason=turnover_reason,
+                trade_count=trade_count,
                 exchange="TPEx",
                 source="tpex",
                 data_as_of=data_as_of or trading_date.isoformat(),

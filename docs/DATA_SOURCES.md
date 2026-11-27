@@ -121,7 +121,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 上市發行股數 | `MI_QFIIS` | 不晚於 2004-02-11 | — | 回補單還沒做；照常請求 |
 | 上櫃股價淨值比 | `peQryDate` | 2007-01-02 | `totalCount 0` 的空表（2006-12-29、12-22、12-15、12-01、10-02、07-03、01-02，2005、2004、2003、2000 各 1 天） | 回補單還沒做；上櫃日線 2007-04-23 起，只抓這段 |
 | 上櫃發行股數 | `dailyQuotes` 的「發行股數」欄（OpenAPI `Capitals`） | 同上櫃日行情：2007-04-23 | — | 0 個請求，從已存的 raw 重讀 |
-| 官方成交筆數 | 日行情的「成交筆數」欄（`MI_INDEX`、`dailyQuotes`；OpenAPI `Transaction`、`TransactionNumber`） | 同日行情：上市 2004-02-11、上櫃 2007-04-23 | — | 回補單還沒做；0 個請求，從已存的 raw 重讀（[官方成交筆數](#官方成交筆數)） |
+| 官方成交筆數 | 日行情的「成交筆數」欄（`MI_INDEX`、`dailyQuotes`；OpenAPI `Transaction`、`TransactionNumber`） | 同日行情：上市 2004-02-11、上櫃 2007-04-23 | — | 0 個請求，研究 DB 以 `trade-count reread` 從已存的 raw 重讀（[官方成交筆數](#官方成交筆數)、[#1094](https://github.com/YiCheng0608/stock-lab/issues/1094)） |
 | 上市借券賣出 | `TWT93U` | 2005-07-01 | `stat`「查詢日期小於94年7月1日，請重新查詢!」（2004-02-11、2005-06-30） | 回補單還沒做；早於這天不請求。2012-03-16 以前是舊版面（[借券賣出與當沖](#借券賣出與當沖)） |
 | 上櫃借券賣出 | `margin/sbl` | 2012-10-02 | `stat ok`、`data` 空表（2012-10-01、07-02、01-02，2011-07-01、2010-07-01、2008-07-01、2007-04-23） | 回補單還沒做；早於這天不請求 |
 | 上市當沖 | `TWTB4U` | 2014-01-06（現股當沖開放日） | `stat`「查詢日期小於103年1月6日，請重新查詢!」（2014-01-03） | 回補單還沒做；更早沒有現股當沖，是制度本身 |
@@ -329,7 +329,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 ### 官方成交筆數
 
-上市、上櫃的盤後日行情表每檔都有「成交筆數」，和收盤價、成交股數在同一份回應的同一列。[#1093](https://github.com/YiCheng0608/stock-lab/issues/1093) 評估後決定存成 `market_bars.trade_count`（可空整數，單位：筆）：來源、資料日期與 raw 就是這根日線自己的 `source`、`data_as_of`、`raw_payload_id`，不另存，也不是新來源（[#1093 決定](https://github.com/YiCheng0608/stock-lab/issues/1093#issuecomment-7210769585)）。正式 DB 從部署那天起由 collect 寫，2024-09-30 起的舊列留 NULL；研究 DB 的歷史從已存的 raw 重讀，不發請求。parser、migration 與重讀由另一張任務單做，跑法寫在 [RESEARCH_DB](ops/RESEARCH_DB.md)。名稱寫「官方成交筆數」，和[策略證據](spec/evidence.md)裡回測的「成交筆數」（交易筆數）分開。個股頁現在不顯示。
+上市、上櫃的盤後日行情表每檔都有「成交筆數」，和收盤價、成交股數在同一份回應的同一列。[#1093](https://github.com/YiCheng0608/stock-lab/issues/1093) 評估後決定存成 `market_bars.trade_count`（可空整數，單位：筆）：來源、資料日期與 raw 就是這根日線自己的 `source`、`data_as_of`、`raw_payload_id`，不另存，也不是新來源（[#1093 決定](https://github.com/YiCheng0608/stock-lab/issues/1093#issuecomment-7210769585)）。正式 DB 從部署那天起由 collect 寫，2024-09-30 起的舊列留 NULL；研究 DB 的歷史從已存的 raw 重讀，不發請求（`worker.cli trade-count reread`，跑法見 [RESEARCH_DB](ops/RESEARCH_DB.md#官方成交筆數的重讀1094)）。migration `0045_market_bar_trade_count`、parser 與寫入由 [#1094](https://github.com/YiCheng0608/stock-lab/issues/1094) 做。名稱寫「官方成交筆數」，和[策略證據](spec/evidence.md)裡回測的「成交筆數」（交易筆數）分開。個股頁現在不顯示。
 
 | 端點 | 表 | 欄名 | 寫法 | 沒有成交時 |
 | --- | --- | --- | --- | --- |
@@ -338,12 +338,13 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 | 上櫃 `dailyQuotes` | 「上櫃股票行情」「管理股票」 | `成交筆數`（在 `成交金額(元)` 之後） | 整數、千分位逗號 | `0` |
 | 上櫃當日 OpenAPI `tpex_mainboard_daily_close_quotes` | — | `TransactionNumber` | 整數、無逗號 | `0` |
 
-- **讀法**：依欄名讀，不靠位置。上市 2004～2026 的抽樣日欄位都相同；上櫃 2020 年前後在「最後買價」「最後賣價」後面多了最後買量、賣量兩欄，`成交筆數` 的位置沒變。空白、`--`、非整數存 NULL，不補零。抽樣的每一列，成交股數是 0 時筆數也是 0（反之亦然），筆數不大於股數。
+- **讀法**：依欄名讀，不靠位置。上市 2004～2026 的抽樣日欄位都相同；上櫃 2020 年前後在「最後買價」「最後賣價」後面多了最後買量、賣量兩欄，`成交筆數` 的位置沒變。空白、`--`、非整數存 NULL，不補零（[`_trade_count_from_row`](../backend/worker/sources.py)：完整的非負整數，可有開頭 `+` 與正確的千分逗號；和[成交量](#日行情成交量整數規則)不同，`12.0` 也是 NULL）。指數、期貨、美股日線不寫。collect 讀哪一份表（當日 OpenAPI 或網站表），就讀那份表同一列的這一欄。抽樣的每一列，成交股數是 0 時筆數也是 0（反之亦然），筆數不大於股數。
 - **覆蓋**：研究 DB 上市 2004-02-11～2026-11-13 的 5,602 天、上櫃 2007-04-23 起的 4,808 天，每一根日線指向的 raw 都讀得出這一欄（含之後下市的股票）；2024-09-30 以後的 514 天，raw 在正式 volume（[#1093 回報](https://github.com/YiCheng0608/stock-lab/issues/1093#issuecomment-7210725240)）。上市 `STOCK_DAY_ALL` 與同一資料日的 `MI_INDEX` 逐檔相同，只差沒有成交的列（`""` 與 `0`）；上櫃 OpenAPI 與 `dailyQuotes` 還沒逐檔比。
 - **口徑**：上市表附註「本統計資訊含一般、零股、盤後定價、鉅額交易，不含拍賣、標購」，筆數和成交股數一樣含這些交易。上櫃的表沒有這句附註，但有沒有一般交易（收盤 `---`）而筆數大於 0 的列，所以也含零股等非一般交易。日線 parser 不收沒有收盤價的列，這種列的筆數不進 `market_bars`。
 - **限制**：
   - **2020-10-26 起有盤中零股**：零股成交大多變成盤中的小筆數，「平均每筆張數」在這天前後的口徑不同、不能直接比。不拆零股（要另抓零股端點）；用到這欄的假設登記時，自己寫明 2020-10-26 前後怎麼處理。
   - **`STOCK_DAY_ALL` 的 `data_as_of` 是請求日**：daily 18:30 抓時，OpenAPI 常常還是前一個交易日的表（例如 2026-10-30、11-12 存的檔，每列 `Date` 是前一天），collector 那天改讀 `MI_INDEX`。`raw_payloads.data_as_of` 不能拿來對資料日；重讀以日線的 `raw_payload_id` 找 raw。
+- **寫入**：和日線其他值同一個規則（[`_upsert_official_bar`](../backend/worker/pipeline.py)）：新列照寫；已有的列值相同不改、NULL 可補（記成 value fill）、值不同保留第一次寫入並記 conflict，`--force` 才改寫；空白的新值不清掉已存的值。collect 補 NULL 時不比成交股數（同日線其他欄位的補值），所以同一根日線的成交股數與筆數可能來自同一天的兩份 raw；補值記在那次 collect run 的 value fill（metadata）。`trade-count reread` 另外要求那份 raw 同一列的成交股數等於日線的 `volume` 才寫。
 - **可得時點**：和收盤價同一份盤後回應，T 日收盤後才知道（含盤後定價與零股，最早 14:30 後才定），只能用在 T+1 以後的決策。
 
 ### TAIEX 交易日基準

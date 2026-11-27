@@ -408,6 +408,26 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 
 正式 DB 沒有這種殘留：比對 `instruments` 與 `data_quality` 最新狀態，0 列不一致（[#838 AC-2](https://github.com/YiCheng0608/stock-lab/issues/838#issuecomment-6935482280)）。每日 collect 每天都會改回類型；正式 DB 也沒有回補到會把下市公司改回 `active` 的日子。
 
+### 官方成交筆數的重讀（#1094）
+
+`market_bars.trade_count`（[官方成交筆數](../DATA_SOURCES.md#官方成交筆數)）在研究 DB 由 `worker.cli trade-count reread` 從已存的 raw 補，0 個請求（[#1094](https://github.com/YiCheng0608/stock-lab/issues/1094)）。
+
+- **對象**：`source` 是 `twse`、`tpex`、`trade_count` 是 NULL 的日線。指數、期貨、美股日線不動。
+- **找 raw**：讀日線自己的 `raw_payload_id`，不用 `raw_payloads.data_as_of` 對日期（`STOCK_DAY_ALL` 的 `data_as_of` 是請求日，見 DATA_SOURCES 同一節）。讀法和 `instruments repair` 讀已存 raw 相同：核對 SHA-256 與回報日期，再用 collect 的 parser 解析。只在那份表同一列（交易所、代號、交易日相同）的成交股數等於日線的 `volume` 時寫入。
+- **研究 volume 沒有的檔**：[種子列](#建研究-db)與 2024-09-30 以後的列，檔案只在正式 volume。`--fallback-raw-dir /prod/raw`（正式 volume 唯讀掛到 `/prod`）時，這些檔照 `tools/audit/raw_files.py --fallback-raw-dir` 的對法去 `/prod/raw` 讀：Windows 舊路徑與 `/data/raw/…` 都對到同一個相對路徑。
+- **寫法**：一個自然月一個 transaction，只補 NULL；中斷後重跑就是續跑，第二次 `written` 是 0。`--from`、`--to`（`YYYY-MM-DD`）不給時是 `twse`、`tpex` 日線的最早到最新一天。
+- **拒絕與維護模式**：DB 旁沒有 `research-db.json`（`purpose=research_history`）就拒絕（`refused`、exit 2），不開 session、不持有維護模式；起跑時持有研究 volume 的維護模式（另一個作業持有時 exit 75）。
+- **前提**：研究 DB 先以含 0045 的 image 跑 `init-db`（加一欄、不重寫表）。開跑前看 `docker ps`，沒有其他寫研究 DB 的容器。
+
+```bash
+# 換值：IMG＝含 #1094 的 backend image
+MSYS_NO_PATHCONV=1 docker run -d --name research-trade-count --network none \
+  -v stock-lab-research:/data -v stock-lab_stock-data:/prod:ro -e STOCK_DATA_DIR=/data "$IMG" \
+  sh -c 'python -B -m worker.cli trade-count reread --fallback-raw-dir /prod/raw > /data/logs/trade-count.json 2> /data/logs/trade-count.err'
+```
+
+輸出一個 JSON：`written`（寫入的根數）、`by_year`（年 × 來源的寫入根數）、`not_written`（沒寫的原因與根數：`raw_file_missing`、`raw_sha256_mismatch`、`raw_rejected`、`no_row_in_raw`、`blank_in_raw`、`volume_mismatch` 等）與前 20 筆 `samples`、`captures_read`（從研究 volume、從 `/prod` 讀的 raw 份數）、`seconds`。有任何一根沒寫就是 `partial`（exit 2），`failed` 是 exit 1。進度每個月一行 JSON 寫在 stderr（`month`、`written`、累計的 `not_written`、`seconds`），例如 `tail -n 3 /data/logs/trade-count.err`。
+
 ### 研究工具的分段
 
 研究工具預設的分段是探索段 2024-09-30～2025-12-31、驗證段 2026-01-01 起（`evidence_lib.SEGMENTS`）。要在研究 DB 上用回補的範圍，兩段都要以 `--segment` 給（`<exploration|validation>:<第一天>:[最後一天]`，探索段要在驗證段開始前結束）：

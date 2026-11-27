@@ -142,6 +142,10 @@ class MarketBar(Base):
     contract_month: Mapped[str | None] = mapped_column(String(10), nullable=True)
     open_interest: Mapped[int | None] = mapped_column(Integer, nullable=True)
     settlement_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The exchange's official trade count (成交筆數) of the same quote-table row
+    # as the bar (Issue #1094), so it shares the bar's provenance.  Null when
+    # the row had none and on index, futures and US index bars.
+    trade_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class FuturesNightBar(Base):
