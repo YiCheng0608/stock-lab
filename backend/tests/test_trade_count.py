@@ -175,6 +175,9 @@ def test_openapi_and_website_tables_of_one_day_agree():
         ("12.0", None),
         ("1,23", None),
         ("-1", None),
+        ("9" * 5000, None),
+        ("9223372036854775808", None),
+        ("9,223,372,036,854,775,807", 9223372036854775807),
         (True, None),
         (3.0, None),
         (None, None),
@@ -434,7 +437,12 @@ def test_reread_uses_the_bars_raw_not_one_dated_by_data_as_of(factory, tmp_path)
     raw_root = tmp_path / "data" / "raw"
     with factory() as db:
         _seed(db, raw_root)
-        stale = [_stock_day_all_row(Date="1080430", Code="0050", Transaction="999")]
+        # Same volume as the 0050 bar, so only the choice of capture can tell.
+        stale = [
+            _stock_day_all_row(
+                Date="1080430", Code="0050", TradeVolume="3247891", Transaction="999"
+            )
+        ]
         _store_raw(db, raw_root, stale, sources.TWSE_DAILY_ENDPOINT, MI_DAY)
         db.commit()
         trade_count_reread.reread(db)
@@ -640,18 +648,102 @@ def test_the_command_holds_maintenance_mode_and_passes_its_options(
     }
 
 
-def test_the_migration_adds_a_nullable_column_and_keeps_rows(tmp_path):
-    path = tmp_path / "old.db"
-    engine = create_engine(f"sqlite:///{path}")
-    enable_sqlite_foreign_keys(engine)
-    upgrade_database(engine)
-    engine.dispose()
+def _alembic_config(engine):
+    from alembic.config import Config
+
+    from app import migrations
+
+    config = Config(str(migrations.ALEMBIC_CONFIG_PATH))
+    config.set_main_option(
+        "script_location", str(Path(migrations.ALEMBIC_CONFIG_PATH).parent / "alembic")
+    )
+    config.attributes["connection"] = engine
+    return config
+
+
+def _bar_table(path: Path):
     with sqlite3.connect(path) as connection:
         columns = {
             row[1]: row for row in connection.execute("PRAGMA table_info(market_bars)")
         }
+        names = [name for name in columns if name != "trade_count"]
+        rows = connection.execute(
+            f"SELECT {', '.join(names)} FROM market_bars ORDER BY id"
+        ).fetchall()
+        counts = (
+            connection.execute(
+                "SELECT trade_count FROM market_bars ORDER BY id"
+            ).fetchall()
+            if "trade_count" in columns
+            else None
+        )
+        checks = (
+            connection.execute("PRAGMA integrity_check").fetchall(),
+            connection.execute("PRAGMA foreign_key_check").fetchall(),
+        )
+        version = connection.execute(
+            "SELECT version_num FROM alembic_version"
+        ).fetchall()
+    return columns, rows, counts, checks, version
+
+
+def test_the_migration_goes_down_and_up_again_keeping_every_row(tmp_path):
+    """0045 down drops only the column; up adds it back nullable (add_column runs)."""
+
+    pytest.importorskip("alembic")
+    from alembic import command
+
+    from app.migration_revisions import REVISIONS
+
+    revision = next(name for name in REVISIONS if name.endswith("_trade_count"))
+    previous = REVISIONS[REVISIONS.index(revision) - 1]
+    path = tmp_path / "down.db"
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    config = _alembic_config(engine)
+    try:
+        command.upgrade(config, revision)
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO instruments (id, market, exchange, symbol, name, "
+                "instrument_type, is_watchlisted, status, created_at) VALUES "
+                "(1, 'TW', 'TWSE', '2330', '台積電', 'stock', 0, 'active', "
+                "'2026-11-11 10:00:00')"
+            )
+            for bar_id, day, count in (
+                (1, "2026-11-11", 119978),
+                (2, "2026-11-12", None),
+            ):
+                connection.exec_driver_sql(
+                    "INSERT INTO market_bars (id, instrument_id, trading_date, open, "
+                    "high, low, close, adj_close, volume, turnover, turnover_status, "
+                    "source, collected_at, is_suspended, trade_count) VALUES "
+                    f"({bar_id}, 1, '{day}', 2370, 2400, 2365, 2395, 2395, 33056476, "
+                    "77900786705, 'available', 'twse', '2026-11-12 10:00:00', 0, ?)",
+                    (count,),
+                )
+        columns, rows, counts, checks, version = _bar_table(path)
         assert columns["trade_count"][2] == "INTEGER"
         assert columns["trade_count"][3] == 0  # nullable
-        assert connection.execute(
-            "SELECT version_num FROM alembic_version"
-        ).fetchall() == [("0045_market_bar_trade_count",)]
+        assert counts == [(119978,), (None,)]
+        assert version == [(revision,)]
+
+        command.downgrade(config, previous)
+        down_columns, down_rows, down_counts, down_checks, down_version = _bar_table(
+            path
+        )
+        assert "trade_count" not in down_columns
+        assert set(down_columns) == set(columns) - {"trade_count"}
+        assert down_rows == rows and down_counts is None
+        assert down_checks == ([("ok",)], [])
+        assert down_version == [(previous,)]
+
+        command.upgrade(config, revision)
+        up_columns, up_rows, up_counts, up_checks, up_version = _bar_table(path)
+        assert up_columns["trade_count"][2] == "INTEGER"
+        assert up_columns["trade_count"][3] == 0
+        assert up_rows == rows and up_counts == [(None,), (None,)]
+        assert up_checks == ([("ok",)], [])
+        assert up_version == [(revision,)]
+    finally:
+        engine.dispose()

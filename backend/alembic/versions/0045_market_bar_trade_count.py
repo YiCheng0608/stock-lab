@@ -36,5 +36,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # SQLite 3.35+ drops a column in place, without rebuilding the table.
+    # SQLite 3.35+ DROP COLUMN: no new table, but every row of market_bars is
+    # rewritten without the column, so on a large table it costs a full rewrite.
     op.get_bind().exec_driver_sql("ALTER TABLE market_bars DROP COLUMN trade_count")

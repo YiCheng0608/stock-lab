@@ -1639,8 +1639,8 @@ def _turnover_from_row(
 def _trade_count_from_row(row: dict[str, Any], *keys: str) -> int | None:
     """The official trade count (成交筆數) of a quote row, by column name (#1094).
 
-    A whole nonnegative number, thousands commas allowed (``160,941``); the
-    first key present in the row owns the value.  Blank (the OpenAPI
+    A whole nonnegative number of at most 19 digits, thousands commas allowed
+    (``160,941``); the first key present in the row owns the value.  Blank (the OpenAPI
     ``STOCK_DAY_ALL`` ``""`` of a day without trades), ``--``, a fraction or
     anything else is None, never zero.
     """
@@ -1656,7 +1656,7 @@ def _trade_count_from_row(row: dict[str, Any], *keys: str) -> int | None:
         if not isinstance(raw, str):
             return None
         raw = raw.strip()
-        if not re.fullmatch(r"\+?(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)", raw):
+        if not re.fullmatch(r"\+?(?:[0-9]{1,19}|[0-9]{1,3}(?:,[0-9]{3}){1,6})", raw):
             return None
         number = int(raw.replace(",", ""))
         return number if number <= 9223372036854775807 else None

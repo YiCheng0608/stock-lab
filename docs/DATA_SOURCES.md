@@ -344,7 +344,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 - **限制**：
   - **2020-10-26 起有盤中零股**：零股成交大多變成盤中的小筆數，「平均每筆張數」在這天前後的口徑不同、不能直接比。不拆零股（要另抓零股端點）；用到這欄的假設登記時，自己寫明 2020-10-26 前後怎麼處理。
   - **`STOCK_DAY_ALL` 的 `data_as_of` 是請求日**：daily 18:30 抓時，OpenAPI 常常還是前一個交易日的表（例如 2026-10-30、11-12 存的檔，每列 `Date` 是前一天），collector 那天改讀 `MI_INDEX`。`raw_payloads.data_as_of` 不能拿來對資料日；重讀以日線的 `raw_payload_id` 找 raw。
-- **寫入**：和日線其他值同一個規則（[`_upsert_official_bar`](../backend/worker/pipeline.py)）：新列照寫；已有的列值相同不改、NULL 可補（記成 value fill）、值不同保留第一次寫入並記 conflict，`--force` 才改寫；空白的新值不清掉已存的值。
+- **寫入**：和日線其他值同一個規則（[`_upsert_official_bar`](../backend/worker/pipeline.py)）：新列照寫；已有的列值相同不改、NULL 可補（記成 value fill）、值不同保留第一次寫入並記 conflict，`--force` 才改寫；空白的新值不清掉已存的值。collect 補 NULL 時不比成交股數（同日線其他欄位的補值），所以同一根日線的成交股數與筆數可能來自同一天的兩份 raw；補值記在那次 collect run 的 value fill（metadata）。`trade-count reread` 另外要求那份 raw 同一列的成交股數等於日線的 `volume` 才寫。
 - **可得時點**：和收盤價同一份盤後回應，T 日收盤後才知道（含盤後定價與零股，最早 14:30 後才定），只能用在 T+1 以後的決策。
 
 ### TAIEX 交易日基準
