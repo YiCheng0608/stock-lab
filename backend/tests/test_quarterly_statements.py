@@ -621,9 +621,10 @@ def test_fetch_sends_nothing_in_quiet_hours(tmp_path):
         raise AssertionError("no request in quiet hours")
 
     state, clock, sleep = _clock()
-    evening = lambda: datetime(
-        2026, 11, 27, 13, 0, tzinfo=timezone.utc
-    )  # 21:00  # noqa: E731
+
+    def evening():
+        return datetime(2026, 11, 27, 13, 0, tzinfo=timezone.utc)  # 21:00 Taipei
+
     result = qs.fetch_check_pages(
         tmp_path, Q, Q, fetcher=fetcher, sleep=sleep, clock=clock, now=evening
     )
