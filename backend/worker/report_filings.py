@@ -443,7 +443,8 @@ def _table(text: str) -> tuple[list[str], str] | None:
     """The filing table: its header cells and the HTML of its rows after the header.
 
     The first row of header cells starts it; it ends at the next ``</table>`` (the
-    notes below the table are another table).
+    notes below the table are another table).  None without that end: an answer
+    cut short would lose its last rows (PR #1104 review suggestion 2).
     """
 
     for match in _ROW.finditer(text):
@@ -451,9 +452,9 @@ def _table(text: str) -> tuple[list[str], str] | None:
         if cells and all(kind.lower() == "h" for kind, _ in cells):
             rest = text[match.end() :]
             end = rest.lower().find("</table>")
-            return [_cell_text(cell) for _, cell in cells], (
-                rest if end < 0 else rest[:end]
-            )
+            if end < 0:
+                return None
+            return [_cell_text(cell) for _, cell in cells], rest[:end]
     return None
 
 
@@ -571,8 +572,16 @@ def filing_date(filings: Iterable[Any]) -> datetime | None:
 def filing_dates(db: Session) -> dict[tuple[int, date], datetime]:
     """``filing_date`` of every instrument and quarter in ``financial_report_filings``."""
 
-    grouped: dict[tuple[int, date], list[FinancialReportFiling]] = defaultdict(list)
-    for row in db.scalars(select(FinancialReportFiling)):
+    grouped: dict[tuple[int, date], list[Any]] = defaultdict(list)
+    # Only the four columns the rule reads, not ORM objects (about 150,000 rows).
+    for row in db.execute(
+        select(
+            FinancialReportFiling.instrument_id,
+            FinancialReportFiling.period_end,
+            FinancialReportFiling.report_kind,
+            FinancialReportFiling.uploaded_at,
+        )
+    ):
         grouped[(row.instrument_id, row.period_end)].append(row)
     result = {}
     for key, rows in grouped.items():
@@ -948,10 +957,15 @@ def write_target(
             counts.old_layout_quarters += 1
             counts.lists["old_layout"].append(f"{target.key}Q{quarter}")
             continue
-        owner = _assign(quarter, matched)
+        # Every instrument of the code decides whose quarter it is; one whose name
+        # does not match is listed in name_mismatch and gets nothing, and its
+        # quarters never move to the other instrument (PR #1104 review 1).
+        owner = _assign(quarter, instruments)
         if owner is None:
             counts.unassigned_rows += len(kept)
             counts.lists["unassigned"].append(f"{target.key}Q{quarter}")
+            continue
+        if owner not in matched:
             continue
         for row in kept:
             counts.rows += 1

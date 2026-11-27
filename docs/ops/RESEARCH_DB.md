@@ -564,13 +564,14 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 2. **`filings fetch --dir /out [--max-requests N]`**：照 `targets.json` 一個請求抓一頁，不碰 DB、不需要 `research-db.json`，可以和其他任務的研究 DB 寫入並行。
    - 頁存在 `raw/<代號>/<民國年>.json`（請求的 form、狀態碼、抓取時間與回應原始位元組的 base64），`manifest.json` 記每頁的 sha256，`requests.jsonl` 記每個請求。已存且 sha256 相符的頁不重抓，重跑就是續跑。
    - 請求之間至少 6 秒；台北 20:30～23:30、08:00～09:00、偶數整點前 10 分到後 10 分不發，遇到就等到時段結束（程序不退出）。
-   - 「查詢過量」、HTTP 403／429、其他非 200、空回應、不是公司表也不是「查無所需資料」的頁（例如金控的子公司選單）、沒有回應，都是失敗，不存成頁；本文留在 `failed/<代號>/`。連續 3 次失敗就停（`failed`、exit 1），`stopped` 寫最後一個成功的頁；不自己加長間隔續跑，先回報。沒抓完是 `partial`、exit 3。
+   - 「查詢過量」、HTTP 403／429、其他非 200、空回應、不是公司表也不是「查無所需資料」的頁（例如金控的子公司選單）、表後面沒有 `</table>`（回應被截斷）、沒有回應，都是失敗，不存成頁；本文留在 `failed/<代號>/`。連續 3 次失敗就停（`failed`、exit 1），`stopped` 寫最後一個成功的頁；不自己加長間隔續跑，先回報。沒抓完是 `partial`、exit 3。
    - 目錄放主機的 `stock-lab-data/evidence/1100/`（bind mount 到 `/out`），結案後還在。
 3. **`filings write --dir /out [--dry-run] [--accept-names FILE]`**：只在研究 DB 跑（沒有 `research-db.json` 就 `refused`、exit 2，`--dry-run` 也查），持有維護模式，不發請求。照當下研究 DB 重算目標，讀已存的頁寫入，一筆 `run_type=financial_report_filings_backfill` 的 run；重跑冪等（`unchanged`），更(補)正欄變了的列 `updated`。輸出的 `lists`：
    - `not_fetched`（還沒抓的，前 50 個）、`no_data`（查無所需資料）、`page_failed`（讀不懂的頁，整頁不寫）。
    - `name_mismatch`：頁首名稱和標的名稱對不上的（規則見 DATA_SOURCES），不寫。人工核過的放進 `--accept-names` 的 JSON 陣列，每項要有 `symbol`、`page_name`、`db_name`、`reason`；檔案放 `stock-lab-data/evidence/1100/`。
    - `old_layout`：只剩舊種類報表的季，不寫。
-   - `unassigned`：轉板代號同一年有兩個標的、這一季兩個都有或都沒有季報時，不猜歸屬，不寫。
+   - `unassigned`：轉板代號同一年有兩個標的、這一季兩個都有或都沒有季報時，不猜歸屬，不寫。歸屬看該代號全部的標的；名稱對不上的那個標的的季不寫，也不會轉給另一個標的。
+   - **舊列不會自己刪**：`write` 只新增或更新。歸屬規則或研究 DB 的季報改了之後重跑，原本寫在另一個標的下的列會留著。這時先刪同一代號、同一年在 `financial_report_filings` 裡不該屬於該標的的列（`DELETE … WHERE instrument_id = ? AND period_end BETWEEN ? AND ?`，刪前把列數貼到 Issue），再跑 `write`；`raw_payloads` 不動。
 4. **`filings coverage`**：依年份 × 標的狀態列有季報的家數與季數、有實際申報日（`report_filings.filing_date`）的家數與季數、覆蓋率與沒查到的標的 id。只讀。
 
 ```bash

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import socket
+import sqlite3
 import sys
+from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -732,6 +734,224 @@ def test_a_quarter_neither_instrument_has_is_not_guessed(factory, tmp_path):
         out = rf.write_filings(db, directory)
     assert out["lists"]["unassigned"] == ["8067/102Q3", "8067/102Q4"]
     assert out["counts"]["inserted"] == 2
+
+
+def fetch_one(factory, tmp_path, symbol, body):
+    directory = tmp_path / "out"
+    with factory() as db:
+        rf.write_plan(directory, db)
+    fake = FakeTime(taipei(14, 20))
+    fetch(directory, Server({symbol: [body]}, fake), fake)
+    return directory
+
+
+def test_a_mismatched_twin_keeps_its_quarters_from_the_matched_one(factory, tmp_path):
+    # PR #1104 review 1: TPEx 南璋 (transferred) has 2013 Q1-Q2, TWSE 福格創新 Q3-Q4;
+    # the page names 福格創新.  南璋's quarters never go to 福格創新.
+    with factory() as db:
+        old = add(
+            db, "4712", "南璋", 2013, [1, 2], exchange="TPEx", status="transferred"
+        )
+        new = add(db, "4712", "福格創新", 2013, [3, 4])
+        db.commit()
+    directory = fetch_one(factory, tmp_path, "4712", page("renamed_4712_102.html"))
+    with factory() as db:
+        out = rf.write_filings(db, directory)
+        rows = written(db)
+    assert [item["instrument_id"] for item in out["lists"]["name_mismatch"]] == [old.id]
+    assert sorted(name for iid, name in rows if iid == new.id) == [
+        "201303_4712_AI1.pdf",
+        "201304_4712_AI1.pdf",
+        "201304_4712_AI3.pdf",
+    ]
+    assert not any(iid == old.id for iid, _ in rows)
+    # Accepted: 南璋 gets its own two quarters, 福格創新 still none of them.
+    with factory() as db:
+        out = rf.write_filings(
+            db, directory, accepted=frozenset({("4712", "福格創新", "南璋")})
+        )
+        rows = written(db)
+    assert out["lists"]["name_mismatch"] == []
+    assert sorted(name for iid, name in rows if iid == old.id) == [
+        "201301_4712_AI1.pdf",
+        "201302_4712_AI1.pdf",
+    ]
+    assert len([name for iid, name in rows if iid == new.id]) == 3
+
+
+MIXED_ROW = """<tr>
+<td align='center'>8067</td><td align='center'>102 年 第二季</td>
+<td align='center'>財務報告書</td>
+<td align='center'>&nbsp;</td>
+<td align='center'>&nbsp;</td>
+<td align='center'>英文版-母子公司合併報表</td><td align='center'>&nbsp;</td><td><a href='javascript:readfile2("A","8067","201302_8067_AE2.pdf");'>201302_8067_AE2.pdf</a></td><td align='right'>                100,000</td>
+<td align='cetern'>102/07/01 09:00:00</td>
+<td align='center'>無</td>
+</tr>
+"""
+
+
+def test_an_old_kind_row_beside_ifrs_rows_is_dropped_alone(factory, tmp_path):
+    # PR #1104 review 3: the 3545 敦泰 107Q1 case, an old kind in a quarter with
+    # IFRSs rows: only the old row is dropped and the quarter is no old_layout.
+    text = (FIXTURES / "general_8067_102.html").read_text(encoding="utf-8")
+    anchor = "<tr>\n<td align='center'>8067</td><td align='center'>102 年 第三季</td>"
+    assert text.count(anchor) == 1
+    body = text.replace(anchor, MIXED_ROW + anchor).encode(rf.ENCODING)
+    with factory() as db:
+        item = add(db, "8067", "志旭", 2013, [1, 2, 3, 4], exchange="TPEx")
+        db.commit()
+    directory = fetch_one(factory, tmp_path, "8067", body)
+    with factory() as db:
+        out = rf.write_filings(db, directory)
+        rows = written(db)
+    assert out["counts"]["old_kind_rows"] == 1
+    assert out["lists"]["old_layout"] == []
+    assert (item.id, "201302_8067_AI1.pdf") in rows
+    assert (item.id, "201302_8067_AE2.pdf") not in rows
+    assert len(rows) == 5
+
+
+def test_a_page_cut_short_is_a_failure():
+    # PR #1104 review suggestion 2: no </table> after the rows, the last ones lost.
+    text = (FIXTURES / "general_8067_102.html").read_text(encoding="utf-8")
+    cut = text[: text.index("201304_8067_AI3.pdf")].encode(rf.ENCODING)
+    assert rf.classify(200, cut) == "unexpected: no filing table"
+
+
+# --- the migration --------------------------------------------------------------
+
+
+def _revisions():
+    from app.migration_revisions import REVISIONS
+
+    return REVISIONS
+
+
+TABLE = "financial_report_filings"
+
+
+def _shape(path):
+    with closing(sqlite3.connect(path)) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        if TABLE not in tables:
+            return None
+        columns = [
+            (name, kind.upper(), bool(notnull), bool(pk))
+            for _, name, kind, notnull, _, pk in connection.execute(
+                f"PRAGMA table_info({TABLE})"
+            )
+        ]
+        indexes = {
+            name: [col for *_, col in connection.execute(f"PRAGMA index_info({name})")]
+            for (name,) in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+                (TABLE,),
+            )
+            if not name.startswith("sqlite_autoindex")
+        }
+        unique = sorted(
+            [col for *_, col in connection.execute(f"PRAGMA index_info({name})")]
+            for _, name, is_unique, origin, _ in connection.execute(
+                f"PRAGMA index_list({TABLE})"
+            )
+            if is_unique and origin == "u"
+        )
+        fks = sorted(
+            (row[3], row[2], row[4])
+            for row in connection.execute(f"PRAGMA foreign_key_list({TABLE})")
+        )
+    return {
+        "columns": sorted(columns),
+        "indexes": indexes,
+        "unique": unique,
+        "fks": fks,
+    }
+
+
+EXPECTED_INDEXES = {
+    "ix_financial_report_filings_instrument_id": ["instrument_id"],
+    "ix_financial_report_filings_period_end": ["period_end"],
+    "ix_financial_report_filings_raw_payload_id": ["raw_payload_id"],
+}
+
+
+def _alembic(engine):
+    from alembic.config import Config
+
+    from app import migrations
+
+    config = Config(str(migrations.ALEMBIC_CONFIG_PATH))
+    config.set_main_option(
+        "script_location", str(Path(migrations.ALEMBIC_CONFIG_PATH).parent / "alembic")
+    )
+    config.attributes["connection"] = engine
+    return config
+
+
+def test_the_migration_body_goes_down_and_up_and_matches_the_fallback(
+    tmp_path, monkeypatch
+):
+    """PR #1104 review 2: 0001 builds every model table, so a new database never
+    runs 0046's create_table; going down to 0040 and up again does.  The table it
+    makes is the one the fallback (create_all) makes."""
+
+    pytest.importorskip("alembic")
+    from alembic import command
+
+    from app import migrations
+
+    revisions = _revisions()
+    revision = next(name for name in revisions if name.endswith("_report_filings"))
+    previous = revisions[revisions.index(revision) - 1]
+    path = tmp_path / "down.db"
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    config = _alembic(engine)
+    try:
+        command.upgrade(config, revision)
+        assert _shape(path) is not None
+        command.downgrade(config, previous)
+        assert _shape(path) is None
+        with closing(sqlite3.connect(path)) as connection:
+            assert connection.execute(
+                "SELECT version_num FROM alembic_version"
+            ).fetchall() == [(previous,)]
+            assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        command.upgrade(config, revision)
+        with closing(sqlite3.connect(path)) as connection:
+            assert connection.execute(
+                "SELECT version_num FROM alembic_version"
+            ).fetchall() == [(revision,)]
+            assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        engine.dispose()
+    made_by_migration = _shape(path)
+    assert made_by_migration["indexes"] == EXPECTED_INDEXES
+    assert made_by_migration["unique"] == [["instrument_id", "file_name"]]
+    assert made_by_migration["fks"] == [
+        ("instrument_id", "instruments", "id"),
+        ("raw_payload_id", "raw_payloads", "id"),
+    ]
+    # The fallback path: no Alembic config, create_all plus the marker.
+    fallback = tmp_path / "fallback.db"
+    engine = create_engine(f"sqlite:///{fallback.as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    monkeypatch.setattr(migrations, "ALEMBIC_CONFIG_PATH", tmp_path / "absent.ini")
+    try:
+        upgrade_database(engine)
+    finally:
+        engine.dispose()
+    assert _shape(fallback) == made_by_migration
+    with closing(sqlite3.connect(fallback)) as connection:
+        assert connection.execute(
+            "SELECT version FROM schema_migrations WHERE version = ?", (revision,)
+        ).fetchall() == [(revision,)]
 
 
 def test_a_changed_correction_updates_the_row(factory, tmp_path):
