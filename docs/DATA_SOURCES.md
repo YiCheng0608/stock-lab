@@ -773,11 +773,11 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
     - 同季有 `t163sb04` 列（`target_rule=t163sb04_eps`）或 daily 的 OpenAPI 快照列 `mops_fundamental`（`snapshot_eps`；2026Q2 起研究 DB 的 active 是這種列，`fundamentals backfill` 不會把它換成 `t163sb04`）的標的，整包 EPS 要和它相同；不同的不寫，計 `eps_different`，代號被新公司重用時舊公司的數字不會寫到新公司上。表的值仍然只取自整包（[#1083 決定](https://github.com/YiCheng0608/stock-lab/issues/1083#issuecomment-7207679098)）。
     - 沒有上述列的 `delisted`、`transferred` 標的（含轉板前的舊標的），照 `xbrl-apply` 的窗口：季底起 670 天內有日線（`target_rule=bar_window`）。
     - 其他不寫：沒有上述列的 active（例如存託憑證、研究 DB 副本之後才申報的公司），計 `no_identity_row`；研究 DB 沒有的興櫃、公開發行公司計 `not_in_db`。
-  - **寫入前的核對**：每季兩項，任一項有一家不同、一家都沒比到，或比不到的（沒有成員、讀不了、沒有 EPS）超過核對家數的 1%，那一季就不寫，命令停下（`failed`）。容差 1 千元。
+  - **寫入前的核對**：每季兩項，任一項有一家不同、一家都沒比到，或比不到的（沒有成員、讀不了、沒有 EPS）超過核對家數的 1%，那一季就不寫，命令停下（`failed`）。容差 1 千元。整包 EPS 和下面那些列不同的（`eps_different`）超過核對家數的 1% 也停：代號重用一季只有零星幾家，多了表示來源出錯。
     - 損益表：上一點那些列，整包 EPS 相同的公司。`t163sb04` 列核對 `gross_profit_ytd`、`operating_income_ytd` 對 `data_json` 的「營業毛利（毛損）淨額」「營業利益（損失）」；快照列沒有毛利，只核對營業利益對「營業利益」，格式沒有營業利益的（銀行、金控）不比。那欄空白、`--` 或沒有這欄的不比；有值而整包沒有算不同。計數依來源分開記在 `income_by_source`。
     - 資產負債表：該季一個市場的 `t163sb05`（上市、上櫃逐季輪流：`(年×4＋季)` 為偶數是上市），頁上每家的 `total_assets`、`equity_total` 對「資產總額／總計／合計」「權益總額／總計／合計」。
   - **命令**（[CLI](ops/CLI.md#現有-worker-cli)）：
-    - `fundamentals statements-check-fetch --start --end --dir` 把每季那一頁存到 `<dir>/t163sb05/<季>-<市場>.html`，`<dir>/t163sb05/manifest.json` 記 form、sha256、家數與抓取時間；不碰 DB。請求規則同 `xbrl-fetch`：間隔 ≥ 5 秒、台北 20:30～23:30 與 08:00～09:00 不發、已有而且 sha256 相符的不重抓、連續 3 季失敗就停。版面認不得、封鎖頁、市場或季別不對都算該季失敗，不存檔。
+    - `fundamentals statements-check-fetch --start --end --dir` 把每季那一頁存到 `<dir>/t163sb05/<季>-<市場>.html`，`<dir>/t163sb05/manifest.json` 記 form、sha256、家數與抓取時間；不碰 DB。請求規則同 `xbrl-fetch`：一季 1 個請求、間隔 ≥ 5 秒、台北 20:30～23:30 與 08:00～09:00 不發、已有而且 sha256 相符的不重抓、連續 3 季失敗就停。不重試：非 200、連線錯誤、版面認不得、封鎖頁、市場或季別不對都算該季失敗，不存檔；輸出的 `requests` 就是送出的 HTTP 請求數。
     - `fundamentals statements-apply --start --end --dir [--dry-run] [--exclude-file]` 讀 `xbrl-fetch` 的整包目錄與上面的頁，`run_type=quarterly_statements_backfill`，一季一個 commit，`coverage_manifest` 每季記核對計數、各組（`active`／`delisted`／`transferred`）的列數、各 `target_rule` 的列數與各欄缺值數（分母不含 `not_applicable`）。只在研究 DB 跑，持有維護模式（`--dry-run` 除外）；重跑 `changed 0`。成員的讀法與防護同上一節。
 
 ### 月營收
