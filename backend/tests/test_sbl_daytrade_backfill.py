@@ -6,6 +6,8 @@ The fixtures under ``fixtures/sbl_daytrade`` are answers of the #1085 probe
 
 - ``twt93u_20261126`` and ``twt93u_20120319``: TWSE lending, the 15 columns;
   ``twt93u_20120316``: the 14 columns before (賣出、庫存異動、今日餘額);
+  these three end with the 合計 row, as published from 2012-03-16, and their
+  ``total`` counts it; ``twt93u_20080701``: 14 columns without a 合計 row;
   ``twt93u_20050630_before_first``: the answer before the first day.
 - ``tpex_sbl_20261126``: TPEx lending.
 - ``twtb4u_20261126`` (1201 marked ``Y``) and ``twtb4u_20140106`` (1201 listed
@@ -48,6 +50,7 @@ def load(name: str):
 SBL_NEW = load("twt93u_20261126.json")
 SBL_0319 = load("twt93u_20120319.json")
 SBL_OLD = load("twt93u_20120316.json")
+SBL_2008 = load("twt93u_20080701.json")
 SBL_BEFORE = load("twt93u_20050630_before_first.json")
 TPEX_SBL = load("tpex_sbl_20261126.json")
 DT_NEW = load("twtb4u_20261126.json")
@@ -224,6 +227,55 @@ def test_an_unreadable_cell_or_count_fails_the_day():
         sd.parse_tpex_day_trade(twice, date(2026, 11, 26))
 
 
+def test_the_twse_total_row_is_dropped_and_counted():
+    for payload, day in (
+        (SBL_NEW, date(2026, 11, 26)),
+        (SBL_0319, date(2012, 3, 19)),
+        (SBL_OLD, date(2012, 3, 16)),
+    ):
+        assert payload["data"][-1][:2] == ["", "合計"]
+        assert payload["total"] == len(payload["data"])
+        assert set(sd.parse_twse_sbl(payload, day)) == {
+            "0050",
+            "1101",
+            "1102",
+            "2317",
+            "2330",
+        }
+    # 2008: no 合計 row, the old layout.
+    assert SBL_2008["data"][-1][0] == "2330"
+    old = sd.parse_twse_sbl(SBL_2008, date(2008, 7, 1))
+    assert old["2330"] == {
+        "sbl_sell_shares": 500_000,
+        "sbl_return_shares": None,
+        "sbl_balance_shares": 44_423_000,
+        "note": None,
+    }
+
+
+def test_a_blank_code_other_than_the_last_total_row_fails():
+    middle = copy.deepcopy(SBL_NEW)
+    middle["data"].insert(2, middle["data"].pop())
+    with pytest.raises(sd.LayoutError, match="without a code"):
+        sd.parse_twse_sbl(middle, date(2026, 11, 26))
+    renamed = copy.deepcopy(SBL_NEW)
+    renamed["data"][-1][1] = "小計"
+    with pytest.raises(sd.LayoutError, match="without a code"):
+        sd.parse_twse_sbl(renamed, date(2026, 11, 26))
+    # The total counts the 合計 row: one row fewer is a mismatch.
+    short = copy.deepcopy(SBL_NEW)
+    short["total"] = len(short["data"]) - 1
+    with pytest.raises(sd.LayoutError, match="stated"):
+        sd.parse_twse_sbl(short, date(2026, 11, 26))
+    # Only TWT93U has one: a TPEx 合計 row is not dropped.
+    tpex = copy.deepcopy(TPEX_SBL)
+    table = tpex["tables"][0]
+    table["data"].append(["", "合計", *table["data"][0][2:]])
+    table["totalCount"] = len(table["data"])
+    with pytest.raises(sd.LayoutError, match="without a code"):
+        sd.parse_tpex_sbl(tpex, date(2026, 11, 26))
+
+
 def test_an_empty_table_or_the_answer_before_the_first_day_fails():
     with pytest.raises(sd.LayoutError, match="stat"):
         sd.parse_twse_sbl(SBL_BEFORE, date(2005, 6, 30))
@@ -350,7 +402,8 @@ class Fetcher:
         return redate(answer, day)
 
 
-D1, D2 = date(2026, 11, 2), date(2026, 11, 3)
+# Final for both kinds: more than DAY_TRADE_FINAL_DAYS before NOON.
+D1, D2 = date(2026, 10, 1), date(2026, 10, 2)
 
 
 def seed(db):
@@ -401,7 +454,7 @@ def test_a_backfill_writes_the_sessions_and_a_rerun_changes_nothing(factory):
         assert (row.sbl_sell_shares, row.sbl_return_shares) == (136_000, 12_000)
         assert (row.source, row.data_as_of) == ("twse_twt93u", D1)
         raw = db.get(RawPayload, row.raw_payload_id)
-        assert raw.source == "twse" and "TWT93U?date=20261102" in raw.endpoint
+        assert raw.source == "twse" and "TWT93U?date=20261001" in raw.endpoint
         assert raw.collected_at == row.collected_at
         # No instrument was made for an unmatched code.
         assert db.scalar(select(func.count()).select_from(Instrument)) == 5
@@ -502,7 +555,9 @@ def test_a_code_dropped_from_a_reread_table_loses_its_row(factory):
         for item in db.scalars(
             select(IngestionRun).where(IngestionRun.run_type == sd.DAY_RUN_TYPE)
         ):
+            # A failed day without a kept answer: asked again.
             item.status = "failed"
+            item.metadata_json = {}
         db.commit()
     second = run(factory, Fetcher({"tpex-daytrade": without}), feeds=["tpex-daytrade"])
     assert second["feeds"]["tpex-daytrade"]["removed"] == 1
@@ -513,7 +568,7 @@ def test_a_code_dropped_from_a_reread_table_loses_its_row(factory):
 def test_failed_requests_in_a_row_stop_the_run(factory):
     with factory() as db:
         for n in range(8):
-            add_instrument(db, "TWSE", f"11{n:02d}", [date(2026, 11, 2 + n)])
+            add_instrument(db, "TWSE", f"11{n:02d}", [date(2026, 10, 1 + n)])
         db.commit()
     fetch = Fetcher({"twse-sbl": sources.OfficialDataError("blocked")})
     result = run(factory, fetch, feeds=["twse-sbl"])
@@ -525,7 +580,8 @@ def test_a_request_in_a_quiet_time_waits(factory):
     with factory() as db:
         add_instrument(db, "TWSE", "1101", [D1])
         db.commit()
-    moments = iter([datetime(2026, 11, 6, 14, 0)] + [NOON] * 10)  # 22:00 Taipei
+    # The plan reads the clock once; the request then meets 22:00 Taipei.
+    moments = iter([NOON, datetime(2026, 11, 6, 14, 0)] + [NOON] * 10)
     slept: list[float] = []
     with factory() as db:
         sd.backfill(
@@ -545,6 +601,79 @@ def test_the_tables_must_exist(tmp_path):
     with sessionmaker(bind=engine)() as db, pytest.raises(ValueError, match="init-db"):
         sd.backfill(db, D1, D1, fetch=Fetcher(), now=lambda: NOON)
     engine.dispose()
+
+
+def test_a_feed_whose_tables_stop_reading_stops(factory):
+    days = [date(2026, 10, 1 + n) for n in range(8)]
+    with factory() as db:
+        add_instrument(db, "TWSE", "1101", days)
+        add_instrument(db, "TPEx", "8069", days)
+        db.commit()
+    renamed = copy.deepcopy(SBL_NEW)
+    renamed["fields"][9] = "借券賣出"
+    fetch = Fetcher({**ANSWERS, "twse-sbl": renamed})
+    result = run(factory, fetch, feeds=["twse-sbl", "tpex-sbl"])
+    assert result["status"] == "partial" and result["aborted"] is None
+    twse = result["feeds"]["twse-sbl"]
+    assert twse["requested"] == sd.LAYOUT_STOP_AFTER
+    assert twse["not_asked_after_stop"] == 8 - sd.LAYOUT_STOP_AFTER
+    assert twse["stopped"]["first_date"] == "2026-10-01"
+    assert "unknown columns" in twse["stopped"]["error"]
+    # The other feed goes on.
+    assert result["feeds"]["tpex-sbl"]["success"] == 8
+
+
+def test_a_failed_day_rereads_its_stored_answer_before_asking(factory, monkeypatch):
+    with factory() as db:
+        seed(db)
+    parser = sd.PARSERS["twse-sbl"]
+
+    def unreadable(_payload, _day):
+        raise sd.LayoutError("a parser that could not read it yet")
+
+    monkeypatch.setitem(sd.PARSERS, "twse-sbl", unreadable)
+    first = run(factory, Fetcher(), feeds=["twse-sbl"])
+    assert first["feeds"]["twse-sbl"]["failed"] == 2
+    monkeypatch.setitem(sd.PARSERS, "twse-sbl", parser)
+    fixed = run(
+        factory,
+        Fetcher({"twse-sbl": sources.OfficialDataError("not asked")}),
+        feeds=["twse-sbl"],
+    )
+    assert fixed["status"] == "success" and fixed["requests"] == 0
+    assert fixed["feeds"]["twse-sbl"]["reread"] == 2
+    with factory() as db:
+        assert count(db, SecuritiesLendingDaily) == 4
+
+
+def test_days_not_final_yet_are_not_asked(factory):
+    # NOON is 2026-11-06 Taipei; the research DB has bars to 11-06.
+    days = [date(2026, 11, 2), date(2026, 11, 3), date(2026, 11, 4)]
+    days += [date(2026, 11, 5), date(2026, 11, 6)]
+    with factory() as db:
+        add_instrument(db, "TWSE", "1101", days)
+        db.commit()
+    fetch = Fetcher()
+    result = run(factory, fetch, feeds=["twse-sbl", "twse-daytrade"])
+    asked = {(feed, day) for feed, day in fetch.calls}
+    # Lending: every day before today.
+    assert {d for f, d in asked if f == "twse-sbl"} == set(days[:-1])
+    assert result["feeds"]["twse-sbl"]["not_final"] == 1
+    # Day trades: three later sessions (11-02 and 11-03 only).
+    assert {d for f, d in asked if f == "twse-daytrade"} == set(days[:2])
+    assert result["feeds"]["twse-daytrade"]["not_final"] == 3
+    assert result["status"] == "success"
+
+
+def test_finality_by_calendar_days():
+    feed = sd.FEEDS["tpex-daytrade"]
+    today = date(2026, 11, 27)
+    assert not sd.is_final(feed, date(2026, 11, 14), 0, today)
+    assert sd.is_final(feed, date(2026, 11, 13), 0, today)
+    assert sd.is_final(feed, date(2026, 11, 24), 3, today)
+    lending = sd.FEEDS["tpex-sbl"]
+    assert sd.is_final(lending, date(2026, 11, 26), 0, today)
+    assert not sd.is_final(lending, today, 5, today)
 
 
 # --- the command ----------------------------------------------------------------------

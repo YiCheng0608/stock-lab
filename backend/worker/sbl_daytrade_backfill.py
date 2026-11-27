@@ -21,15 +21,19 @@ an absent code is no data, never 0.
 Each feed and session is one ``ingestion_runs`` row (``DAY_RUN_TYPE``, request key
 ``sbl_daytrade_backfill:<feed>:<date>``): the manifest.  A session already
 ``success`` is not asked again; ``reapply`` rereads its stored raw instead and
-rewrites the rows, ``changed 0`` when nothing differs.  A failed session is asked
-again on the next run.  One commit a feed and session, so a stopped run resumes.
+rewrites the rows, ``changed 0`` when nothing differs.  A failed session first
+rereads the answer it kept (``reread``) and is asked again only when that does
+not read.  A session the source may still revise is not asked (``is_final``).
+One commit a feed and session, so a stopped run resumes.
 
 A table that is not one of the known layouts (``*_LAYOUTS``, matched on all column
 names in order: TWSE lending before and from 2012-03-19, TPEx day trades with and
 without the 暫停現股賣出後現款買進當沖註記 column), a value that does not read as a
 non-negative number, a reported date other than the session, a row count other than
-the stated one or an empty table fails the whole session; nothing of it is written
-and nothing is guessed.  A blank or ``-`` cell is NULL; 0 stays 0.
+the stated one, a blank code (but TWT93U's last 合計 row, which ``total`` counts)
+or an empty table fails the whole session; nothing of it is written and nothing
+is guessed; ``LAYOUT_STOP_AFTER`` such sessions in a row stop the feed.  A blank
+or ``-`` cell is NULL; 0 stays 0.
 
 Requests: at least ``REQUEST_INTERVAL_SECONDS`` apart on a host, none between
 ``QUIET_START`` and ``QUIET_END`` Taipei nor within ``EVEN_HOUR_MARGIN`` of an even
@@ -89,6 +93,15 @@ QUIET_END = clock_time(23, 30)
 EVEN_HOUR_MARGIN = timedelta(minutes=10)
 TAIPEI = timezone(timedelta(hours=8))
 ABORT_AFTER_FAILURES = 5
+# A feed whose tables do not read this many sessions in a row stops (the source
+# changed its layout): the rest of its days are not asked.
+LAYOUT_STOP_AFTER = 5
+# A session is asked only once its values are final: TWT93U updates T at 20:30
+# and 22:30 (the day after T is final); the day trade tables are revised until
+# T+2's evening (final once the research DB has three later sessions, or
+# DAY_TRADE_FINAL_DAYS calendar days have passed).
+DAY_TRADE_FINAL_SESSIONS = 3
+DAY_TRADE_FINAL_DAYS = 14
 MAX_LISTED = 200
 BAR_TYPES = ("stock", "ipo", "etf")
 
@@ -197,6 +210,7 @@ TPEX_DAY_TRADE_LAYOUTS = (
     ),
 )
 TWSE_DAY_TRADE_TITLE = "當日沖銷交易標的及成交量值"
+TOTAL_ROW_NAME = "合計"
 _ROC_DAY = re.compile(r"(\d{2,3})/(\d{1,2})/(\d{1,2})")
 _ROC_TITLE_DAY = re.compile(r"(\d{2,3})年(\d{1,2})月(\d{1,2})日")
 
@@ -344,8 +358,20 @@ def _count(value: Any) -> int | None:
 
 
 def _layout_rows(
-    fields: Any, data: Any, layouts: tuple[Layout, ...], stated: Any
+    fields: Any,
+    data: Any,
+    layouts: tuple[Layout, ...],
+    stated: Any,
+    *,
+    total_row: bool = False,
 ) -> tuple[Layout, list[list[Any]]]:
+    """The layout and the security rows of a table.
+
+    ``total_row``: TWT93U ends with a 合計 row (from 2012-03-16; ``total`` counts
+    it).  Only that one is dropped: the last row, its code blank and its name
+    ``TOTAL_ROW_NAME``; a blank code anywhere else still fails the day.
+    """
+
     layout = next(
         (
             item
@@ -364,6 +390,15 @@ def _layout_rows(
     for row in data:
         if not isinstance(row, list) or len(row) != len(layout.fields):
             raise LayoutError(f"a row does not match the columns: {row!r}")
+    last = data[-1]
+    if (
+        total_row
+        and not str(last[layout.at["code"]] or "").strip()
+        and str(last[1] or "").strip() == TOTAL_ROW_NAME
+    ):
+        data = data[:-1]
+        if not data:
+            raise LayoutError("the table has no rows")
     return layout, data
 
 
@@ -435,7 +470,11 @@ def _tpex_tables(payload: Any, day: date) -> list[dict[str, Any]]:
 def parse_twse_sbl(payload: Any, day: date) -> dict[str, dict[str, Any]]:
     body = _twse_body(payload, day)
     layout, rows = _layout_rows(
-        body.get("fields"), body.get("data"), TWSE_SBL_LAYOUTS, body.get("total")
+        body.get("fields"),
+        body.get("data"),
+        TWSE_SBL_LAYOUTS,
+        body.get("total"),
+        total_row=True,
     )
     return _by_code(layout, rows, _lending)
 
@@ -688,13 +727,33 @@ def quiet_wait_seconds(moment: datetime) -> float:
             return (free - local).total_seconds()
 
 
+def is_final(feed: Feed, day: date, later_sessions: int, today: date) -> bool:
+    """Whether the source has stopped revising ``day`` (see DAY_TRADE_FINAL_*)."""
+
+    if feed.table is SecuritiesLendingDaily:
+        return day < today
+    return (
+        later_sessions >= DAY_TRADE_FINAL_SESSIONS
+        or (today - day).days >= DAY_TRADE_FINAL_DAYS
+    )
+
+
+def _stored_raw(db: Session, run: IngestionRun) -> RawPayload | None:
+    raw_id = (run.metadata_json or {}).get("raw_payload_id")
+    return db.get(RawPayload, raw_id) if raw_id is not None else None
+
+
 def _empty_counts(feed: Feed) -> dict[str, Any]:
     return {
         "sessions": 0,
         "not_published": 0,
+        "not_final": 0,
         "done_before": 0,
         "requested": 0,
         "reapplied": 0,
+        "reread": 0,
+        "stopped": None,
+        "not_asked_after_stop": 0,
         "success": 0,
         "failed": 0,
         "failed_days": [],
@@ -731,33 +790,58 @@ def backfill(
     started = time.monotonic()
     result = {name: _empty_counts(FEEDS[name]) for name in names}
     plan: dict[date, list[str]] = {}
-    sessions = {
-        exchange: _sessions(db, exchange, start, end)
+    every = {
+        exchange: _sessions(db, exchange, start, date.max)
         for exchange in {FEEDS[name].exchange for name in names}
     }
+    today = _taipei(now()).date()
     for name in names:
         feed = FEEDS[name]
-        for day in sessions[feed.exchange]:
+        known = every[feed.exchange]
+        for at, day in enumerate(known):
+            if day > end:
+                break
             result[name]["sessions"] += 1
             if day < feed.first_date:
                 result[name]["not_published"] += 1
+                continue
+            if not is_final(feed, day, len(known) - 1 - at, today):
+                result[name]["not_final"] += 1
                 continue
             plan.setdefault(day, []).append(name)
     requests = 0
     failures_in_a_row = 0
     aborted = None
+    layout_streak: dict[str, list[Any]] = {}  # feed -> [count, first day, error]
     for day in sorted(plan):
         for name in plan[day]:
             feed = FEEDS[name]
             counts = result[name]
+            if counts["stopped"]:
+                counts["not_asked_after_stop"] += 1
+                continue
             run = _day_run(db, name, day)
             done = run.status == "success"
             if done and not reapply:
                 counts["done_before"] += 1
                 continue
             raw: RawPayload | None = None
+            parsed = None
             try:
-                if not done:
+                stored = _stored_raw(db, run)
+                if done or stored is not None:
+                    # A success under --reapply, or a failed day whose answer
+                    # was kept: read it again before asking again.
+                    if done and stored is None:
+                        raise OfficialDataError("the stored session has no raw payload")
+                    try:
+                        parsed = PARSERS[name](read_raw(stored), day)
+                        raw = stored
+                        counts["reapplied" if done else "reread"] += 1
+                    except OfficialDataError:
+                        if done:
+                            raise
+                if parsed is None:
                     wait = quiet_wait_seconds(now())
                     if wait > 0:
                         sleep(wait)
@@ -774,15 +858,7 @@ def backfill(
                         feed.raw_source, endpoint, payload, day.isoformat()
                     )
                     raw = pipeline._upsert_raw_payload(db, run, captured)
-                else:
-                    counts["reapplied"] += 1
-                    raw = db.get(
-                        RawPayload, (run.metadata_json or {}).get("raw_payload_id")
-                    )
-                    if raw is None:
-                        raise OfficialDataError("the stored session has no raw payload")
-                    payload = read_raw(raw)
-                parsed = PARSERS[name](payload, day)
+                    parsed = PARSERS[name](payload, day)
                 written = write_rows(db, feed, day, parsed, raw)
             except OfficialDataError as exc:
                 run.status = "failed"
@@ -800,10 +876,22 @@ def backfill(
                     counts["failed_days"].append(
                         {"date": day.isoformat(), "error": str(exc)}
                     )
+                if isinstance(exc, LayoutError):
+                    streak = layout_streak.setdefault(name, [0, day, str(exc)])
+                    streak[0] += 1
+                    if streak[0] >= LAYOUT_STOP_AFTER:
+                        counts["stopped"] = {
+                            "reason": f"{streak[0]} sessions in a row did not read",
+                            "first_date": streak[1].isoformat(),
+                            "error": streak[2],
+                        }
+                else:
+                    layout_streak.pop(name, None)
                 if failures_in_a_row >= ABORT_AFTER_FAILURES:
                     aborted = f"{failures_in_a_row} failed requests in a row"
                     break
                 continue
+            layout_streak.pop(name, None)
             run.status = "success"
             run.error = None
             run.records = written["written"]
@@ -829,8 +917,9 @@ def backfill(
     for counts in result.values():
         counts["changed"] = counts["inserted"] + counts["updated"] + counts["removed"]
     failed = sum(counts["failed"] for counts in result.values())
+    stopped = any(counts["stopped"] for counts in result.values())
     return {
-        "status": "partial" if failed or aborted else "success",
+        "status": "partial" if failed or aborted or stopped else "success",
         "start": start.isoformat(),
         "end": end.isoformat(),
         "requests": requests,

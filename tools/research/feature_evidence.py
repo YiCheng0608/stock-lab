@@ -81,9 +81,10 @@ VERSION_NOTE = (
     "第 3 版（#1089）只改兩個特徵的輸入：借券賣出速度改讀官方借券賣出表，"
     "當沖比改為官方當沖成交股數 ÷ 日線成交股數（兩者在 chip_snapshots 從來沒有值）"
 )
-# The version of the pieces other tools borrow: ``INSTITUTIONS``, ``_flow``,
-# ``_mean_volume``, ``_quarter_eps`` and ``_revenues_known`` (round11～20 put it
-# in their ``definitions()``, #1089 decision 7209651492).  Bump it with any change
+# The version of the pieces other tools borrow: ``INSTITUTIONS``, ``_flow`` (and
+# its ``_total``), ``_mean_volume``, ``_quarter_eps``, ``_revenues_known`` and the
+# ``revenue_yoy`` feature (round11～20 put it in their ``definitions()``, #1089
+# decision 7209651492).  Bump it with any change
 # to one of them; that changes those rounds' definitions_sha256 on purpose.  It
 # is not the report's ``VERSION``: version 3 changed none of them.
 SHARED_VERSION = 2
