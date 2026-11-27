@@ -36,6 +36,8 @@ _ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
         "is_suspended": "BOOLEAN NOT NULL DEFAULT 0",
         "turnover_status": "VARCHAR(20) NOT NULL DEFAULT 'unknown'",
         "turnover_reason": "VARCHAR(40)",
+        # 0045: the official trade count (Issue #1094).
+        "trade_count": "INTEGER",
     },
     "chip_snapshots": {
         "raw_payload_id": "INTEGER REFERENCES raw_payloads(id)",
@@ -871,6 +873,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0040_premarket_ai', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0045 only adds market_bars.trade_count (#1094), added above with the
+    # other additive columns.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0045_market_bar_trade_count', CURRENT_TIMESTAMP)"
         )
     )
 

@@ -2621,6 +2621,7 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
     "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
         "volume_raw_payload_id": "指數列不附量值月報 raw（#552）",
+        "trade_count": "頁面不讀官方成交筆數（#1094，個股頁不顯示）",
     },
     "news_items": {
         "event_at": "媒體新聞用發布時間、官方公告用事件日，沒有事件時刻",

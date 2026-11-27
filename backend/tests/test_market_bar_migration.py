@@ -118,7 +118,10 @@ def test_the_old_table_is_rebuilt_nullable_with_every_row_and_index(tmp_path):
             row[1]
             for row in connection.exec_driver_sql("PRAGMA table_info(market_bars)")
         ]
-        old = [name for name in names if name not in NEW_COLUMNS]
+        # The rebuild takes the current model, so a column added after 0029
+        # (0045 trade_count, #1094) is there too, empty on every copied row.
+        later = {"trade_count"}
+        old = [name for name in names if name not in set(NEW_COLUMNS) | later]
         after = connection.exec_driver_sql(
             f"SELECT {', '.join(old)} FROM market_bars ORDER BY id"
         ).all()
@@ -127,7 +130,8 @@ def test_the_old_table_is_rebuilt_nullable_with_every_row_and_index(tmp_path):
             connection.exec_driver_sql(
                 "SELECT count(*) FROM market_bars WHERE price_reason IS NOT NULL "
                 "OR volume_raw_payload_id IS NOT NULL OR contract_month IS NOT NULL "
-                "OR open_interest IS NOT NULL OR settlement_price IS NOT NULL"
+                "OR open_interest IS NOT NULL OR settlement_price IS NOT NULL "
+                "OR trade_count IS NOT NULL"
             ).scalar()
             == 0
         )

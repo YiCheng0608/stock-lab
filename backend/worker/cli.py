@@ -65,6 +65,7 @@ from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUAR
 from .quarterly_fundamentals import run_fundamental_backfill
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
+from .trade_count_reread import run_trade_count_reread
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -157,6 +158,9 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "fundamentals xbrl-apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
+    if args.command == "trade-count" and args.trade_count_command == "reread":
+        # Writes the research DB (#1094); refused elsewhere before the hold.
+        return "trade-count reread"
     if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
         return "revenue transfers --apply"
     if (
@@ -693,6 +697,28 @@ def main() -> None:
         company_parser.add_argument(
             "--max-requests", type=int, help="這次最多發幾個請求（已存的回應不算）"
         )
+    trade_count_parser = subparsers.add_parser(
+        "trade-count",
+        help="研究 DB：日線的官方成交筆數（#1094）",
+    )
+    trade_count_subparsers = trade_count_parser.add_subparsers(
+        dest="trade_count_command", required=True
+    )
+    trade_count_reread_parser = trade_count_subparsers.add_parser(
+        "reread",
+        help="研究 DB：上市、上櫃日線的 trade_count 從日線自己的 raw 重讀，只補 NULL，"
+        "一個月一個 transaction（0 個請求，#1094）",
+    )
+    trade_count_reread_parser.add_argument(
+        "--from", dest="start_date", help="YYYY-MM-DD；預設是最早的日線"
+    )
+    trade_count_reread_parser.add_argument(
+        "--to", dest="end_date", help="YYYY-MM-DD；預設是最新的日線"
+    )
+    trade_count_reread_parser.add_argument(
+        "--fallback-raw-dir",
+        help="本 volume 沒有的 raw 檔改從這裡讀（唯讀掛的正式 volume，例如 /prod/raw）",
+    )
     index_bars_parser = subparsers.add_parser(
         "index-bars",
         help="加權、櫃買指數的日 K（#552）與指數、台指期、美股的歷史回補（#563）",
@@ -985,13 +1011,16 @@ RESEARCH_REVENUE_COMMANDS = {"transfers", "company-classify", "company-backfill"
 def research_command_refusal(args: argparse.Namespace) -> str | None:
     """Why a research-database-only command may not run here; None otherwise.
 
-    ``fundamentals xbrl-apply`` (#781) and the revenue commands of #782.
+    ``fundamentals xbrl-apply`` (#781), the revenue commands of #782 and
+    ``trade-count reread`` (#1094).
     """
 
     if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
         return xbrl_research_refusal(DB_PATH)
     if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
         return monthly_revenue_refusal(DB_PATH)
+    if args.command == "trade-count":
+        return xbrl_research_refusal(DB_PATH)
     return None
 
 
@@ -1194,6 +1223,13 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_revenue_company_classify(args.plan, args.max_requests, DB_PATH)
     elif args.command == "revenue" and args.revenue_command == "company-backfill":
         result = run_revenue_company_backfill(args.plan, args.max_requests, DB_PATH)
+    elif args.command == "trade-count" and args.trade_count_command == "reread":
+        result = run_trade_count_reread(
+            args.start_date,
+            args.end_date,
+            fallback_raw_dir=args.fallback_raw_dir,
+            db_path=DB_PATH,
+        )
     elif args.command == "index-bars" and args.index_bars_command == "backfill":
         result = run_index_bar_backfill(
             args.from_month, args.to_month, force=args.force
@@ -1321,6 +1357,8 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
+    if args.command == "trade-count" and result.get("status") != "success":
+        raise SystemExit(2 if result.get("status") in {"partial", "refused"} else 1)
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (

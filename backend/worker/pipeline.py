@@ -2775,6 +2775,9 @@ def _upsert_official_bar(
             "adj_close": record.adj_close or record.close,
             "volume": record.volume,
             "is_suspended": record.is_suspended,
+            # The official trade count (Issue #1094) follows the bar's rule:
+            # an empty incoming value leaves it, a stored null is filled.
+            "trade_count": record.trade_count,
         },
         is_new=is_new,
         overwrite=overwrite,
