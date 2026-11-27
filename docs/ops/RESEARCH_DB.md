@@ -559,7 +559,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 ## 注意股票與處置股票（#1090）
 
-上市櫃每一則注意股票公告與每一段處置期間，含之後下市、轉板的公司，寫進 `trading_attentions` 與 `trading_disposals`。來源、欄位與可得時點見 [DATA_SOURCES](../DATA_SOURCES.md#注意股票與處置股票)。正式 DB 只有空表，daily 不收（#1086 [決定 7208544050](https://github.com/YiCheng0608/stock-lab/issues/1086#issuecomment-7208544050) D2）。
+上市櫃每一則注意股票公告與每一段處置期間，含之後下市、轉板的公司，寫進 `trading_attentions` 與 `trading_disposals`。來源、欄位與可得時點見 [DATA_SOURCES](../DATA_SOURCES.md)。正式 DB 只有空表，daily 不收（#1086 [決定 7208544050](https://github.com/YiCheng0608/stock-lab/issues/1086#issuecomment-7208544050) D2）。
 
 **跑法**：照[跑一批](#跑一批)的 `docker run -d … "${R[@]}" "$IMG" sh -c 'python -B -m worker.cli trading-notices backfill > /data/logs/trading-notices.json 2>&1'`。不給月份時，從各 feed 最早可得的月份補到最新的完整月份（台北）：上市注意與處置 2001-01、上櫃注意 2002-02、上櫃處置 2003-09 起。之後再跑同一行，只補新的完整月份。
 
