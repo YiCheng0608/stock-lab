@@ -555,10 +555,13 @@ def count_day(
     listed: Listed,
     s: int,
     busy: dict[int, int] | None = None,
+    traded: Callable[[int, date, int, Ear], None] | None = None,
 ) -> list[tuple[int, date, int, Ear]]:
-    """The events of T (session ``s``) counted in ``listed``; the signals
-    back.  ``busy`` None: coverage, no occupancy (the signals are not
-    traded, so a later one is never occupied)."""
+    """The events of T (session ``s``) counted in ``listed``, in the
+    quarters' order; the signals back.  ``traded`` trades each signal before
+    the next event is judged, so one item's later quarter on the same T is
+    occupied by the earlier one.  ``busy`` None: coverage, no occupancy (the
+    signals are not traded, so a later one is never occupied)."""
 
     day = ctx.panel.sessions[s]
     out = []
@@ -574,6 +577,8 @@ def count_day(
         listed.add(day, quarter, "signals")
         listed.signal(s, day, quarter)
         out.append((instrument_id, quarter, a, got))
+        if traded is not None:
+            traded(instrument_id, quarter, a, got)
     return out
 
 
@@ -802,17 +807,17 @@ def run_trades(
     views: dict[date, ReferenceView] = {}
     locked_down = 0
     for s in range(first - 1, last):
-        made = 0
-        quarters: set[date] = set()
-        for _iid, quarter, a, got in count_day(ctx, listed, s, state.busy):
+
+        def traded(_iid: int, quarter: date, a: int, got: Ear) -> None:
+            nonlocal locked_down
             row = trade_signal(ctx, state, s, last, quarter, a, got, views)
             locked_down += bool(row["t1_locked_down"])
-            state.trades.append(row)
-            quarters.add(quarter)
-            made += 1
-        if quarters:
-            reference_counts(ctx, listed, s, quarters)
-        state.signal_days += made > 0
+            state.trades.append(row)  # its occupancy is set: before the next
+
+        signals = count_day(ctx, listed, s, state.busy, traded)
+        if signals:
+            reference_counts(ctx, listed, s, {row[1] for row in signals})
+        state.signal_days += bool(signals)
     result["window"]["signal_days"] = last - first + 1
     numbers = tr.stats(state)
     reference_days = tr.series(state.trades, "reference_excess")

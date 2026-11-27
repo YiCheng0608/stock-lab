@@ -533,6 +533,29 @@ def test_the_listed_counts_and_the_reference_by_hand():
     assert [item.instrument_id for item, _at in view.universe(T)] == [1, 2, 4]
 
 
+def test_one_items_two_quarters_on_one_t_trade_the_earlier_only():
+    """第二十二輪實作釋義: the later quarter is occupied by the earlier one's
+    trade, made before the later one is judged."""
+
+    q4, q1 = date(2015, 12, 31), date(2016, 3, 31)
+    ctx = context_for(hand_items(), SESSIONS)
+    ctx.events = {T: [(1, q4, A), (1, q1, A), (2, q1, A)]}
+    busy: dict[int, int] = {}
+    made = []
+
+    def traded(instrument_id, quarter, a, got):
+        made.append((instrument_id, quarter))
+        busy[instrument_id] = T + 60  # held: occupied from T
+
+    listed = tool.Listed()
+    signals = tool.count_day(ctx, listed, T, busy, traded)
+    assert made == [(1, q4), (2, q1)] == [(row[0], row[1]) for row in signals]
+    tables = listed.tables()
+    assert tables["quarters"]["2016Q1"]["occupied"] == 1
+    assert tables["quarters"]["2015Q4"]["signals"] == 1
+    assert tables["years"]["2016"]["signal_days"] == 1
+
+
 def test_the_overlap_with_ad1_by_hand():
     q1, q2, q3 = date(2016, 3, 31), date(2016, 6, 30), date(2016, 9, 30)
     trades = [
