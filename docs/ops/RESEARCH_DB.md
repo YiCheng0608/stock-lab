@@ -556,6 +556,43 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
   - 已存的 raw 不重抓，重跑就是續跑。
   - 各時期的代號清單是先用 `sweep`（指定月份全掃）與 `bisect`（找出代號開始或結束的月份）確認的。
 
+## 借券賣出與當沖（#1089）
+
+研究 DB 的兩張表，正式 DB 只有空表、daily 不收（[#1085 決定](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208519530)）。來源事實（欄位、單位、口徑、最早可得）在 [DATA_SOURCES「借券賣出與當沖」](../DATA_SOURCES.md#借券賣出與當沖)。
+
+| 表 | 欄位 | 來源（`source`） | 起日 |
+| --- | --- | --- | --- |
+| `securities_lending_daily` | `sbl_sell_shares`（當日賣出）、`sbl_return_shares`（當日還券）、`sbl_balance_shares`（當日餘額）、`note`（備註符號），股 | 上市 `twse_twt93u`（TWSE `TWT93U`）、上櫃 `tpex_sbl`（TPEx `margin/sbl`） | 上市 2005-07-01、上櫃 2012-10-02 |
+| `day_trade_daily` | `day_trade_shares`（當沖成交股數）、`day_trade_buy_value`／`day_trade_sell_value`（元）、`sell_first_suspended`（暫停現股賣出後現款買進當沖註記） | 上市 `twse_twtb4u`（TWSE `TWTB4U`）、上櫃 `tpex_intraday_stat`（TPEx `intraday/stat`） | 兩市 2014-01-06 |
+
+每列有 `data_as_of`（交易日）、`raw_payload_id`、`collected_at`；一列一個來源，上市、上櫃不混。
+
+**跑法**：照[跑一批](#跑一批)的 `R` 與 `IMG`（含 #1089 的 image），先 `init-db` 升到含兩張表的 revision，再以 `docker run -d` 跑：
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm "${R[@]}" "$IMG" python -B -m worker.cli init-db
+MSYS_NO_PATHCONV=1 docker run -d --name research-sbl-daytrade "${R[@]}" "$IMG" \
+  sh -c 'python -B -m worker.cli sbl-daytrade backfill --start 2005-07-01 --end <研究 DB 日線的終點> > /data/logs/sbl-daytrade.json 2> /data/logs/sbl-daytrade.err'
+# 進度：每個 feed 與交易日一筆 manifest
+MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data:ro "$IMG" \
+  python -c "import sqlite3; c=sqlite3.connect('file:/data/stock.db?mode=ro', uri=True); print(c.execute(\"select source, status, count(*), max(run_date) from ingestion_runs where run_type='sbl_daytrade_backfill_day' group by 1, 2\").fetchall())"
+```
+
+- **只在研究 DB**：`research-db.json` 不是研究標記就 `refused`、exit 2；起跑時持有維護模式（另一個批次持有時 exit 75）。
+- **交易日**：研究 DB 該市場有 stock／ipo／ETF 日線的日子；早於各 feed 起日的日子不請求（輸出的 `not_published`）。只寫當天有日線的標的；官方表有、研究 DB 沒有日線的代號不建標的，只計 `unmatched`（同 `STOCK_HISTORY_CREATE_UNMATCHED` 只由日線建標的）。
+- **請求**：每 host 間隔 3.5 秒；台北 21:15～23:30 與偶數整點前後 10 分鐘等待（`quiet_wait_seconds`）；連續 5 個請求失敗就停（`aborted`）。上市兩個端點和其他上市回補（#1075 的 `BWIBBU_d`、`MI_QFIIS` 等）同一個 host，不要同時跑，開跑前看 `docker ps`。只跑一個市場用 `--feed`（可重複）。
+- **接續與冪等**：每個 feed 與交易日一筆 `run_type=sbl_daytrade_backfill_day` 的 manifest（`request_key` `sbl_daytrade_backfill:<feed>:<日>`），一個 commit。已成功的日子不再請求；失敗的日子下次重跑會再請求。`--reapply` 不請求，改讀已存的 raw 重寫，沒有差異時 `changed 0`。
+- **失敗的日子**：版面（全部欄名，依序）不是已知的、數值讀不懂或是負數、回報日期不是那天、列數和回應寫的不同、表是空的，整天失敗、不寫任何列，不猜欄位；回應原文仍存 raw，manifest 的 `metadata_json.raw_payload_id` 指向它。
+
+**限制**：
+
+- **沒有列是無資料，不是 0**：借券表只列信用交易標的，當沖表只列當天的當沖標的；回應沒有的代號不建列（manifest 的 `no_row`）。有列、值是 0 才是當天沒有。空白、`-` 存 NULL。
+- **上市借券 2012-03-16 以前**是舊版面（14 欄）：沒有「當日還券」（只有「庫存異動」＝履約＋還券），`sbl_return_shares` 是 NULL；餘額在 2012-03-19 換公式，前後不能接。研究工具只用 `sbl_sell_shares`。
+- **上櫃當沖 2014 年**是 5 欄版面，`sell_first_suspended` 是 NULL。
+- **當沖的修正**：官方在 T、T+1、T+2 日更新當沖量值，T+2 才定版；回補抓到的是定版值，比 T 日晚上真的看得到的值多了兩天的修正（量測見 #1089 的 AC-4）。
+- **稀疏**：2014-01-06～2016 上半年的當沖標的只有試辦的上市 150 檔、上櫃 50 檔；2008～2013 年有借券賣出的檔數很少。
+- **研究工具**：`feature_evidence` 第 3 版起，`borrowed_sell_surge` 讀 `sbl_sell_shares`，`day_trade_ratio` 是 `day_trade_shares` ÷ 同日日線成交股數（`evidence_lib.LENDING_DAY_TRADE_FIELDS`，只有 `load_panel` 讀）；每年有值的列數用 `feature_evidence.py --coverage-only --feature borrowed_sell_surge --feature day_trade_ratio` 量，不算報酬。`chip_snapshots` 的 `borrowed_sell`、`day_trade_ratio` 兩欄仍是空值、不動。
+
 ## 研究工具的耗時與記憶體
 
 `explore_research` 與 `trade_research` 的探索段要讀到 2019-12-31 以前的全部歷史，每個假設、每個工具版本只能跑一次，所以耗時與記憶體不能在研究 DB 上試。[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 用一份**合成的長歷史 DB** 量（量測方式是統籌決定 [6885225362](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6885225362)）。
