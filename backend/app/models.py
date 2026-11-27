@@ -429,6 +429,72 @@ class TradingHalt(Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class ValuationDaily(Base):
+    """One security's official P/B, P/E and yield of one session (Issue #1075).
+
+    TWSE ``BWIBBU_d`` and TPEx ``peQryDate`` (個股日本益比、殖利率及股價淨值比), as
+    published that day: the exchanges compute them with the latest statement filed
+    then and do not recompute them later.  A value the source leaves blank, ``-`` or
+    ``N/A`` is NULL, never 0.  Only the research database is written
+    (``worker.valuation_backfill``); the production one has the empty table.
+    """
+
+    __tablename__ = "valuation_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id", "trading_date", "source", name="uq_valuation_daily"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    pb_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 殖利率(%), as the source prints it (3.21 is 3.21%).
+    dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 財報年/季 as ``2018Q1``: TWSE from 2017-04-12, TPEx since its newer layout;
+    # NULL before.
+    report_period: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class SharesOutstandingDaily(Base):
+    """One security's official number of issued shares of one session (Issue #1075).
+
+    TWSE ``MI_QFIIS`` 發行股數 and the TPEx daily quote table's 發行股數, in shares.
+    Market value is the close times this, computed by the research tools, never
+    stored.  A blank or 0 is NULL.  Only the research database is written.
+    """
+
+    __tablename__ = "shares_outstanding_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "trading_date",
+            "source",
+            name="uq_shares_outstanding_daily",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    shares_issued: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

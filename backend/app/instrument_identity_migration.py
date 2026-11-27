@@ -55,6 +55,8 @@ _CHILDREN = {
     "theme_cluster_members",
     "candidate_pool_items",
     "premarket_ai_stocks",
+    "valuation_daily",
+    "shares_outstanding_daily",
     "quarterly_statements",
 }
 _TOKEN = re.compile(

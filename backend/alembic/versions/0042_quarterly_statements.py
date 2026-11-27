@@ -1,7 +1,7 @@
 """Add the quarterly balance sheet and cash flow table.
 
 Revision ID: 0042_quarterly_statements
-Revises: 0040_premarket_ai
+Revises: 0041_valuation_shares
 
 ``quarterly_statements`` keeps one company's main balance sheet items, operating
 cash flow, capital expenditure, gross profit and operating income of one quarter,
@@ -31,7 +31,7 @@ from sqlalchemy import (
 )
 
 revision = "0042_quarterly_statements"
-down_revision = "0040_premarket_ai"
+down_revision = "0041_valuation_shares"
 branch_labels = None
 depends_on = None
 

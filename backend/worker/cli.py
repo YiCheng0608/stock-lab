@@ -62,10 +62,15 @@ from .plan_tracking import run_plan_tracking
 from .premarket_score import run_premarket_score
 from . import premarket_score_report
 from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUARTERS
-from .quarterly_fundamentals import run_fundamental_backfill
+from .quarterly_fundamentals import (
+    run_foreign_deadline_recompute,
+    run_fundamental_backfill,
+)
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
 from .quarterly_statements import run_check_fetch, run_statements_apply
+from .valuation_backfill import FEEDS as VALUATION_FEEDS
+from .valuation_backfill import run_valuation_backfill
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -162,8 +167,16 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         and not args.dry_run
     ):
         return "fundamentals statements-apply"
+    if (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "foreign-deadlines"
+        and args.apply
+    ):
+        return "fundamentals foreign-deadlines --apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
+    if args.command == "valuation" and args.valuation_command == "backfill":
+        return "valuation backfill"
     if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
         return "revenue transfers --apply"
     if (
@@ -195,7 +208,11 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
 # maintenance mode it holds never makes a daily skip.  ``chips short-balance``
 # also stops between captures from 21:25 (chip_revisions).
 DAILY_WINDOW = (time(21, 15), time(23, 30))
-DAILY_WINDOW_REFUSED = {"chips short-balance --apply", "strategy-lists backfill"}
+DAILY_WINDOW_REFUSED = {
+    "chips short-balance --apply",
+    "strategy-lists backfill",
+    "fundamentals foreign-deadlines --apply",
+}
 
 
 def in_daily_window(moment: datetime | None = None) -> bool:
@@ -674,6 +691,41 @@ def main() -> None:
             "--exclude-file",
             help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）",
         )
+    foreign_deadlines_parser = fundamentals_subparsers.add_parser(
+        "foreign-deadlines",
+        help="把已存的外國發行人 2021 年起 Q2 列的可得日改成它們的法定期限 8/31（只動 statutory_deadline 的列，0 個請求，重跑冪等，#1101）",
+    )
+    foreign_deadlines_parser.add_argument(
+        "--apply", action="store_true", help="寫入；不加只印要改的列"
+    )
+    valuation_parser = subparsers.add_parser(
+        "valuation",
+        help="研究 DB 的股價淨值比與發行股數（#1075）：TWSE BWIBBU_d／MI_QFIIS、TPEx peQryDate、已存的上櫃行情表",
+    )
+    valuation_subparsers = valuation_parser.add_subparsers(
+        dest="valuation_command", required=True
+    )
+    valuation_backfill_parser = valuation_subparsers.add_parser(
+        "backfill",
+        help="逐交易日回補（每 host 間隔 3.5 秒、台北 21:15～23:30 等待；已成功的日子不再請求，重跑冪等）；只在研究 DB 跑",
+    )
+    valuation_backfill_parser.add_argument("--start", required=True, help="YYYY-MM-DD")
+    valuation_backfill_parser.add_argument("--end", required=True, help="YYYY-MM-DD")
+    valuation_backfill_parser.add_argument(
+        "--feed",
+        action="append",
+        choices=sorted(VALUATION_FEEDS),
+        help="只跑這個 feed（可重複）；預設四個都跑",
+    )
+    valuation_backfill_parser.add_argument(
+        "--reapply",
+        action="store_true",
+        help="不送請求：有已存 raw 的日子（成功的，或回應讀不懂而失敗的）改讀 raw 重寫（沒有差異時 changed 0）",
+    )
+    valuation_backfill_parser.add_argument(
+        "--fallback-raw-dir",
+        help="raw 檔不在本 volume 時，到這個目錄找同一個相對路徑（正式 volume 的 raw，唯讀掛載）",
+    )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
     )
@@ -1007,8 +1059,8 @@ RESEARCH_REVENUE_COMMANDS = {"transfers", "company-classify", "company-backfill"
 def research_command_refusal(args: argparse.Namespace) -> str | None:
     """Why a research-database-only command may not run here; None otherwise.
 
-    ``fundamentals xbrl-apply`` (#781), ``statements-apply`` (#1083) and the revenue
-    commands of #782.
+    ``fundamentals xbrl-apply`` (#781), ``statements-apply`` (#1083), the revenue
+    commands of #782 and ``valuation backfill`` (#1075).
     """
 
     if args.command == "fundamentals" and args.fundamentals_command in {
@@ -1018,6 +1070,8 @@ def research_command_refusal(args: argparse.Namespace) -> str | None:
         return xbrl_research_refusal(DB_PATH)
     if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
         return monthly_revenue_refusal(DB_PATH)
+    if args.command == "valuation":
+        return xbrl_research_refusal(DB_PATH)
     return None
 
 
@@ -1041,6 +1095,7 @@ def backfill_command(args: argparse.Namespace) -> str | None:
         ("events", "events_command"),
         ("fundamentals", "fundamentals_command"),
         ("revenue", "revenue_command"),
+        ("valuation", "valuation_command"),
     ):
         if args.command == command and getattr(args, sub, None) == "backfill":
             return f"{command} backfill"
@@ -1207,6 +1262,11 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_fundamental_backfill(args.quarters, args.end_quarter)
     elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-fetch":
         result = run_xbrl_fetch(args.dir, args.start, args.end)
+    elif (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "foreign-deadlines"
+    ):
+        result = run_foreign_deadline_recompute(args.apply)
     elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
         result = run_xbrl_apply(
             args.dir,
@@ -1230,6 +1290,14 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             args.end,
             dry_run=args.dry_run,
             exclude_file=args.exclude_file,
+        )
+    elif args.command == "valuation" and args.valuation_command == "backfill":
+        result = run_valuation_backfill(
+            args.start,
+            args.end,
+            feeds=args.feed,
+            reapply=args.reapply,
+            fallback_raw_dir=args.fallback_raw_dir,
         )
     elif args.command == "revenue" and args.revenue_command == "backfill":
         result = run_revenue_backfill(args.months, args.end_month)
@@ -1362,7 +1430,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
     if args.command == "revenue" and result.get("status") == "refused":
         raise SystemExit(2)
     if (
-        args.command in {"fundamentals", "revenue", "index-bars"}
+        args.command in {"fundamentals", "revenue", "index-bars", "valuation"}
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
