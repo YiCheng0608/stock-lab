@@ -1516,6 +1516,10 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 - X6 有一個已知缺口：TWSE 週六補班日，官方三大法人表只列當天有法人進出的證券，沒列的照登記規則缺值排最後。估計影響約 0.3% 的選股檔次（[#864 7043539560](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043539560)、[決定 7043686420](https://github.com/YiCheng0608/stock-lab/issues/864#issuecomment-7043686420)）。
 - S1～S3、X3、X4、X7、H1 用到月營收或 EPS。研究 DB 多數下市公司沒有月營收，偏差有利於假設，處理照 [#867 決定 7032683717](https://github.com/YiCheng0608/stock-lab/issues/867#issuecomment-7032683717)。
 - X8 用了重大訊息（`events` 的 `material_information`，MOPS `t05st02`）。這張表只有現存公司：下市公司 2014 年起 0 則（[#920 提問 7056000242](https://github.com/YiCheng0608/stock-lab/issues/920#issuecomment-7056000242) 的「另外發現」第 2 點）。X8 的探索段用的也是這張表，所以下市公司不會被選進來，偏差方向對 X8 有利。
+- X4、P2、A1 的驗證段有一個已知缺口：2021～2024 年 Q2 外國發行人的季報可得日，當時記成 8/14～8/16，實際法定期限是 8/31～9/2，早了約兩週。研究 DB 在 2026-11-28 改好（[#1101 AC-3 回報 7225860483](https://github.com/YiCheng0608/stock-lab/issues/1101#issuecomment-7225860483)）。三個驗證段照「只跑一次」不重跑，判定不變（[決定 7225898518](https://github.com/YiCheng0608/stock-lab/issues/1101#issuecomment-7225898518)）。
+  - 受影響的選股檔次（[#1110](https://github.com/YiCheng0608/stock-lab/issues/1110)）：X4 23,060 檔次中 21 檔次（0.09%，都是 TWSE 2637 的 2022Q2、2024Q2）；P2 380 檔次中 1 檔次（0.26%，2023-08-14 TWSE 4763）；A1 380 檔次中 1 檔次（0.26%，2021-08-16 TPEx 5227）。
+  - 偏差是偷看當時還拿不到的半年報，方向多半對假設有利，這三個驗證段的 t 要當成可能偏高來讀。
+  - 前瞻讀正式 DB，部署後由 #1101 AC-4 改好。
 
 ### 第一輪：X1～X8
 
