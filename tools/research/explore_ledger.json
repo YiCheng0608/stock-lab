@@ -1017,6 +1017,19 @@
       "tool_commit": "e9916b43d5be13a1d1f5201e27a2a4e65495deb9",
       "definitions_sha256": "2c8d393563383ff5bc4376e0fdb7ebbc4df435074c4cf4c7b9fadf48a5984220",
       "verdict": "沒有通過（探索段）"
+    },
+    {
+      "hypothesis": "AE1",
+      "tool": "round22_research",
+      "round": 22,
+      "segment": "exploration",
+      "version": 1,
+      "status": "finished",
+      "finished_at": "2026-11-27T18:33:20+00:00",
+      "report_sha256": "2d4794d756db1663d9f4d10934490c88e53e877b9caecad0882b733aa0a4a578",
+      "tool_commit": "de787bf8defedb11b46e9c20ee9954386f88f1b7",
+      "definitions_sha256": "c678bfcb6acb7f1b72470ffeea3f14afe9b254359db508357346180d0fdfdb47",
+      "verdict": "沒有通過（探索段）"
     }
   ]
 }
