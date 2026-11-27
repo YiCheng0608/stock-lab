@@ -1,0 +1,528 @@
+{
+  "tool": "round22_research",
+  "version": 1,
+  "design": "1080",
+  "definitions_sha256": "c678bfcb6acb7f1b72470ffeea3f14afe9b254359db508357346180d0fdfdb47",
+  "label": "(F, q) 這一季的公告交易日 a（`ann_date` 起第一個交易日）前後 a−1～a+1 的報酬減去同一窗口母體的等權平均（EAR）> 0，T＝a+1 收盤後成訊號，全部符合的訊號；T+1 開盤成交（期限 1 日）、沒有停損與目標、持有 60 日",
+  "direction": "事件：公告期間報酬的漂移",
+  "parameters": {
+    "engine": "trade",
+    "kind": "event",
+    "event": "ear_positive",
+    "market_filter": false,
+    "entry_days": 1,
+    "stop": null,
+    "target": null,
+    "hold": 60,
+    "start": [
+      "date",
+      "2013-04-01"
+    ]
+  },
+  "hypothesis": "AE1",
+  "engine": "trade",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-04-01",
+    "first_session": "2013-04-02",
+    "last_session": "2019-12-31",
+    "days": 1660,
+    "signal_days": 1660
+  },
+  "prerequisites": {
+    "days": 1660,
+    "min_days": 500,
+    "delisted": 87,
+    "ok": true
+  },
+  "taiex_excess": {
+    "days": 322,
+    "mean": 0.014504519760263734,
+    "t": 0.34078688349863206
+  },
+  "excess": {
+    "days": 322,
+    "mean": 0.02172631193187672,
+    "t": 0.5295870820581208
+  },
+  "absolute": {
+    "days": 322,
+    "mean": 0.027892155459764194
+  },
+  "signals": 671,
+  "signal_days": 322,
+  "trade_days": 322,
+  "trades": 668,
+  "net_mean": 0.02385877686741398,
+  "net_median": -0.011719338696835092,
+  "win_rate": 0.46706586826347307,
+  "zero": 0,
+  "won_mean": 0.18298458953710114,
+  "lost_mean": -0.11559980052849164,
+  "won": 312,
+  "lost": 356,
+  "exit_share": {
+    "stop": 0.0,
+    "target": 0.0,
+    "time": 0.9700598802395209,
+    "segment_end": 0.029940119760479042,
+    "delisted": 0.0,
+    "transferred": 0.0
+  },
+  "exits": {
+    "stop": 0,
+    "target": 0,
+    "time": 648,
+    "segment_end": 20,
+    "delisted": 0,
+    "transferred": 0
+  },
+  "both_touched": 0,
+  "gapped": 0,
+  "limit_delayed": 1,
+  "suspension_delayed": 0,
+  "holding_mean": 59.33982035928144,
+  "abandoned": 3,
+  "abandon_rate": 0.004470938897168405,
+  "abandon_reasons": {
+    "limit_up": 3
+  },
+  "entry_limit_blocked": 3,
+  "below_lower": 0,
+  "filter_blocked_days": 0,
+  "filter_missing_days": 0,
+  "population_unbought": 33,
+  "reference_excess": {
+    "days": 322,
+    "mean": 0.01991912819082568,
+    "t": 0.48555005559460374
+  },
+  "listed": {
+    "years": {
+      "2013": {
+        "with_ann": 127,
+        "not_member": 243,
+        "occupied": 3,
+        "missing": 0,
+        "not_positive": 58,
+        "signals": 66,
+        "signal_days": 33,
+        "delisted": 1777,
+        "delisted_missing": 1777
+      },
+      "2014": {
+        "with_ann": 269,
+        "not_member": 442,
+        "occupied": 21,
+        "missing": 0,
+        "not_positive": 135,
+        "signals": 113,
+        "signal_days": 54,
+        "delisted": 3404,
+        "delisted_missing": 3404
+      },
+      "2015": {
+        "with_ann": 215,
+        "not_member": 599,
+        "occupied": 22,
+        "missing": 0,
+        "not_positive": 93,
+        "signals": 100,
+        "signal_days": 54,
+        "delisted": 2565,
+        "delisted_missing": 2565
+      },
+      "2016": {
+        "with_ann": 205,
+        "not_member": 661,
+        "occupied": 25,
+        "missing": 0,
+        "not_positive": 94,
+        "signals": 86,
+        "signal_days": 41,
+        "delisted": 1531,
+        "delisted_missing": 1531
+      },
+      "2017": {
+        "with_ann": 256,
+        "not_member": 679,
+        "occupied": 16,
+        "missing": 0,
+        "not_positive": 133,
+        "signals": 107,
+        "signal_days": 45,
+        "delisted": 1962,
+        "delisted_missing": 1962
+      },
+      "2018": {
+        "with_ann": 217,
+        "not_member": 766,
+        "occupied": 14,
+        "missing": 0,
+        "not_positive": 110,
+        "signals": 93,
+        "signal_days": 46,
+        "delisted": 1626,
+        "delisted_missing": 1626
+      },
+      "2019": {
+        "with_ann": 227,
+        "not_member": 737,
+        "occupied": 24,
+        "missing": 0,
+        "not_positive": 97,
+        "signals": 106,
+        "signal_days": 49,
+        "delisted": 1229,
+        "delisted_missing": 1229
+      }
+    },
+    "quarters": {
+      "2013Q1": {
+        "with_ann": 37,
+        "not_member": 83,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 15,
+        "signals": 22,
+        "signal_days": 13,
+        "delisted": 711,
+        "delisted_missing": 711
+      },
+      "2013Q2": {
+        "with_ann": 47,
+        "not_member": 86,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 23,
+        "signals": 23,
+        "signal_days": 10,
+        "delisted": 546,
+        "delisted_missing": 546
+      },
+      "2013Q3": {
+        "with_ann": 43,
+        "not_member": 74,
+        "occupied": 2,
+        "missing": 0,
+        "not_positive": 20,
+        "signals": 21,
+        "signal_days": 10,
+        "delisted": 520,
+        "delisted_missing": 520
+      },
+      "2013Q4": {
+        "with_ann": 121,
+        "not_member": 138,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 68,
+        "signals": 53,
+        "signal_days": 23,
+        "delisted": 1603,
+        "delisted_missing": 1603
+      },
+      "2014Q1": {
+        "with_ann": 59,
+        "not_member": 85,
+        "occupied": 19,
+        "missing": 0,
+        "not_positive": 16,
+        "signals": 24,
+        "signal_days": 12,
+        "delisted": 719,
+        "delisted_missing": 719
+      },
+      "2014Q2": {
+        "with_ann": 52,
+        "not_member": 109,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 30,
+        "signals": 21,
+        "signal_days": 10,
+        "delisted": 633,
+        "delisted_missing": 633
+      },
+      "2014Q3": {
+        "with_ann": 37,
+        "not_member": 110,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 21,
+        "signals": 15,
+        "signal_days": 9,
+        "delisted": 449,
+        "delisted_missing": 449
+      },
+      "2014Q4": {
+        "with_ann": 86,
+        "not_member": 193,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 42,
+        "signals": 44,
+        "signal_days": 25,
+        "delisted": 1202,
+        "delisted_missing": 1202
+      },
+      "2015Q1": {
+        "with_ann": 42,
+        "not_member": 130,
+        "occupied": 18,
+        "missing": 0,
+        "not_positive": 13,
+        "signals": 11,
+        "signal_days": 9,
+        "delisted": 449,
+        "delisted_missing": 449
+      },
+      "2015Q2": {
+        "with_ann": 38,
+        "not_member": 156,
+        "occupied": 2,
+        "missing": 0,
+        "not_positive": 18,
+        "signals": 18,
+        "signal_days": 10,
+        "delisted": 444,
+        "delisted_missing": 444
+      },
+      "2015Q3": {
+        "with_ann": 49,
+        "not_member": 120,
+        "occupied": 2,
+        "missing": 0,
+        "not_positive": 20,
+        "signals": 27,
+        "signal_days": 10,
+        "delisted": 470,
+        "delisted_missing": 470
+      },
+      "2015Q4": {
+        "with_ann": 84,
+        "not_member": 230,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 43,
+        "signals": 41,
+        "signal_days": 18,
+        "delisted": 738,
+        "delisted_missing": 738
+      },
+      "2016Q1": {
+        "with_ann": 39,
+        "not_member": 146,
+        "occupied": 20,
+        "missing": 0,
+        "not_positive": 7,
+        "signals": 12,
+        "signal_days": 9,
+        "delisted": 295,
+        "delisted_missing": 295
+      },
+      "2016Q2": {
+        "with_ann": 47,
+        "not_member": 144,
+        "occupied": 2,
+        "missing": 0,
+        "not_positive": 20,
+        "signals": 25,
+        "signal_days": 10,
+        "delisted": 381,
+        "delisted_missing": 381
+      },
+      "2016Q3": {
+        "with_ann": 35,
+        "not_member": 141,
+        "occupied": 3,
+        "missing": 0,
+        "not_positive": 24,
+        "signals": 8,
+        "signal_days": 4,
+        "delisted": 117,
+        "delisted_missing": 117
+      },
+      "2016Q4": {
+        "with_ann": 100,
+        "not_member": 246,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 53,
+        "signals": 46,
+        "signal_days": 19,
+        "delisted": 838,
+        "delisted_missing": 838
+      },
+      "2017Q1": {
+        "with_ann": 46,
+        "not_member": 144,
+        "occupied": 15,
+        "missing": 0,
+        "not_positive": 16,
+        "signals": 15,
+        "signal_days": 7,
+        "delisted": 288,
+        "delisted_missing": 288
+      },
+      "2017Q2": {
+        "with_ann": 47,
+        "not_member": 160,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 29,
+        "signals": 18,
+        "signal_days": 10,
+        "delisted": 435,
+        "delisted_missing": 435
+      },
+      "2017Q3": {
+        "with_ann": 63,
+        "not_member": 129,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 35,
+        "signals": 28,
+        "signal_days": 9,
+        "delisted": 401,
+        "delisted_missing": 401
+      },
+      "2017Q4": {
+        "with_ann": 85,
+        "not_member": 275,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 52,
+        "signals": 33,
+        "signal_days": 17,
+        "delisted": 674,
+        "delisted_missing": 674
+      },
+      "2018Q1": {
+        "with_ann": 48,
+        "not_member": 156,
+        "occupied": 13,
+        "missing": 0,
+        "not_positive": 17,
+        "signals": 18,
+        "signal_days": 9,
+        "delisted": 357,
+        "delisted_missing": 357
+      },
+      "2018Q2": {
+        "with_ann": 44,
+        "not_member": 173,
+        "occupied": 0,
+        "missing": 0,
+        "not_positive": 23,
+        "signals": 21,
+        "signal_days": 11,
+        "delisted": 364,
+        "delisted_missing": 364
+      },
+      "2018Q3": {
+        "with_ann": 40,
+        "not_member": 162,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 18,
+        "signals": 21,
+        "signal_days": 9,
+        "delisted": 231,
+        "delisted_missing": 231
+      },
+      "2018Q4": {
+        "with_ann": 87,
+        "not_member": 287,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 41,
+        "signals": 45,
+        "signal_days": 19,
+        "delisted": 510,
+        "delisted_missing": 510
+      },
+      "2019Q1": {
+        "with_ann": 57,
+        "not_member": 168,
+        "occupied": 21,
+        "missing": 0,
+        "not_positive": 15,
+        "signals": 21,
+        "signal_days": 11,
+        "delisted": 285,
+        "delisted_missing": 285
+      },
+      "2019Q2": {
+        "with_ann": 41,
+        "not_member": 161,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 20,
+        "signals": 20,
+        "signal_days": 9,
+        "delisted": 213,
+        "delisted_missing": 213
+      },
+      "2019Q3": {
+        "with_ann": 42,
+        "not_member": 121,
+        "occupied": 1,
+        "missing": 0,
+        "not_positive": 21,
+        "signals": 20,
+        "signal_days": 10,
+        "delisted": 221,
+        "delisted_missing": 221
+      }
+    },
+    "t1_locked_down_fills": 0
+  },
+  "overlap": {
+    "AE1_AD1": {
+      "days": 23,
+      "mean": 0.6635758603447294,
+      "years": {
+        "2014": {
+          "days": 3,
+          "mean": 0.5674603174603174
+        },
+        "2015": {
+          "days": 4,
+          "mean": 0.6355218855218856
+        },
+        "2016": {
+          "days": 4,
+          "mean": 0.7530081300813007
+        },
+        "2017": {
+          "days": 4,
+          "mean": 0.5848775017253278
+        },
+        "2018": {
+          "days": 4,
+          "mean": 0.6955266955266955
+        },
+        "2019": {
+          "days": 4,
+          "mean": 0.721031746031746
+        }
+      },
+      "signals": 552,
+      "both": 351,
+      "share": 0.6358695652173914
+    }
+  },
+  "seconds": {
+    "run": 24.387625025003217,
+    "ann_date": 1.8678051979513839,
+    "session": 0.053017041995190084,
+    "population_mean": 11.371897374629043,
+    "ear": 0.016433456679806113,
+    "reference": 1.1810594566632062,
+    "ad1_order": 3.899301844998263
+  },
+  "min_t": 2.0
+}

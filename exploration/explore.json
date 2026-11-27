@@ -1,0 +1,71 @@
+{
+  "tool": "round22_research",
+  "version": 1,
+  "design": "1080",
+  "registration_commit": "f43c86f2",
+  "segment": "exploration",
+  "round": 22,
+  "round_size": 1,
+  "cumulative": 72,
+  "validation_min_t": 3.392,
+  "definitions_sha256": "c678bfcb6acb7f1b72470ffeea3f14afe9b254359db508357346180d0fdfdb47",
+  "engines": {
+    "trade_research": 1
+  },
+  "tool_commit": "de787bf8defedb11b46e9c20ee9954386f88f1b7",
+  "command": "python tools/research/round22_research.py --db /research/stock.db --segment exploration --hypotheses AE1 --out /out/exploration",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0041_valuation_shares",
+    "mtime": "2026-11-27T17:01:20.973362+00:00"
+  },
+  "read_until": "2019-12-31",
+  "min_t": 2.0,
+  "selected": [
+    "AE1"
+  ],
+  "hypotheses": {
+    "AE1": {
+      "engine": "trade",
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 1660,
+      "trade_days": 322,
+      "taiex_excess": {
+        "days": 322,
+        "mean": 0.014504519760263734,
+        "t": 0.34078688349863206
+      },
+      "excess": {
+        "days": 322,
+        "mean": 0.02172631193187672,
+        "t": 0.5295870820581208
+      },
+      "absolute_mean": 0.027892155459764194,
+      "trades": 668,
+      "abandon_rate": 0.004470938897168405,
+      "prerequisites": {
+        "days": 1660,
+        "min_days": 500,
+        "delisted": 87,
+        "ok": true
+      },
+      "reference_excess": {
+        "days": 322,
+        "mean": 0.01991912819082568,
+        "t": 0.48555005559460374
+      },
+      "t1_locked_down_fills": 0,
+      "overlap_ad1": {
+        "days": 23,
+        "mean": 0.6635758603447294,
+        "signals": 552,
+        "both": 351,
+        "share": 0.6358695652173914
+      },
+      "win_rate": 0.46706586826347307
+    }
+  },
+  "elapsed_seconds": 463.25695097097196,
+  "peak_memory_gb": 1.40277099609375
+}
