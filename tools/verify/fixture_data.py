@@ -2686,10 +2686,14 @@ OMITTED_TABLES: dict[str, str] = {
         "量價共振分群（#1018）只給候選題材的提案；五頁的 API 不讀，"
         "由後端 test_theme_discovery 驗"
     ),
+    "trading_attentions": (
+        "注意股票與處置股票（#1090）：正式 DB 只建空表、只有研究 DB 寫入，五頁 API 不讀"
+    ),
     "trading_calendar_days": (
         "休市表只給 analyze 推算規則最早執行日；API 不讀，"
         "假資料的訊號直接寫好 earliest_execution_date"
     ),
+    "trading_disposals": "同 trading_attentions",
     "trading_halts": (
         "減資停止買賣區間（#582）；假資料的標的每個交易日都有行情，沒有停止買賣。"
         "個股頁頁首的停止買賣 badge 與原因句由後端 test_trading_halts 與前端測試驗"

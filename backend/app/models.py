@@ -429,6 +429,107 @@ class TradingHalt(Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class TradingAttention(Base):
+    """One official 公布注意有價證券 notice of one security and day (Issue #1090).
+
+    TWSE ``announcement/notice`` and TPEx ``bulletin/attention``, every row the
+    exchange printed, warrants and ETFs too: ``instrument_id`` is NULL when the
+    code is no stock, ``ipo`` or ETF of the database, ``symbol`` is kept.  The
+    notice is published after the close of ``attention_date``.  Only the research
+    database is written (``worker.trading_notices``); the production one has the
+    empty table.
+    """
+
+    __tablename__ = "trading_attentions"
+    __table_args__ = (
+        UniqueConstraint(
+            "exchange",
+            "symbol",
+            "attention_date",
+            "source",
+            name="uq_trading_attentions",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instruments.id"), nullable=True, index=True
+    )
+    exchange: Mapped[str] = mapped_column(String(20))
+    symbol: Mapped[str] = mapped_column(String(30))
+    # The name the answer prints: the name of the time, not today's.
+    security_name: Mapped[str] = mapped_column(String(120))
+    attention_date: Mapped[date] = mapped_column(Date, index=True)
+    # 款次 as "1,9" (第一款, 第九款), ascending; NULL when the text names none
+    # (TPEx before 2009 prints the criteria in words only).
+    clauses: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # 注意交易資訊 without the HTML.
+    detail: Mapped[str] = mapped_column(Text)
+    close_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # TPEx 累計 only; the TWSE one counts within the query period and is not kept.
+    cumulative_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class TradingDisposal(Base):
+    """One official 處置 period of one security (Issue #1090).
+
+    TWSE ``announcement/punish`` and TPEx ``bulletin/disposal``, every row as
+    ``TradingAttention``.  The period starts after ``announced_date`` (the next
+    session as a rule); ``end_date`` is the last version the exchange shows, which
+    may have been moved after the announcement.  ``match_interval_minutes`` and
+    ``prepayment`` are read from ``detail`` (處置內容) only and are NULL when it does
+    not say (TWSE before 2014 prints no 處置內容).  Only the research database
+    is written.
+    """
+
+    __tablename__ = "trading_disposals"
+    __table_args__ = (
+        UniqueConstraint(
+            "exchange",
+            "symbol",
+            "announced_date",
+            "start_date",
+            "source",
+            name="uq_trading_disposals",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instruments.id"), nullable=True, index=True
+    )
+    exchange: Mapped[str] = mapped_column(String(20))
+    symbol: Mapped[str] = mapped_column(String(30))
+    security_name: Mapped[str] = mapped_column(String(120))
+    announced_date: Mapped[date] = mapped_column(Date, index=True)
+    start_date: Mapped[date] = mapped_column(Date, index=True)
+    end_date: Mapped[date] = mapped_column(Date)
+    # 處置措施 as printed (第一次處置, 再次處置, 收足五成款券, ...).
+    measure: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # TWSE 處置條件 / TPEx 處置原因.
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    match_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prepayment: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # 處置內容 without the HTML; NULL when blank.
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # TPEx 累計 only, as TradingAttention.
+    cumulative_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

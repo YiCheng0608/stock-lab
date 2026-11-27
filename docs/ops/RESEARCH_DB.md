@@ -216,6 +216,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 | 季報（下市、轉板股） | `fundamentals xbrl-apply --start 2013Q1 --end 2024Q3 --dir /xbrl`（整包目錄唯讀掛到 `/xbrl`，由 `fundamentals xbrl-fetch` 在 09:00～20:30 下載；Git Bash 要 `MSYS_NO_PATHCONV=1`，否則 `/xbrl` 被改寫成 Windows 路徑） | **每一批建了新的下市標的之後都跑一次**：已寫的列 `unchanged`，只寫新標的；先和 `t163sb04` 核對，不同就停（#781）。約 1 小時，照上面以 `docker run -d` 跑、日誌寫 `/data/logs/`；沒有 `research-db.json` 時拒絕，批次持有維護模式時 exit 75 |
 | 減資停止買賣 | `trading-halts --start 2011-01-01 --end 2024-09-30` | 起日夾到各來源的起始日（TWSE 2011、TPEx 2013），輸出 `not_published_before`。恢復日在 2015-04-16 以前的 89 列 TWSE 資料，最後交易日要用已存的日線推（[DATA_SOURCES](../DATA_SOURCES.md#減資停止買賣)，#776）：日線還沒補到的月份會拒絕（`no bar before the resumption`），所以要等那段日線補完再跑：批 4 後跑一次（2012-05～2015-04，含批 3 的 2015 年），批 5 後再跑一次（2011-01～2012-04）。推不出的列記在 `conflicts`（不是 `rejected`），每列記 warning `TWSE trading halts rejected: …`，run 是 `partial`。批 4 之後應看到 TWSE `inferred_from_bars` 65、`updated` 3（2408、2438、3536：日期不變，只有 `details_json` 多了晚列的 `same_resumption_rows`，2408 的 `last_trade_date_basis` 改成 `inferred_from_bars`）、`conflicts` 22（恢復日 2011-01～2012-01，`no bar before the resumption`）、`rejected` 0、`removed` 0，其他列 `unchanged`（2026-11-16 在批 4 後的副本實測，PR #789）。批 5 之後，那 22 列由 `conflicts` 轉成寫入 |
 | 休市表 | `trading-calendar --year 2021 --year 2022` | 2020 年以前沒有內容 |
+| 注意股票與處置股票 | `trading-notices backfill` | 見下面的[注意股票與處置股票](#注意股票與處置股票1090) |
 | 週末交易日（#790） | 三步，照順序跑：<br>1. `python -B tools/research/history_backfill.py --from 2004-02-11 --to 2018-12-31 --weekend-sessions`（用 `history_backfill.py` 的那行 `docker run -d`，不是 `worker.cli`）<br>2. 含週末交易日的每個月，各跑一次 `index-bars backfill --from-month <月> --to-month <月>`<br>3. `indicators --rebuild` | 補月份模式沒送的星期六、星期日（`OFFICIAL_WEEKEND_SESSIONS`，[DATA_SOURCES](../DATA_SOURCES.md#交易日的判定與週末交易日)）。<br>**為什麼要另跑**：已完成的月份，request key 是 success，不會再送；所以每個週末交易日各跑一個單日 backfill。progress 檔記 `weekend` 行，和 `month` 行分開，暫停與最後的整庫檢查和月份模式相同。<br>**第 2 步**：單日 backfill 從 `MI_INDEX` 寫 TAIEX 收盤；重跑 `index-bars` 後，那天的 `no_close_row` 會變成 `upgraded`。`index-bars` 不讀已存 raw，每月重發 4 個請求。<br>**請求數**：單日 backfill 每天約 11 個：上市 6（含 3 個名冊 OpenAPI）、上櫃 4、MOPS 1，是 2026-11-16 在副本上補 2012-12-22 的實測數；2012-05 以前沒有 T86，2009 年以前多 1 個 `MI_5MINS_HIST`。`index-bars` 每月 4 個。總數約為「天數 × 11 ＋ 月數 × 4」，清單的 23 天分在 22 個月，約 253 ＋ 88 ＝ 341 個請求。<br>**耗時**：副本上每天約 3.5 分鐘（這次為了不和批 5 疊加，請求間隔拉到 30 秒；照預設 3 秒會更短），加上最後一次整庫檢查約 14 分鐘（13.5 GB 的副本） |
 | 上櫃舊版 `0.00` 價格的修正（#819） | 兩步：SQL 刪除＋`no-trade-days --start 2007-04-23 --end 2011-11-11`，命令全文見下節[上櫃舊版 0.00 價格的修正](#上櫃舊版-000-價格的修正819) | 只跑一次，跑完後才跑 `indicators --rebuild` |
 
@@ -555,6 +556,25 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
   - 失敗的回應本文存在 `failed/`，`requests.jsonl` 那一列記本文路徑。
   - 已存的 raw 不重抓，重跑就是續跑。
   - 各時期的代號清單是先用 `sweep`（指定月份全掃）與 `bisect`（找出代號開始或結束的月份）確認的。
+
+## 注意股票與處置股票（#1090）
+
+上市櫃每一則注意股票公告與每一段處置期間，含之後下市、轉板的公司，寫進 `trading_attentions` 與 `trading_disposals`。來源、欄位與可得時點見 [DATA_SOURCES](../DATA_SOURCES.md#注意股票與處置股票)。正式 DB 只有空表，daily 不收（#1086 [決定 7208544050](https://github.com/YiCheng0608/stock-lab/issues/1086#issuecomment-7208544050) D2）。
+
+**跑法**：照[跑一批](#跑一批)的 `docker run -d … "${R[@]}" "$IMG" sh -c 'python -B -m worker.cli trading-notices backfill > /data/logs/trading-notices.json 2>&1'`。不給月份時，從各 feed 最早可得的月份補到最新的完整月份（台北）：上市注意與處置 2001-01、上櫃注意 2002-02、上櫃處置 2003-09 起。之後再跑同一行，只補新的完整月份。
+
+- **請求**：每個 feed 每月 1 個，全歷史約 1,200 個。同一個 host 間隔 3.5 秒；台北 21:15～23:30 與偶數整點前後 10 分鐘不送，程式自己等。上市兩個 feed 和其他上市回補用同一個 host，不同時跑。
+- **接續**：每個 feed 每月一列 `ingestion_runs`（`run_type=trading_notices_month`，request key `trading_notices_backfill:<feed>:<YYYY-MM>`）。已成功的月份不再請求，失敗的下次重問；`--max-requests N` 送 N 個請求後停，下次接著跑。`--reapply` 不送請求，改讀已存的 raw 重寫，沒有差異時 `changed` 是 0。
+- **只在研究 DB**：沒有 `research-db.json` 時拒絕（exit 2）。起跑時持有維護模式。
+- **處置跨月**：處置的查詢篩的是期間重疊，所以每月的查詢一律查到下個月月底，每列只由公布日所在月份的那個請求寫入。月底公布、下個月生效的處置也查得到，跨月重複的列只寫一次。以「交易所＋代號＋公布日＋處置起日」為鍵。
+- **哪些列**：回應的每一列都存，權證、ETF 也存。研究 DB 有同交易所、同代號的普通股、`ipo` 或 ETF 標的時填 `instrument_id`，沒有就留 NULL、`symbol` 照存（D3）。代號重用的公司（[日線排除清單](#研究工具的日線排除清單)）照現有標的寫入，研究工具照排除清單處理。
+- **空日**：上櫃沒有公告的日子會印一列佔位列（「本日無公布注意交易資訊」「本日無處置資料」）。這一列不寫進表，只把日期記在那個月 manifest 的 `metadata_json.empty_days`。上市沒有佔位列，沒有列就是沒有。
+- **讀不到就留空**：
+  - 上市的「累計」隨查詢期間變，不存，`cumulative_count` 一律 NULL。上櫃的照存。
+  - 款次只讀括號裡的「第X款」；上櫃 2008 年以前的注意沒有款次，留 NULL。
+  - 撮合間隔與預收只從處置內容讀。上市 2013 年以前的處置內容空白，三欄都是 NULL。「收足五成款券」這類處置措施照原文存在 `measure`，不拿來推預收。處置內容寫了兩種間隔時，間隔留 NULL。
+  - 認不得的版面、讀不懂的格子、日期在查詢期間外，那個月整月失敗，不寫任何列。
+- **限制**：處置迄日是交易所最後的版本，可能是公布後才調整的（「開休市日變動則調整處置迄日」）。
 
 ## 研究工具的耗時與記憶體
 
