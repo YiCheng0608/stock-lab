@@ -114,9 +114,11 @@ CLOSE_RULE = (
 )
 MEAN_RULE = (
     "EAR = the item's window return less the equal-weight mean of the window "
-    "returns of T's population (evidence_lib.universe(panel, T, MIN_LOTS), "
-    "the occupied members and the item itself too), only the members with "
-    "both closes; no such member: the mean and EAR missing"
+    "returns of T's population (evidence_lib.universe(panel, T, MIN_LOTS)) "
+    "less the occupied members (to the exit or abandonment session, both in, "
+    "as of T before any of T's trades; the item itself in), only the members with "
+    "both closes; no such member: the mean and EAR missing; --coverage-only "
+    "trades nothing, so its mean leaves none out (listed only)"
 )
 EAR_MIN = 0.0  # AE1 第 4 點: EAR > 0, strictly
 # AE1 第 4 點
@@ -182,7 +184,7 @@ DEGENERATE = {
     "同一檔同一季有多則符合的，只取季底次日起的第一則（發言日期最早的）；起日 2013-04-01 以前的 `ann_date`（2012Q4 以前的季）不成訊號；"
     "`Panel.sessions` 沒有 ≥ `ann_date` 的交易日，或 a+1 在 panel 最後一天之後時不成訊號；"
     "這一檔在 a−2 或 a+1 沒有日線、停牌或還原收盤 ≤ 0 時窗口報酬缺值，EAR 缺值、不符合；"
-    "母體平均只取 T 的母體（`evidence_lib.universe`，占用中的與這一檔自己都算）裡 a−2 與 a+1 都有收盤的成員，"
+    "母體平均只取 T 的母體（`evidence_lib.universe`）扣掉占用中的股票（以 T 當天任何一筆成交之前的占用為準，這一檔自己算在內）之後 a−2 與 a+1 都有收盤的成員，"
     "一個都沒有時平均缺值，EAR 缺值、不符合；EAR 剛好等於 0 不符合；"
     "不符合的原因依序判：T 不在母體、占用中、EAR 缺值、EAR ≤ 0，每筆只算第一個；"
     "同一檔兩季的訊號落在同一個 T 時先算較早的季，較晚的季因占用中不成立；每天的訊號全部進場，不排序、不設上限",
@@ -208,7 +210,7 @@ LIMITS = {
     "涵蓋低：主旨規則每個窗口只收到母體的 8.3%～20.2%（#1067 7202828781），名單只會是「會發這則重大訊息的公司」，"
     "不能推到整個母體；存活者偏差：下市公司 2014 年起 0 則，沒有 `ann_date` 不成訊號，偏差方向對假設有利，看對對照基準的超額；"
     "持有 60 日的逐筆之間重疊比 20 日多，t 照逐筆評估用 `overlap=20`、不改，以「日數 ÷ 20」計只是保守的下限，"
-    "持有 60 日時實際的重疊更多，t 高估獨立樣本數；"
+    "持有 60 日時實際的重疊更多，t 假設的獨立樣本數偏多；"
     "金融業等法定期限不同的公司照樣算，但 `ann_date` 的區間是一般公司的法定期限（同 AD1）；"
     "重大訊息 2024-09-28～2026-08-01 的清單缺口落在已用段，探索段與驗證段（到 2024-09-27）用到的 `ann_date` 都在涵蓋內，"
     "驗證段最後幾筆持有到段末結算；"
@@ -431,9 +433,14 @@ def window_return(item: lib.Series, sessions: list[date], a: int) -> float | Non
     return after / before - 1.0
 
 
-def population_mean(ctx: Context, s: int) -> tuple[float | None, int]:
-    """The equal-weight mean of the window of a = s − 1 over T's population,
-    only the members with both closes: (mean or None, members in it)."""
+def population_mean(
+    ctx: Context, s: int, held: dict[int, int] | None = None
+) -> tuple[float | None, int]:
+    """The equal-weight mean of the window of a = s − 1 over T's population
+    less the occupied members (``held``: each item's last occupied session,
+    the exit or the abandonment, both in; None: none left out, coverage),
+    only the members with both closes: (mean or None, members in it).  The
+    first call of a T fixes it: ``count_day`` makes it before T's trades."""
 
     if s not in ctx.means:
         t0 = time.perf_counter()
@@ -442,6 +449,7 @@ def population_mean(ctx: Context, s: int) -> tuple[float | None, int]:
         values = [
             value
             for item, _at in ctx.trade.universe(s)
+            if held is None or held.get(item.instrument_id, -1) < s
             if (value := window_return(item, sessions, a)) is not None
         ]
         ctx.means[s] = (statistics.fmean(values) if values else None, len(values))
@@ -460,10 +468,16 @@ class Ear:
 
 
 def ear(
-    ctx: Context, s: int, instrument_id: int, busy: dict[int, int] | None = None
+    ctx: Context,
+    s: int,
+    instrument_id: int,
+    busy: dict[int, int] | None = None,
+    held: dict[int, int] | None = None,
 ) -> Ear:
     """AE1 第 3、4 點 on T (session ``s``): the first reason that fails, or a
-    signal.  ``busy`` is the occupancy (None: not traded, coverage)."""
+    signal.  ``busy`` is the occupancy of a new signal (``trade_research``'s,
+    a signal on the exit day counts), ``held`` the one the mean leaves out
+    (None both: not traded, coverage)."""
 
     if s not in ctx.member_map:
         ctx.member_map.clear()  # one signal date at a time
@@ -478,7 +492,7 @@ def ear(
     t0 = time.perf_counter()
     own = window_return(item, ctx.panel.sessions, s - SIGNAL_AFTER)
     ctx.seconds["ear"] += time.perf_counter() - t0
-    mean, _n = population_mean(ctx, s)
+    mean, _n = population_mean(ctx, s, held)
     if own is None or mean is None:
         return Ear("missing", own=own, mean=mean, item=item)
     value = own - mean
@@ -556,6 +570,7 @@ def count_day(
     s: int,
     busy: dict[int, int] | None = None,
     traded: Callable[[int, date, int, Ear], None] | None = None,
+    held: dict[int, int] | None = None,
 ) -> list[tuple[int, date, int, Ear]]:
     """The events of T (session ``s``) counted in ``listed``, in the
     quarters' order; the signals back.  ``traded`` trades each signal before
@@ -565,8 +580,11 @@ def count_day(
 
     day = ctx.panel.sessions[s]
     out = []
-    for instrument_id, quarter, a in events(ctx).get(s, ()):
-        got = ear(ctx, s, instrument_id, busy)
+    found = events(ctx).get(s, ())
+    if found:
+        population_mean(ctx, s, held)  # the occupancy before T's trades
+    for instrument_id, quarter, a in found:
+        got = ear(ctx, s, instrument_id, busy, held)
         if got.reason == "not_member":
             listed.add(day, quarter, "not_member")
             continue
@@ -805,6 +823,9 @@ def run_trades(
     state = tr.State(name, spec)
     listed = Listed()
     views: dict[date, ReferenceView] = {}
+    held: dict[
+        int, int
+    ] = {}  # the last occupied session, the exit's or the abandonment's
     locked_down = 0
     for s in range(first - 1, last):
 
@@ -813,8 +834,10 @@ def run_trades(
             row = trade_signal(ctx, state, s, last, quarter, a, got, views)
             locked_down += bool(row["t1_locked_down"])
             state.trades.append(row)  # its occupancy is set: before the next
+            end = row["exit_date"] or row.get("abandoned_date")
+            held[got.item.instrument_id] = bisect_left(sessions, end)
 
-        signals = count_day(ctx, listed, s, state.busy, traded)
+        signals = count_day(ctx, listed, s, state.busy, traded, held)
         if signals:
             reference_counts(ctx, listed, s, {row[1] for row in signals})
         state.signal_days += bool(signals)
@@ -1292,7 +1315,8 @@ def _overview_line(name: str, row: dict[str, Any], judged: bool) -> str:
 
 
 COVERAGE_NOTES = (
-    "- 每個訊號日都數，不扣占用（沒有模擬成交，「占用中」一欄是 0）；只數段內的訊號日；不跑模擬、不算報酬，"
+    "- 每個訊號日都數，不扣占用（沒有模擬成交，「占用中」一欄是 0）；EAR 的母體平均也不扣占用中的股票，"
+    "和探索段（扣占用）不同，訊號數只列出、不判定；只數段內的訊號日；不跑模擬、不算報酬，"
     "EAR 只看正負與缺值、不列值",
     f"- AE1：{DEGENERATE['AE1']}。依年是 T 的年、依季是財報的季（`ann_date` 所屬的季）；"
     "「母體裡有 `ann_date` 的檔數」是 T 在母體裡的 (F, q)，EAR 缺值比例的分母是它；"

@@ -466,6 +466,55 @@ def test_ear_by_hand():
     assert tool.ear(ctx, T, 4).reason == "missing"  # no close on a-2
     # the item's own close of a-1 and a (10.4, 10.7) is not read
     assert tool.window_return(ctx.panel.series[1], SESSIONS, A) == pytest.approx(0.1)
+    # 共同「母體」: the occupied members are not in the mean (3 held to T)
+    held = context_for(hand_items(), SESSIONS)
+    occupied = {3: T}  # its exit (or abandonment) session is T: occupied, in
+    assert tool.population_mean(held, T, occupied) == (pytest.approx(0.075), 2)
+    got = tool.ear(held, T, 1, held=occupied)
+    assert got.value == pytest.approx(0.1 - 0.075, abs=1e-15)
+    free = context_for(hand_items(), SESSIONS)
+    assert tool.population_mean(free, T, {3: T - 1}) == (
+        pytest.approx(mean, abs=1e-15), 3,
+    )  # out on T-1: back in the mean on T  # fmt: skip
+
+
+def test_the_mean_leaves_out_the_occupied_as_of_t_before_its_trades():
+    """The mean is fixed before T's first trade: a trade made on T does not
+    move the EAR of T's later events."""
+
+    q = date(2016, 3, 31)
+    ctx = context_for(hand_items(), SESSIONS)
+    ctx.events = {T: [(1, q, A), (2, q, A)]}
+    held = {3: T + 5}  # bought before T, still held
+    busy = {3: T + 4}
+
+    def traded(instrument_id, quarter, a, got):
+        held[instrument_id] = busy[instrument_id] = T + 60
+
+    listed = tool.Listed()
+    signals = tool.count_day(ctx, listed, T, busy, traded, held)
+    mean = (0.1 + 0.05) / 2  # 3 occupied, 4 without a close on a-2
+    assert [row[0] for row in signals] == [1]  # 2: 0.05 - 0.075 < 0
+    assert signals[0][3].mean == pytest.approx(mean)
+    assert listed.tables()["years"]["2016"]["not_positive"] == 1
+    # 1 was bought on T before 2 was judged: the mean of T stays the one before
+    assert held[1] == T + 60 and ctx.means[T] == (pytest.approx(mean), 2)
+    after = context_for(hand_items(), SESSIONS)
+    assert tool.population_mean(after, T, held) == (pytest.approx(0.05), 1)
+    coverage = context_for(hand_items(), SESSIONS)  # no occupancy: 3 is in
+    coverage.events = dict(ctx.events)
+    found = tool.count_day(coverage, tool.Listed(), T)
+    assert found[0][3].mean == pytest.approx((0.1 + 0.05 - 0.1) / 3)
+
+
+def test_a_close_at_or_below_0_is_missing():
+    full = {s: 1.0 for s in range(len(SESSIONS))}
+    zero = make_item({**full, 2: 10.0, 5: 0.0}, SESSIONS, 7)
+    ctx = context_for([*hand_items(), zero], SESSIONS)
+    assert tool.close_on(zero, SESSIONS, T) is None
+    got = tool.ear(ctx, T, 7)  # in T's population, its close on a+1 is 0
+    assert got.reason == "missing" and got.own is None
+    assert tool.population_mean(ctx, T)[1] == 3  # not in the mean either
 
 
 def test_a_suspension_between_a_minus_2_and_a_plus_1_changes_nothing():
@@ -914,22 +963,42 @@ def test_ae1_trades_by_hand(loaded, monkeypatch):
     assert first["net"] == pytest.approx(
         net(s17.close[s17.position[d[109]]], s17.open[s17.position[d[50]]]), rel=1e-12
     )
+    ear_row = trades[(d[76], "S18")]  # a 75, a-2 73
     # EAR by hand on the copy: close(T) / close(a-2) - 1 less T's population mean
-    members = lib.universe(loaded.panel, d[49], lib.DEFAULT_MIN_LOTS)
+    # less the members occupied on T: an earlier trade held (or abandoned) to T or later
+    occupied = {
+        t["instrument_id"]
+        for t in result["_trades"]
+        if t["signal_date"] < d[76]
+        and (t["exit_date"] or t.get("abandoned_date")) >= d[76]
+    }
+    assert occupied  # 2015Q4's trades are held then
+    members = [
+        (item, k)
+        for item, k in lib.universe(loaded.panel, d[76], lib.DEFAULT_MIN_LOTS)
+        if item.instrument_id not in occupied
+    ]
     returns = {
-        item.instrument_id: item.close[item.position[d[49]]]
-        / item.close[item.position[d[46]]]
+        item.instrument_id: item.close[item.position[d[76]]]
+        / item.close[item.position[d[73]]]
         - 1
         for item, _at in members
-        if d[46] in item.position and not item.is_suspended(item.position[d[46]])
+        if d[73] in item.position and not item.is_suspended(item.position[d[73]])
     }
-    assert first["window_return"] == pytest.approx(returns[17])
-    assert first["population_window"] == pytest.approx(
+    assert ear_row["window_return"] == pytest.approx(returns[18])
+    assert ear_row["population_window"] == pytest.approx(
         sum(returns.values()) / len(returns)
     )
-    assert first["ear"] == pytest.approx(
-        returns[17] - sum(returns.values()) / len(returns)
+    assert ear_row["ear"] == pytest.approx(
+        returns[18] - sum(returns.values()) / len(returns)
     )
+    every = [
+        item.close[item.position[d[76]]] / item.close[item.position[d[73]]] - 1
+        for item, _at in lib.universe(loaded.panel, d[76], lib.DEFAULT_MIN_LOTS)
+        if d[73] in item.position and not item.is_suspended(item.position[d[73]])
+    ]
+    assert len(every) > len(returns)  # the occupied ones would move the mean
+    assert ear_row["population_window"] != pytest.approx(sum(every) / len(every))
     halted, locked = trades[(d[79], "S19")], trades[(d[82], "S20")]
     assert (halted["net"], halted["entry_reason"]) == (None, "not_tradable")
     assert (locked["net"], locked["entry_reason"]) == (None, "limit_up")
@@ -964,6 +1033,29 @@ def test_ae1_trades_by_hand(loaded, monkeypatch):
     assert first["reference"] == tr.baseline(view, 49, 50, 109, 299)["mean"]
     assert first["reference_excess"] == pytest.approx(first["net"] - first["reference"])
     assert result["reference_excess"]["days"] == result["excess"]["days"]
+
+
+def test_the_reference_is_listed_only(loaded, monkeypatch):
+    """AE1 第 6 點: another reference changes its own column, not the
+    judged numbers (the excess over the population, the absolute, the days)."""
+
+    first = used_run(loaded, monkeypatch)
+    monkeypatch.setattr(tool.ReferenceView, "universe", lambda self, s: [])
+    second = used_run(loaded, monkeypatch)
+    assert second["reference_excess"]["days"] == 0 < first["reference_excess"]["days"]
+    for key in (
+        "excess",
+        "absolute",
+        "taiex_excess",
+        "trade_days",
+        "trades",
+        "signals",
+    ):
+        assert first[key] == second[key], key
+    judge = lambda r: ex.explore_judge(  # noqa: E731
+        "exploration", 600, True, r["excess"], r["absolute"]["mean"], tool.MIN_T
+    )
+    assert judge(first) == judge(second)
 
 
 def test_the_quarters_second_announcement_and_the_occupied_one_make_no_trade(
