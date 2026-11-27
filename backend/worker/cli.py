@@ -62,7 +62,10 @@ from .plan_tracking import run_plan_tracking
 from .premarket_score import run_premarket_score
 from . import premarket_score_report
 from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUARTERS
-from .quarterly_fundamentals import run_fundamental_backfill
+from .quarterly_fundamentals import (
+    run_foreign_deadline_recompute,
+    run_fundamental_backfill,
+)
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
 from .schedule_runs import (
@@ -155,6 +158,12 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
     ):
         # Writes the research DB; a research batch holding maintenance mode refuses it.
         return "fundamentals xbrl-apply"
+    if (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "foreign-deadlines"
+        and args.apply
+    ):
+        return "fundamentals foreign-deadlines --apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
     if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
@@ -188,7 +197,11 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
 # maintenance mode it holds never makes a daily skip.  ``chips short-balance``
 # also stops between captures from 21:25 (chip_revisions).
 DAILY_WINDOW = (time(21, 15), time(23, 30))
-DAILY_WINDOW_REFUSED = {"chips short-balance --apply", "strategy-lists backfill"}
+DAILY_WINDOW_REFUSED = {
+    "chips short-balance --apply",
+    "strategy-lists backfill",
+    "fundamentals foreign-deadlines --apply",
+}
 
 
 def in_daily_window(moment: datetime | None = None) -> bool:
@@ -651,6 +664,13 @@ def main() -> None:
     )
     xbrl_apply_parser.add_argument(
         "--exclude-file", help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）"
+    )
+    foreign_deadlines_parser = fundamentals_subparsers.add_parser(
+        "foreign-deadlines",
+        help="把已存的外國發行人 2021 年起 Q2 列的可得日改成它們的法定期限 8/31（只動 statutory_deadline 的列，0 個請求，重跑冪等，#1101）",
+    )
+    foreign_deadlines_parser.add_argument(
+        "--apply", action="store_true", help="寫入；不加只印要改的列"
     )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
@@ -1178,6 +1198,11 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_fundamental_backfill(args.quarters, args.end_quarter)
     elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-fetch":
         result = run_xbrl_fetch(args.dir, args.start, args.end)
+    elif (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "foreign-deadlines"
+    ):
+        result = run_foreign_deadline_recompute(args.apply)
     elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
         result = run_xbrl_apply(
             args.dir,

@@ -703,7 +703,18 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   | 保險，IFRS 17（保險服務結果、財務結果；2026 年起） | 無，留空 | 5/15、8/31、11/14 |
   | 保險，舊格式（營業收入、沒有營業毛利；2025 年以前） | 營業收入 | 同上 |
 
-  年度（Q4）一律隔年 3/31。表頭不屬於上列任一種、欄位數不符、同一代號出現兩次、頁首的市場或季別與請求不符、或回應是「FOR SECURITY REASONS」之類的阻擋頁時，整個市場季記失敗、不寫入。沒有表格但寫「查無資料」是已回答的空季。
+  年度（Q4）一律隔年 3/31。實收資本額 100 億元以上的上市（櫃）公司，111 會計年度起年報期限是 75 日（特殊適用範圍辦法第 3 條第 4 款）。這裡仍用 3/31，比實際期限晚，偏保守，不會用到當時拿不到的資料，所以不另外處理。表頭不屬於上列任一種、欄位數不符、同一代號出現兩次、頁首的市場或季別與請求不符、或回應是「FOR SECURITY REASONS」之類的阻擋頁時，整個市場季記失敗、不寫入。沒有表格但寫「查無資料」是已回答的空季。
+- **外國發行人**（第一上市（櫃）公司，含創新板 `-KY創`；[#1101](https://github.com/YiCheng0608/stock-lab/issues/1101)）：
+  - **期限**：2021（110 會計年度）起，Q2 的期限取格式期限與 8/31 中較晚的那個，Q1、Q3、年度和上表相同。依據是[公開發行公司財務報告及營運情形公告申報特殊適用範圍辦法](https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0400152)第 3 條第 3 款：「第一上市（櫃）公司之第二季財務報告……公告申報不得逾會計年度第二季終了後二個月」，110-04-21 金管證審字第 1100361447 號令增訂（[沿革](https://law.moj.gov.tw/LawClass/LawHistory.aspx?pcode=G0400152)）。2020 年以前和一般公司一樣是 8/14。Q1、Q3 與年度的依據是[證券交易法](https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0400001)第 36 條第 1 項，外國發行人經第 165 條之 1 準用。#1096 抽樣的 KY 公司半年報上傳時間：2013、2018 年都在 8/14 以前，2024 年上市 7 家在 8/22～8/29。
+  - **怎麼認**（`worker/foreign_issuers.py`）：依序用已存的官方標記，都掛在標的上，所以改名（`F-` 改成 `-KY`）不影響：
+    1. `t21sc03` 國外公司頁（`_1`）的月營收列（`data_json.page = 1`），記成 `t21sc03_foreign_page`。
+    2. 單一公司月營收頁回「外國發行人免申報本項資訊」（`revenue company-classify`／`company-backfill` run 的 manifest），記成 `t05st10_foreign_exempt`。
+    3. 單一公司月營收的雙幣別版面（`data_json` 有 `功能性貨幣`），記成 `t05st10_functional_currency`。
+
+    三種都沒有的，名稱做 NFKC、去掉空白後以 `-KY`、`-KY創` 結尾或以 `F-` 開頭才算，記成 `name_suffix`（[#1101 決定](https://github.com/YiCheng0608/stock-lab/issues/1101#issuecomment-7213332342)）。這種只剩月營收頁都查不到的下市公司；研究 DB 2021 年起是 4803、6404、8427 三家。認錯時的方向是保守的：國內公司被誤認，只會晚看到它的 Q2。
+  - **`-DR`（存託憑證）**：是第二上市，適用同辦法第 3 條第 2 款，依註冊地國法令申報，沒有季報列，不處理。
+  - **記錄**：規則適用的列，`data_json` 多記 `deadline_rule: foreign_issuer_q2_two_months` 與 `foreign_issuer_basis`（上面四種之一）。沒有這兩個鍵的列照格式期限，所以其他公司、其他季的列不受影響。
+  - **既有列**：`fundamentals foreign-deadlines --apply` 重算（[CLI](ops/CLI.md#現有-worker-cli)），規則同下一點的法定期限。
 - **可得日**：回補的季度沒有實際公告日，`announcement_date` 用該格式的法定申報期限，期限不是交易日時順延到下一個交易日（註1第 6 點「遇例假日以證期局公布者為準」）：有 [`trading_calendar_days`](#交易日曆) 的年度照官方休市表，沒有的年度只順延週末；`data_json` 記 `announcement_basis: statutory_deadline`、`statutory_deadline` 與 `deadline_calendar`（`twse_holiday_schedule`／`weekend_only`）。期限還沒到的季度（例如 11/6 時的第三季，已申報的公司先列出）用抓到那天的台北日期，`announcement_basis: first_seen`，不寫未來日期。可得日的意思是「該日結束後可得」：研究截止日期等於可得日時就列入，對應 T 日晚上收集、分析，T+1 才執行；所以期限日當晚才申報的財報，會被當晚的分析用到。這和日快照的出表日期是同一個口徑，因此不另外順延到下一個交易日。逾期申報的公司會比實際早「可見」，這種公司很少，但不是 0。網站版休市表從 2021 年起有內容，2020 年以前回 `total 0`（2026-11-14 實測，[#692](https://github.com/YiCheng0608/stock-lab/issues/692)；11-06 曾查 2024 年回非 JSON，現在已有 20 列），回補前先跑 `trading-calendar --year <年>`；2020 年以前的期限只順延週末。
 - **首見出表日**：快照每次重新出表都會換「出表日期」（2330 第二季曾存成 2026-10-30，實際 8 月就公告）。現在同一季遇到既有列時，可得日取既有與新值中較早的那個；保留舊日期時一併保留它的 `announcement_basis` 等欄位。營收、EPS 照舊以最新一次為準。已知限制：財報重編或更正後，數值換成新的，可得日仍是最早那天，所以截止日在重編之前的回測，會提早看到重編後的數字。例外：既有與新值都是法定期限時，用重新算的期限，休市表之後才補上時，重跑會把期限更正成順延後的日期。
 - **與快照並存**：唯一鍵 `(instrument_id, period_end, fiscal_period)` 不變，不會多列。回補遇到快照寫的列，不改數值與來源，只在法定期限較早時把可得日往前調；回補寫的列由回補更新數值。之後日快照涵蓋同一季時，照上一點覆寫數值、保留較早的可得日。
@@ -728,7 +739,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   - **raw**：`raw_payloads` 一季一列，`source=mops_tifrs`，`payload_path` 直接指向整包 zip，`sha256` 是整包的 sha256。檔案放在 `<RAW_DIR>/mops_tifrs/<抓取日>/<sha256>.zip`，經 `sources.ensure_raw_file` 寫入（`write_raw_file` 收 `.json` 與 `.zip`）。
   - **成員**：一家取一份，順序是 `cr`（合併）、`ir`（個體）、`er`。產業碼對到 `t163sb04` 的格式：`ci` 一般、`basi` 銀行、`bd` 證券、`fh` 金控、`ins` 舊格式保險、`mim` 其他。2014Q2 的 1,517 家一對一，產業碼不在表上的公司略過並計數。
   - **EPS**：取 `BasicEarningsLossPerShare`，比對 local name，所以 `ifrs:` 與 `ifrs-full:` 都認得。context 是當年 1/1 到季底、沒有維度的 YTD 累計，和 `t163sb04` 同口徑。inline XBRL 要處理 `format`、`scale`、`sign`、`xsi:nil`；同一 context 的多個 fact 要相同。
-  - **可得日**：照上一節，各格式的法定申報期限。
+  - **可得日**：照上一節，各格式的法定申報期限；外國發行人 2021 年起的 Q2 也照上一節。
   - **寫給誰**：只寫 `stock`／`ipo` 的 `delisted`、`transferred` 標的，而且要在季底到季底後 670 天內有日線。670 天是研究工具讀到這一季的最晚日子：5 季 × 92 天＋`QUARTER_STALE_DAYS` 200 天＋10 天餘裕。已有的列（任何來源）不動。active 標的一律不寫：它們在 `t163sb04` 上，同一代號的舊公司也不會寫到現在的公司上。
   - **口徑核對**：每季先比兩邊都有的公司。EPS 或格式有一家不同、`t163sb04` 有列卻一家都沒比到，或比不到的（沒有成員、沒有 EPS、讀不了）超過核對家數的 1%（`CHECK_MISSING_LIMIT`；2014Q2 是 1／1,518），那一季就不寫，命令也停下。`source=mops_tifrs_zip`，`data_json` 記成員名稱、成員 sha256、產業碼、格式、context 與可得日的依據。
 - **外部檔案的防護**：成員只在記憶體內讀，不解壓到路徑。上限：成員數 5,000、單一成員 32 MB、一季解壓總量 8 GB、下載 1 GB，讀取時邊讀邊算。含 `<!DOCTYPE` 或 `<!ENTITY`、NUL 或 UTF-16 BOM 的成員不解析。CRC 錯、不支援的壓縮法、加密或資料流壞掉的成員讓整季失敗；同一家同一種報表（`cr`／`ir`／`er`）有兩份也是。

@@ -45,6 +45,7 @@ from app.db import SessionLocal
 from app.models import FundamentalSnapshot, IngestionRun, Instrument
 from app.trading_calendar import next_session
 from worker import bounded_http, pipeline
+from worker.foreign_issuers import foreign_issuers
 from worker.sources import (
     FundamentalRecord,
     OfficialDataError,
@@ -126,6 +127,13 @@ DEADLINES: dict[str, dict[int, tuple[int, int]]] = {
     "securities": _FINANCIAL,
 }
 ANNUAL_DEADLINE = (3, 31)
+# Foreign issuers (第一上市（櫃）公司) file Q2 within two months of the half
+# year from the 2021 fiscal year (公開發行公司財務報告及營運情形公告申報特殊
+# 適用範圍辦法 第3條第3款, 110-04-21); Q1, Q3 and the annual report are as
+# above.  Formats already due 8/31 keep it (#1101).
+FOREIGN_Q2_DEADLINE = (8, 31)
+FOREIGN_RULE_FROM_YEAR = 2021
+FOREIGN_RULE = "foreign_issuer_q2_two_months"
 
 
 # --- quarters -----------------------------------------------------------------
@@ -190,10 +198,43 @@ def request_form(market: str, quarter: Quarter) -> dict[str, str]:
 # --- statutory deadline and availability -------------------------------------
 
 
-def nominal_deadline(report_format: str, quarter: Quarter) -> date:
+def foreign_rule_applies(quarter: Quarter) -> bool:
+    return quarter.quarter == 2 and quarter.year >= FOREIGN_RULE_FROM_YEAR
+
+
+def nominal_deadline(
+    report_format: str, quarter: Quarter, foreign: bool = False
+) -> date:
+    """The format's deadline; a foreign issuer's Q2 from 2021 is 8/31 at the earliest."""
+
     if quarter.quarter == 4:
         return date(quarter.year + 1, *ANNUAL_DEADLINE)
-    return date(quarter.year, *DEADLINES[report_format][quarter.quarter])
+    day = date(quarter.year, *DEADLINES[report_format][quarter.quarter])
+    if foreign and foreign_rule_applies(quarter):
+        return max(day, date(quarter.year, *FOREIGN_Q2_DEADLINE))
+    return day
+
+
+def deadline_key(
+    report_format: str, quarter: Quarter, foreign_basis: str | None
+) -> str:
+    """A run's deadline cache key: the format, or the format under the foreign rule."""
+
+    if foreign_basis is not None and foreign_rule_applies(quarter):
+        return f"{report_format}:{FOREIGN_RULE}"
+    return report_format
+
+
+def deadline_details(quarter: Quarter, foreign_basis: str | None) -> dict[str, str]:
+    """``data_json`` keys naming the foreign-issuer rule; empty when it does not apply.
+
+    A row without them follows its format's deadline, so the rows of other
+    companies and quarters are unchanged by #1101.
+    """
+
+    if foreign_basis is None or not foreign_rule_applies(quarter):
+        return {}
+    return {"deadline_rule": FOREIGN_RULE, "foreign_issuer_basis": foreign_basis}
 
 
 def roll_to_session(db: Session, day: date) -> tuple[date, str]:
@@ -440,6 +481,7 @@ def _record(
     deadline: date,
     calendar: str,
     payload_sha256: str,
+    foreign_basis: str | None = None,
 ) -> FundamentalRecord:
     details: dict[str, Any] = {
         **row.cells,
@@ -451,6 +493,7 @@ def _record(
         "announcement_basis": basis,
         "statutory_deadline": deadline.isoformat(),
         "deadline_calendar": calendar,
+        **deadline_details(quarter, foreign_basis),
     }
     return FundamentalRecord(
         symbol=row.symbol,
@@ -525,7 +568,11 @@ def apply_record(
             return "unchanged"
         row.announcement_date = announcement
         row.data_json = {
-            **(row.data_json or {}),
+            **{
+                key: value
+                for key, value in (row.data_json or {}).items()
+                if key not in pipeline.ANNOUNCEMENT_KEYS
+            },
             **{
                 key: details[key]
                 for key in pipeline.ANNOUNCEMENT_KEYS
@@ -623,6 +670,7 @@ def backfill_quarterly_fundamentals(
     instruments = {
         (item.exchange, item.symbol): item for item in db.scalars(select(Instrument))
     }
+    foreign = foreign_issuers(db)
     db.commit()
     manifest: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
@@ -657,7 +705,7 @@ def backfill_quarterly_fundamentals(
                     sleep(interval_seconds)
                 first = False
                 item = _fetch_and_store(
-                    db, run, market, exchange, quarter, fetcher, instruments
+                    db, run, market, exchange, quarter, fetcher, instruments, foreign
                 )
                 manifest[key] = item
                 if item["status"] == "failed":
@@ -716,6 +764,7 @@ def _fetch_and_store(
     quarter: Quarter,
     fetcher: Callable[[str, dict[str, str]], str],
     instruments: dict[tuple[str, str], Instrument],
+    foreign: dict[int, str] | None = None,
 ) -> dict[str, Any]:
     form = request_form(market, quarter)
     try:
@@ -741,20 +790,32 @@ def _fetch_and_store(
     deadlines: dict[str, tuple[date, str]] = {}
     counts = dict.fromkeys((*OUTCOMES, "outside_universe"), 0)
     formats: dict[str, int] = {}
+    foreign = foreign or {}
     for row in rows:
         formats[row.report_format] = formats.get(row.report_format, 0) + 1
         instrument = instruments.get((exchange, row.symbol))
         if instrument is None:
             counts["outside_universe"] += 1
             continue
-        if row.report_format not in deadlines:
-            deadlines[row.report_format] = roll_to_session(
-                db, nominal_deadline(row.report_format, quarter)
+        foreign_basis = foreign.get(instrument.id)
+        key = deadline_key(row.report_format, quarter, foreign_basis)
+        if key not in deadlines:
+            deadlines[key] = roll_to_session(
+                db,
+                nominal_deadline(row.report_format, quarter, foreign_basis is not None),
             )
-        deadline, calendar = deadlines[row.report_format]
+        deadline, calendar = deadlines[key]
         available, basis = availability(deadline, first_seen)
         record = _record(
-            row, market, quarter, available, basis, deadline, calendar, captured.sha256
+            row,
+            market,
+            quarter,
+            available,
+            basis,
+            deadline,
+            calendar,
+            captured.sha256,
+            foreign_basis,
         )
         counts[apply_record(db, record, instrument, raw.id)] += 1
     db.flush()
@@ -769,6 +830,132 @@ def _fetch_and_store(
         },
         **counts,
     }
+
+
+# --- foreign issuers' deadline on stored rows (#1101) ----------------------------
+
+RECOMPUTE_RUN_TYPE = "fundamental_deadline_recompute"
+
+
+def recompute_foreign_deadlines(db: Session, *, apply: bool = False) -> dict[str, Any]:
+    """Move stored foreign issuers' Q2 rows from 2021 to their own deadline.
+
+    Only rows whose ``announcement_basis`` is ``statutory_deadline`` change,
+    of any source (a snapshot row a backfill dated keeps its values and
+    source).  The new date is what a backfill would write now: the format's
+    deadline under the foreign rule (``report_format``; a snapshot row has
+    none and is ``general``), rolled to a session, and never after the Taipei
+    day the row was collected (``availability``; earlier is ``first_seen``).
+    Values, source, ``raw_payload_id`` and ``collected_at`` stay; a rerun
+    changes nothing.  ``apply`` False writes nothing and opens no run.
+    """
+
+    foreign = foreign_issuers(db)
+    instruments = {
+        item.id: item
+        for item in db.scalars(select(Instrument).where(Instrument.id.in_(foreign)))
+    }
+    rows = db.scalars(
+        select(FundamentalSnapshot)
+        .where(
+            FundamentalSnapshot.instrument_id.in_(foreign),
+            FundamentalSnapshot.fiscal_period == "Q2",
+            FundamentalSnapshot.period_end >= date(FOREIGN_RULE_FROM_YEAR, 6, 30),
+        )
+        .order_by(FundamentalSnapshot.period_end, FundamentalSnapshot.id)
+    ).all()
+    deadlines: dict[tuple[str, int], tuple[date, str]] = {}
+    changes: list[dict[str, Any]] = []
+    counts = {"rows": len(rows), "changed": 0, "unchanged": 0, "not_deadline": 0}
+    by_group: dict[str, dict[str, int]] = {}
+    for row in rows:
+        details = dict(row.data_json or {})
+        if _basis(details) != "statutory_deadline":
+            counts["not_deadline"] += 1
+            continue
+        quarter = Quarter(row.period_end.year, 2)
+        report_format = details.get("report_format")
+        if report_format not in DEADLINES:
+            report_format = "general"
+        key = (report_format, quarter.year)
+        if key not in deadlines:
+            deadlines[key] = roll_to_session(
+                db, nominal_deadline(report_format, quarter, foreign=True)
+            )
+        deadline, calendar = deadlines[key]
+        available, basis = availability(deadline, _taipei_day(row.collected_at))
+        foreign_basis = foreign[row.instrument_id]
+        new_details = {
+            **details,
+            "announcement_basis": basis,
+            "statutory_deadline": deadline.isoformat(),
+            "deadline_calendar": calendar,
+            **deadline_details(quarter, foreign_basis),
+        }
+        if row.announcement_date == available and details == new_details:
+            counts["unchanged"] += 1
+            continue
+        counts["changed"] += 1
+        instrument = instruments[row.instrument_id]
+        group = by_group.setdefault(
+            f"{quarter.label}:{instrument.exchange}:{foreign_basis}", {}
+        )
+        move = f"{row.announcement_date}->{available}"
+        group[move] = group.get(move, 0) + 1
+        changes.append(
+            {
+                "id": row.id,
+                "exchange": instrument.exchange,
+                "symbol": instrument.symbol,
+                "period_end": row.period_end.isoformat(),
+                "source": row.source,
+                "before": row.announcement_date.isoformat()
+                if row.announcement_date
+                else None,
+                "after": available.isoformat(),
+                "basis": basis,
+                "foreign_issuer_basis": foreign_basis,
+            }
+        )
+        if apply:
+            row.announcement_date = available
+            row.data_json = new_details
+    bases: dict[str, int] = {}
+    for value in foreign.values():
+        bases[value] = bases.get(value, 0) + 1
+    result: dict[str, Any] = {
+        "status": "success",
+        "apply": apply,
+        "foreign_issuers": bases,
+        **counts,
+        "groups": by_group,
+        "changes": changes,
+    }
+    if apply:
+        now = utcnow()
+        run = IngestionRun(
+            run_type=RECOMPUTE_RUN_TYPE,
+            source="derived:fundamental_deadlines",
+            run_date=_taipei_day(now),
+            status="success",
+            records=counts["changed"],
+            started_at=now,
+            finished_at=now,
+            metadata_json={
+                key: value for key, value in result.items() if key != "status"
+            },
+        )
+        db.add(run)
+        db.commit()
+        result["run_id"] = run.id
+    else:
+        db.rollback()
+    return result
+
+
+def run_foreign_deadline_recompute(apply: bool) -> dict[str, Any]:
+    with SessionLocal() as db:
+        return recompute_foreign_deadlines(db, apply=apply)
 
 
 def run_fundamental_backfill(quarters: int, end: str | None) -> dict[str, Any]:
