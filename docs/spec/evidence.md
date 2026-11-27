@@ -1321,6 +1321,51 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #1067 | 第一版；沒有人用它對回補資料跑過 |
 
+**第二十二輪的假設**（[第二十二輪：AE1](#第二十二輪ae1)）：`tools/research/round22_research.py`（[#1080](https://github.com/YiCheng0608/stock-lab/issues/1080)）。AE1 寫在 `round22_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round21_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（AE1 不用成員表，沒有 `--members`）。AE1 走[逐筆評估](#逐筆評估)，同 J3：逐筆成交、結算、占用與統計（`trade_research` 的 `TradeBars`、`_trade_row`、`settle`、`baseline`、`stats`、`State`，t 用 `overlap=20`）、沒有停損與目標的出場（`round9_research.enter_next_open`、`NO_STOP`、`trade_context`）；母體（`evidence_lib.universe`）、載入（`explore_research.load_context`，含重大訊息清單）、`explore_judge`、主旨規則與 `ann_date`（`round21_research.announced`／`ann_date`，一字不改）、AD1 的名單（`round21_research.plan_ad1` 本身，`round21_research` 第 1 版的 `HYPOTHESES["AD1"]`）、對照基準的去掉法（`round21_research._reference`，即 `round20_research._reference`，G1 的寫法）、重疊比例（`round10_research` 的 `overlap_share`、`overlap_summary`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具。新寫的只有公告交易日 a、EAR、AE1 的訊號、對照基準的基準（`trade_research.baseline` 換一個母體）與另列的檔數。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round21_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round22_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **一份 panel**：`round22_research.load` 用 `explore_research.load_context` 讀一份 panel（含重大訊息清單；`events` 的 `source`＝`mops_material_information`、`event_type`＝`material_information`，清單日期到該段最後一天），逐筆的標的狀態與下市、轉板股的最後一根日線用 `round9_research.trade_context`（同 `trade_research.load`），`round21_research` 的 `Context`（`ann_date`、AD1 的名單）也建在同一個 `explore_research.Context` 上。三段都從副本起點讀（`LOAD_FROM`，規則 `LOAD_RULE` 算進 `definitions_sha256`），不讀段末以後的任何列（下市、轉板股最後一根日線的日期除外，不讀價格）。
+- **算法**：照[第二十二輪：AE1](#第二十二輪ae1)與[第二十二輪實作釋義](#第二十二輪實作釋義)。
+  - `ann_date`：`round21_research.announced` 本身（主旨規則、季底次日到法定期限、日曆日、只取第一則），`round21_research` 的版本與 `definitions_sha256` 算進本工具的 `definitions_sha256`，換掉主旨規則或區間時本工具的雜湊也跟著變。只用 ≥ 起日 2013-04-01 的 `ann_date`（2013Q1 起的季）。
+  - 公告交易日 a：`round22_research.announcement_session`，`Panel.sessions` 中 ≥ `ann_date` 的第一個交易日（週末、休市日順延到之後第一個交易日）。訊號日 T＝a+1（收盤後）。
+  - EAR：`round22_research.ear`，這一檔的窗口報酬 close(a+1) ÷ close(a−2) − 1（還原收盤；a−2、a+1 數 `Panel.sessions`，中間停牌不影響），減去 T 的母體（`evidence_lib.universe`）裡 a−2 與 a+1 都有收盤的成員同一窗口報酬的等權平均（`population_mean`；照登記的「母體」扣掉占用中的股票：到出場日或放棄日（含）為止是占用中，以 T 當天任何一筆成交之前的狀態為準，這一檔自己算在內；`trade_research.baseline` 的基準母體照逐筆評估不扣占用）。「有收盤」是那個交易日有日線、沒有停牌、還原收盤 > 0。
+  - 條件與進場：EAR > 0、這一檔在 T 的母體裡且不在占用中（`trade_research.State.busy`）就是訊號，每天的訊號全部進場；T+1 開盤成交（期限 1 日），T+1 不可成交（停牌、沒有日線）或漲停鎖死就放棄，兩類原因另列；T+1 跌停鎖死照常以開盤價成交、另列筆數。退化的判準：這一季（季底次日到法定期限，含期限當天，日曆日）沒有符合主旨規則的公告時沒有 `ann_date`，不成訊號；同一檔同一季有多則符合的，只取季底次日起的第一則（發言日期最早的）；起日 2013-04-01 以前的 `ann_date`（2012Q4 以前的季）不成訊號；`Panel.sessions` 沒有 ≥ `ann_date` 的交易日，或 a+1 在 panel 最後一天之後時不成訊號；這一檔在 a−2 或 a+1 沒有日線、停牌或還原收盤 ≤ 0 時窗口報酬缺值，EAR 缺值、不符合；母體平均只取 T 的母體（`evidence_lib.universe`）扣掉占用中的股票（以 T 當天任何一筆成交之前的占用為準，這一檔自己算在內）之後 a−2 與 a+1 都有收盤的成員，一個都沒有時平均缺值，EAR 缺值、不符合；EAR 剛好等於 0 不符合；不符合的原因依序判：T 不在母體、占用中、EAR 缺值、EAR ≤ 0，每筆只算第一個；同一檔兩季的訊號落在同一個 T 時先算較早的季，較晚的季因占用中不成立；每天的訊號全部進場，不排序、不設上限。
+  - 出場：沒有停損與目標（`settle` 帶 `NO_STOP`），成交日算第 1 天，第 60 個交易日收盤出場；跌停鎖死與停牌順延到下一個可賣的開盤、下市、轉板與段末結算照[逐筆評估](#逐筆評估)。占用照[逐筆評估](#逐筆評估)：到出場日（含）為止是占用中，出場日當天收盤後出的訊號可以算；持有中的同一檔下一季的訊號不成立，不延後、不遞補。
+  - 超額：每筆扣成本報酬減去同一訊號日 T 的母體在同一個成交日買、同一個出場日賣的等權平均（`trade_research.baseline`），同一訊號日的各筆先平均成訊號日序列，t 用 `overlap=20`（持有 60 日時只是保守的下限）。對照基準：每筆用 `trade_research.baseline` 在「T 的母體去掉這筆的季沒有 `ann_date` 的下市、轉板股」上算（`ReferenceView`），只列出。
+  - 報告開頭寫「定義照摘要與索引頁，未讀全文；來源只找到工作論文版本」與存活者偏差：
+    - 存活者偏差（AE1）：下市公司 2014 年起 0 則重大訊息，沒有 `ann_date` 就不成訊號，偏差方向對假設有利。對照基準（母體去掉這一季沒有 `ann_date` 的下市、轉板股）的超額與 t 在 `AE1/summary.md`「數字」表的「超額（對對照基準，只列出）」列與 `explore.md` 的「只列出、不判定」
+
+    另列（只列出、不判定）：對照基準：訊號日 T 的母體去掉「這筆訊號的季沒有 `ann_date` 的 `delisted`／`transferred` 標的」，同一套逐筆評估（`trade_research.baseline`，同一筆的成交日與出場日）算的基準；列 AE1 對它的超額與 t，只列出、不判定（判定仍只比母體）；依年（T 的年）、依季（財報的季）：母體裡有 `ann_date` 的檔數（T 在母體裡的 (F, q)）、其中 EAR 缺值的檔數、EAR > 0 的訊號數與訊號日數（有訊號的不同 T）。只列出、不判定；AE1 與 AD1（`round21_research` 第 1 版的 `HYPOTHESES["AD1"]`，同一季算）名單的重疊比例：每一季 |AE1 這一季的訊號 ∩ AD1 這一季的名單| ÷ AE1 這一季的訊號數（同一檔同一季算一次）；AD1 這一季的名單是 `round21_research.plan_ad1` 在這一季的窗口裡任一天選進的檔，AD1 起日（2014-04-15）以前的季與 AD1 沒有名單的季不計；依 T 的年列各季的平均，另列合計的檔數。只列出、不判定。`explore.json` 的 AE1 列有 `reference_excess`、`overlap_ad1`、`t1_locked_down_fills`、`win_rate`、`trades`、`abandon_rate`。
+  - 限制（`LIMITS["AE1"]`，`summary.md` 與 `explore.md` 照寫）：定義照摘要與轉述（[Quantpedia 摘要](https://quantpedia.com/strategies/post-earnings-announcement-effect/)），未讀全文；來源①只找到工作論文版本，沒有找到期刊版本；涵蓋低：主旨規則每個窗口只收到母體的 8.3%～20.2%（#1067 7202828781），名單只會是「會發這則重大訊息的公司」，不能推到整個母體；存活者偏差：下市公司 2014 年起 0 則，沒有 `ann_date` 不成訊號，偏差方向對假設有利，看對對照基準的超額；持有 60 日的逐筆之間重疊比 20 日多，t 照逐筆評估用 `overlap=20`、不改，以「日數 ÷ 20」計只是保守的下限，持有 60 日時實際的重疊更多，t 假設的獨立樣本數偏多；金融業等法定期限不同的公司照樣算，但 `ann_date` 的區間是一般公司的法定期限（同 AD1）；重大訊息 2024-09-28～2026-08-01 的清單缺口落在已用段，探索段與驗證段（到 2024-09-27）用到的 `ann_date` 都在涵蓋內，驗證段最後幾筆持有到段末結算；和 AD1 的關係：同一條主旨規則、同一個 `ann_date`，AD1 的狀態登記時已知（沒有通過），不是 AD1 的變形、也不是看結果挑的：AD1 依去年推的預期公告日、在公告之前持有 5 日，AE1 只在實際公告之後買、依市場對公告的價格反應選、持有 60 日，看和 AD1 的重疊比例；和 V2、AB2、X4 的關係：V2、AB2 是 20 日報酬小者先（反轉），AE1 是公告的 3 日、EAR 為正的方向（漂移），窗口與機制都不同；X4 用 EPS 收益率，AE1 不讀季報。
+  - 漲跌幅依日期：`exit_research.daily_limit`（2015-05-29 以前 ±7%、2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），表算進 `definitions_sha256`。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.392（t < 3.392 判「前瞻觀察」，沒有 t 下限），寫死、不在執行時重算，算進 `definitions_sha256`；有成交的訊號日 < 60（`trade_research.MIN_DAYS`）記無法判定。本輪 1 個、累計 72 個。
+- **探索**：`python tools/research/round22_research.py --db /research/stock.db --segment exploration --hypotheses AE1 --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）。訊號日從起日 2013-04-01 那個交易日起（2013Q1 第一則符合的公告的 a+1 是第一個訊號）。
+- **驗證**：`python tools/research/round22_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `1080`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27。判「通過」的另跑已用段，寫在 `AE1/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以（照樣載入整份 panel，EAR 的正負要讀 a−2 與 a+1 的收盤，只數筆數、不列值）。每個訊號日都數，不扣占用；EAR 的母體平均也不扣占用中的股票（沒有模擬成交，算不出占用），和探索段不同，訊號數只列出、不判定。
+  - 依年（T 的年）一列、依季（財報的季，含 2013 年各季）一列：母體裡有 `ann_date` 的檔數（T 在母體裡的 (F, q)）、EAR 缺值的檔數與比例、EAR ≤ 0、EAR > 0 的訊號數與訊號日數（有訊號的不同 T）、有 `ann_date` 但 T 不在母體的檔數、母體裡的下市、轉板股檔次與其中這一季沒有 `ann_date` 的檔次（對照基準去掉的；每個有訊號的 (T, 季) 數一次）。
+  - 有成交的訊號日的估計：探索段是有訊號的訊號日數（有成交的訊號日不會多於這個數）；驗證段是探索段完整年（起日那年以外）平均每年的訊號日數 × 驗證段的年數，不讀驗證段的資料（同 `round14_research` 的 K1）。
+  - 耗時：總耗時、載入耗時（另列 panel 與逐筆的標的狀態）、峰值記憶體、讀到的日線根數與重大訊息則數，以及特徵的計算時間（`ann_date`（`round21_research.announced` 把清單歸到各季）、`session`（a 與 T）、`ear`（這一檔的窗口報酬）、`population_mean`（母體平均）、`reference`（對照基準的去掉判斷）、`ad1_order`（`round21_research.plan_ad1` 算 AD1 的名單，含它自己的 P1 名單；`--coverage-only` 只計時、不算重疊））。
+  - 有明顯斷點或缺值比例異常的年份或季、探索段或驗證段估計有成交的訊號日不到 60，或 2013 年某一季母體裡有 `ann_date` 的檔數不到 20 時，先在工具單提問、不跑探索段。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round22_research"`、`"round": 22`。代號不重疊，各工具互不擋；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」，接著是「定義照摘要與索引頁，未讀全文；來源只找到工作論文版本」、存活者偏差與對照基準在哪裡、本輪 1 個、累計 72 個、探索段與驗證段的門檻、引擎、AE1 的限制；驗證段另寫前瞻觀察的條件（t < 3.392（沒有 t 下限））；總表列方向、引擎、日數（段內交易日）、有成交的訊號日、對加權指數的超額與 t（第一個列）、對母體的超額與 t、絕對報酬與判定；總表下另列對對照基準的超額與 t、和 AD1 的重疊、成交筆數、勝率與放棄比例。
+  - `explore.json`：同上的總表（AE1 另有 `engine` 與上面列出的欄位），另有 `tool`、`design`（`1080`）、`validation_min_t`、`engines`、`definitions_sha256`、工具 commit、副本資訊與先決條件。
+  - `AE1/summary.md`（開頭先寫「定義照摘要與索引頁，未讀全文；來源只找到工作論文版本」與存活者偏差，再列退化的判準與限制；「數字」表另有對對照基準的超額；「只列出」照[逐筆評估](#逐筆評估)「只列、不判定的欄位」列勝率、出場原因、放棄的比例與兩類原因、T+1 跌停鎖死成交、跌停與停牌順延；另有「依年、依季的檔數與訊號數」與「和 AD1 的重疊」）、`tables.json`、`trades.csv`（每筆訊號一列，有 `quarter`、`ann_date`、`announcement_session`、`window_return`、`population_window`、`ear`、`t1_locked_down`，以及 `reference`、`reference_excess`）、`days.csv`（訊號日序列）。
+  - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
+- **耗時與記憶體**：`--coverage-only` 的實測與探索段的估計見 [#1080](https://github.com/YiCheng0608/stock-lab/issues/1080) AC-4 的回報。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
+- 文件與程式用同一套說法：AE1 的退化判準、重疊比例、對照基準、另列的檔數、存活者偏差、限制與「定義照摘要與索引頁，未讀全文」的說明是 `round22_research` 的 `DEGENERATE`、`OVERLAP_NOTE`、`LIMITS`（`coverage.md` 的說明句 `COVERAGE_NOTES` 引用同一份 `DEGENERATE`），本段逐字照抄，`backend/tests/test_round22_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round22_research` 的版本**：`round22_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（AE1 的定義；`round21_research` 的版本與雜湊（主旨規則、`ann_date` 的區間與第一則）、起日與「起日以前的 `ann_date` 不用」、a 的取法、EAR 的窗口（a−2、a+1）、「有收盤」的判準、母體平均的取法、EAR > 0、T＝a+1、訊號的規則與不符合原因的順序、同一個 T 兩季的順序、進場（T+1 開盤、期限 1 日）、持有 60 日、沒有停損與目標、對照基準的規則（含 `round21_research` 的版本與雜湊）、AD1 的定義與名單的取法、`trade_research` 與 `round9_research` 的版本與雜湊、分段、兩段的門檻、有成交的訊號日下限、`overlap`、本輪與累計的個數、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #1080 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
