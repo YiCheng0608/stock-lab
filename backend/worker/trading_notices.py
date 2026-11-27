@@ -53,7 +53,7 @@ import math
 import re
 import time
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as clock_time
 from typing import Any, Callable
@@ -156,8 +156,9 @@ _PERIOD_SPLIT = re.compile(r"\s*[～~]\s*")
 _CLAUSE_GROUP = re.compile(r"[﹝(（〔\[]([^﹝﹞()（）〔〕\[\]]*款)[﹞)）〕\]]")
 _CLAUSE = re.compile(r"第([0-9０-９〇零一二兩三四五六七八九十百廿]+)款")
 _INTERVAL = re.compile(r"每\s*([0-9０-９〇零一二兩三四五六七八九十百廿]+)\s*分鐘")
-# 預收: the brokers collect the price or the securities in advance.
-_PREPAYMENT = re.compile(r"收取全部|收取.{0,12}(?:價金|款券)|預收")
+# 預收: the brokers collect the price or the securities in advance; 「應先收足款券」 too
+# (TPEx 2008), never 「應收足融資自備款或融券保證金」 (the margin deposit).
+_PREPAYMENT = re.compile(r"收取全部|收取.{0,12}(?:價金|款券)|收足.{0,4}款券|預收")
 _TAG = re.compile(r"<[^>]*>")
 _BREAK = re.compile(r"<br\s*/?>", re.I)
 # TPEx disposal names carry their link: 「金麗科(../../mainboard/...html?code=3228)」.
@@ -178,6 +179,10 @@ _DIGITS = {
     "八": 8,
     "九": 9,
 }
+
+
+class Refused(ValueError):
+    """The arguments ask for no month this may run: nothing is requested."""
 
 
 class LayoutError(OfficialDataError):
@@ -432,11 +437,25 @@ def security_name(cell: Any) -> str:
 
 @dataclass
 class Parsed:
-    """A month's answer: rows by key, days verified empty."""
+    """A month's answer: rows by key, days verified empty.
+
+    ``placeholder_with_rows`` are the days TPEx printed a placeholder row and data
+    rows for (#1092 review: 2004-06-07 of the attentions): not verified empty.
+    """
 
     rows: dict[tuple, dict[str, Any]]
     empty_days: set[date]
     answer_rows: int
+    placeholder_with_rows: set[date] = field(default_factory=set)
+
+
+def _tpex_parsed(
+    rows: dict[tuple, dict[str, Any]], placeholders: set[date], answer_rows: int
+) -> Parsed:
+    """The days of a placeholder row that also have data rows are not empty."""
+
+    with_rows = placeholders & {key[1] for key in rows}
+    return Parsed(rows, placeholders - with_rows, answer_rows, with_rows)
 
 
 def _records(fields: Any, data: Any, layout: tuple[str, ...]) -> list[dict]:
@@ -565,7 +584,7 @@ def parse_tpex_attention(payload: Any, first: date, last: date) -> Parsed:
                 "cumulative_count": _count(record["累計"]),
             },
         )
-    return Parsed(rows, empty, len(records))
+    return _tpex_parsed(rows, empty, len(records))
 
 
 def _period(cell: Any) -> tuple[date, date]:
@@ -625,7 +644,7 @@ def parse_tpex_disposal(payload: Any, first: date, last: date) -> Parsed:
         values = _disposal(record, "處置起訖時間", "處置原因")
         values["cumulative_count"] = _count(record["累計"])
         _keep(rows, (code, announced, values["start_date"]), values)
-    return Parsed(rows, empty, len(records))
+    return _tpex_parsed(rows, empty, len(records))
 
 
 PARSERS: dict[str, Callable[[Any, date, date], Parsed]] = {
@@ -769,6 +788,11 @@ def write_month(
         "empty_days": sorted(
             day.isoformat() for day in parsed.empty_days if month <= day <= last
         ),
+        "placeholder_with_rows": sorted(
+            day.isoformat()
+            for day in parsed.placeholder_with_rows
+            if month <= day <= last
+        ),
         "nulls": dict(sorted(nulls.items())),
     }
 
@@ -841,6 +865,7 @@ def _empty_counts(feed: Feed) -> dict[str, Any]:
         "unchanged": 0,
         "unmatched": 0,
         "empty_days": 0,
+        "placeholder_with_rows": 0,
         "first_month": f"{feed.first_month:%Y-%m}",
     }
 
@@ -860,15 +885,17 @@ def backfill(
     latest = latest_complete_month(now())
     end = month_start(end) if end else latest
     if end > latest:
-        raise ValueError(
+        raise Refused(
             f"{end:%Y-%m} is not a complete month yet; the latest is {latest:%Y-%m}"
         )
     names = feeds or list(FEEDS)
     unknown = [name for name in names if name not in FEEDS]
     if unknown:
-        raise ValueError(f"unknown feeds {unknown}; known: {list(FEEDS)}")
+        raise Refused(f"unknown feeds {unknown}; known: {list(FEEDS)}")
     if max_requests is not None and max_requests < 0:
-        raise ValueError("--max-requests is negative")
+        raise Refused("--max-requests is negative")
+    if start is not None and month_start(start) > end:
+        raise Refused(f"--start-month {start:%Y-%m} is after {end:%Y-%m}")
     for table in ("trading_attentions", "trading_disposals"):
         if not inspect(db.get_bind()).has_table(table):
             raise ValueError(f"{table} is missing: run init-db first")
@@ -975,6 +1002,7 @@ def backfill(
             ):
                 counts[key] += written[key]
             counts["empty_days"] += len(written["empty_days"])
+            counts["placeholder_with_rows"] += len(written["placeholder_with_rows"])
         if stopped:
             break
     remaining = 0
@@ -1015,7 +1043,7 @@ def run_trading_notices_backfill(
         first = parse_month(start_month) if start_month else None
         last = parse_month(end_month) if end_month else None
     except ValueError as exc:
-        return {"status": "failed", "error": str(exc)}
+        return {"status": "refused", "error": str(exc)}
     previous = sources.set_minimum_host_interval(REQUEST_INTERVAL_SECONDS)
     try:
         with SessionLocal() as db:
@@ -1028,6 +1056,8 @@ def run_trading_notices_backfill(
                     reapply=reapply,
                     max_requests=max_requests,
                 )
+            except Refused as exc:
+                return {"status": "refused", "error": str(exc)}
             except ValueError as exc:
                 db.rollback()
                 return {"status": "failed", "error": str(exc)}

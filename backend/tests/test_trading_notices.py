@@ -125,6 +125,15 @@ def test_clause_interval_and_prepayment_unread_are_null():
     assert tn.prepayment_of("") is None
     assert tn.prepayment_of("申報金額總公司不得超過新台幣四千萬元") is False
     assert tn.prepayment_of("應就其當日已委託之買賣，向該投資人收取全部之買進價金")
+    # TPEx 2008 (probe tpex_disposal_2008y, 9951 2008-12-17): prepayment in other words.
+    assert tn.prepayment_of(
+        "自97年12月10日起，經紀商於接受委託買賣時，應先收足款券始得辦理買賣"
+    )
+    # The margin deposit is no prepayment.
+    assert (
+        tn.prepayment_of("信用交易部分，則收足融資自備款或融券保證金。但信用交易了結")
+        is False
+    )
 
 
 # --- parsers ------------------------------------------------------------------------
@@ -170,6 +179,32 @@ def test_tpex_attention_2008_has_no_clauses_and_placeholders_are_empty_days():
         date(2008, 10, 24),
     }
     assert parsed.answer_rows == len(ATTENTION_OLD["tables"][0]["data"])
+
+
+def test_a_placeholder_day_with_rows_is_not_verified_empty():
+    # tpex_attention_2004y: 93/06/07 has 「本日無公佈注意資訊」 and 5810's notice.
+    attention = copy.deepcopy(ATTENTION_OLD)
+    data = attention["tables"][0]["data"]
+    real = next(row for row in data if row[1].strip())
+    placeholder = next(row for row in data if not row[1].strip())
+    data.append([*real[:5], placeholder[5], *real[6:]])
+    parsed = tn.parse(feed("tpex-attention"), attention, date(2008, 10, 1))
+    day = roc_day(placeholder[5])
+    assert day not in parsed.empty_days and parsed.placeholder_with_rows == {day}
+    assert (real[1], day) in parsed.rows
+    disposal = copy.deepcopy(DISPOSAL_NEW)
+    data = disposal["tables"][0]["data"]
+    placeholder = next(row for row in data if row[1] == "109/11/18")
+    data.append([*next(row for row in data if row[2] == "3228")])
+    data[-1][1] = placeholder[1]
+    parsed = tn.parse(feed("tpex-disposal"), disposal, NOV)
+    assert parsed.placeholder_with_rows == {date(2020, 11, 18)}
+    assert parsed.empty_days == {date(2020, 12, 28)}
+
+
+def roc_day(text):
+    year, month, day = (int(part) for part in text.split("/"))
+    return date(year + 1911, month, day)
 
 
 def test_twse_punish_2008_blank_content_is_null_not_guessed():
@@ -374,6 +409,7 @@ def test_a_backfill_writes_the_month_and_a_rerun_changes_nothing(factory):
         assert len(manifest) == 4 and {r.status for r in manifest} == {"success"}
         disposal_run = next(r for r in manifest if r.source == "tpex-disposal")
         assert disposal_run.metadata_json["empty_days"] == ["2020-11-18"]
+        assert disposal_run.metadata_json["placeholder_with_rows"] == []
         assert disposal_run.metadata_json["other_month"] == 1
         assert disposal_run.data_as_of == "2020-11-01~2020-12-31"
     assert first["feeds"]["tpex-disposal"]["empty_days"] == 1
@@ -492,8 +528,41 @@ def test_no_request_before_a_feeds_first_month(factory):
     assert result["feeds"]["tpex-disposal"]["months"] == 0
 
 
+def test_an_empty_month_is_a_success_without_rows(factory):
+    # The probe's twse_notice_200001 / tpex_disposal_200001: stat ok, no row.
+    notice = rewindow(NOTICE_NEW, "twse-notice", NOV)
+    notice.update(data=[], total=0, count=0)
+    disposal = copy.deepcopy(DISPOSAL_NEW)
+    disposal["tables"][0]["data"] = []
+    answers = {("twse-notice", NOV): notice, ("tpex-disposal", NOV): disposal}
+    result = run(factory, Fetcher(answers), feeds=["twse-notice", "tpex-disposal"])
+    assert result["status"] == "success", result
+    assert result["requests"] == 2 and result["changed"] == 0
+    assert result["feeds"]["twse-notice"]["rows"] == 0
+    assert result["feeds"]["tpex-disposal"]["empty_days"] == 0
+
+
+def test_delisted_and_transferred_instruments_are_matched(factory):
+    with factory() as db:
+        add_instrument(db, "TWSE", "1220", status="delisted")
+        add_instrument(db, "TWSE", "2009", status="transferred")
+        db.commit()
+    run(factory, Fetcher(), feeds=["twse-notice"])
+    with factory() as db:
+        matched = {
+            row.symbol: row.instrument_id is not None
+            for row in db.scalars(select(TradingAttention))
+        }
+    assert matched == {"1220": True, "2009": True, "2038": False, "6153": False}
+
+
+def test_a_start_after_the_end_is_refused(factory):
+    with factory() as db, pytest.raises(tn.Refused, match="after"):
+        tn.backfill(db, DEC, NOV, fetch=Fetcher(), now=lambda: MORNING)
+
+
 def test_only_complete_months(factory):
-    with factory() as db, pytest.raises(ValueError, match="not a complete month"):
+    with factory() as db, pytest.raises(tn.Refused, match="not a complete month"):
         tn.backfill(db, date(2026, 11, 1), date(2026, 11, 1), now=lambda: MORNING)
     assert tn.latest_complete_month(MORNING) == date(2026, 10, 1)
     # 2026-11-30 17:00 UTC is 12-01 01:00 Taipei: November is complete.
@@ -601,7 +670,7 @@ def test_the_run_keeps_three_and_a_half_seconds_and_restores_the_floor(monkeypat
     tn.run_trading_notices_backfill("2020-11", "2020-11")
     assert seen == [tn.REQUEST_INTERVAL_SECONDS]
     assert sources._minimum_host_interval == before
-    assert tn.run_trading_notices_backfill("2020-13")["status"] == "failed"
+    assert tn.run_trading_notices_backfill("2020-13")["status"] == "refused"
 
 
 # --- the migration --------------------------------------------------------------------

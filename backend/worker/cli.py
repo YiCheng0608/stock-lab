@@ -1365,7 +1365,10 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         sys.exit(US_COLLECT_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command == "index-bars" and args.index_bars_command == "futures-night":
         sys.exit(FUTURES_NIGHT_EXIT_CODES.get(str(result.get("status")), 1))
-    if args.command == "revenue" and result.get("status") == "refused":
+    if (
+        args.command in {"revenue", "trading-notices"}
+        and result.get("status") == "refused"
+    ):
         raise SystemExit(2)
     if (
         args.command in {"fundamentals", "revenue", "index-bars", "trading-notices"}
