@@ -9,6 +9,7 @@ source file is in the PR description.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import socket
 import sqlite3
@@ -387,6 +388,42 @@ def test_a_damaged_stored_page_is_asked_again(tmp_path):
     (directory / "raw/8067/102.json").write_bytes(b"{}")
     server = Server({"8067": [page("general_8067_102.html")]}, fake)
     assert fetch(directory, server, fake)["requests"] == 1
+
+
+def test_a_stored_page_the_rule_now_refuses_is_asked_again_and_kept(tmp_path):
+    # PR #1104 review 7216384719: a page stored by the older rule and cut short.
+    directory = tmp_path / "out"
+    plan(directory, ("8067", 2013))
+    text = (FIXTURES / "general_8067_102.html").read_text(encoding="utf-8")
+    cut = text[: text.index("201304_8067_AI3.pdf")].encode(rf.ENCODING)
+    target = rf.Target("8067", 2013)
+    data = rf.envelope(target, 200, "text/html", cut, taipei(14, 0))
+    path = directory / rf.raw_name(target)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(data)
+    rf._write_json(
+        directory / rf.MANIFEST,
+        {
+            "pages": {
+                target.key: {
+                    "path": rf.raw_name(target),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "kind": "filings",
+                    "fetched_at": "2026-11-27T06:00:00+00:00",
+                }
+            }
+        },
+    )
+    manifest = rf.read_manifest(directory)
+    assert rf.stored_page(directory, target, manifest) is None
+    fake = FakeTime(taipei(14, 20))
+    server = Server({"8067": [page("general_8067_102.html")]}, fake)
+    out = fetch(directory, server, fake)
+    assert out["requests"] == 1 and out["counts"] == {"filings": 1}
+    stored, body = rf.read_envelope(path.read_bytes())
+    assert body == page("general_8067_102.html")
+    (kept,) = (directory / rf.FAILED_DIR / "8067").iterdir()
+    assert kept.name.endswith(".stale.json") and kept.read_bytes() == data
 
 
 def test_three_failures_in_a_row_stop_with_the_last_success(tmp_path):

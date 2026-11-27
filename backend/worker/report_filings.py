@@ -326,7 +326,12 @@ def raw_name(target: Target) -> str:
 def stored_page(
     directory: Path, target: Target, manifest: dict[str, Any]
 ) -> bytes | None:
-    """The stored envelope of TARGET when it is whole (the manifest's sha256), else None."""
+    """The stored envelope of TARGET when it is whole and still a page, else None.
+
+    Whole: the manifest's sha256.  Still a page: ``classify`` passes it today, so a
+    page an older rule stored and this one refuses (cut short, PR #1104 review
+    suggestion) is asked again by the next fetch and not read by ``write``.
+    """
 
     entry = manifest["pages"].get(target.key)
     if not entry:
@@ -338,7 +343,29 @@ def stored_page(
         return None
     if hashlib.sha256(data).hexdigest() != entry.get("sha256"):
         return None
+    try:
+        stored, body = read_envelope(data)
+    except (ValueError, KeyError, TypeError):
+        return None
+    if classify(stored.get("status"), body) is not None:
+        return None
     return data
+
+
+def _set_aside(directory: Path, target: Target, manifest: dict[str, Any]) -> None:
+    """A stored file no longer taken as the page moves to ``FAILED_DIR``, never deleted."""
+
+    entry = manifest["pages"].get(target.key)
+    if not entry:
+        return
+    path = directory / entry["path"]
+    if path.exists():
+        kept = directory / FAILED_DIR / target.symbol
+        kept.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        os.replace(path, kept / f"{target.roc_year}.{stamp}.stale.json")
+    del manifest["pages"][target.key]
+    _write_json(directory / MANIFEST, manifest)
 
 
 def envelope(
@@ -712,6 +739,7 @@ def fetch_pages(
         if stored_page(directory, target, manifest) is not None:
             counts["kept"] += 1
             continue
+        _set_aside(directory, target, manifest)
         if max_requests is not None and requests >= max_requests:
             stopped = f"max requests {max_requests} reached before {target.key}"
             break
