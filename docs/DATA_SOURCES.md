@@ -912,7 +912,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 
 ### 注意股票與處置股票
 
-研究 DB 沒有注意股票與處置股票的歷史，融資融券名單的 `O`、`!` 註記也分不出成因（[融資標的清單](#融資標的清單)）。[#1086](https://github.com/YiCheng0608/stock-lab/issues/1086) 評估後選定下列四個端點，**只回補進研究 DB**；正式 DB 先不收，之後要每天抓時改讀 OpenAPI（TWSE `announcement/notice`、`announcement/punish`，TPEx `tpex_trading_warning_information`、`tpex_disposal_information`，都只有最新的資料、沒有日期參數）。回補由另一張任務單做，跑法與覆蓋寫在 [RESEARCH_DB](ops/RESEARCH_DB.md)。最早可得見[各來源最早可得](#各來源最早可得)。
+研究 DB 沒有注意股票與處置股票的歷史，融資融券名單的 `O`、`!` 註記也分不出成因（[融資標的清單](#融資標的清單)）。[#1086](https://github.com/YiCheng0608/stock-lab/issues/1086) 評估後選定下列四個端點，**只回補進研究 DB**；正式 DB 先不收。之後要每天抓時，上櫃讀 OpenAPI `tpex_trading_warning_information`、`tpex_disposal_information`（2026-11-27 實測 18:15 已有當天的列），上市處置讀 OpenAPI `announcement/punish`；上市注意股改讀網站 `rwd/zh/announcement/notice`，因為 2026-11-27 實測 OpenAPI `announcement/notice` 從 10:46 到 19:15 都只有一列佔位列，網站同時已有當天的 12 列。這三個 OpenAPI 都只有最新的資料、沒有日期參數。回補由另一張任務單做，跑法與覆蓋寫在 [RESEARCH_DB](ops/RESEARCH_DB.md)。最早可得見[各來源最早可得](#各來源最早可得)。
 
 | 資料 | 端點 | 一次涵蓋 | 欄位 |
 | --- | --- | --- | --- |
