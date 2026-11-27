@@ -562,7 +562,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 1. **`filings plan --dir /out`**：從研究 DB 列出 2013 年起有季報（`fundamental_snapshots`）的「代號 × 年」，寫 `targets.json`。只讀 DB；同一代號在兩個交易所（轉板）只算一個請求。
 2. **`filings fetch --dir /out [--max-requests N]`**：照 `targets.json` 一個請求抓一頁，不碰 DB、不需要 `research-db.json`，可以和其他任務的研究 DB 寫入並行。
-   - 頁存在 `raw/<代號>/<民國年>.json`（請求的 form、狀態碼、抓取時間與回應原始位元組的 base64），`manifest.json` 記每頁的 sha256，`requests.jsonl` 記每個請求。已存且 sha256 相符的頁不重抓，重跑就是續跑。
+   - 頁存在 `raw/<代號>/<民國年>.json`（請求的 form、狀態碼、抓取時間與回應原始位元組的 base64），`manifest.json` 記每頁的 sha256，`requests.jsonl` 記每個請求。已存、sha256 相符、而且照現在的判定仍算是頁的，不重抓，重跑就是續跑。舊判定存下、現在判成失敗的頁（例如被截斷的），`write` 當成還沒抓（`not_fetched`）；下次 `fetch` 先把舊檔移到 `failed/<代號>/<民國年>.<時間>.stale.json`，再重問。
    - 請求之間至少 6 秒；台北 20:30～23:30、08:00～09:00、偶數整點前 10 分到後 10 分不發，遇到就等到時段結束（程序不退出）。
    - 「查詢過量」、HTTP 403／429、其他非 200、空回應、不是公司表也不是「查無所需資料」的頁（例如金控的子公司選單）、表後面沒有 `</table>`（回應被截斷）、沒有回應，都是失敗，不存成頁；本文留在 `failed/<代號>/`。連續 3 次失敗就停（`failed`、exit 1），`stopped` 寫最後一個成功的頁；不自己加長間隔續跑，先回報。沒抓完是 `partial`、exit 3。
    - 目錄放主機的 `stock-lab-data/evidence/1100/`（bind mount 到 `/out`），結案後還在。
