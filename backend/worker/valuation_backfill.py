@@ -632,10 +632,11 @@ def read_raw(row: RawPayload, fallback_raw_dir: Path | None = None) -> Any:
 
     candidates = [payload_file(row.payload_path)]
     if fallback_raw_dir is not None and row.payload_path:
-        relative: Any = legacy_relative(row.payload_path)
+        stored_path = row.payload_path  # only mapped here; payload_file reads it above
+        relative: Any = legacy_relative(stored_path)
         if relative is None:
             try:
-                relative = Path(row.payload_path).relative_to(Path(config.RAW_DIR))
+                relative = Path(stored_path).relative_to(Path(config.RAW_DIR))
             except ValueError:
                 relative = None
         if relative is not None:
