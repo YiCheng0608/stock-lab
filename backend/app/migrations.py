@@ -873,12 +873,12 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0040_premarket_ai', CURRENT_TIMESTAMP)"
         )
     )
-    # 0041 only adds securities_lending_daily / day_trade_daily (#1089), made by
+    # 0043 only adds securities_lending_daily / day_trade_daily (#1089), made by
     # create_all with their indexes; only the research database writes them.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0041_sbl_day_trade', CURRENT_TIMESTAMP)"
+            "VALUES ('0043_sbl_day_trade', CURRENT_TIMESTAMP)"
         )
     )
 

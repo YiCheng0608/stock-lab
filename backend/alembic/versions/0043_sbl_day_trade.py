@@ -1,6 +1,6 @@
 """Add the official daily securities lending and day trade tables.
 
-Revision ID: 0041_sbl_day_trade
+Revision ID: 0043_sbl_day_trade
 Revises: 0040_premarket_ai
 
 ``securities_lending_daily`` keeps one security's 借券賣出 (當日賣出、還券、餘額)
@@ -28,7 +28,7 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0041_sbl_day_trade"
+revision = "0043_sbl_day_trade"
 down_revision = "0040_premarket_ai"
 branch_labels = None
 depends_on = None
