@@ -173,6 +173,10 @@ MI_QFIIS_LAYOUTS = (
 # later); the ones read must be there by name, once.
 TPEX_QUOTE_CODE, TPEX_QUOTE_SHARES = "代號", "發行股數"
 TPEX_QUOTE_TITLE = "上櫃股票行情"
+# The same answer's table of managed (全額交割) stocks: the bars of those days come
+# from it too (2008-07-01: 1107, 2410, 5207 and 6 more, most delisted since).  It
+# has no date of its own; the main table's is checked.
+TPEX_MANAGED_TITLE = "管理股票"
 _TWSE_PERIOD = re.compile(r"(\d{2,3})/([1-4])")
 _TPEX_PERIOD = re.compile(r"(\d{2,3})Q([1-4])")
 _ROC_DAY = re.compile(r"(\d{2,3})/(\d{1,2})/(\d{1,2})")
@@ -419,7 +423,8 @@ def parse_tpex_pb(payload: Any, day: date) -> dict[str, dict[str, Any]]:
 
 
 def parse_tpex_quote_shares(payload: Any, day: date) -> dict[str, dict[str, Any]]:
-    """發行股數 of a stored TPEx quote table: ``dailyQuotes`` or the OpenAPI list."""
+    """發行股數 of a stored TPEx quote table: ``dailyQuotes`` (with its 管理股票 table)
+    or the OpenAPI list."""
 
     if isinstance(payload, list):
         roc = f"{day.year - 1911}{day:%m%d}"
@@ -444,20 +449,31 @@ def parse_tpex_quote_shares(payload: Any, day: date) -> dict[str, dict[str, Any]
             lambda row: {"shares_issued": _shares(row["Capitals"])},
         )
     table = _tpex_table(payload, day, title=TPEX_QUOTE_TITLE)
-    fields = table.get("fields")
-    data = table.get("data")
-    if not isinstance(fields, list) or any(
-        fields.count(name) != 1 for name in (TPEX_QUOTE_CODE, TPEX_QUOTE_SHARES)
-    ):
-        raise LayoutError(f"unknown columns {fields!r}")
-    if not isinstance(data, list) or not data:
+    if not isinstance(table.get("data"), list) or not table["data"]:
         raise LayoutError("the table has no rows")
-    code_at, shares_at = fields.index(TPEX_QUOTE_CODE), fields.index(TPEX_QUOTE_SHARES)
+    managed = [
+        t
+        for t in payload["tables"]
+        if isinstance(t, dict) and t.get("title") == TPEX_MANAGED_TITLE
+    ]
+    if len(managed) > 1:
+        raise LayoutError(f"{len(managed)} {TPEX_MANAGED_TITLE} tables, expected 1")
     rows = []
-    for row in data:
-        if not isinstance(row, list) or len(row) != len(fields):
-            raise LayoutError(f"a row does not match the columns: {row!r}")
-        rows.append({"code": row[code_at], "shares": row[shares_at]})
+    for each in [table, *managed]:
+        fields = each.get("fields")
+        data = each.get("data")
+        if not isinstance(fields, list) or any(
+            fields.count(name) != 1 for name in (TPEX_QUOTE_CODE, TPEX_QUOTE_SHARES)
+        ):
+            raise LayoutError(f"unknown columns {fields!r}")
+        if not isinstance(data, list):
+            raise LayoutError(f"{each.get('title')} has no rows list")
+        code_at = fields.index(TPEX_QUOTE_CODE)
+        shares_at = fields.index(TPEX_QUOTE_SHARES)
+        for row in data:
+            if not isinstance(row, list) or len(row) != len(fields):
+                raise LayoutError(f"a row does not match the columns: {row!r}")
+            rows.append({"code": row[code_at], "shares": row[shares_at]})
     return _by_code(rows, "code", lambda row: {"shares_issued": _shares(row["shares"])})
 
 

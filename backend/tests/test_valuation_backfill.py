@@ -693,3 +693,18 @@ def test_a_seed_capture_with_an_old_windows_path_is_read_from_the_fallback(
     assert result["status"] == "success"
     with factory() as db:
         assert db.scalar(select(SharesOutstandingDaily)).shares_issued == 115_446_000
+
+
+def test_the_managed_stock_table_gives_shares_too():
+    # dailyQuotes' 管理股票 table: the bars of 1107 建台 come from it.
+    parsed = vb.parse_tpex_quote_shares(DAILY_QUOTES, date(2011, 11, 1))
+    assert parsed["1107"] == {"shares_issued": 314_035_300}
+    assert parsed["2341"] == {"shares_issued": 207_812_953}
+    twice = copy.deepcopy(DAILY_QUOTES)
+    twice["tables"][1]["data"].append(list(twice["tables"][0]["data"][0]))
+    with pytest.raises(vb.LayoutError, match="listed twice"):
+        vb.parse_tpex_quote_shares(twice, date(2011, 11, 1))
+    renamed = copy.deepcopy(DAILY_QUOTES)
+    renamed["tables"][1]["fields"][13] = "股數"
+    with pytest.raises(vb.LayoutError, match="unknown columns"):
+        vb.parse_tpex_quote_shares(renamed, date(2011, 11, 1))
