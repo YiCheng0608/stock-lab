@@ -67,7 +67,7 @@ from app.models import (
     SharesOutstandingDaily,
     ValuationDaily,
 )
-from app.raw_paths import payload_file
+from app.raw_paths import legacy_relative, payload_file
 from worker import pipeline, sources
 from worker.sources import (
     TPEX_DAILY_ENDPOINT,
@@ -609,15 +609,19 @@ def read_raw(row: RawPayload, fallback_raw_dir: Path | None = None) -> Any:
 
     A file not whole where ``payload_path`` points is looked for at the same path
     under ``fallback_raw_dir`` (the production volume's ``raw``, mounted read-only),
-    when the path is under this volume's raw directory.
+    when the path is under this volume's raw directory or is an old Windows path
+    (``app.raw_paths.legacy_relative``): the seed rows captured before the Docker
+    cutover keep ``C:\\Users\\...\\raw\\...`` (#1075).
     """
 
     candidates = [payload_file(row.payload_path)]
     if fallback_raw_dir is not None and row.payload_path:
-        try:
-            relative = Path(row.payload_path).relative_to(Path(config.RAW_DIR))
-        except ValueError:
-            relative = None
+        relative: Any = legacy_relative(row.payload_path)
+        if relative is None:
+            try:
+                relative = Path(row.payload_path).relative_to(Path(config.RAW_DIR))
+            except ValueError:
+                relative = None
         if relative is not None:
             candidates.append(Path(fallback_raw_dir) / relative)
     for path in candidates:

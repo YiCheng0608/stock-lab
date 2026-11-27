@@ -650,3 +650,46 @@ def test_reapply_reads_a_failed_sessions_answer_and_asks_nothing(factory, monkey
     again = run(factory, asked, feeds=["twse-pb", "twse-shares"])
     assert again["status"] == "success"
     assert {feed for feed, _ in asked.calls} == {"twse-shares"}
+
+
+def test_a_seed_capture_with_an_old_windows_path_is_read_from_the_fallback(
+    factory, tmp_path, monkeypatch
+):
+    # Seed rows captured before the Docker cutover keep the Windows raw path.
+    monkeypatch.setenv("STOCK_STORED_RAW_DIR", str(tmp_path / "raw"))
+    day = date(2011, 11, 1)
+    production = tmp_path / "production_raw"
+    content = sources._encode_payload(DAILY_QUOTES)
+    digest = hashlib.sha256(content).hexdigest()
+    target = production / "tpex" / "2026" / "10" / "17" / f"{digest}.json"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(content)
+    with factory() as db:
+        raw = RawPayload(
+            source="tpex",
+            endpoint=sources.TPEX_HISTORY_API,
+            payload_path=(
+                "C:\\Users\\YiCheng\\stock-lab-data\\raw\\tpex\\2026\\10\\17\\"
+                f"{digest}.json"
+            ),
+            sha256=digest,
+            data_as_of=day.isoformat(),
+            collected_at=datetime(2026, 10, 17, 2, 0),
+        )
+        db.add(raw)
+        db.flush()
+        add_instrument(db, "TPEx", "006201", [day], raw_id=raw.id, kind="etf")
+        db.commit()
+    with factory() as db:
+        result = vb.backfill(
+            db,
+            day,
+            day,
+            feeds=["tpex-shares"],
+            fallback_raw_dir=production,
+            fetch=Fetcher({}),
+            now=lambda: NOON,
+        )
+    assert result["status"] == "success"
+    with factory() as db:
+        assert db.scalar(select(SharesOutstandingDaily)).shares_issued == 115_446_000
