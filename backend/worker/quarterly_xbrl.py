@@ -71,10 +71,13 @@ from app.models import (
 )
 from app.raw_paths import payload_file
 from worker import sources
+from worker.foreign_issuers import foreign_issuers
 from worker.quarterly_fundamentals import (
     Quarter,
     apply_record,
     availability,
+    deadline_details,
+    deadline_key,
     nominal_deadline,
     roll_to_session,
 )
@@ -822,14 +825,19 @@ def apply_quarter(
     fetched_at: datetime,
     *,
     excluded: frozenset[int] = frozenset(),
+    foreign: dict[int, str] | None = None,
 ) -> QuarterCounts:
     """Check one quarter against t163sb04, then write its missing rows (``run`` None: dry run).
 
     Raises ArchiveError when the archive cannot be trusted, and ``MismatchError`` when
     a company both sources have differs; nothing of the quarter is written then.
+    ``foreign`` (``foreign_issuers``; read here when None) gives foreign issuers
+    their own Q2 deadline (#1101).
     """
 
     counts = QuarterCounts()
+    if foreign is None:
+        foreign = foreign_issuers(db)
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
@@ -964,11 +972,16 @@ def apply_quarter(
                     continue
                 if raw is None:
                     raw = _raw_row(db, run, quarter, data, digest, fetched_at)
-                if report_format not in deadlines:
-                    deadlines[report_format] = roll_to_session(
-                        db, nominal_deadline(report_format, quarter)
+                foreign_basis = foreign.get(instrument.id)
+                key = deadline_key(report_format, quarter, foreign_basis)
+                if key not in deadlines:
+                    deadlines[key] = roll_to_session(
+                        db,
+                        nominal_deadline(
+                            report_format, quarter, foreign_basis is not None
+                        ),
                     )
-                deadline, calendar = deadlines[report_format]
+                deadline, calendar = deadlines[key]
                 available, basis = availability(deadline, first_seen)
                 record = FundamentalRecord(
                     symbol=symbol,
@@ -988,6 +1001,7 @@ def apply_quarter(
                         "announcement_basis": basis,
                         "statutory_deadline": deadline.isoformat(),
                         "deadline_calendar": calendar,
+                        **deadline_details(quarter, foreign_basis),
                     },
                     exchange=instrument.exchange,
                     source=SOURCE,
@@ -1118,6 +1132,7 @@ def _apply_each(
     """Apply the quarters oldest first; the reason of the first that stopped, or None."""
 
     aborted: str | None = None
+    foreign = foreign_issuers(db)
     for quarter in targets:
         entry = manifest["quarters"][quarter.label]
         path = directory / archive_name(quarter)
@@ -1136,6 +1151,7 @@ def _apply_each(
                 digest,
                 datetime.fromisoformat(entry["fetched_at"]),
                 excluded=excluded,
+                foreign=foreign,
             )
         except MismatchError as exc:
             db.rollback()
