@@ -4957,7 +4957,7 @@ AE1 用[逐筆登記表](#假設登記表)與[逐筆評估](#逐筆評估)，沒
 - **定義照摘要與索引頁，未讀全文**：下面引用的文獻，期刊、卷期與頁碼以網路搜尋核對過索引頁，內容只讀摘要、索引頁與後續文獻的轉述。
 
 **依據**
-- #1 決定 [7072448243](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7072448243)：候選單照前例，在前一輪結果出來後開；#1 決定 [7107251741](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107251741)：選股改以 AI 判讀為核心後，研究輪照常。
+- #1 決定 [7072448243](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7072448243)：各輪照前例接著開。本輪在第二十二輪 AE1 的結果出來前開（[#1105](https://github.com/YiCheng0608/stock-lab/issues/1105) 本文），是為了讓候選完全不看 AE1 的結果，見下面「AE1 的時點」。#1 決定 [7107251741](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107251741)：選股改以 AI 判讀為核心後，研究輪照常。
 - 候選清單：#1105 AC-1 提問 [7217188463](https://github.com/YiCheng0608/stock-lab/issues/1105#issuecomment-7217188463)。
   - 5 個候選（AF1～AF5），只依公開研究、交易規則和 repo 的文件。
   - 沒有讀研究 DB（沒有掛研究 volume），也沒有跑研究工具。涵蓋只引用：
