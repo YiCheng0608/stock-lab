@@ -21,15 +21,18 @@ leaves it to the bars.
 
 Each feed and session is one ``ingestion_runs`` row (``DAY_RUN_TYPE``, request key
 ``valuation_backfill:<feed>:<date>``): the manifest.  A session already
-``success`` is not asked again; ``reapply`` rereads its stored raw instead and
-rewrites the rows, ``changed 0`` when nothing differs.  A failed session is asked
-again on the next run.  One commit a feed and session, so a stopped run resumes.
+``success`` is not asked again, and a failed one is asked again on the next run.
+``reapply`` sends no request: it rereads the stored raw of every session that has
+one (a success, or a failure whose answer did not read, after the parser is fixed)
+and rewrites the rows, ``changed 0`` when nothing differs; a session without an
+answer is left to a run (``not_answered``).  One commit a feed and session, so a
+stopped run resumes.
 
 A table that is not one of the known layouts (``*_LAYOUTS``: the TWSE columns before
 and after 2017-04-12, TPEx with and without 財報年/季), a value that does not read
 as a number, a reported date other than the session or an empty table fails the
-whole session; nothing of it is written and nothing is guessed.  ``-``, ``N/A`` and
-blank are NULL (and 0 shares), never 0.
+whole session; nothing of it is written and nothing is guessed.  ``-``, ``N/A``,
+``null`` and blank are NULL (and 0 shares), never 0.
 
 Requests: at least ``REQUEST_INTERVAL_SECONDS`` apart on a host, none between
 ``QUIET_START`` and ``QUIET_END`` Taipei (the run waits), ``ABORT_AFTER_FAILURES``
@@ -97,7 +100,9 @@ ABORT_AFTER_FAILURES = 5
 MAX_LISTED = 200
 BAR_TYPES = ("stock", "ipo", "etf")
 
-NULL_CELLS = frozenset({"", "-", "--", "---", "N/A"})
+# ``null`` (as text): TPEx peQryDate from 2021-07-26 writes it for 6840's 本益比 and
+# 股價淨值比, where the other rows write ``N/A`` (#1075).
+NULL_CELLS = frozenset({"", "-", "--", "---", "N/A", "null"})
 
 # --- layouts ------------------------------------------------------------------
 
@@ -683,6 +688,7 @@ def _empty_counts(feed: Feed) -> dict[str, Any]:
         "done_before": 0,
         "requested": 0,
         "reapplied": 0,
+        "not_answered": 0,
         "success": 0,
         "failed": 0,
         "failed_days": [],
@@ -744,9 +750,14 @@ def backfill(
             if done and not reapply:
                 counts["done_before"] += 1
                 continue
+            stored = (run.metadata_json or {}).get("raw_payload_id")
+            if reapply and feed.requests and not done and stored is None:
+                # reapply sends no request: a session never answered waits for a run.
+                counts["not_answered"] += 1
+                continue
             raw: RawPayload | None = None
             try:
-                if feed.requests and not done:
+                if feed.requests and not reapply:
                     if in_quiet_hours(now()):
                         sleep(seconds_to_quiet_end(now()))
                     _method, endpoint, _form = request_of(name, day)
@@ -764,12 +775,9 @@ def backfill(
                     raw = pipeline._upsert_raw_payload(db, run, captured)
                     source = SOURCES[name]
                 else:
-                    if done:
-                        counts["reapplied"] += 1
+                    counts["reapplied"] += 1
                     if feed.requests:
-                        raw = db.get(
-                            RawPayload, (run.metadata_json or {}).get("raw_payload_id")
-                        )
+                        raw = db.get(RawPayload, stored)
                         if raw is None:
                             raise OfficialDataError(
                                 "the stored session has no raw payload"

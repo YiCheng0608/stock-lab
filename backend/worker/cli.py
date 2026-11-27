@@ -678,7 +678,7 @@ def main() -> None:
     valuation_backfill_parser.add_argument(
         "--reapply",
         action="store_true",
-        help="已成功的日子不請求，改讀已存的 raw 重寫（沒有差異時 changed 0）",
+        help="不送請求：有已存 raw 的日子（成功的，或回應讀不懂而失敗的）改讀 raw 重寫（沒有差異時 changed 0）",
     )
     valuation_backfill_parser.add_argument(
         "--fallback-raw-dir",

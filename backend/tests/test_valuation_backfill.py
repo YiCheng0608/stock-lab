@@ -608,3 +608,45 @@ def test_the_migration_adds_two_empty_tables_and_goes_down_again(tmp_path):
         assert tables <= set(inspect(engine).get_table_names())
     finally:
         engine.dispose()
+
+
+def test_null_text_is_null():
+    # TPEx peQryDate 2021-07-26 on: 6840 東研信超 has 'null' for 本益比 and 股價淨值比.
+    payload = copy.deepcopy(PE_OLD)
+    payload["tables"][0]["data"][0][2] = "null"
+    payload["tables"][0]["data"][0][6] = "null"
+    parsed = vb.parse_tpex_pb(payload, date(2007, 4, 23))
+    assert parsed["1333"]["pe_ratio"] is None and parsed["1333"]["pb_ratio"] is None
+
+
+def test_reapply_reads_a_failed_sessions_answer_and_asks_nothing(factory, monkeypatch):
+    with factory() as db:
+        seed(db)
+    broken = Fetcher(
+        {
+            "twse-pb": BW_NEW,
+            "twse-shares": sources.OfficialDataError("blocked"),
+            "tpex-pb": PE_NEW,
+        }
+    )
+    # The parser of that time could not read the answers.
+    original = vb.PARSERS["twse-pb"]
+    monkeypatch.setitem(
+        vb.PARSERS, "twse-pb", lambda *_: (_ for _ in ()).throw(vb.LayoutError("old"))
+    )
+    first = run(factory, broken)
+    assert first["feeds"]["twse-pb"]["failed"] == 2
+    assert first["feeds"]["twse-shares"]["failed"] == 2
+    monkeypatch.setitem(vb.PARSERS, "twse-pb", original)
+    reapplied = run(
+        factory, Fetcher({}), reapply=True, feeds=["twse-pb", "twse-shares"]
+    )
+    assert reapplied["requests"] == 0
+    assert reapplied["feeds"]["twse-pb"]["success"] == 2
+    assert reapplied["feeds"]["twse-pb"]["inserted"] == 5
+    # No answer was kept for the shares: left to a run, never asked by reapply.
+    assert reapplied["feeds"]["twse-shares"]["not_answered"] == 2
+    asked = Fetcher()
+    again = run(factory, asked, feeds=["twse-pb", "twse-shares"])
+    assert again["status"] == "success"
+    assert {feed for feed, _ in asked.calls} == {"twse-shares"}
