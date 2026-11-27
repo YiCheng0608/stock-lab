@@ -710,7 +710,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 
 ### 整包的資產負債表與現金流量表
 
-`t163sb04` 只有綜合損益表。上一節的季度 XBRL 整包同時收了資產負債表、現金流量表與損益表。[#1078](https://github.com/YiCheng0608/stock-lab/issues/1078) 評估後選定下列科目，**只回補進研究 DB**（正式 DB 先不收，[決定 7207067861](https://github.com/YiCheng0608/stock-lab/issues/1078#issuecomment-7207067861)）；表的欄位與寫入規則由回補單實作時補在這裡。以下是 2026-11-27 讀研究 raw 已存的 47 包（2013Q1～2024Q3）實測的結果（[回報 7207007046](https://github.com/YiCheng0608/stock-lab/issues/1078#issuecomment-7207007046)）。
+`t163sb04` 只有綜合損益表。上一節的季度 XBRL 整包同時收了資產負債表、現金流量表與損益表。[#1078](https://github.com/YiCheng0608/stock-lab/issues/1078) 評估後選定下列科目，**只回補進研究 DB**（正式 DB 先不收，[決定 7207067861](https://github.com/YiCheng0608/stock-lab/issues/1078#issuecomment-7207067861)）；表的欄位與寫入規則見本節最後的「`quarterly_statements`」（[#1083](https://github.com/YiCheng0608/stock-lab/issues/1083)）。以下是 2026-11-27 讀研究 raw 已存的 47 包（2013Q1～2024Q3）實測的結果（[回報 7207007046](https://github.com/YiCheng0608/stock-lab/issues/1078#issuecomment-7207007046)）。
 
 - **element**：比對 local name，`ifrs:`、`ifrs-full:`、`tifrs-*:` 前綴都認得。2018Q1 起換成 `ifrs-full` taxonomy，有四科改名（股本合計、資本支出、毛利、營業利益）。成員 2018Q4 以前是 `.xml`，2019Q1 起是 inline XBRL `.html`（2019Q2 有 2 份仍是 `.xml`）。2018 年的 `.xml` 和 2019 年起的 `.html` 用同一組名稱，inline 的讀法（`format`、`scale`、`sign`、`xsi:nil`）同 EPS。XBRL 的數字單位是元（`decimals=-3`），`t163sb04`、`t163sb05` 是千元。
 
@@ -764,6 +764,21 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **解析耗時與記憶體**（研究 raw 唯讀、單一 python 程序、只取上列科目）：47 季依序共 2,950 秒，最大 RSS 113 MB。
   - 2013～2018 每季 15～35 秒。
   - 2019 年起每季解壓後 1.0～1.5 GB，每季 75～140 秒（例如 2024Q2 2,613 個成員，137 秒）。
+- **`quarterly_statements`**（[#1083](https://github.com/YiCheng0608/stock-lab/issues/1083)，實作在 [`worker/quarterly_statements.py`](../backend/worker/quarterly_statements.py)）：
+  - **欄位**：唯一鍵 `(instrument_id, period_end, fiscal_period)`。上表 15 科一科一欄：季底的 `total_assets`、`total_liabilities`、`equity_parent`、`equity_total`、`current_assets`、`current_liabilities`、`cash`、`receivables`、`inventories`、`share_capital_common`（普通股）、`share_capital_total`（股本合計），以及 1/1 起累計的 `cfo_ytd`、`capex_ytd`、`gross_profit_ytd`、`operating_income_ytd`。單位千元（XBRL 的元除以 1,000），YTD 照申報值存（資本支出是負數），單季由研究工具相減。營收、EPS 不在這張表，留在 `fundamental_snapshots`。
+  - **來源與可得日**：整張表只有 `source=mops_tifrs_zip`。`raw_payload_id` 指向該季整包那列 `raw_payloads`（`mops_tifrs`，和 `xbrl-apply` 共用），`data_as_of` 是季底日。`announcement_date` 照 EPS 的法定期限（產業碼對到格式，遇休市順延；期限還沒到時用抓取日）。
+  - **`data_json`**：成員名稱與 sha256、整包 sha256、產業碼、`cr`／`ir`／`er`、格式、整包的 EPS、`target_rule`（`t163sb04_eps`、`snapshot_eps` 或 `bar_window`）、每欄用的 element 與 context id（`elements`）、`not_applicable` 的欄、可得日依據（`announcement_basis`、`statutory_deadline`、`deadline_calendar`）。
+  - **缺值**：沒申報的科目與格式本來就沒有的科目都存 NULL，不補零；後者列在 `not_applicable`（上表最後一欄，依產業碼：銀行 `basi`、金控 `fh`、保險 `ins`、證券 `bd`）。附註 taxonomy（命名空間或 inline 前綴含 `notes`）的 fact 不取。成員裡沒有季底 context（非曆年制）的公司不寫。金融業在資料層不排除。
+  - **寫給誰**（`stock`／`ipo` 標的）：
+    - 同季有 `t163sb04` 列（`target_rule=t163sb04_eps`）或 daily 的 OpenAPI 快照列 `mops_fundamental`（`snapshot_eps`；2026Q2 起研究 DB 的 active 是這種列，`fundamentals backfill` 不會把它換成 `t163sb04`）的標的，整包 EPS 要和它相同；不同的不寫，計 `eps_different`，代號被新公司重用時舊公司的數字不會寫到新公司上。表的值仍然只取自整包（[#1083 決定](https://github.com/YiCheng0608/stock-lab/issues/1083#issuecomment-7207679098)）。
+    - 沒有上述列的 `delisted`、`transferred` 標的（含轉板前的舊標的），照 `xbrl-apply` 的窗口：季底起 670 天內有日線（`target_rule=bar_window`）。
+    - 其他不寫：沒有上述列的 active（例如存託憑證、研究 DB 副本之後才申報的公司），計 `no_identity_row`；研究 DB 沒有的興櫃、公開發行公司計 `not_in_db`。
+  - **寫入前的核對**：每季兩項，任一項有一家不同、一家都沒比到，或比不到的（沒有成員、讀不了、沒有 EPS）超過核對家數的 1%，那一季就不寫，命令停下（`failed`）。容差 1 千元。
+    - 損益表：上一點那些列，整包 EPS 相同的公司。`t163sb04` 列核對 `gross_profit_ytd`、`operating_income_ytd` 對 `data_json` 的「營業毛利（毛損）淨額」「營業利益（損失）」；快照列沒有毛利，只核對營業利益對「營業利益」，格式沒有營業利益的（銀行、金控）不比。那欄空白、`--` 或沒有這欄的不比；有值而整包沒有算不同。計數依來源分開記在 `income_by_source`。
+    - 資產負債表：該季一個市場的 `t163sb05`（上市、上櫃逐季輪流：`(年×4＋季)` 為偶數是上市），頁上每家的 `total_assets`、`equity_total` 對「資產總額／總計／合計」「權益總額／總計／合計」。
+  - **命令**（[CLI](ops/CLI.md#現有-worker-cli)）：
+    - `fundamentals statements-check-fetch --start --end --dir` 把每季那一頁存到 `<dir>/t163sb05/<季>-<市場>.html`，`<dir>/t163sb05/manifest.json` 記 form、sha256、家數與抓取時間；不碰 DB。請求規則同 `xbrl-fetch`：間隔 ≥ 5 秒、台北 20:30～23:30 與 08:00～09:00 不發、已有而且 sha256 相符的不重抓、連續 3 季失敗就停。版面認不得、封鎖頁、市場或季別不對都算該季失敗，不存檔。
+    - `fundamentals statements-apply --start --end --dir [--dry-run] [--exclude-file]` 讀 `xbrl-fetch` 的整包目錄與上面的頁，`run_type=quarterly_statements_backfill`，一季一個 commit，`coverage_manifest` 每季記核對計數、各組（`active`／`delisted`／`transferred`）的列數、各 `target_rule` 的列數與各欄缺值數（分母不含 `not_applicable`）。只在研究 DB 跑，持有維護模式（`--dry-run` 除外）；重跑 `changed 0`。成員的讀法與防護同上一節。
 
 ### 月營收
 

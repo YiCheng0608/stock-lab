@@ -65,6 +65,7 @@ from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUAR
 from .quarterly_fundamentals import run_fundamental_backfill
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
+from .quarterly_statements import run_check_fetch, run_statements_apply
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -155,6 +156,12 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
     ):
         # Writes the research DB; a research batch holding maintenance mode refuses it.
         return "fundamentals xbrl-apply"
+    if (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "statements-apply"
+        and not args.dry_run
+    ):
+        return "fundamentals statements-apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
     if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
@@ -640,18 +647,33 @@ def main() -> None:
         "xbrl-apply",
         help="把目錄裡的季度 XBRL 整包寫進下市、轉板標的缺的季報 EPS（先和 t163sb04 核對，不同就停；重跑冪等，#781）",
     )
-    for xbrl_parser in (xbrl_fetch_parser, xbrl_apply_parser):
+    statements_check_parser = fundamentals_subparsers.add_parser(
+        "statements-check-fetch",
+        help="下載核對用的 MOPS t163sb05 資產負債表彙總頁（一季一個市場 1 個請求、間隔 5 秒，存進 DIR/t163sb05，不碰 DB；已有的不重抓，#1083）",
+    )
+    statements_apply_parser = fundamentals_subparsers.add_parser(
+        "statements-apply",
+        help="把目錄裡的季度 XBRL 整包寫進 quarterly_statements（先和 t163sb04、t163sb05 核對，不同就停；只在研究 DB；重跑冪等，#1083）",
+    )
+    for xbrl_parser in (
+        xbrl_fetch_parser,
+        xbrl_apply_parser,
+        statements_check_parser,
+        statements_apply_parser,
+    ):
         xbrl_parser.add_argument("--start", required=True, help="YYYYQn，最早 2013Q1")
         xbrl_parser.add_argument("--end", required=True, help="YYYYQn")
         xbrl_parser.add_argument(
             "--dir", required=True, help="整包與 manifest.json 的目錄"
         )
-    xbrl_apply_parser.add_argument(
-        "--dry-run", action="store_true", help="不寫入，只印每季的計數"
-    )
-    xbrl_apply_parser.add_argument(
-        "--exclude-file", help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）"
-    )
+    for apply_parser in (xbrl_apply_parser, statements_apply_parser):
+        apply_parser.add_argument(
+            "--dry-run", action="store_true", help="不寫入，只印每季的計數"
+        )
+        apply_parser.add_argument(
+            "--exclude-file",
+            help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）",
+        )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
     )
@@ -985,10 +1007,14 @@ RESEARCH_REVENUE_COMMANDS = {"transfers", "company-classify", "company-backfill"
 def research_command_refusal(args: argparse.Namespace) -> str | None:
     """Why a research-database-only command may not run here; None otherwise.
 
-    ``fundamentals xbrl-apply`` (#781) and the revenue commands of #782.
+    ``fundamentals xbrl-apply`` (#781), ``statements-apply`` (#1083) and the revenue
+    commands of #782.
     """
 
-    if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
+    if args.command == "fundamentals" and args.fundamentals_command in {
+        "xbrl-apply",
+        "statements-apply",
+    }:
         return xbrl_research_refusal(DB_PATH)
     if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
         return monthly_revenue_refusal(DB_PATH)
@@ -1006,8 +1032,11 @@ def backfill_command(args: argparse.Namespace) -> str | None:
         return args.command
     if args.command == "corporate-actions" and args.actions_command == "sync":
         return "corporate-actions sync"
-    if args.command == "fundamentals" and args.fundamentals_command == "xbrl-fetch":
-        return "fundamentals xbrl-fetch"
+    if args.command == "fundamentals" and args.fundamentals_command in {
+        "xbrl-fetch",
+        "statements-check-fetch",
+    }:
+        return f"fundamentals {args.fundamentals_command}"
     for command, sub in (
         ("events", "events_command"),
         ("fundamentals", "fundamentals_command"),
@@ -1180,6 +1209,22 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_xbrl_fetch(args.dir, args.start, args.end)
     elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
         result = run_xbrl_apply(
+            args.dir,
+            args.start,
+            args.end,
+            dry_run=args.dry_run,
+            exclude_file=args.exclude_file,
+        )
+    elif (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "statements-check-fetch"
+    ):
+        result = run_check_fetch(args.dir, args.start, args.end)
+    elif (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "statements-apply"
+    ):
+        result = run_statements_apply(
             args.dir,
             args.start,
             args.end,

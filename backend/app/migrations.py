@@ -873,6 +873,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0040_premarket_ai', CURRENT_TIMESTAMP)"
         )
     )
+    # 0042 only adds quarterly_statements (#1083), made by create_all with its
+    # indexes; only the research database writes it.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0042_quarterly_statements', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
