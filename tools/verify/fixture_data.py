@@ -2654,6 +2654,9 @@ OMITTED_TABLES: dict[str, str] = {
         "由後端 test_candidate_pool 驗"
     ),
     "corporate_actions": "沒有除權息或分割；個股頁不需還原價格",
+    "day_trade_daily": (
+        "借券賣出與當沖（#1089）：正式 DB 只建空表、只有研究 DB 寫入，五頁 API 不讀"
+    ),
     "events": (
         "官方公告直接寫成 news_items（source_kind=official_disclosure）；"
         "有 events 時，GET 發現投影指紋不符就改寫 news_items（#476）"
@@ -2673,6 +2676,7 @@ OMITTED_TABLES: dict[str, str] = {
     ),
     "schedule_runs": "排程紀錄只給看門狗與系統頁",
     "schedule_run_steps": "同 schedule_runs",
+    "securities_lending_daily": "同 day_trade_daily",
     "signal_evaluations": "較早的訊號只當追蹤計畫的來源；系統訊號追蹤不在五頁顯示",
     "signal_settlements": "同 signal_evaluations",
     "technical_features": "舊版特徵表；K 線與指標讀 technical_indicators",

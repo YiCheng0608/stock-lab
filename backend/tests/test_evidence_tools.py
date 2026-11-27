@@ -8,7 +8,7 @@ import json
 import random
 import statistics
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -21,10 +21,12 @@ from app.models import (
     ChipSnapshot,
     CorporateAction,
     DailyCandidate,
+    DayTradeDaily,
     FundamentalSnapshot,
     Instrument,
     MarketBar,
     MonthlyRevenue,
+    SecuritiesLendingDaily,
 )
 from app.strategies import index_conditions
 
@@ -594,10 +596,192 @@ def test_a_continuous_feature_keeps_its_five_groups(evidence_result):
 
 
 def test_the_report_names_its_version(evidence_result):
-    assert evidence.VERSION == 2 and evidence_result["version"] == 2
+    assert evidence.VERSION == 3 and evidence_result["version"] == 3
     title, _blank, version = evidence.markdown(evidence_result, "x").splitlines()[:3]
-    assert title == "# 特徵證據（feature_evidence 第 2 版）"
+    assert title == "# 特徵證據（feature_evidence 第 3 版）"
     assert "看完第一輪（#619）結果後提出" in version
+    assert "第 3 版（#1089）只改兩個特徵的輸入" in version
+
+
+# --- securities lending and day trades (Issue #1089) ---------------------------
+
+NEW_INPUTS = {"borrowed_sell_surge", "day_trade_ratio"}
+
+
+@pytest.fixture(scope="module")
+def lent_db(copy_db, tmp_path_factory) -> Path:
+    """``copy_db`` plus lending and day trade rows for stocks 3 and 4.
+
+    Stock 3 sells 1,000 borrowed shares a day, 3,000 in the last five sessions
+    of the panel; stock 4 has day trades of 10 % of its volume and none (no row)
+    on session 80.  Stock 5's day trade row has no shares (NULL).
+    """
+
+    path = tmp_path_factory.mktemp("lent") / "stock.db"
+    path.write_bytes(copy_db.read_bytes())
+    days = sessions()
+    engine = create_engine(f"sqlite:///{path}")
+    with Session(engine) as db:
+        provenance = {
+            "data_as_of": days[0],
+            "raw_payload_id": 1,
+            "collected_at": datetime(2026, 11, 27),
+        }
+        for index, day in enumerate(days):
+            sold = 3000 if index >= SESSIONS - 5 else 1000
+            db.add(
+                SecuritiesLendingDaily(
+                    instrument_id=3,
+                    trading_date=day,
+                    sbl_sell_shares=sold,
+                    source="twse_twt93u",
+                    **provenance,
+                )
+            )
+            if index != 80:
+                db.add(
+                    DayTradeDaily(
+                        instrument_id=4,
+                        trading_date=day,
+                        day_trade_shares=(2_000_000 + index) // 10,
+                        source="twse_twtb4u",
+                        **provenance,
+                    )
+                )
+            db.add(
+                DayTradeDaily(
+                    instrument_id=5,
+                    trading_date=day,
+                    day_trade_shares=None,
+                    source="twse_twtb4u",
+                    **provenance,
+                )
+            )
+        db.commit()
+    engine.dispose()
+    return path
+
+
+@pytest.fixture(scope="module")
+def lent_panel(lent_db, tmp_path_factory):
+    return lib.load_panel(lent_db, START, tmp_path_factory.mktemp("raw"))
+
+
+def test_the_two_features_read_the_new_tables(panel, lent_panel):
+    lent = lent_panel.series[3]
+    assert feature("borrowed_sell_surge")(lent, 80) == pytest.approx(1.0)
+    last = SESSIONS - 1
+    assert feature("borrowed_sell_surge")(lent, last) == pytest.approx(
+        3000 / ((15 * 1000 + 5 * 3000) / 20)
+    )
+    assert feature("borrowed_sell_surge")(lent, 10) is None  # under 20 sessions
+    traded = lent_panel.series[4]
+    assert feature("day_trade_ratio")(traded, 81) == pytest.approx(
+        ((2_000_000 + 81) // 10) / (2_000_000 + 81)
+    )
+    assert feature("day_trade_ratio")(traded, 80) is None  # no row: no data
+    assert feature("day_trade_ratio")(lent_panel.series[5], 81) is None  # NULL
+    # Without the tables' rows, neither has a value anywhere.
+    for item in panel.series.values():
+        for at in range(len(item.dates)):
+            assert feature("borrowed_sell_surge")(item, at) is None
+            assert feature("day_trade_ratio")(item, at) is None
+
+
+def test_a_zero_or_missing_volume_is_no_day_trade_ratio(lent_panel):
+    traded = lent_panel.series[4]
+    keep = traded.volume[81]
+    try:
+        traded.volume[81] = 0.0
+        assert feature("day_trade_ratio")(traded, 81) is None
+        traded.volume[81] = float("nan")
+        assert feature("day_trade_ratio")(traded, 81) is None
+    finally:
+        traded.volume[81] = keep
+
+
+def test_the_other_features_and_the_chips_do_not_change(panel, lent_panel):
+    assert list(panel.series) == list(lent_panel.series)
+    others = [entry for entry in evidence.FEATURES if entry[0] not in NEW_INPUTS]
+    assert len(others) == len(evidence.FEATURES) - 2
+    for instrument_id, item in panel.series.items():
+        lent = lent_panel.series[instrument_id]
+        for name in lib.CHIP_FIELDS:
+            assert item.chips[name].tobytes() == lent.chips[name].tobytes(), name
+        for at in range(len(item.dates)):
+            for name, *_rest, function in others:
+                assert function(item, at) == function(lent, at), (name, at)
+            for name, *_rest, function in evidence.CONDITIONS:
+                assert function(item, at) == function(lent, at), (name, at)
+
+
+def test_load_chips_does_not_read_the_new_tables(lent_db):
+    con = lib.connect_read_only(lent_db)
+    try:
+        instruments, _listed = lib.research_report().benchmark_universe(con, START)
+        session_index = {
+            day: at
+            for at, day in enumerate(lib.research_report().market_sessions(con, START))
+        }
+        series = {
+            key: lib._series(key, instrument, lambda *_a: 1.0, session_index)
+            for key, instrument in instruments.items()
+        }
+        lib._load_chips(con, series, START)
+    finally:
+        con.close()
+    assert all(list(item.chips) == list(lib.CHIP_FIELDS) for item in series.values())
+
+
+def test_coverage_only_counts_bars_per_year_and_no_return(
+    lent_db, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("STOCK_DATA_DIR", str(tmp_path / "production"))
+    monkeypatch.setattr(
+        lib, "forward_return", lambda *_a: pytest.fail("read a forward return")
+    )
+    out = tmp_path / "out"
+    code = evidence.main(
+        [
+            "--db",
+            str(lent_db),
+            "--out",
+            str(out),
+            "--coverage-only",
+            "--feature",
+            "borrowed_sell_surge",
+            "--feature",
+            "day_trade_ratio",
+        ]
+    )
+    assert code == 0
+    result = json.loads((out / "coverage.json").read_text(encoding="utf-8"))
+    assert result["version"] == 3 and not (out / "tables.json").exists()
+    years = result["years"]
+    assert set(years) == {"2025", "2026"}
+    total = sum(row["features"]["borrowed_sell_surge"] for row in years.values())
+    assert total == SESSIONS - 19  # stock 3 only, from its 20th session
+    # Stock 4 every session but 80.
+    assert sum(row["features"]["day_trade_ratio"] for row in years.values()) == (
+        SESSIONS - 1
+    )
+    assert all(row["features"].keys() == NEW_INPUTS for row in years.values())
+    assert "--coverage-only" in (out / "coverage.md").read_text(encoding="utf-8")
+
+
+def test_feature_needs_coverage_only(copy_db, tmp_path, monkeypatch):
+    monkeypatch.setenv("STOCK_DATA_DIR", str(tmp_path / "production"))
+    with pytest.raises(SystemExit):
+        evidence.main(
+            [
+                "--db",
+                str(copy_db),
+                "--out",
+                str(tmp_path / "out"),
+                "--feature",
+                "day_trade_ratio",
+            ]
+        )
 
 
 # --- candidate_scorecard ---------------------------------------------------

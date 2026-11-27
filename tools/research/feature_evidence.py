@@ -70,11 +70,16 @@ import evidence_lib as lib  # noqa: E402
 # reading #619's results: the two-group fallback of ``day_spread`` and the
 # rows of ``judge`` for a missing or opposite spread.  Bump it with any change
 # to the rule or the grouping, and say why in the report (evidence.md rule 3).
-VERSION = 2
+# Version 3 (#1089) changes the inputs of two features only: borrowed_sell_surge
+# reads securities_lending_daily and day_trade_ratio is day_trade_daily's shares
+# over the bar's volume; chip_snapshots never had either value.
+VERSION = 3
 VERSION_NOTE = (
-    "本版是看完第一輪（#619）結果後提出（#643）：最高或最低一組因同值整段為空時（離散值特徵）"
+    "第 2 版是看完第一輪（#619）結果後提出（#643）：最高或最低一組因同值整段為空時（離散值特徵）"
     "改用高低兩組算五分位差；"
-    "判定表補上五分位差缺值與異號"
+    "判定表補上五分位差缺值與異號。"
+    "第 3 版（#1089）只改兩個特徵的輸入：借券賣出速度改讀官方借券賣出表，"
+    "當沖比改為官方當沖成交股數 ÷ 日線成交股數（兩者在 chip_snapshots 從來沒有值）"
 )
 MIN_DAYS = 60
 MIN_IC = 0.02
@@ -185,16 +190,20 @@ def borrowed_sell_surge(item: lib.Series, at: int) -> float | None:
 
     if at < 19:
         return None
-    month = _total(item.chips["borrowed_sell"][at - 19 : at + 1])
-    week = _total(item.chips["borrowed_sell"][at - 4 : at + 1])
+    month = _total(item.chips["sbl_sell_shares"][at - 19 : at + 1])
+    week = _total(item.chips["sbl_sell_shares"][at - 4 : at + 1])
     if month is None or week is None or month <= 0:
         return None
     return (week / 5.0) / (month / 20.0)
 
 
 def day_trade_ratio(item: lib.Series, at: int) -> float | None:
-    value = item.chips["day_trade_ratio"][at]
-    return None if value != value else value
+    """Day-trade shares of T over T's volume; missing when either is or volume is 0."""
+
+    shares, volume = item.chips["day_trade_shares"][at], item.volume[at]
+    if shares != shares or volume != volume or volume <= 0:
+        return None
+    return shares / volume
 
 
 def _revenues_known(
@@ -799,6 +808,62 @@ def markdown(result: dict[str, Any], command: str) -> str:
     return "\n".join(lines)
 
 
+def coverage(
+    db: Path,
+    start: date,
+    end: date | None,
+    raw_dir: Path,
+    keys: list[str] | None = None,
+) -> dict[str, Any]:
+    """Per year, the panel's bars and how many have each feature; no return read.
+
+    For a backfill's acceptance (#1089): every bar of every stock／ipo of the
+    panel from ``start`` on, not the liquid universe, and no forward return.
+    """
+
+    chosen = [feature for feature in FEATURES if keys is None or feature[0] in keys]
+    panel = lib.load_panel(db, start, raw_dir)
+    bars: Counter[int] = Counter()
+    present: dict[str, Counter[int]] = {feature[0]: Counter() for feature in chosen}
+    for item in panel.series.values():
+        for at, day in enumerate(item.dates):
+            if day < start or (end is not None and day > end):
+                continue
+            bars[day.year] += 1
+            for name, *_rest, function in chosen:
+                if function(item, at) is not None:
+                    present[name][day.year] += 1
+    return {
+        "version": VERSION,
+        "start": start.isoformat(),
+        "end": end.isoformat() if end else None,
+        "years": {
+            str(year): {
+                "bars": bars[year],
+                "features": {name: present[name][year] for name in present},
+            }
+            for year in sorted(bars)
+        },
+    }
+
+
+def coverage_markdown(result: dict[str, Any], command: str) -> str:
+    names = sorted({n for row in result["years"].values() for n in row["features"]})
+    lines = [
+        f"# 特徵覆蓋（feature_evidence 第 {result['version']} 版，--coverage-only）",
+        "",
+        f"- 命令：`{command}`",
+        "- 每年 panel 的日線列數（stock／ipo，含下市），與各特徵有值的列數；不算報酬。",
+        "",
+        "| 年 | 日線 | " + " | ".join(f"`{name}`" for name in names) + " |",
+        "| --- | --- | " + " | ".join("---" for _ in names) + " |",
+    ]
+    for year, row in result["years"].items():
+        cells = [f"{row['features'][name]:,}" for name in names]
+        lines.append(f"| {year} | {row['bars']:,} | " + " | ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="feature_evidence.py", description=__doc__)
     parser.add_argument("--db", required=True, help="a tools/ops/copy_db.py copy")
@@ -813,6 +878,17 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--end", type=date.fromisoformat, default=None)
     parser.add_argument("--min-lots", type=float, default=lib.DEFAULT_MIN_LOTS)
     parser.add_argument("--min-names", type=int, default=30)
+    parser.add_argument(
+        "--coverage-only",
+        action="store_true",
+        help="只寫 coverage.md／coverage.json：每年日線列數與各特徵有值的列數，不算報酬",
+    )
+    parser.add_argument(
+        "--feature",
+        action="append",
+        choices=[feature[0] for feature in FEATURES],
+        help="--coverage-only 只量這個特徵（可重複）；預設全部",
+    )
     return parser
 
 
@@ -833,6 +909,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    command = "python tools/research/feature_evidence.py " + " ".join(argv)
+    if args.coverage_only:
+        counted = coverage(db, args.start, args.end, out / RAW_DIR_NAME, args.feature)
+        counted["command"] = command
+        (out / "coverage.json").write_text(
+            json.dumps(counted, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (out / "coverage.md").write_text(
+            coverage_markdown(counted, command), encoding="utf-8"
+        )
+        print(json.dumps({"out": str(out.resolve()), "years": len(counted["years"])}))
+        return 0
+    if args.feature:
+        parser.error("--feature only goes with --coverage-only")
     result = build(
         db,
         args.start,
@@ -842,7 +932,6 @@ def main(argv: list[str] | None = None) -> int:
         out / RAW_DIR_NAME,
         lambda text: print(text, file=sys.stderr, flush=True),
     )
-    command = "python tools/research/feature_evidence.py " + " ".join(argv)
     result["command"] = command
     (out / "tables.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8"

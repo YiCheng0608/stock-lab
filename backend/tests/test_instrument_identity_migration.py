@@ -41,6 +41,8 @@ CHILDREN = [
     "mainstream_items",
     "strategy_list_items",
     "theme_cluster_members",
+    "securities_lending_daily",
+    "day_trade_daily",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -272,7 +274,13 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     values.update(run_id=11)
                 if table.name == "theme_cluster_members":
                     values.update(theme_cluster_run_id=11)
-                if table.name in {"no_trade_days", "monthly_revenues", "trading_halts"}:
+                if table.name in {
+                    "no_trade_days",
+                    "monthly_revenues",
+                    "trading_halts",
+                    "securities_lending_daily",
+                    "day_trade_daily",
+                }:
                     values.update(raw_payload_id=11)
                 if table.name == "tracking_plans":
                     values.update(signal_id=11)
