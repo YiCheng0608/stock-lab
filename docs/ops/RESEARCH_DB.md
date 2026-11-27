@@ -556,6 +556,37 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
   - 已存的 raw 不重抓，重跑就是續跑。
   - 各時期的代號清單是先用 `sweep`（指定月份全掃）與 `bisect`（找出代號開始或結束的月份）確認的。
 
+## 季報的實際上傳時間（#1100）
+
+`financial_report_filings` 是 TWSE 電子書 `t57sb01` 每個季報檔的上傳時間（來源、限流與口徑見 [DATA_SOURCES](../DATA_SOURCES.md#季報的實際上傳時間)），實作在 [`worker/report_filings.py`](../../backend/worker/report_filings.py)。分四步，只有第 3 步寫 DB：
+
+1. **`filings plan --dir /out`**：從研究 DB 列出 2013 年起有季報（`fundamental_snapshots`）的「代號 × 年」，寫 `targets.json`。只讀 DB；同一代號在兩個交易所（轉板）只算一個請求。
+2. **`filings fetch --dir /out [--max-requests N]`**：照 `targets.json` 一個請求抓一頁，不碰 DB、不需要 `research-db.json`，可以和其他任務的研究 DB 寫入並行。
+   - 頁存在 `raw/<代號>/<民國年>.json`（請求的 form、狀態碼、抓取時間與回應原始位元組的 base64），`manifest.json` 記每頁的 sha256，`requests.jsonl` 記每個請求。已存且 sha256 相符的頁不重抓，重跑就是續跑。
+   - 請求之間至少 6 秒；台北 20:30～23:30、08:00～09:00、偶數整點前 10 分到後 10 分不發，遇到就等到時段結束（程序不退出）。
+   - 「查詢過量」、HTTP 403／429、其他非 200、空回應、不是公司表也不是「查無所需資料」的頁（例如金控的子公司選單）、沒有回應，都是失敗，不存成頁；本文留在 `failed/<代號>/`。連續 3 次失敗就停（`failed`、exit 1），`stopped` 寫最後一個成功的頁；不自己加長間隔續跑，先回報。沒抓完是 `partial`、exit 3。
+   - 目錄放主機的 `stock-lab-data/evidence/1100/`（bind mount 到 `/out`），結案後還在。
+3. **`filings write --dir /out [--dry-run] [--accept-names FILE]`**：只在研究 DB 跑（沒有 `research-db.json` 就 `refused`、exit 2，`--dry-run` 也查），持有維護模式，不發請求。照當下研究 DB 重算目標，讀已存的頁寫入，一筆 `run_type=financial_report_filings_backfill` 的 run；重跑冪等（`unchanged`），更(補)正欄變了的列 `updated`。輸出的 `lists`：
+   - `not_fetched`（還沒抓的，前 50 個）、`no_data`（查無所需資料）、`page_failed`（讀不懂的頁，整頁不寫）。
+   - `name_mismatch`：頁首名稱和標的名稱對不上的（規則見 DATA_SOURCES），不寫。人工核過的放進 `--accept-names` 的 JSON 陣列，每項要有 `symbol`、`page_name`、`db_name`、`reason`；檔案放 `stock-lab-data/evidence/1100/`。
+   - `old_layout`：只剩舊種類報表的季，不寫。
+   - `unassigned`：轉板代號同一年有兩個標的、這一季兩個都有或都沒有季報時，不猜歸屬，不寫。
+4. **`filings coverage`**：依年份 × 標的狀態列有季報的家數與季數、有實際申報日（`report_filings.filing_date`）的家數與季數、覆蓋率與沒查到的標的 id。只讀。
+
+```bash
+# 換值：IMG＝含 #1100 的 backend image；O＝主機上的 evidence/1100 目錄
+docker run --rm -v stock-lab-research:/data -e STOCK_DATA_DIR=/data -v "$O:/out" "$IMG" \
+  python -B -m worker.cli filings plan --dir /out
+docker run -d --name t1100-fetch -v "$O:/out" "$IMG" \
+  sh -c 'python -B -m worker.cli filings fetch --dir /out > /out/fetch.json 2> /out/fetch.err'
+docker run -d --name t1100-write -v stock-lab-research:/data -e STOCK_DATA_DIR=/data -v "$O:/out:ro" "$IMG" \
+  sh -c 'python -B -m worker.cli filings write --dir /out --accept-names /out/accept-names.json > /data/logs/filings-write.json 2>&1'
+```
+
+- `plan` 只讀 DB，但研究 volume 不掛唯讀：其他任務在寫時 SQLite 要用 `-shm`，唯讀掛載會讀不到。
+- **耗時**：約 26,386 個請求，每個 6 秒是 44 小時；一天扣掉不發的時段（約 7.5 小時）約 16.5 小時可發，約 3 天。`write` 不發請求。
+- **記憶體**：`fetch` 只放一頁在記憶體；`write` 逐頁讀、每 200 個目標 commit 一次，不吃記憶體。
+
 ## 研究工具的耗時與記憶體
 
 `explore_research` 與 `trade_research` 的探索段要讀到 2019-12-31 以前的全部歷史，每個假設、每個工具版本只能跑一次，所以耗時與記憶體不能在研究 DB 上試。[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 用一份**合成的長歷史 DB** 量（量測方式是統籌決定 [6885225362](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6885225362)）。

@@ -2658,6 +2658,10 @@ OMITTED_TABLES: dict[str, str] = {
         "官方公告直接寫成 news_items（source_kind=official_disclosure）；"
         "有 events 時，GET 發現投影指紋不符就改寫 news_items（#476）"
     ),
+    "financial_report_filings": (
+        "季報上傳時間（#1100）只寫研究 DB，正式 DB 是空表；五頁的 API 不讀，"
+        "由後端 test_report_filings 驗"
+    ),
     "group_daily_score_archive": "只在 hot_group 版本升級時封存舊分數；假資料只有現行版本",
     "margin_lists": (
         "融資標的清單只給 analyze 判定融資條件是否適用（#392）；API 不讀，"

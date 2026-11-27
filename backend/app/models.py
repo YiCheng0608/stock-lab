@@ -805,6 +805,47 @@ class FundamentalSnapshot(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class FinancialReportFiling(Base):
+    """One file of a quarterly report on the TWSE e-book page (Issue #1100).
+
+    ``t57sb01`` lists every file a company uploaded for a year's quarters: the
+    consolidated, individual and English versions and re-uploads after a
+    correction, one row each.  ``uploaded_at`` is the page's 上傳日期 in Taipei
+    time.  ``worker.report_filings.filing_date`` is the rule for the quarter's
+    actual filing day.  Only the research database is written
+    (``worker.report_filings``); the production one has the empty table.
+    """
+
+    __tablename__ = "financial_report_filings"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id", "file_name", name="uq_financial_report_filings"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+    # Q1..Q4, as fundamental_snapshots.
+    fiscal_period: Mapped[str] = mapped_column(String(30))
+    # 資料細節說明 as printed: IFRSs合併財報, IFRSs個體財報, IFRSs英文版-合併財報, ...
+    report_kind: Mapped[str] = mapped_column(String(120))
+    # 上傳日期, Taipei, naive.
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime)
+    file_name: Mapped[str] = mapped_column(String(120))
+    file_size: Mapped[int] = mapped_column(Integer)
+    # 財務報告更(補)正: 「無」, or the 詳細資料 link (t56sb31_q1) of the company's
+    # latest correction; the page shows no earlier one.
+    correction: Mapped[str] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(40))
+    # The Taipei day the page was fetched: the correction cell is as of then.
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class MonthlyRevenue(Base):
     """One company's revenue for one month (Issue #530).
 
