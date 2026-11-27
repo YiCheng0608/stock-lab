@@ -65,6 +65,8 @@ from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUAR
 from .quarterly_fundamentals import run_fundamental_backfill
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
+from .trading_notices import FEEDS as TRADING_NOTICE_FEEDS
+from .trading_notices import run_trading_notices_backfill
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -157,6 +159,8 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "fundamentals xbrl-apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
+    if args.command == "trading-notices" and args.trading_notices_command == "backfill":
+        return "trading-notices backfill"
     if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
         return "revenue transfers --apply"
     if (
@@ -652,6 +656,39 @@ def main() -> None:
     xbrl_apply_parser.add_argument(
         "--exclude-file", help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）"
     )
+    notices_parser = subparsers.add_parser(
+        "trading-notices",
+        help="研究 DB 的注意股票與處置股票（#1090）：TWSE announcement/notice、punish，TPEx bulletin/attention、disposal",
+    )
+    notices_subparsers = notices_parser.add_subparsers(
+        dest="trading_notices_command", required=True
+    )
+    notices_backfill_parser = notices_subparsers.add_parser(
+        "backfill",
+        help="逐月回補（每 host 間隔 3.5 秒、台北 21:15～23:30 與偶數整點前後 10 分鐘等待；已成功的月份不再請求，重跑冪等）；只在研究 DB 跑",
+    )
+    notices_backfill_parser.add_argument(
+        "--start-month", help="YYYY-MM；預設各 feed 的最早可得月份"
+    )
+    notices_backfill_parser.add_argument(
+        "--end-month", help="YYYY-MM；預設最新的完整月份（台北），不能更晚"
+    )
+    notices_backfill_parser.add_argument(
+        "--feed",
+        action="append",
+        choices=sorted(TRADING_NOTICE_FEEDS),
+        help="只跑這個 feed（可重複）；預設四個都跑",
+    )
+    notices_backfill_parser.add_argument(
+        "--max-requests",
+        type=int,
+        help="送出這麼多個請求後停（下次照已完成的月份接續）",
+    )
+    notices_backfill_parser.add_argument(
+        "--reapply",
+        action="store_true",
+        help="已成功的月份不請求，改讀已存的 raw 重寫（沒有差異時 changed 0）",
+    )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
     )
@@ -985,13 +1022,16 @@ RESEARCH_REVENUE_COMMANDS = {"transfers", "company-classify", "company-backfill"
 def research_command_refusal(args: argparse.Namespace) -> str | None:
     """Why a research-database-only command may not run here; None otherwise.
 
-    ``fundamentals xbrl-apply`` (#781) and the revenue commands of #782.
+    ``fundamentals xbrl-apply`` (#781), the revenue commands of #782 and
+    ``trading-notices`` (#1090).
     """
 
     if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
         return xbrl_research_refusal(DB_PATH)
     if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
         return monthly_revenue_refusal(DB_PATH)
+    if args.command == "trading-notices":
+        return xbrl_research_refusal(DB_PATH)
     return None
 
 
@@ -1012,6 +1052,7 @@ def backfill_command(args: argparse.Namespace) -> str | None:
         ("events", "events_command"),
         ("fundamentals", "fundamentals_command"),
         ("revenue", "revenue_command"),
+        ("trading-notices", "trading_notices_command"),
     ):
         if args.command == command and getattr(args, sub, None) == "backfill":
             return f"{command} backfill"
@@ -1186,6 +1227,16 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             dry_run=args.dry_run,
             exclude_file=args.exclude_file,
         )
+    elif (
+        args.command == "trading-notices" and args.trading_notices_command == "backfill"
+    ):
+        result = run_trading_notices_backfill(
+            args.start_month,
+            args.end_month,
+            feeds=args.feed,
+            reapply=args.reapply,
+            max_requests=args.max_requests,
+        )
     elif args.command == "revenue" and args.revenue_command == "backfill":
         result = run_revenue_backfill(args.months, args.end_month)
     elif args.command == "revenue" and args.revenue_command == "transfers":
@@ -1314,10 +1365,13 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         sys.exit(US_COLLECT_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command == "index-bars" and args.index_bars_command == "futures-night":
         sys.exit(FUTURES_NIGHT_EXIT_CODES.get(str(result.get("status")), 1))
-    if args.command == "revenue" and result.get("status") == "refused":
+    if (
+        args.command in {"revenue", "trading-notices"}
+        and result.get("status") == "refused"
+    ):
         raise SystemExit(2)
     if (
-        args.command in {"fundamentals", "revenue", "index-bars"}
+        args.command in {"fundamentals", "revenue", "index-bars", "trading-notices"}
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
