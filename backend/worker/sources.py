@@ -706,6 +706,9 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     "mops.twse.com.tw": 3.0,
     # The old MOPS site serves the quarterly report pages (Issue #529).
     "mopsov.twse.com.tw": 3.0,
+    # The TWSE e-book page t57sb01 (Issue #1100): 3.5 to 5 seconds got rate-limited
+    # (#1096); only worker.report_filings asks it.
+    "doc.twse.com.tw": 6.0,
 }
 _host_last_request: dict[str, float] = {}
 # A floor over every official host for this process, set by the backfill

@@ -65,6 +65,7 @@ from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUAR
 from .quarterly_fundamentals import run_fundamental_backfill
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
+from . import report_filings
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -155,6 +156,12 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
     ):
         # Writes the research DB; a research batch holding maintenance mode refuses it.
         return "fundamentals xbrl-apply"
+    if (
+        args.command == "filings"
+        and args.filings_command == "write"
+        and not args.dry_run
+    ):
+        return "filings write"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
     if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
@@ -652,6 +659,47 @@ def main() -> None:
     xbrl_apply_parser.add_argument(
         "--exclude-file", help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）"
     )
+    filings_parser = subparsers.add_parser(
+        "filings",
+        help="研究 DB：季報的實際上傳時間（TWSE 電子書 t57sb01，#1100）",
+    )
+    filings_subparsers = filings_parser.add_subparsers(
+        dest="filings_command", required=True
+    )
+    filings_plan_parser = filings_subparsers.add_parser(
+        "plan",
+        help="從研究 DB 列出 2013 年起有季報的代號 × 年，寫進目錄的 targets.json（只讀 DB）",
+    )
+    filings_fetch_parser = filings_subparsers.add_parser(
+        "fetch",
+        help="照 targets.json 抓 t57sb01（間隔 6 秒、避開時段、連續 3 次失敗就停；不碰 DB；已存的不重抓）",
+    )
+    filings_fetch_parser.add_argument(
+        "--max-requests", type=int, help="這次最多發幾個請求，之後重跑續抓"
+    )
+    filings_write_parser = filings_subparsers.add_parser(
+        "write",
+        help="把目錄裡已存的頁寫進 financial_report_filings（研究 DB、維護模式；不發請求；重跑冪等）",
+    )
+    filings_write_parser.add_argument(
+        "--dry-run", action="store_true", help="不寫入，只印計數與清單"
+    )
+    filings_write_parser.add_argument(
+        "--accept-names",
+        help="JSON 陣列：人工核過的名稱不符（symbol、page_name、db_name、reason）",
+    )
+    for filings_dir_parser in (
+        filings_plan_parser,
+        filings_fetch_parser,
+        filings_write_parser,
+    ):
+        filings_dir_parser.add_argument(
+            "--dir", required=True, help="targets.json、manifest.json 與 raw/ 的目錄"
+        )
+    filings_subparsers.add_parser(
+        "coverage",
+        help="依年份 × 標的狀態列有季報的季與有實際申報日的季（只讀 DB）",
+    )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
     )
@@ -990,6 +1038,9 @@ def research_command_refusal(args: argparse.Namespace) -> str | None:
 
     if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
         return xbrl_research_refusal(DB_PATH)
+    if args.command == "filings" and args.filings_command != "fetch":
+        # plan and coverage only read, but only the research DB has the history.
+        return xbrl_research_refusal(DB_PATH)
     if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
         return monthly_revenue_refusal(DB_PATH)
     return None
@@ -1186,6 +1237,16 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             dry_run=args.dry_run,
             exclude_file=args.exclude_file,
         )
+    elif args.command == "filings" and args.filings_command == "plan":
+        result = report_filings.run_plan(args.dir)
+    elif args.command == "filings" and args.filings_command == "fetch":
+        result = report_filings.run_fetch(args.dir, args.max_requests)
+    elif args.command == "filings" and args.filings_command == "write":
+        result = report_filings.run_write(
+            args.dir, dry_run=args.dry_run, accept_names=args.accept_names
+        )
+    elif args.command == "filings" and args.filings_command == "coverage":
+        result = report_filings.run_coverage()
     elif args.command == "revenue" and args.revenue_command == "backfill":
         result = run_revenue_backfill(args.months, args.end_month)
     elif args.command == "revenue" and args.revenue_command == "transfers":
@@ -1321,6 +1382,9 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
+    if args.command == "filings" and result.get("status") != "success":
+        # 2 is "refused" (not the research DB); 3 a fetch to run again.
+        raise SystemExit(3 if result.get("status") == "partial" else 1)
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (
