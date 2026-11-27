@@ -988,7 +988,9 @@ def test_a_snapshot_row_identifies_the_company_and_checks_operating_income(
         assert rows[("TWSE", "2801")].operating_income_ytd is None
 
 
-def test_a_snapshot_with_another_eps_is_not_written(factory, tmp_path):
+def test_a_snapshot_with_another_eps_is_not_written(factory, tmp_path, monkeypatch):
+    # One of two is over the 1% stop; a reused code is one among about 2,000.
+    monkeypatch.setattr(qs, "CHECK_MISSING_LIMIT", 0.5)
     with factory() as db:
         add_snapshot(db, add_instrument(db, "2330", status="active"), 4.0, "500.00")
         add_snapshot(db, add_instrument(db, "6005", status="active"), 9.9, "500.00")
@@ -1021,7 +1023,11 @@ def test_a_snapshot_with_another_operating_income_stops(factory, tmp_path):
         assert written(db) == {}
 
 
-def test_an_active_company_with_another_eps_is_not_written(factory, tmp_path):
+def test_an_active_company_with_another_eps_is_not_written(
+    factory, tmp_path, monkeypatch
+):
+    # One of two is over the 1% stop; a reused code is one among about 2,000.
+    monkeypatch.setattr(qs, "CHECK_MISSING_LIMIT", 0.5)
     # The code's company in the archive is not the one t163sb04 lists today.
     with factory() as db:
         survivor = add_instrument(db, "2330", status="active")
@@ -1411,3 +1417,60 @@ def test_xbrl_apply_from_2026_checks_insurers_as_ifrs17(
 ):
     result = _xbrl_insurer(factory, tmp_path, Quarter(2026, 1), stored_format)
     assert result["status"] == status, result
+
+
+def test_too_many_eps_differences_stop(factory, tmp_path):
+    with factory() as db:
+        survivor = add_instrument(db, "2330", status="active")
+        add_t163sb04(db, survivor, 4.0)
+        other = add_instrument(db, "6005", status="active")
+        add_t163sb04(db, other, 9.9)
+        db.commit()
+    store(
+        tmp_path,
+        Q,
+        archive(dict([company("2330", eps="4.00"), company("6005", eps="1.00")])),
+        page_html({"2330": ("10000", "6000")}),
+    )
+    result = apply(factory, tmp_path)
+    assert result["status"] == "failed" and "eps different 1" in result["aborted"]
+    with factory() as db:
+        assert written(db) == {}
+
+
+def test_a_quarter_with_no_income_row_to_compare_stops(factory, tmp_path):
+    with factory() as db:
+        add_instrument(db, "2475")
+        db.commit()
+    store(
+        tmp_path,
+        Q,
+        archive(dict([company("2475"), company("2330")])),
+        page_html({"2330": ("10000", "6000")}),
+    )
+    result = apply(factory, tmp_path)
+    assert result["status"] == "failed"
+    assert "t163sb04／snapshot" in result["aborted"]
+
+
+def test_post_once_asks_once_and_refuses_anything_but_200(monkeypatch):
+    throttled, posted = [], []
+    monkeypatch.setattr(sources, "_throttle_official_host", throttled.append)
+
+    class Answer:
+        def __init__(self, status):
+            self.status_code, self.text = status, "<html>page</html>"
+
+    answers = iter([Answer(503), Answer(200)])
+
+    def post(url, **kwargs):
+        posted.append(kwargs["data"])
+        return next(answers)
+
+    monkeypatch.setattr(qs.httpx, "post", post)
+    form = {"TYPEK": "sii"}
+    with pytest.raises(OfficialDataError, match="HTTP 503"):
+        qs.post_once(qs.CHECK_ENDPOINT, form)
+    assert posted == [form] and throttled == [qs.CHECK_ENDPOINT]
+    assert qs.post_once(qs.CHECK_ENDPOINT, form) == "<html>page</html>"
+    assert len(posted) == 2

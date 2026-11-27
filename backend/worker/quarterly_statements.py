@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any, Callable
 from xml.etree import ElementTree
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -59,6 +60,7 @@ from app.models import (
     RawPayload,
 )
 from worker import quarterly_fundamentals as qf
+from worker import sources
 from worker import quarterly_xbrl as qx
 from worker.quarterly_fundamentals import Quarter
 from worker.sources import OfficialDataError, parse_number
@@ -360,12 +362,32 @@ def _whole_page(directory: Path, quarter: Quarter, manifest: dict[str, Any]) -> 
     return hashlib.sha256(path.read_bytes()).hexdigest() == entry.get("sha256")
 
 
+def post_once(url: str, form: dict[str, str]) -> str:
+    """One POST of the page; anything but a 200 is OfficialDataError, never asked again.
+
+    The same rule as ``xbrl-fetch`` (``quarterly_fundamentals.fetch_html`` retries
+    transient failures, so its request count is not the requests sent; review of PR
+    #1084).  Through ``sources._throttle_official_host`` as every official request.
+    """
+
+    sources._throttle_official_host(url)
+    try:
+        response = httpx.post(
+            url, data=form, timeout=60.0, headers={"User-Agent": qx.USER_AGENT}
+        )
+    except httpx.HTTPError as exc:
+        raise OfficialDataError(f"{url}: {exc!r}") from exc
+    if response.status_code != 200:
+        raise OfficialDataError(f"{url}: HTTP {response.status_code}")
+    return response.text
+
+
 def fetch_check_pages(
     directory: Path,
     start: Quarter,
     end: Quarter,
     *,
-    fetcher: Callable[[str, dict[str, str]], str] = qf.fetch_html,
+    fetcher: Callable[[str, dict[str, str]], str] = post_once,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
@@ -499,7 +521,7 @@ class MismatchError(qx.ArchiveError):
         super().__init__(
             f"{quarter.label}: archive and {what} differ (income same "
             f"{counts.income_same}, different {counts.income_different}, missing "
-            f"{counts.income_missing}; balance same {counts.balance_same}, different "
+            f"{counts.income_missing}, eps different {counts.eps_different}; balance same {counts.balance_same}, different "
             f"{counts.balance_different}, missing {counts.balance_missing}); 停下來問"
         )
         self.counts = counts
@@ -627,8 +649,10 @@ def apply_statement_quarter(
         compared = len(sb04)
         if (
             counts.income_different
-            or (compared and counts.income_same == 0)
+            or counts.income_same == 0
             or counts.income_missing > compared * CHECK_MISSING_LIMIT
+            # Many EPS differences are not reused codes but a source gone wrong.
+            or counts.eps_different > compared * CHECK_MISSING_LIMIT
         ):
             raise MismatchError(quarter, counts, "t163sb04／snapshot")
 
