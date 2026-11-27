@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、整包的資產負債表與現金流量表、標的狀態同步、官方來源限制、新聞來源清單、盤中報價來源、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、股價淨值比與發行股數、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、整包的資產負債表與現金流量表、標的狀態同步、官方來源限制、新聞來源清單、盤中報價來源、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、股價淨值比與發行股數、借券賣出與當沖、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [CAPABILITIES](CAPABILITIES.md) 為準。
@@ -42,9 +42,9 @@
 | 月營收（下市公司，只在研究 DB） | MOPS 單一公司月營收 `ajax_t05st10_ifrs`（`POST https://mopsov.twse.com.tw/mops/web/ajax_t05st10_ifrs`，表單 `co_id`、民國 `year`、兩位數 `month`、`TYPEK=all`，UTF-8 HTML） | 手動的 `revenue company-classify`／`revenue company-backfill`，每家每月 1 個請求，寫入 `monthly_revenues`（`source=mops_t05st10`）；轉板公司另由 `revenue transfers` 從同一家公司的另一個標的複製（`source=mops_t21sc03_transfer`，0 個請求）。 | 只有仍公開發行的公司查得到；可得日同 `t21sc03`。規則見[下市與轉板公司的月營收](#下市與轉板公司的月營收)。 |
 | 公司基本資料（候選題材的證據） | MOPS 公司基本資料 `ajax_t05st03`（`GET https://mopsov.twse.com.tw/mops/web/ajax_t05st03?...&TYPEK=all&co_id=<代號>`，HTML） | daily 的 theme_discovery 步驟（[#1018](https://github.com/YiCheng0608/stock-lab/issues/1018)）每晚只抓要送 AI 的群的成員（最多 3 群、每群最多 20 檔），一次一頁、間隔 3 秒，取「主要經營業務」那一格給 AI 摘錄，並以 `check_member` 核對摘錄（[候選題材](INDUSTRY_CLASSIFICATION.md#73-候選題材)）。 | 頁面不另存 raw，也不寫成資料表；只在那次 `claude -p` 的 prompt raw 裡留每檔前 600 字。抓到的是當下的頁面，不是分群那天的版本。 |
 
-**選定、還沒有 collector 呼叫的端點**：股價淨值比與發行股數只回補進[研究 DB](ops/RESEARCH_DB.md)，正式 DB 先不收（[#1074 決定](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205622705)）。上市淨值比 `BWIBBU_d`、上市發行股數 `MI_QFIIS`、上櫃淨值比 `peQryDate` 三個網站端點，上櫃發行股數讀已存的 `dailyQuotes`。它們算現有官方來源（TWSE、TPEx）的新端點，不算新來源；欄位、可得時點與限制見[股價淨值比與發行股數](#股價淨值比與發行股數)。
+**選定、還沒有 collector 呼叫的端點**：股價淨值比與發行股數只回補進[研究 DB](ops/RESEARCH_DB.md)，正式 DB 先不收（[#1074 決定](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205622705)）。上市淨值比 `BWIBBU_d`、上市發行股數 `MI_QFIIS`、上櫃淨值比 `peQryDate` 三個網站端點，上櫃發行股數讀已存的 `dailyQuotes`。它們算現有官方來源（TWSE、TPEx）的新端點，不算新來源；欄位、可得時點與限制見[股價淨值比與發行股數](#股價淨值比與發行股數)。借券賣出與當沖也一樣只回補進研究 DB、正式 DB 先不收（[#1085 決定](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208519530)）：上市 `TWT93U`、`TWTB4U`，上櫃 `margin/sbl`、`intraday/stat` 四個網站端點，同樣算現有官方來源的新端點（[#1 7208515806](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7208515806)）；見[借券賣出與當沖](#借券賣出與當沖)。
 
-每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。raw 檔（`raw/<來源>/<擷取日>/<SHA-256>.json` 與旁邊的 `.meta.json`）先寫同目錄的暫存檔、`fsync` 後換名再同步目錄，DB 才記它的路徑；目標已存在但大小或 SHA-256 不符（例如斷電留下的 0 bytes 檔）時，下一次寫同一個路徑會以同 SHA-256 的內容重寫，內容的 SHA-256 與檔名不同就不寫、拋錯。目錄是擷取日，所以隔天重抓（例如回補 `--force`）會寫進當天的目錄；同一個 run 已有同 endpoint、同 SHA-256 的 `raw_payloads` 列時沿用那一列，它引用的檔不存在、0 bytes 或 SHA-256 不符就以這次的內容寫回原路徑（含 `.meta.json`），DB 不改，寫回失敗則 run 失敗（[#772](https://github.com/YiCheng0608/stock-lab/issues/772) 決定 [6893166947](https://github.com/YiCheng0608/stock-lab/issues/772#issuecomment-6893166947)）。列出 DB 引用、但不存在、0 bytes 或 SHA-256 不符的 raw 檔，用 [`tools/audit/raw_files.py`](../tools/audit/raw_files.py)（[讀 raw 的工具](ops/LOCAL.md#讀-raw-的工具)）。重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖與借券欄位，現有寫入路徑不收集這些值；融券餘額 2026-11 起收集（[籌碼來源](#籌碼來源)，[#662](https://github.com/YiCheng0608/stock-lab/issues/662)）。券商分點列後版，collector 不接入。
+每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。raw 檔（`raw/<來源>/<擷取日>/<SHA-256>.json` 與旁邊的 `.meta.json`）先寫同目錄的暫存檔、`fsync` 後換名再同步目錄，DB 才記它的路徑；目標已存在但大小或 SHA-256 不符（例如斷電留下的 0 bytes 檔）時，下一次寫同一個路徑會以同 SHA-256 的內容重寫，內容的 SHA-256 與檔名不同就不寫、拋錯。目錄是擷取日，所以隔天重抓（例如回補 `--force`）會寫進當天的目錄；同一個 run 已有同 endpoint、同 SHA-256 的 `raw_payloads` 列時沿用那一列，它引用的檔不存在、0 bytes 或 SHA-256 不符就以這次的內容寫回原路徑（含 `.meta.json`），DB 不改，寫回失敗則 run 失敗（[#772](https://github.com/YiCheng0608/stock-lab/issues/772) 決定 [6893166947](https://github.com/YiCheng0608/stock-lab/issues/772#issuecomment-6893166947)）。列出 DB 引用、但不存在、0 bytes 或 SHA-256 不符的 raw 檔，用 [`tools/audit/raw_files.py`](../tools/audit/raw_files.py)（[讀 raw 的工具](ops/LOCAL.md#讀-raw-的工具)）。重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖與借券欄位（`day_trade_ratio`、`borrowed_sell`），現有寫入路徑從沒接來源，正式 DB 與研究 DB 都是 0 列非空；研究 DB 的回補改寫進另外兩張表，這兩欄先不動（[借券賣出與當沖](#借券賣出與當沖)）；融券餘額 2026-11 起收集（[籌碼來源](#籌碼來源)，[#662](https://github.com/YiCheng0608/stock-lab/issues/662)）。券商分點列後版，collector 不接入。
 
 ### 核心與非核心來源
 
@@ -86,6 +86,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
   - 第五條：禁止「非依櫃檯買賣中心同意之方式」以自動程式下載本網站資料。OpenAPI 是同意的方式（[swagger](https://www.tpex.org.tw/openapi/swagger.json) 寫「歡迎各位介接使用」）。collector 讀的網站端點 `dailyQuotes`、`insti/dailyTrade`、`margin/balance`、`exDailyQ` 不是，`inx`、`tradingIndex`、`info.tpex.org.tw` 的 `etfFilter` 也不是。
   - 查核結論（2026-11-08，[#555](https://github.com/YiCheng0608/stock-lab/issues/555)）：前四個端點的資料集都登錄在 data.gov.tw（[11370](https://data.gov.tw/dataset/11370)、[11856](https://data.gov.tw/dataset/11856)、[11387](https://data.gov.tw/dataset/11387)、[11633](https://data.gov.tw/dataset/11633)，政府資料開放授權條款第1版）。OpenAPI 有內容相同的端點：`tpex_mainboard_daily_close_quotes`、`tpex_3insti_daily_trading`、`tpex_mainboard_margin_balance`、`tpex_exright_daily`。2026-11-06 的日行情、法人、融資，全部列逐欄比對都一致；OpenAPI 的法人檔少了自營商自行買賣與避險明細，collector 沒有讀這些欄。
   - 上櫃淨值比 `peQryDate`（[#1074](https://github.com/YiCheng0608/stock-lab/issues/1074)）也登錄在 data.gov.tw：[11373 上櫃股票個股本益比、殖利率、股價淨值比](https://data.gov.tw/dataset/11373)（`A45020000D-000081`，政府資料開放授權條款第1版、免費；下載網址是舊版 CSV `web/stock/aftertrading/peratio_analysis/pera_result.php?l=zh-tw&o=data`，`resourceRequestParameters` 空白），OpenAPI 對應 `tpex_mainboard_peratio_analysis`。2026-11-27 以 `https://data.gov.tw/api/v2/rest/dataset/11373` 查。
+  - 借券與當沖（[#1085](https://github.com/YiCheng0608/stock-lab/issues/1085)，2026-11-27 以 data.gov.tw 的 `POST https://data.gov.tw/api/front/dataset/list` 全文搜尋「上櫃 借券」「上櫃 當沖」查，2 個請求）：上櫃借券 `margin/sbl` 的內容登錄為 [11632 上櫃股票融券借券賣出餘額](https://data.gov.tw/dataset/11632)（政府資料開放授權條款第1版、免費；下載網址是舊版 CSV `web/stock/margin_trading/margin_sbl/margin_sbl_result.php?l=zh-tw&o=data`），OpenAPI 對應 `tpex_margin_sbl`。上櫃當沖 `intraday/stat` 的**逐檔成交量值沒有登錄**：只有全市場統計 [11627](https://data.gov.tw/dataset/11627)（OpenAPI `tpex_intraday_trading_statistics`）與標的名單 [137680](https://data.gov.tw/dataset/137680)（`tpex_securities`），照 #1085 決定仍走網站端點、只在研究 DB 回補時請求。
   - 限制：OpenAPI 與 data.gov.tw 的下載都只有最新一天、不能指定日期。所以漏日補抓、回補與除權息回補，沒有開放授權的替代來源。
   - 決定（[#555](https://github.com/YiCheng0608/stock-lab/issues/555#issuecomment-6720477492)，2026-11-08）：當天的日行情、法人、融資改抓 OpenAPI，collector 的切換另開任務，切換前 daily 仍讀網站端點；catchup、`backfill`、`corporate-actions sync` 照舊走網站端點，只在漏日或手動回補時發出。
 - 各端點的數字 rate limit、精確發布時間、逐筆首次可得時間、修訂／撤回紀錄與停用通知都未公開；一次 HTTP 200、今日的 payload 形狀或名稱含「history」都不能證明歷史可重建。
@@ -93,7 +94,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 ## 各來源最早可得
 
-2026-11-14 以少量請求實測各端點最早回得出資料的日子（[#692 AC-1](https://github.com/YiCheng0608/stock-lab/issues/692#issuecomment-6873790108)，59 個請求、同 host 間隔 3.5 秒）；最後 4 列（淨值比與發行股數）是 2026-11-27 的實測（[#1074 回報](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205579479)，45 個請求，同樣的間隔）。正式 DB 的個股歷史從 2024-09-30 起；更早的歷史只補進獨立的[研究 DB](ops/RESEARCH_DB.md)（#692 決定）。
+2026-11-14 以少量請求實測各端點最早回得出資料的日子（[#692 AC-1](https://github.com/YiCheng0608/stock-lab/issues/692#issuecomment-6873790108)，59 個請求、同 host 間隔 3.5 秒）；最後 4 列（淨值比與發行股數）是 2026-11-27 的實測（[#1074 回報](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205579479)，45 個請求，同樣的間隔）；借券賣出與當沖 4 列是 2026-11-27 的實測（[#1085 回報](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208492301)，62 個請求，同樣的間隔）。正式 DB 的個股歷史從 2024-09-30 起；更早的歷史只補進獨立的[研究 DB](ops/RESEARCH_DB.md)（#692 決定）。
 
 | 資料 | 端點 | 最早可得 | 更早時的回應 | 回補路徑怎麼處理更早的日子 |
 | --- | --- | --- | --- | --- |
@@ -120,6 +121,10 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 上市發行股數 | `MI_QFIIS` | 不晚於 2004-02-11 | — | 回補單還沒做；照常請求 |
 | 上櫃股價淨值比 | `peQryDate` | 2007-01-02 | `totalCount 0` 的空表（2006-12-29、12-22、12-15、12-01、10-02、07-03、01-02，2005、2004、2003、2000 各 1 天） | 回補單還沒做；上櫃日線 2007-04-23 起，只抓這段 |
 | 上櫃發行股數 | `dailyQuotes` 的「發行股數」欄（OpenAPI `Capitals`） | 同上櫃日行情：2007-04-23 | — | 0 個請求，從已存的 raw 重讀 |
+| 上市借券賣出 | `TWT93U` | 2005-07-01 | `stat`「查詢日期小於94年7月1日，請重新查詢!」（2004-02-11、2005-06-30） | 回補單還沒做；早於這天不請求。2012-03-16 以前是舊版面（[借券賣出與當沖](#借券賣出與當沖)） |
+| 上櫃借券賣出 | `margin/sbl` | 2012-10-02 | `stat ok`、`data` 空表（2012-10-01、07-02、01-02，2011-07-01、2010-07-01、2008-07-01、2007-04-23） | 回補單還沒做；早於這天不請求 |
+| 上市當沖 | `TWTB4U` | 2014-01-06（現股當沖開放日） | `stat`「查詢日期小於103年1月6日，請重新查詢!」（2014-01-03） | 回補單還沒做；更早沒有現股當沖，是制度本身 |
+| 上櫃當沖 | `intraday/stat` | 2014-01-06 | `stat ok`、兩張表都是空的（2014-01-03） | 同上 |
 
 ## 新聞來源
 
@@ -828,6 +833,32 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   - 財報重編不回溯：舊日子的值是當時的數字，和研究 DB 季報存「最新數值」的口徑相反。
   - 存託憑證（91 開頭）沒有淨值比。
   - 研究 DB 的季報（`fundamental_snapshots`）只有營收、EPS、ROE，沒有股本或權益，不能自己算每股淨值。XBRL 整包有 `OrdinaryShare` 與 `EquityAttributableToOwnersOfParent`，但只有 2013 年起、每季一個值，還要假設面額，只拿來抽樣核對。
+
+### 借券賣出與當沖
+
+`chip_snapshots` 的 `borrowed_sell`、`day_trade_ratio` 從基線 schema 就有，但從沒接來源，正式 DB 與研究 DB 都是 0 列非空，`feature_evidence.py` 的 `borrowed_sell_surge`、`day_trade_ratio` 因此永遠缺值（[策略證據](spec/evidence.md)第九輪起的「研究 DB 沒有的」）。[#1085](https://github.com/YiCheng0608/stock-lab/issues/1085) 評估後選定下列端點，**只回補進研究 DB**，寫進另外兩張表（`securities_lending_daily`、`day_trade_daily`），`chip_snapshots` 的兩欄先不動（[#1085 決定](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208519530)）。回補由另一張任務單做，跑法與覆蓋寫在 [RESEARCH_DB](ops/RESEARCH_DB.md)。最早可得見[各來源最早可得](#各來源最早可得)。
+
+| 資料 | 端點 | 一次涵蓋 | 欄位 |
+| --- | --- | --- | --- |
+| 上市借券賣出 | `GET https://www.twse.com.tw/rwd/zh/marginTrading/TWT93U?date=YYYYMMDD&response=json`（信用額度總量管制餘額表） | 一天的全部信用交易標的（含 ETF） | 代號、名稱；融券六欄（前日餘額、賣出、買進、現券、今日餘額、次一營業日限額）；借券賣出六欄：前日餘額、**當日賣出**、當日還券、當日調整、**當日餘額**、次一營業日可限額；備註符號（X 停券、Y、V、%、Z 暫停借券賣出、! 停止買賣）。單位：股 |
+| 上櫃借券賣出 | `POST https://www.tpex.org.tw/www/zh-tw/margin/sbl`，form `date=YYYY/MM/DD&response=json`（data.gov.tw [11632](https://data.gov.tw/dataset/11632)） | 一天的全部上櫃信用交易標的 | 同上市（欄名「當日調整數額」「次一營業日可借券賣出限額」）。單位：股 |
+| 上市當沖 | `GET https://www.twse.com.tw/rwd/zh/dayTrading/TWTB4U?date=YYYYMMDD&selectType=All&response=json`（當日沖銷交易標的及成交量值） | `tables[0]` 全市場統計 1 列；`tables[1]` 當天的當沖標的逐檔 | 逐檔：證券代號、證券名稱、暫停現股賣出後現款買進當沖註記、**當日沖銷交易成交股數**、買進成交金額、賣出成交金額。單位：股、元 |
+| 上櫃當沖 | `POST https://www.tpex.org.tw/www/zh-tw/intraday/stat`，form `date=YYYY/MM/DD&type=Daily&response=json`（少了 `type` 回 `stat`「參數輸入錯誤」） | 同上市 | 同上市；2014 年的版面沒有「暫停…註記」欄（改版日沒有實測） |
+
+- **用途**：借券賣出存當日賣出、當日還券、當日餘額與備註；當沖存成交股數與買進、賣出金額與註記。當沖比不存成欄位，由研究工具以「當日沖銷交易成交股數 ÷ 當天的 `market_bars.volume`」算（同一市場、同一天；分母 0 或缺值時是缺值）。抽樣的 2014、2017、2020 年逐檔算，最大 0.83，沒有超過 1 的。官方只有全市場比重，分母是含盤後定價、零股、鉅額的整體成交股數，和日線口徑不同，不拿來核對逐檔比率。每列有 `source` 與資料日期，上市、上櫃不混。
+- **「回應沒有這檔」存無資料**：不建列、不補 0。借券表只列信用交易標的，2008～2020 的抽樣日，沒有列的股票當天都沒有融資列；當沖表只列當天的當沖標的（官方：「遇調整為非當日沖銷交易之證券，本報表停止揭露」）。有列、值是 0，才是當天沒有借券賣出或沒有當沖。空白、`-` 存 NULL。
+- **下市股覆蓋**：四個端點都依當天的名單產生，含之後下市的公司。之後下市的公司沒有列的比例比全體高，是因為當天不在信用交易或當沖標的名單上，不是回應漏掉（[#1085 回報](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208492301)）。
+- **授權與限流**：四個都是網站端點，條款照[官方來源共同限制](#官方來源共同限制)：只在研究 DB 回補時、以有上限的批次請求，同 host 間隔 3.5 秒；限流未公開。上市的兩個端點和其他上市回補同一個 host，不同時送。
+- **為什麼正式 DB 先不收**：上市逐檔借券賣出、逐檔當沖量都沒有 OpenAPI（TWSE swagger 只有 `SBL/TWT96U` 當日可借券賣出股數、`exchangeReport/TWTB4U` 只有標的名單）；上櫃借券有 `tpex_margin_sbl`（股；`tpex_short_sell` 的 `SBLVolume` 是**張**），當沖也只有全市場的 `tpex_intraday_trading_statistics` 與名單 `tpex_securities`。當沖 T+2 才定版，每天抓還要排重抓。要進規則時再開正式 DB 的任務。
+- **可得時點**：
+  - 借券：`TWT93U` 附註「每日晚間執行二次更新作業，更新時間分別約為20時30分及22時30分」，第二次才納入隔天轉上市的個股。上櫃頁面沒寫。
+  - 當沖：官方附註「T日、T+1日及T+2日…更新…，**最終正確數額以T+2日更新之資料為準**，而T日及T+1日提供之資料為輔助參考資料」（上市、上櫃同文）。回補抓到的歷史是定版值，比 T 日晚上真的看得到的值多了兩天的修正；修正的列數與幅度由回補單抽樣量，量完前當成已知限制。
+- **限制**：
+  - **上市借券 2012-03-16 以前是舊版面**：14 欄，借券賣出只有前日餘額、賣出、庫存異動（＝履約＋還券，可正可負）、今日餘額、可使用額度；2012-03-19 起是現行 15 欄。「賣出」與「當日賣出」同一個位置，舊版面沒有還券（存 NULL）。
+  - **上市借券餘額 2012-03-19 換公式**：官方附註「自101年3月19日起借券賣出餘額採用新公式計算及資訊揭露」，實測餘額在這天接不起來（2330：03-16 今日餘額 50,673,137，03-19 前日餘額 50,466,000），餘額不跨這天比。
+  - 借券賣出股數含鉅額交易股數（上市附註）；餘額不一定是千股的倍數。
+  - **早年稀疏**：2014-01-06 到 2016 上半年的當沖標的只有試辦的上市 150 檔、上櫃 50 檔（2016-01-04 是 250／127，2016-07-01 是 853／531，擴大的日子沒有實測）；有借券賣出的檔數 2008-07-01 上市只有 15 檔、2013-07-01 上櫃 27 檔，2020-07-01 才到 489／126 檔。研究的起點等登記假設時再定。
+  - 上櫃借券 2012-10-02 以前、兩市當沖 2014-01-06 以前沒有資料；後者是制度本身（現股當沖這天開放）。
 
 ## FinMind 補缺口規則
 
