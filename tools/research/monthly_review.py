@@ -11,7 +11,9 @@ coordinator runs this on a copy and gets, for the month before,
   calls (``premarket_errors.py``, the cases ``prompt_proposal.py`` reads) and
   the pre-market AI scores' monthly report
   (``worker.premarket_score_report.render``, the code of ``worker.cli
-  premarket-score-report``, on the copy);
+  premarket-score-report``, on the copy) and the AI list scores' monthly
+  report by method (``worker.ai_list_score_report.render``, the code of
+  ``worker.cli ai-list-score-report``, on the copy; #1147);
 - two lists, 變差 and 變強, by the rules frozen here (``worse``, ``better``)
   before the first real run.  The lists only list: a product or delisting
   decision is the user's, a 變強 feature only a candidate for a next round.
@@ -52,13 +54,15 @@ import feature_evidence as fe  # noqa: E402
 import forward_watch as fw  # noqa: E402
 import portfolio_research as pr  # noqa: E402
 
-VERSION = 2
+VERSION = 3
 DESIGN = "1062"
 # What each VERSION changed in the lists (研究規則第 3 條)
 VERSION_NOTES = {
     1: "#1062：前瞻對象、H1、今日名單、特徵與條件",
     2: "#1069：加候選池的 16 個來源（任一期間「輸給基準」進變差、「通過」進變強，"
     "只當紀錄）；新增「候選池的對答案」「早盤 AI 判錯清單」兩段，判錯清單不進清單",
+    3: "#1142、#1147：今日名單改由 AI 產出，候選的成績單讀的 daily_candidates 是背景的"
+    "規則名單，「輸給基準」改成只記錄、不提案；新增「AI 名單對答案月報」一段，不進清單",
 }
 # review.json's layout; a --previous of another layout is refused, not read
 REVIEW_FORMAT = 1
@@ -67,6 +71,7 @@ H1 = "H1"
 SCORECARD = "candidate_scorecard"
 FEATURES = "feature_evidence"
 PREMARKET = "premarket_score_report"
+AI_LIST = "ai_list_score_report"
 POOL_SCORE = "candidate_pool_score"
 ERRORS = "premarket_errors"
 LOGS = "logs"
@@ -124,7 +129,7 @@ def month_cutoff(db: Path, month: str) -> date | None:
 def steps(db: Path, out: Path, cutoff: date, min_free_gb: float) -> list[dict]:
     """Every entry in the order run: H1, the ``WATCHES`` keys, the scorecard,
     the feature evidence, the pool's sources, the AI's misses, then the
-    pre-market report (no tool: in process).  ``tables`` is the file an entry
+    pre-market report and the AI list report (no tool: in process).  ``tables`` is the file an entry
     that succeeded has written (``tables.json`` unless said)."""
 
     end = cutoff.isoformat()
@@ -187,6 +192,7 @@ def steps(db: Path, out: Path, cutoff: date, min_free_gb: float) -> list[dict]:
         }
     )
     listed.append({"name": PREMARKET, "tool": None, "argv": []})
+    listed.append({"name": AI_LIST, "tool": None, "argv": []})
     return listed
 
 
@@ -264,13 +270,36 @@ def premarket_text(db: Path, month: str) -> str:
         engine.dispose()
 
 
+def ai_list_text(db: Path, month: str) -> str:
+    """``worker.ai_list_score_report.render`` on the copy, read only, as
+    ``premarket_text`` (the code of ``worker.cli ai-list-score-report``)."""
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from worker import ai_list_score_report as report
+
+    engine = create_engine("sqlite://", creator=lambda: lib.connect_read_only(db))
+    try:
+        with Session(engine) as session:
+            return report.render(session, month)
+    finally:
+        engine.dispose()
+
+
 def run_premarket(
-    db: Path, month: str, out: Path, render: Callable[[Path, str], str]
+    db: Path,
+    month: str,
+    out: Path,
+    render: Callable[[Path, str], str],
+    name: str = PREMARKET,
 ) -> dict[str, Any]:
+    """An in-process report (``PREMARKET`` or ``AI_LIST``) into ``<out>/<name>/``."""
+
     started = time.monotonic()
     status: dict[str, Any] = {
         "tool": None,
-        "command": f"premarket_score_report.render({month})",
+        "command": f"{name}.render({month})",
     }
     try:
         text = render(db, month)
@@ -282,7 +311,7 @@ def run_premarket(
             "reason": reason,
             "elapsed_seconds": round(time.monotonic() - started, 1),
         }
-    folder = out / PREMARKET
+    folder = out / name
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "report.md").write_text(text + "\n", encoding="utf-8")
     return {
@@ -434,7 +463,7 @@ RANKS = {"evidence": 3, "weak": 2, "not_selected": 1, "reversed": 0}
 UNRANKED = "cannot_tell"
 BETTER_FLOOR = RANKS["weak"]  # a 變強 feature is at least 方向一致但不顯著 now
 SCORECARD_MIN_DAYS = 60
-SCORECARD_NOTE = "今日名單是產品：統籌在 #1 提案檢討（不是下架提案）"
+SCORECARD_NOTE = "規則名單是對答案的基準：只記錄，不提案"
 POOL_NOTE = (
     "候選池只決定 AI 看哪些股票：統籌在 #1 提案調整來源或上限；改 `PoolConfig` "
     "預設值要留 `決定：`"
@@ -719,7 +748,7 @@ def worse(review: dict[str, Any], previous: dict[str, Any] | None) -> list[dict]
                     _item(
                         "scorecard",
                         f"{SCORECARD}:T+{horizon}",
-                        f"今日名單 T+{horizon} 判「輸給基準」：每日超額日均 "
+                        f"規則名單 T+{horizon} 判「輸給基準」：每日超額日均 "
                         f"{lib.pct(part['mean'], 3)}，t {lib.num(part['t'], 2)}，"
                         f"{part['days']} 日",
                         SCORECARD_NOTE,
@@ -1010,6 +1039,16 @@ def markdown(review: dict[str, Any], out: Path) -> str:
             for line in text.rstrip("\n").splitlines()
         ]
         lines += ["", f"- 原始輸出：`{PREMARKET}/report.md`", ""]
+    lines += ["## AI 名單對答案月報", ""]
+    if status[AI_LIST]["status"] != OK:
+        lines += _failed_lines(status[AI_LIST])
+    else:
+        text = (out / AI_LIST / "report.md").read_text(encoding="utf-8")
+        lines += [
+            ("#" + line) if line.startswith("#") else line
+            for line in text.rstrip("\n").splitlines()
+        ]
+        lines += ["", f"- 原始輸出：`{AI_LIST}/report.md`", ""]
     return "\n".join(lines) + "\n"
 
 
@@ -1057,13 +1096,17 @@ def run_review(
     command: str = "",
     runner: Runner = subprocess_runner,
     premarket: Callable[[Path, str], str] = premarket_text,
+    ai_list: Callable[[Path, str], str] = ai_list_text,
 ) -> dict[str, Any]:
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     status: dict[str, dict] = {}
+    renders = {PREMARKET: premarket, AI_LIST: ai_list}
     for step in steps(db, out, cutoff, min_free_gb):
         if step["tool"] is None:
-            status[step["name"]] = run_premarket(db, month, out, premarket)
+            status[step["name"]] = run_premarket(
+                db, month, out, renders[step["name"]], step["name"]
+            )
         else:
             status[step["name"]] = run_tool_step(step, out, runner, db)
     _first, last_day = month_bounds(month)
@@ -1131,6 +1174,7 @@ def main(
     argv: list[str] | None = None,
     runner: Runner = subprocess_runner,
     premarket: Callable[[Path, str], str] = premarket_text,
+    ai_list: Callable[[Path, str], str] = ai_list_text,
 ) -> int:
     argv = sys.argv[1:] if argv is None else argv
     parser = _parser()
@@ -1168,6 +1212,7 @@ def main(
         command="python tools/research/monthly_review.py " + " ".join(argv),
         runner=runner,
         premarket=premarket,
+        ai_list=ai_list,
     )
     print(
         json.dumps(

@@ -2169,3 +2169,41 @@ class AiListPick(Base):
     # The stock's rule levels of the list date as the input had them (null off the
     # rule list or without levels).
     rule_levels_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class AiListScore(Base):
+    """One scored outcome of an AI list reading (Issue #1147, ``ai_list_score_v1``).
+
+    ``scope`` is ``market``, ``stock`` or ``overall``; ``subject`` is
+    ``market``, ``overall`` or the pick's symbol (``pick_id`` set).  Append
+    only, as ``premarket_ai_scores``: a new ``score_version`` adds rows.
+    """
+
+    __tablename__ = "ai_list_scores"
+    __table_args__ = (
+        UniqueConstraint(
+            "reading_id",
+            "scope",
+            "subject",
+            "horizon",
+            "score_version",
+            name="uq_ai_list_score",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reading_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_list_readings.id"), index=True
+    )
+    pick_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ai_list_picks.id"), nullable=True
+    )
+    session_date: Mapped[date] = mapped_column(Date, index=True)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    role: Mapped[str] = mapped_column(String(20))
+    scope: Mapped[str] = mapped_column(String(20))
+    subject: Mapped[str] = mapped_column(String(40))
+    horizon: Mapped[str] = mapped_column(String(20))
+    score_version: Mapped[str] = mapped_column(String(40))
+    outcome_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(DateTime)

@@ -842,8 +842,8 @@ def test_the_daily_writes_the_evening_last(factory, monkeypatch):
     assert result["status"] == "success"
     assert result["candidate_pool"]["status"] == "success"
     # The real step is not a recorded fake: it runs between theme_discovery and
-    # premarket_score (#1043).
-    assert steps.calls[-2:] == ["theme_discovery", "premarket_score"]
+    # premarket_score (#1043) and ai_list_score (#1147).
+    assert steps.calls[-3:] == ["theme_discovery", "premarket_score", "ai_list_score"]
     rows, by_run = runs(factory)
     step = by_run[rows[0].id]["candidate_pool"]
     assert (step.status, step.sequence) == ("success", 17)

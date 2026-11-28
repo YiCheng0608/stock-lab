@@ -93,6 +93,8 @@ class Steps:
             "candidate_pool": {"status": "success", "records": 40},
             # Issue #1043; the real step has its own tests (test_premarket_score).
             "premarket_score": {"status": "success", "records": 7},
+            # Issue #1147; the real step has its own tests (test_ai_list_score).
+            "ai_list_score": {"status": "success", "records": 4},
             # Issue #536; the real step has its own tests (test_period_backfill).
             "period_backfill": {
                 "status": "skipped",
@@ -149,6 +151,7 @@ class Steps:
         monkeypatch.setattr(
             schedule_runs, "_premarket_score_step", make("premarket_score")
         )
+        monkeypatch.setattr(schedule_runs, "_ai_list_score_step", make("ai_list_score"))
         monkeypatch.setattr(
             schedule_runs, "_period_backfill_step", make("period_backfill")
         )
@@ -207,6 +210,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     assert [
@@ -232,6 +236,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "theme_discovery": ("success", 2),
         "candidate_pool": ("success", 40),
         "premarket_score": ("success", 7),
+        "ai_list_score": ("success", 4),
         "period_backfill": ("skipped", 0),
     }
     assert all(step.started_at and step.finished_at for step in logged.values())
@@ -260,6 +265,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
         "institutional_refetch",
     ]
     rows, by_run = runs(database)
@@ -307,6 +313,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "theme_discovery": "skipped",
         "candidate_pool": "skipped",
         "premarket_score": "skipped",
+        "ai_list_score": "skipped",
         "period_backfill": "skipped",
     }
     # A partial day is retried by the next trigger instead of being reused.
@@ -332,6 +339,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
 
 
@@ -371,6 +379,7 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -424,6 +433,7 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     assert rows[0].error == "evaluate: fixture evaluate failure"
@@ -454,6 +464,7 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -497,11 +508,12 @@ def test_candidate_note_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, candidate_notes=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-4:] == [
+    assert steps.calls[-5:] == [
         "candidate_notes",
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]["candidate_notes"]
@@ -647,7 +659,7 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
     steps = Steps(monkeypatch, plan_tracking=RuntimeError("fixture plan crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls[-7:] == [
+    assert steps.calls[-8:] == [
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -655,6 +667,7 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -672,9 +685,10 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
             "theme_discovery",
             "candidate_pool",
             "premarket_score",
+            "ai_list_score",
             "period_backfill",
         )
-    ] == [12, 13, 14, 15, 16, 17, 18, 10]
+    ] == [12, 13, 14, 15, 16, 17, 18, 19, 10]
 
 
 @pytest.mark.parametrize(
@@ -692,13 +706,14 @@ def test_strategy_level_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, strategy_levels=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-6:] == [
+    assert steps.calls[-7:] == [
         "strategy_levels",
         "action_tiers",
         "candidate_notes",
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -724,12 +739,13 @@ def test_action_tier_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, action_tiers=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-5:] == [
+    assert steps.calls[-6:] == [
         "action_tiers",
         "candidate_notes",
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -952,6 +968,7 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
 
 
@@ -1458,6 +1475,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, _ = runs(database)
     assert rows[0].status == "failed" and f"process {dead.pid}" in rows[0].error
@@ -1858,6 +1876,7 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     caught = result["catchup"]
     # The holiday does not count toward the five sessions.
@@ -2318,7 +2337,7 @@ def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
     rows, by_run = runs(database)
     assert (rows[0].started_at, rows[0].finished_at) == (first, first)
     logged = by_run[rows[0].id]
-    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 19
+    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 20
     assert {(step.started_at, step.finished_at) for step in logged.values()} == {
         (first, first)
     }

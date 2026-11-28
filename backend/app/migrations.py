@@ -897,6 +897,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0051_ai_list', CURRENT_TIMESTAMP)"
         )
     )
+    # 0053 only adds ai_list_scores (#1147), made by create_all with its indexes
+    # (0052 is #1149's).
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0053_ai_list_scores', CURRENT_TIMESTAMP)"
+        )
+    )
     # 0043 only adds securities_lending_daily / day_trade_daily (#1089), made by
     # create_all with their indexes; only the research database writes them.
     connection.execute(

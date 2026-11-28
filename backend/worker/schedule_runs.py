@@ -99,6 +99,7 @@ DAILY_STEPS = (
     "theme_discovery",
     "candidate_pool",
     "premarket_score",
+    "ai_list_score",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
@@ -118,6 +119,7 @@ STEP_REQUIRES = {
     "theme_discovery": (),
     "candidate_pool": (),
     "premarket_score": (),
+    "ai_list_score": (),
     "period_backfill": (),
 }
 # Steps whose failure is kept on the step row only: the run stays success, so
@@ -136,6 +138,7 @@ STEP_REQUIRES = {
 # reads; worker.cli candidate-pool --date writes a missing evening.
 # The pre-market AI scores (#1043): nothing in the run reads them; the next
 # daily writes every horizon still due, and worker.cli premarket-score does too.
+# The AI list scores (#1147): the same, with worker.cli ai-list-score.
 NON_BLOCKING_STEPS = frozenset(
     {
         "trading_calendar",
@@ -143,6 +146,7 @@ NON_BLOCKING_STEPS = frozenset(
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
         "strategy_levels",
         "action_tiers",
         "mainstream",
@@ -197,6 +201,8 @@ CANDIDATE_POOL_MODULE = "worker.candidate_pool"
 CANDIDATE_POOL_FUNCTION = "run_candidate_pool"
 PREMARKET_SCORE_MODULE = "worker.premarket_score"
 PREMARKET_SCORE_FUNCTION = "run_premarket_score"
+AI_LIST_SCORE_MODULE = "worker.ai_list_score"
+AI_LIST_SCORE_FUNCTION = "run_ai_list_score"
 THEME_HEAT_MODULE = "worker.theme_heat"
 THEME_HEAT_FUNCTION = "run_theme_heat"
 X4_LIST_MODULE = "worker.x4_list"
@@ -327,6 +333,11 @@ def _candidate_pool_step(target: date) -> dict[str, Any]:
 def _premarket_score_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(PREMARKET_SCORE_MODULE)
     return getattr(module, PREMARKET_SCORE_FUNCTION)(target)
+
+
+def _ai_list_score_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(AI_LIST_SCORE_MODULE)
+    return getattr(module, AI_LIST_SCORE_FUNCTION)(target)
 
 
 def _theme_heat_step(target: date) -> dict[str, Any]:
@@ -935,8 +946,10 @@ def run_daily_job(
         # The candidate pool (#1020): last, as it reads the day's clusters,
         # heat, lists and today list; the morning run is preopen's.
         ("candidate_pool", 17, lambda: _candidate_pool_step(target)),
-        # The pre-market AI scores (#1043): last, on the day's bars alone.
+        # The pre-market AI scores (#1043): after the pool, on the day's bars alone.
         ("premarket_score", 18, lambda: _premarket_score_step(target)),
+        # The AI list scores (#1147): after premarket_score, on the day's bars alone.
+        ("ai_list_score", 19, lambda: _ai_list_score_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):

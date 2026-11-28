@@ -483,12 +483,13 @@ def test_a_failed_list_leaves_the_today_list_the_run_and_the_exit_code(
     assert result["status"] == "success"
     assert DAILY_EXIT_CODES[result["status"]] == 0
     assert result["candidates"] == steps.results["candidates"]
-    assert steps.calls[-5:] == [
+    assert steps.calls[-6:] == [
         "action_tiers",
         "candidate_notes",
         "theme_discovery",
         "candidate_pool",
         "premarket_score",
+        "ai_list_score",
     ]
     rows, by_run = runs(factory)
     logged = by_run[rows[0].id]
