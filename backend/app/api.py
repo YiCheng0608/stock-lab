@@ -35,6 +35,7 @@ from .candidate_view import (
     MAX_LIMIT as CANDIDATES_MAX_LIMIT,
 )
 from .candidate_pool import candidate_pool as stored_candidate_pool
+from .ai_list import view as ai_list_view
 from .premarket_ai import view as premarket_ai_view
 from .candidate_runs import read_run as read_candidate_run
 from .candidate_view import (
@@ -2869,6 +2870,19 @@ def premarket_ai(
     ``list_date``, or the latest; ``status=missing`` without one.  Not a buy or
     sell signal (docs/spec/premarket_ai.md#顯示)."""
     return premarket_ai_view(db, date_, list_date)
+
+
+@router.get("/ai-list")
+def ai_list(
+    date_: date | None = Query(default=None, alias="date"),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The AI list (#1146, inference, not verified): the champion of the current
+    prompt version of session ``date``, or the latest session; a day without a
+    done list shows the latest done one before it, with ``failure`` saying why
+    (#1142 1/4 Q1-5 A); ``status=missing`` without any.  Not an order
+    (docs/spec/ai_list.md#顯示)."""
+    return ai_list_view(db, date_)
 
 
 def _news_symbol_filter(instrument: Instrument):

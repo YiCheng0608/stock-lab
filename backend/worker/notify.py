@@ -4,49 +4,42 @@ Each trading day at 08:45 Taipei, serve runs ``notify --send``. It sends one mes
 user's own chat: a picture card (#754, the user's choice) with the Bot API ``sendPhoto``,
 and the text card of #742 with ``sendMessage`` when the picture cannot be drawn or sent.
 Both come from one read of the database (``read`` gives a ``Content``), so the picture and
-the text have the same rows, sections, levels and US lines, word for word:
+the text have the same picks, levels and US lines, word for word:
 
-- 今日名單: the list of the session before today (D - 1: the weekday before, skipping the
-  days ``trading_calendar_days`` marks closed), as ``/api/candidates?date=D-1`` gives it
-  (``app.candidate_view.candidate_list``): its date and count, then the rows in the
-  sections 突破 and 回踩 (``entry_type``; any other type under 其他), each in the page's
-  rank order: the code and name, the entry, the stop and the target (a pullback's entry
-  「X～Y」) by the today page's rules, or 「價位不完整」. No other list stands in for a
-  missing one: it reads 「無資料（…）」 with the day's daily status.
-- 開盤前檢查 (#759): the 08:20 check of that very list (#755), as the same
-  ``candidate_list`` gives it (``preopen_check`` and each item's ``preopen_news``, judged by
-  ``app.preopen_news.list_view``: only a check of the list's own ``candidate_run_id`` is
-  ``checked``). Checked: each row with overnight news is marked as the today page's row is
-  (frontend ``preopenRowMark``), 「隔夜新聞 2（可能負向 1）」, the brackets only with a
-  可能負向 one, nothing without news. Not checked (the check not done by 08:45, failed, or
-  the list recomputed after it): one line 「開盤前檢查：尚未完成」, never an older day's
-  result. notify neither waits for the check nor takes its lock.
+- AI 名單 (#1146): ``app.ai_list.view`` for today, the champion of the current prompt
+  version (``GET /api/ai-list?date=D``): the title 「AI 名單 2026/11/27（五）開盤前 · AI
+  推論，未經驗證」, the model and the prompt version, 大盤 (stance, confidence, its first
+  reason), 族群 (the first five with their direction), then each pick in rank order: its
+  code and name with 判讀方式 and 把握, its levels (「進場 站上 233.00（不追 236.50）｜停損
+  226.00｜目標 243.50／254.50｜RR 1.50」, a pullback's 「進場區 X～Y」) and its first reason.
+  A pick whose levels failed a check reads 「價位未通過核對，未顯示」, one past its validity
+  「價位已過有效期（…）」; one with a corporate action after the list date keeps its levels
+  with 「（除權息，價位以 MM/DD 為基準）」. Today without a list of its own (failed,
+  rejected, no row): the line 「今天的 AI 名單沒有產出（<reason>）；以下是 MM/DD 的名單」
+  before the latest list before it (#1142 1/4 Q1-5 A). An empty list reads 「今天 AI 沒有列
+  股票：<reason>」. A reading that cannot be read or shaped (an exception in ``view`` or
+  ``ai_list``) is the line 「AI 名單無法讀取」 and a ``--- ai_list unreadable
+  error=<type>`` log line; the US block still goes. notify neither waits for the list nor
+  takes its lock. The pre-market reading ``premarket_v1`` is recorded only, not sent
+  (#1142 1/4 Q1-6 A).
+- 規則名單 (#1142 3/4 Q3-5 A): one line with the count of the background rule list of
+  D - 1 (``app.candidate_view.candidate_list``), 「（規則名單 N 檔見今日名單頁）」, or
+  「（規則名單：無資料）」.
 - 隔夜美股: ``app.market_overview.foreign_indices`` for today, the four indexes of the today
   page's line (``overnight_us``, #681), each up, down or flat in the Taiwan colours, with
   its freshness (美股休市, 非最新, 美股尚未更新), the close date and the source's name.
 
-- 早盤 AI 判讀 (#1042): ``app.premarket_ai.view`` for today, the champion of the current
-  prompt version only (a shadow is never sent). ``done``: after the US block, a section of
-  its own marked 「AI 推論」 with the model and the prompt version: 大盤 (stance, confidence
-  and its first reasons), 族群 (each with its direction and first reason) and each stock's
-  action and first reason, the today-list stocks first (their prices are the rule's, in the
-  list above; 3a), then the rest of the pool without any price. ``failed``／``rejected``:
-  no section, one line under the head 「今日 AI 判讀失敗：<reason>」; no reading yet (not
-  run, still running) 「今日 AI 判讀尚未完成」. A reading that cannot be read or shaped
-  (an exception in ``view`` or ``ai_view``) is the line 「今日 AI 判讀無法讀取」 and a
-  ``--- premarket_ai unreadable error=<type>`` log line; the list and the US block still go.
-  notify neither waits for the reading nor takes its lock.
-
 The picture (``worker.notify_card``): an HTML page in the dark terminal layout of
-docs/DESIGN_SYSTEM.md, a table per section and the US block (red up, green down), drawn to
-a PNG by the image's Chromium in a temporary directory that is removed afterwards, killed
-past its time limit. Its caption is one line, 「今日名單 11/13（五）・突破 8、回踩 9」.
+docs/DESIGN_SYSTEM.md, the AI list as one section with the 「AI 推論」 badge and the US
+block (red up, green down), drawn to a PNG by the image's Chromium in a temporary
+directory that is removed afterwards, killed past its time limit. Its caption is one line,
+「AI 名單 11/27（五）・3 檔・AI 推論，未經驗證」.
 
-The text: ``parse_mode=HTML`` for the bold title, section heads and row names, marked 🚀
-突破 and ↩️ 回踩, the US indexes 🔴 up, 🟢 down or ⚪ flat. The 4096 characters are counted
-with the tags; the AI section's stocks are cut first, from its last one, with 「另 N 檔的 AI
-判讀見今日名單頁」, then the list's rows from the end with 「另 N 檔見今日名單頁」. The caption and the
-picture's page escape the data's text too (``html.escape``: names, reasons, sources).
+The text: ``parse_mode=HTML`` for the bold title and pick names, the US indexes 🔴 up, 🟢
+down or ⚪ flat. The 4096 characters are counted with the tags; past them the picks'
+reasons are cut first, from the last pick up, then the picks from the last one, with 「另 N
+檔見今日名單頁」 (#1142 3/4). The caption and the picture's page escape the data's text too
+(``html.escape``: names, reasons, sources).
 
 The token and the chat id come from ``TELEGRAM_BOT_TOKEN`` and ``TELEGRAM_CHAT_ID``, which
 reach the scheduler container through compose's ``env_file`` (docs/ops/SETUP.md). Without
@@ -98,7 +91,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 from . import job
 
@@ -124,8 +117,6 @@ RETRY_AFTER_MAX_SECONDS = 60.0
 TIME_LIMIT_MINUTES = 5.0
 # Telegram's limit for one message's text.
 MAX_CHARS = 4096
-# The today page's cap (app.candidate_view.MAX_LIMIT).
-MAX_ITEMS = 20
 LOG_RETENTION_DAYS = 90
 SENT = "sent"
 NOT_CONFIGURED = "not_configured"
@@ -142,34 +133,23 @@ WEEKDAYS = "一二三四五六日"
 US_LABELS = {"SPX": "S&P 500", "IXIC": "NASDAQ", "DJI": "道瓊", "SOX": "費半"}
 US_FRESH = ("latest", "us_market_closed")
 US_REASONS = {"not_collected": "未取得", "fetch_failed": "抓取失敗"}
-# The card (#742): the list's sections in order, the indent and the separator (U+3000, a
-# full-width space), the minus sign (U+2212) and the US marks.
-# (entry_type, the mark before the bold head, the head).
-SECTIONS = (("breakout", "🚀 ", "突破"), ("pullback", "↩️ ", "回踩"))
-OTHER_SECTION = (None, "", "其他")
+# The card (#742): the indent (U+3000, a full-width space), the minus sign (U+2212) and
+# the US marks.
 INDENT = "　"
 MINUS = "−"
 US_MARKS = {"up": "🔴", "down": "🟢", "flat": "⚪"}
-INCOMPLETE = "價位不完整"
-# The today page's words (UI_COPY_SPEC §10, frontend candidates.ts PREOPEN_NEWS_TITLE and
-# directionView('negative')); the line when the list has no check of its own (#759).
-PREOPEN_NEWS = "隔夜新聞"
-PREOPEN_NEGATIVE = "可能負向"
-PREOPEN_PENDING = "開盤前檢查：尚未完成"
 PARSE_MODE = "HTML"
-AI_TITLE = "早盤 AI 判讀"
-AI_MARK = "AI 推論"
-AI_FAILED = "今日 AI 判讀失敗："
-AI_PENDING = "今日 AI 判讀尚未完成"
-# The reading could not be read or shaped (#1042 review 7198038610, 1): the list still goes.
-AI_UNREADABLE = "今日 AI 判讀無法讀取"
+# The AI list's words (#1146; app.ai_list, UI_COPY_SPEC §10 AI 名單).
+AI_LIST_TITLE = "AI 名單"
+AI_LIST_MARK = "AI 推論，未經驗證"
+AI_LIST_MISSING = "尚無 AI 名單"
+LEVELS_FAILED = "價位未通過核對，未顯示"
+# The list could not be read or shaped (as #1042 review 7198038610, 1): the US block
+# still goes.
+AI_UNREADABLE = "AI 名單無法讀取"
 AI_ERROR = "error"
-AI_LISTED = "今日名單的股票"
-AI_OTHERS = "候選池其他股票"
-# What the message shows of a done reading; the page has all of it.
-AI_MAX_STOCKS = 20
+RULE_LIST_MISSING = "（規則名單：無資料）"
 AI_MAX_SECTORS = 5
-AI_MARKET_REASONS = 2
 # Telegram's 400 for a text its HTML parser refuses.
 PARSE_ERROR_TEXT = "can't parse entities"
 
@@ -266,55 +246,6 @@ def level_parts(levels: dict[str, Any]) -> tuple[str, str, str] | None:
 
 
 @dataclass(frozen=True)
-class Row:
-    """One row of the list, as the text and the card show it (raw text: each escapes)."""
-
-    kind: str | None
-    name: str
-    entry: str | None = None
-    stop: str | None = None
-    target: str | None = None
-    # The pre-open check's overnight news (#759): 0 when none or not checked.
-    news: int = 0
-    negative: int = 0
-
-    @property
-    def levels(self) -> str:
-        if self.entry is None:
-            return INCOMPLETE
-        return f"進場 {self.entry}｜停損 {self.stop}｜目標 {self.target}"
-
-    @property
-    def preopen(self) -> tuple[str, str | None] | None:
-        """The row's mark as the today page has it (frontend preopenRowMark): 「隔夜新聞 2」
-        and 「可能負向 1」 (None without a negative one); None without overnight news."""
-
-        if self.news <= 0:
-            return None
-        negative = f"{PREOPEN_NEGATIVE} {self.negative}" if self.negative > 0 else None
-        return f"{PREOPEN_NEWS} {self.news}", negative
-
-    def preopen_mark(
-        self,
-        plain: Callable[[str], str] = str,
-        negative: Callable[[str], str] = str,
-    ) -> str | None:
-        """The mark's one wording for the text and the card: 「隔夜新聞 2（可能負向 1）」,
-        「隔夜新聞 2」; None without overnight news. PLAIN and NEGATIVE write each part
-        (the card escapes them and puts the negative one in the falling colour)."""
-
-        mark = self.preopen
-        if mark is None:
-            return None
-        news, bad = mark
-        return plain(news) + (f"（{negative(bad)}）" if bad else "")
-
-    @property
-    def preopen_text(self) -> str | None:
-        return self.preopen_mark()
-
-
-@dataclass(frozen=True)
 class UsRow:
     """One US index: its close, change and tone, or no close and the reason in NOTE."""
 
@@ -337,38 +268,54 @@ class UsView:
 
 
 @dataclass(frozen=True)
-class AiStock:
-    """One stock of a done reading (raw text): its action, the reprice rule and the
-    first reason. No price: a today-list stock's prices are the rule's, in the list."""
+class Pick:
+    """One pick of the AI list as the text and the card show it (raw text: each
+    escapes): 「1. 1477 聚陽」, 「突破｜把握中」, its levels line (or the sentence in
+    their place), the corporate-action note and its first reason."""
 
+    rank: int
     name: str
-    listed: bool
-    action: str
-    rule: str | None = None
+    method: str
+    levels: str
+    shown: bool = True  # False: the levels failed a check or are past their validity
+    note: str | None = None
     reason: str | None = None
 
     @property
-    def action_line(self) -> str:
-        return f"{self.action}（{self.rule}）" if self.rule else self.action
+    def head(self) -> str:
+        return f"{self.rank}. {self.name}"
 
 
 @dataclass(frozen=True)
-class AiView:
-    """The day's pre-market AI reading as the message shows it (#1042)."""
+class AiList:
+    """The day's AI list as the message shows it (#1146, ``app.ai_list.view``)."""
 
-    status: str  # done, failed, rejected, missing, error
-    line: str | None = None  # failed, rejected, missing, error: the one line instead
+    status: str  # done, missing, error
+    session_date: date | None = None
+    # The day had no list of its own (failed, rejected, no row): the line before the
+    # title, 「今天的 AI 名單沒有產出（呼叫逾時）；以下是 11/27 的名單」.
+    failure: str | None = None
+    line: str | None = None  # missing, error: the one line instead of the list
     error: str | None = None  # error: the exception's type, for the log
-    meta: str = ""  # 「模型 claude-sonnet-5-5・提示 premarket_v1」
-    market: str | None = None  # 「偏多（把握中）」
-    market_reasons: tuple[str, ...] = ()
-    sectors: tuple[tuple[str, str | None], ...] = ()  # (「半導體 可能正向」, reason)
-    stocks: tuple[AiStock, ...] = ()
-    total: int = 0  # the reading's stocks (past AI_MAX_STOCKS too)
+    meta: str = ""  # 「模型 claude-sonnet-5-5・提示 ai_list_v1」
+    market: str | None = None  # 「中性（把握低）」
+    market_reason: str | None = None
+    sectors: str | None = None  # 「PCB 可能正向、金融 可能負向」
+    picks: tuple[Pick, ...] = ()
+    empty: str | None = None  # 「今天 AI 沒有列股票：…」
 
     @property
     def done(self) -> bool:
         return self.status == "done"
+
+    @property
+    def title(self) -> str:
+        """「AI 名單 2026/11/27（五）開盤前」 (raw)."""
+
+        if self.session_date is None:
+            return AI_LIST_TITLE
+        day = self.session_date
+        return f"{AI_LIST_TITLE} {day:%Y/%m/%d}（{WEEKDAYS[day.weekday()]}）開盤前"
 
 
 def _first(reasons: Any) -> str | None:
@@ -379,105 +326,150 @@ def _first(reasons: Any) -> str | None:
     return None
 
 
-def ai_view(reading: dict[str, Any] | None) -> AiView | None:
-    """The message's AI part from ``app.premarket_ai.view``; None without one. Never
-    raises: a reading of another shape is the one line 「今日 AI 判讀無法讀取」, and the
-    list and the US indexes still go (#1042 review 7198038610, 1)."""
+def _num(value: Any) -> str:
+    return price(value) if _is_price(value) else "—"
+
+
+def pick_levels(levels: dict[str, Any]) -> str:
+    """「進場 站上 233.00（不追 236.50）｜停損 226.00｜目標 243.50／254.50｜RR 1.50」;
+    a pullback's 「進場區 44.40～46.05」 (the page's words, UI_COPY_SPEC §10 AI 名單)."""
+
+    entry = levels.get("entry") or {}
+    low, high = entry.get("low"), entry.get("high")
+    if entry.get("type") == "breakout":
+        head = f"進場 站上 {_num(low)}"
+        if _is_price(high) and high != low:
+            head += f"（不追 {_num(high)}）"
+    else:
+        head = f"進場區 {_num(low)}～{_num(high)}"
+    target = _num(levels.get("target_1"))
+    if _is_price(levels.get("target_2")):
+        target += f"／{_num(levels['target_2'])}"
+    parts = [head, f"停損 {_num(levels.get('stop'))}", f"目標 {target}"]
+    ratio = levels.get("risk_reward")
+    if isinstance(ratio, (int, float)) and not isinstance(ratio, bool):
+        parts.append(f"RR {ratio:.2f}")
+    return "｜".join(parts)
+
+
+def _pick(pick: dict[str, Any], list_date: date) -> Pick:
+    name = f"{pick.get('symbol', '')} {pick.get('name') or ''}".strip()
+    method = "｜".join(
+        part for part in (pick.get("setup_text"), pick.get("confidence_text")) if part
+    )
+    levels = pick.get("levels")
+    if levels:
+        line, shown = pick_levels(levels), True
+    else:
+        line = pick.get("expired_text") or pick.get("levels_text") or LEVELS_FAILED
+        shown = False
+    note = None
+    if shown and pick.get("corporate_action_on_session"):
+        note = f"（除權息，價位以 {list_date:%m/%d} 為基準）"
+    return Pick(
+        rank=int(pick.get("rank") or 0),
+        name=name,
+        method=method,
+        levels=line,
+        shown=shown,
+        note=note,
+        reason=_first(pick.get("reasons")),
+    )
+
+
+def ai_list(reading: dict[str, Any] | None) -> AiList:
+    """The message's AI list from ``app.ai_list.view``. Never raises: a reading of
+    another shape is the one line 「AI 名單無法讀取」, and the US indexes still go
+    (as #1042 review 7198038610, 1)."""
 
     try:
-        return _ai_view(reading)
+        return _ai_list(reading)
     except Exception as exc:
-        return AiView(AI_ERROR, AI_UNREADABLE, error=type(exc).__name__)
+        return AiList(AI_ERROR, line=AI_UNREADABLE, error=type(exc).__name__)
 
 
-def _ai_view(reading: dict[str, Any] | None) -> AiView | None:
-    if reading is None:
+def _failure(
+    failure: dict[str, Any] | None, shown: date | None, today: date
+) -> str | None:
+    if not failure:
         return None
+    day = date.fromisoformat(failure["session_date"])
+    who = "今天" if day == today else f"{day:%m/%d} "
+    why = failure.get("reason_text") or "其他原因"
+    head = f"{who}的 AI 名單沒有產出（{why}）"
+    return f"{head}；以下是 {shown:%m/%d} 的名單" if shown else head
+
+
+def _ai_list(reading: dict[str, Any] | None) -> AiList:
+    if reading is None:
+        return AiList("missing", line=AI_LIST_MISSING)
     status = reading.get("status")
     if status == AI_ERROR:
-        return AiView(AI_ERROR, AI_UNREADABLE, error=reading.get("error"))
+        return AiList(AI_ERROR, line=AI_UNREADABLE, error=reading.get("error"))
+    today = date.fromisoformat(reading["today"])
     if status != "done":
-        if status in ("failed", "rejected"):
-            return AiView(
-                status, f"{AI_FAILED}{reading.get('reason_text') or '其他原因'}"
-            )
-        return AiView("missing", AI_PENDING)
+        failure = _failure(reading.get("failure"), None, today)
+        return AiList(
+            "missing", failure=failure, line=None if failure else AI_LIST_MISSING
+        )
+    session = date.fromisoformat(reading["session_date"])
+    list_date = date.fromisoformat(reading["list_date"])
     meta = f"模型 {reading.get('llm_model') or '未記錄'}・提示 {reading.get('prompt_version')}"
     market = reading.get("market") or {}
     stance = market.get("stance_text") or "—"
     confidence = market.get("confidence_text")
-    reasons = [
-        (reason.get("text") or "").strip() for reason in market.get("reasons") or []
-    ]
-    stocks = reading.get("stocks") or []
-    shown = []
-    for stock in stocks[:AI_MAX_STOCKS]:
-        name = f"{stock.get('symbol', '')} {stock.get('name') or ''}".strip()
-        shown.append(
-            AiStock(
-                name=name,
-                listed=bool(stock.get("on_today_list")),
-                action=stock.get("action_text") or stock.get("action") or "",
-                rule=stock.get("reprice_text"),
-                reason=_first(stock.get("reasons")),
-            )
-        )
-    return AiView(
+    sectors = "、".join(
+        f"{sector.get('name') or ''} {sector.get('direction_text') or ''}".strip()
+        for sector in (reading.get("sectors") or [])[:AI_MAX_SECTORS]
+    )
+    return AiList(
         "done",
+        session_date=session,
+        failure=_failure(reading.get("failure"), session, today),
         meta=meta,
         market=f"{stance}（{confidence}）" if confidence else stance,
-        market_reasons=tuple(text for text in reasons if text)[:AI_MARKET_REASONS],
-        sectors=tuple(
-            (
-                f"{sector.get('name') or ''} {sector.get('direction_text') or ''}".strip(),
-                _first(sector.get("reasons")),
-            )
-            for sector in (reading.get("sectors") or [])[:AI_MAX_SECTORS]
-        ),
-        stocks=tuple(shown),
-        total=len(stocks),
+        market_reason=_first(market.get("reasons")),
+        sectors=sectors or None,
+        picks=tuple(_pick(pick, list_date) for pick in reading.get("picks") or []),
+        empty=reading.get("empty_text"),
     )
 
 
-def ai_groups(stocks: Iterable[AiStock]) -> list[tuple[str, list[AiStock]]]:
-    """The stocks by group: the today-list ones, then the rest of the pool."""
+def pick_lines(pick: Pick, reason: bool = True) -> list[str]:
+    """The text's lines of one pick: the bold head and its method, the levels (with
+    the corporate-action note), the first reason when REASON."""
 
-    stocks = list(stocks)
-    out = []
-    for title, listed in ((AI_LISTED, True), (AI_OTHERS, False)):
-        members = [stock for stock in stocks if stock.listed is listed]
-        if members:
-            out.append((title, members))
-    return out
+    head = bold(esc(pick.head)) + (f"｜{esc(pick.method)}" if pick.method else "")
+    lines = [head, f"{INDENT}{esc(pick.levels)}{esc(pick.note or '')}"]
+    if reason and pick.reason:
+        lines.append(f"{INDENT}{esc(pick.reason)}")
+    return lines
 
 
-def ai_lines(ai: AiView | None, shown: int | None = None) -> list[str]:
-    """The text's AI section (done only), its first SHOWN stocks."""
+def ai_list_lines(ai: AiList, shown: int, reasons: int) -> list[str]:
+    """The text's AI list: its title with the date and the mark, the model line, 大盤
+    and 族群, then the first SHOWN picks, the first REASONS of them with a reason."""
 
-    if ai is None or not ai.done:
-        return []
-    stocks = ai.stocks if shown is None else ai.stocks[:shown]
-    lines = [
-        "",
-        f"🤖 {bold(AI_TITLE)}（{AI_MARK}）",
-        esc(ai.meta),
-        f"{bold('大盤')} {esc(ai.market)}",
-    ]
-    lines += [f"{INDENT}{esc(reason)}" for reason in ai.market_reasons]
+    lines = []
+    if ai.failure:
+        lines.append(esc(ai.failure))
+    if not ai.done:
+        if ai.line:
+            lines.append(esc(ai.line))
+        return lines
+    lines += [f"📋 {bold(esc(ai.title))} · {AI_LIST_MARK}", esc(ai.meta)]
+    market = f"{bold('大盤')} {esc(ai.market)}"
+    if ai.market_reason:
+        market += f"：{esc(ai.market_reason)}"
+    lines.append(market)
     if ai.sectors:
-        lines.append(bold("族群"))
-        for head, reason in ai.sectors:
-            lines.append(
-                f"{INDENT}{esc(head)}" + (f"：{esc(reason)}" if reason else "")
-            )
-    for title, members in ai_groups(stocks):
-        lines.append(bold(title))
-        for stock in members:
-            lines.append(f"{bold(esc(stock.name))}{INDENT}{esc(stock.action_line)}")
-            if stock.reason:
-                lines.append(f"{INDENT}{esc(stock.reason)}")
-    if len(stocks) < ai.total:
-        lines.append(f"另 {ai.total - len(stocks)} 檔的 AI 判讀見今日名單頁")
+        lines.append(f"{bold('族群')}：{esc(ai.sectors)}")
+    if ai.empty:
+        lines.append(esc(ai.empty))
+    for index, pick in enumerate(ai.picks[:shown]):
+        lines += pick_lines(pick, reason=index < reasons)
+    if shown < len(ai.picks):
+        lines.append(f"另 {len(ai.picks) - shown} 檔見今日名單頁")
     return lines
 
 
@@ -486,123 +478,17 @@ class Content:
     """The day's message, read once (#754): the text and the card are drawn from it."""
 
     today: date
-    list_date: date
-    computed: bool
-    count: int
-    zero_reason: str | None
-    daily_status: str | None
-    rows: tuple[Row, ...]
-    total: (
-        int  # what the list has (past MAX_ITEMS too); 「另 N 檔」 is total less shown
-    )
+    ai: AiList
     us: UsView
-    # The list has rows and no check of its own (#759): 「開盤前檢查：尚未完成」.
-    preopen_pending: bool = False
-    # The day's pre-market AI reading (#1042); None when it was not read (the tests).
-    ai: AiView | None = None
+    # The background rule list of D - 1 (#1142 3/4 Q3-5 A): one line of its count;
+    # None when it was not computed.
+    rule_count: int | None = None
 
     @property
-    def ai_line(self) -> str | None:
-        """The one line of a reading that is not done (failed, rejected, missing)."""
-
-        return self.ai.line if self.ai is not None and not self.ai.done else None
-
-    @property
-    def preopen_line(self) -> str | None:
-        return PREOPEN_PENDING if self.preopen_pending else None
-
-    @property
-    def head(self) -> str:
-        """The list's head line (raw)."""
-
-        if not self.computed:
-            return f"名單：無資料（{self.missing_reason}）"
-        head = f"{day_label(self.list_date)}收盤後產生・{self.count} 檔"
-        return f"{head}（{self.zero_reason}）" if self.zero_reason else head
-
-    @property
-    def missing_reason(self) -> str:
-        why = f"daily：{self.daily_status}" if self.daily_status else "daily 沒有紀錄"
-        return f"{day_label(self.list_date)}的名單沒有產生；{why}"
-
-    @property
-    def sub(self) -> str:
-        """The card's line under its title."""
-
-        if not self.computed:
-            return "名單無資料"
-        return f"{day_label(self.list_date)}收盤後產生"
-
-    @property
-    def note(self) -> str | None:
-        """The card's reason line: no list, or an empty one."""
-
-        return self.missing_reason if not self.computed else self.zero_reason
-
-
-def preopen_checked(listing: dict[str, Any]) -> bool:
-    """Whether the list's own run was checked before the open (``preopen_check``, judged
-    by ``app.preopen_news.list_view`` as /api/candidates is; its status word)."""
-
-    from app.preopen_news import CHECKED
-
-    return (listing.get("preopen_check") or {}).get("status") == CHECKED
-
-
-def _count(value: Any) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
-
-
-def list_rows(listing: dict[str, Any]) -> tuple[Row, ...]:
-    """The list's rows in rank order (at most MAX_ITEMS), with the pre-open check's
-    counts when the list was checked."""
-
-    checked = preopen_checked(listing)
-    rows = []
-    for item in (listing.get("items") or [])[:MAX_ITEMS]:
-        instrument = item.get("instrument") or {}
-        levels = item.get("levels") or {}
-        name = f"{instrument.get('symbol', '')} {instrument.get('name', '')}".strip()
-        news = (item.get("preopen_news") or {}) if checked else {}
-        rows.append(
-            Row(
-                levels.get("entry_type"),
-                name,
-                *(level_parts(levels) or ()),
-                news=_count(news.get("count")),
-                negative=_count(news.get("negative")),
-            )
-        )
-    return tuple(rows)
-
-
-def sections(rows: Iterable[Row]) -> list[tuple[str, str, list[Row]]]:
-    """The rows by section (突破, 回踩, then 其他), each in rank order, as (mark, head,
-    rows); an empty one is left out."""
-
-    rows = list(rows)
-    known = [kind for kind, _, _ in SECTIONS]
-    out = []
-    for kind, mark, title in (*SECTIONS, OTHER_SECTION):
-        members = [
-            row for row in rows if (row.kind == kind if kind else row.kind not in known)
-        ]
-        if members:
-            out.append((mark, title, members))
-    return out
-
-
-def section_lines(rows: Iterable[Row]) -> list[str]:
-    """The text's sections: a bold head with the count, then each row's two lines."""
-
-    lines = []
-    for mark, title, members in sections(rows):
-        lines += ["", f"{mark}{bold(f'{title}（{len(members)} 檔）')}"]
-        for row in members:
-            mark = row.preopen_text
-            name = bold(esc(row.name)) + (f"{INDENT}{mark}" if mark else "")
-            lines += [name, f"{INDENT}{row.levels}"]
-    return lines
+    def rule_line(self) -> str:
+        if self.rule_count is None:
+            return RULE_LIST_MISSING
+        return f"（規則名單 {self.rule_count} 檔見今日名單頁）"
 
 
 def _change(index: dict[str, Any]) -> tuple[str, str | None]:
@@ -706,85 +592,66 @@ def length(text: str) -> int:
 
 def content(
     today: date,
-    list_date: date,
-    listing: dict[str, Any],
+    reading: dict[str, Any] | None,
     indexes: list[dict[str, Any]],
-    daily_status: str | None = None,
-    reading: dict[str, Any] | None = None,
+    rule_listing: dict[str, Any] | None = None,
 ) -> Content:
-    """The day's message from the API's shapes (``candidate_list``, ``foreign_indices``,
-    ``app.premarket_ai.view``)."""
+    """The day's message from the API's shapes (``app.ai_list.view``,
+    ``foreign_indices``, ``candidate_list`` for the rule list's count)."""
 
-    computed = listing.get("status") != "not_computed"
-    rows = list_rows(listing) if computed else ()
-    count = (listing.get("candidate_count") or 0) if computed else 0
-    zero = listing.get("zero_reason_text") if computed and not count else None
+    rule_count = None
+    if rule_listing is not None and rule_listing.get("status") != "not_computed":
+        count = rule_listing.get("candidate_count")
+        rule_count = (
+            count if isinstance(count, int) and not isinstance(count, bool) else 0
+        )
     return Content(
-        today=today,
-        list_date=list_date,
-        computed=computed,
-        count=count,
-        zero_reason=zero or None,
-        daily_status=None if computed else daily_status,
-        rows=rows,
-        total=max(len(rows), count),
-        us=us_view(indexes),
-        preopen_pending=bool(rows) and not preopen_checked(listing),
-        ai=ai_view(reading),
+        today=today, ai=ai_list(reading), us=us_view(indexes), rule_count=rule_count
     )
 
 
 def text(card: Content) -> str:
-    """The text message (Telegram HTML), at most MAX_CHARS with its tags: the AI
-    section's stocks are cut first, then the list's rows from the end (the lowest
-    ranks), each with 「另 N 檔」."""
+    """The text message (Telegram HTML), at most MAX_CHARS with its tags (3/4): the
+    picks' reasons go first, from the last pick up, then the picks from the last,
+    with 「另 N 檔見今日名單頁」."""
 
-    top = [f"📋 {bold(f'今日名單｜{day_label(card.today)}')}", esc(card.head)]
-    if card.preopen_line:
-        top.append(card.preopen_line)
-    if card.ai_line:
-        top.append(esc(card.ai_line))
-    bottom = ["", *us_lines(card.us)]
-    shown = len(card.rows)
-    ai_shown = len(card.ai.stocks) if card.ai is not None else 0
+    shown = reasons = len(card.ai.picks)
+    bottom = [card.rule_line, "", *us_lines(card.us)]
     while True:
-        lines = [*top, *section_lines(card.rows[:shown])]
-        if shown < card.total:
-            lines.append(f"另 {card.total - shown} 檔見今日名單頁")
-        message_text = "\n".join([*lines, *bottom, *ai_lines(card.ai, ai_shown)])
-        if length(message_text) <= MAX_CHARS or (shown == 0 and ai_shown == 0):
+        lines = ai_list_lines(card.ai, shown, reasons)
+        message_text = "\n".join([*lines, *bottom])
+        if length(message_text) <= MAX_CHARS or shown == 0:
             return message_text[:MAX_CHARS]
-        if ai_shown > 0:
-            ai_shown -= 1
+        if reasons > 0:
+            reasons -= 1
         else:
             shown -= 1
 
 
 def caption(card: Content) -> str:
-    """The photo's one line (Telegram HTML): 「今日名單 11/13（五）・突破 8、回踩 9」."""
+    """The photo's one line (Telegram HTML): 「AI 名單 11/27（五）・3 檔・AI 推論，未經驗證」."""
 
-    title = bold(f"今日名單 {day_label(card.today)}")
-    if not card.computed:
-        return f"{title}・名單無資料"
-    if not card.rows:
-        return f"{title}・{card.count} 檔"
-    counts = "、".join(
-        f"{esc(head)} {len(members)}" for _mark, head, members in sections(card.rows)
-    )
-    return f"{title}・{counts}"
+    ai = card.ai
+    day = ai.session_date or card.today
+    title = bold(f"{AI_LIST_TITLE} {day_label(day)}")
+    if not ai.done:
+        return f"{title}・{esc(ai.failure or ai.line or AI_LIST_MISSING)}"
+    parts = [title]
+    if ai.session_date != card.today:
+        parts.append(f"{ai.session_date:%m/%d} 的名單")
+    parts += [f"{len(ai.picks)} 檔", AI_LIST_MARK]
+    return "・".join(parts)
 
 
 def compose(
     today: date,
-    list_date: date,
-    listing: dict[str, Any],
+    reading: dict[str, Any] | None,
     indexes: list[dict[str, Any]],
-    daily_status: str | None = None,
-    reading: dict[str, Any] | None = None,
+    rule_listing: dict[str, Any] | None = None,
 ) -> str:
     """The text message of the API's shapes (``content`` then ``text``)."""
 
-    return text(content(today, list_date, listing, indexes, daily_status, reading))
+    return text(content(today, reading, indexes, rule_listing))
 
 
 # --- the database reads --------------------------------------------------------------
@@ -836,26 +703,23 @@ def daily_status(db, day: date) -> str | None:
 
 
 def read(db, today: date) -> Content:
-    """Today's message from the database (the list of D - 1, the overnight US indexes
-    and the pre-market AI reading), read once for the card and the text."""
+    """Today's message from the database (the AI list of today, or the list before it
+    with the reason today has none, the overnight US indexes and the count of the
+    rule list of D - 1), read once for the card and the text."""
 
+    from app.ai_list import view as ai_list_view
     from app.candidate_view import candidate_list
     from app.market_overview import foreign_indices
-    from app.premarket_ai import view as premarket_view
 
-    list_date = previous_session(db, today)
-    listing = candidate_list(db, list_date, limit=MAX_ITEMS)
-    status = (
-        daily_status(db, list_date) if listing["status"] == "not_computed" else None
-    )
+    listing = candidate_list(db, previous_session(db, today), limit=1)
     indexes = foreign_indices(db, today.isoformat())
     try:
-        reading = premarket_view(db, session_date=today)
+        reading = ai_list_view(db, session_date=today, today=today)
     except Exception as exc:
-        # The list and the US indexes go without it (#1042 review 7198038610, 1).
+        # The US indexes go without it (as #1042 review 7198038610, 1).
         db.rollback()
         reading = {"status": AI_ERROR, "error": type(exc).__name__}
-    return content(today, list_date, listing, indexes, status, reading)
+    return content(today, reading, indexes, listing)
 
 
 def message(db, today: date) -> str:
@@ -1263,8 +1127,8 @@ class _Run:
                 return 1, f"status={FAILED} reason=chat_not_private"
             card = read(db, self.today)
         body, line = text(card), caption(card)
-        if card.ai is not None and card.ai.status == AI_ERROR:
-            self.log(f"--- premarket_ai unreadable error={card.ai.error}")
+        if card.ai.status == AI_ERROR:
+            self.log(f"--- ai_list unreadable error={card.ai.error}")
         self.log(
             f"--- message chars={len(body)}\n{body}\n--- message end\n"
             f"--- caption {line}"

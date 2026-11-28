@@ -12,17 +12,14 @@ The page:
 - links nothing (``Content-Security-Policy: default-src 'none'``): the styles are in the
   file and the fonts are the image's own, named in ``font-family``.
 - ``html.escape``s every text from the data (names, reasons, labels, sources).
-- shows the rows ``notify.Content`` gives, in the text's sections and order, at most
-  ``MAX_ROWS`` of them, the rest counted in 「另 N 檔見今日名單頁」 as the text does.
-- the pre-open check as the text has it (#759): a row with overnight news has a second
-  line 「隔夜新聞 2（可能負向 1）」 under its name and levels (the today page's place, its
-  可能負向 count in the falling colour ``--color-down``); a list without a check of its own
-  has the line 「開盤前檢查：尚未完成」 under the head's date line.
-- the pre-market AI reading as the text has it (#1042): done, a section of its own after
-  the US block, with the accent bar and the 「AI 推論」 badge of DESIGN_SYSTEM §7, the
-  model and the prompt version, 大盤, 族群 and each stock's action, its reprice rule on a
-  line of its own, and its first reason (each at most two lines, ``AI_REASON_H``; longer ones end with an ellipsis, the page has
-  them whole); no price in it. Not done: no section, its one line under the head.
+- the AI list as the text has it (#1146): the head with the list's date, a warning
+  「MM/DD 的名單」 when it is not today's, its count and 「AI 推論，未經驗證」, the
+  failure line when today has no list of its own; then one section with the accent bar
+  and the badge of DESIGN_SYSTEM §7: the model and the prompt version, 大盤 and its first
+  reason, 族群, and each pick's head (rank, code, name, 判讀方式 and 把握), its levels line
+  (or the sentence in their place), its corporate-action note in ``--color-warning`` and
+  its first reason (at most two lines, ``AI_REASON_H``; longer ones end with an ellipsis,
+  the page has them whole). Then the rule list's count line and the US block.
 
 The drawing (``render``) runs in a new temporary directory under the system's (not beside
 any output, #750): the page, the browser profile and the PNG live there, and the directory
@@ -52,7 +49,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # notify imports this module, not the other way at run time
-    from .notify import Content, Row
+    from .notify import Content, Pick
 
 BROWSER_ENV = "SCREENSHOT_BROWSER"
 DEFAULT_BROWSERS = ("/usr/bin/chromium",)
@@ -62,11 +59,8 @@ RENDER_TIMEOUT_SECONDS = 30.0
 # CSS pixels; the PNG is SCALE times that (1080 px wide).
 WIDTH = 540
 SCALE = 2
-# The rows shown: the today page's cap, as the text's.
-MAX_ROWS = 20
-# The entry, stop and target cells longer than these (prices of 1,000 and up:
-# 「1,234.50～1,300.00」, 「1,234.50」) get a smaller font, so they stay in their columns.
-LONG_NUMBER = (13, 7, 7)
+# The picks shown: the AI list's cap (ai_list_reading.MAX_PICKS), as the text's.
+MAX_ROWS = 10
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 TEMP_PREFIX = "stock-notify-card-"
 # The only variables the browser gets from the run's environment.
@@ -83,28 +77,23 @@ BROWSER_ENV_KEEP = (
 PAD = 24
 HEAD_TITLE_H = 40
 HEAD_LINE_H = 24
-HEAD_NOTE_H = 44  # a reason on up to two lines
+HEAD_NOTE_H = 44  # a line of up to two lines (the failure line)
 GAP = 16
-SECTION_H = 36
-TABLE_HEAD_H = 26
-ROW_H = 40
-# A row with the pre-open mark: the name and levels on a line of ROW_H - 6, the mark on
-# one of PREOPEN_MARK_H, inside ROW_H + PREOPEN_EXTRA_H with the border (#759).
-PREOPEN_MARK_H = 18
-PREOPEN_EXTRA_H = 14
-MORE_H = 32
 US_TITLE_H = 36
 US_ROW_H = 36
 US_NOTE_H = 24  # a second line for 「（11/11 收盤） 非最新」
 SOURCE_H = 28
-# The AI section (#1042): its title, the model line, a head (大盤, 族群, a group's
-# title), a stock's line, a reason (two lines at most) and 「另 N 檔」.
+# The AI list (#1146): its title, the model line, a head (大盤, 族群), a pick's head, its
+# levels line, its corporate-action note, a reason (two lines at most) and 「另 N 檔」/the
+# rule list's line.
 AI_TITLE_H = 36
 AI_META_H = 24
 AI_HEAD_H = 30
 AI_LINE_H = 28
+AI_LEVELS_H = 26
+AI_NOTE_H = 22
 AI_REASON_H = 42
-AI_MORE_H = 30
+MORE_H = 32
 
 # docs/DESIGN_SYSTEM.md tokens (the frontend's tokens.css): the dark terminal layout.
 STYLE = f"""
@@ -129,33 +118,20 @@ header h1 {{ font-size: 26px; font-weight: 700; }}
 header .date {{ font-size: 20px; font-weight: 600; }}
 header .count {{ margin-left: auto; font-size: 20px; font-weight: 700; }}
 header .sub {{ height: {HEAD_LINE_H}px; line-height: {HEAD_LINE_H}px; font-size: 15px; }}
+header .stale {{ font-size: 15px; font-weight: 600; color: var(--color-warning);
+  border: 1px solid var(--color-warning); border-radius: 50px; padding: 0 8px; }}
 header .note {{ height: {HEAD_NOTE_H}px; line-height: 22px; font-size: 15px;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical; }}
+  color: var(--color-warning); overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; }}
 section {{ margin-top: {GAP}px; background: var(--color-bg-card);
   border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; }}
-section h2 {{ height: {SECTION_H}px; line-height: {SECTION_H}px; padding: 0 14px;
+section h2 {{ height: {US_TITLE_H}px; line-height: {US_TITLE_H}px; padding: 0 14px;
   font-size: 17px; font-weight: 700; background: var(--color-bg-alt);
   border-left: 3px solid var(--color-primary); }}
-section h2 .n {{ color: var(--color-text-muted); font-weight: 600; margin-left: 8px; }}
-.grid {{ display: grid; grid-template-columns: minmax(0, 1fr) 150px 74px 74px;
-  column-gap: 8px; align-items: center; padding: 0 14px; }}
-.thead {{ height: {TABLE_HEAD_H}px; font-size: 13px; color: var(--color-text-muted); }}
-.thead span:not(:first-child) {{ text-align: right; }}
-.row {{ height: {ROW_H}px; border-top: 1px solid var(--color-border); font-size: 17px; }}
-.row .name {{ font-weight: 600; }}
-.row .long {{ font-size: 14px; letter-spacing: -0.3px; }}
-.row .sym {{ font-family: var(--font-mono); }}
-.row .incomplete {{ grid-column: 2 / 5; text-align: right; font-size: 15px; }}
-.row.marked {{ height: {ROW_H + PREOPEN_EXTRA_H}px;
-  grid-template-rows: {ROW_H - 6}px {PREOPEN_MARK_H}px; }}
-.row .preopen {{ grid-column: 1 / 5; grid-row: 2; font-size: 13px;
-  line-height: {PREOPEN_MARK_H}px; align-self: start; }}
-header .preopen-pending {{ height: {HEAD_LINE_H}px; line-height: {HEAD_LINE_H}px;
-  font-size: 15px; color: var(--color-warning); }}
+.grid {{ display: grid; column-gap: 8px; align-items: center; padding: 0 14px; }}
+.row {{ border-top: 1px solid var(--color-border); font-size: 17px; }}
 .more {{ margin-top: {GAP}px; height: {MORE_H}px; line-height: {MORE_H}px; font-size: 15px;
   padding: 0 2px; }}
-.us h2 {{ height: {US_TITLE_H}px; line-height: {US_TITLE_H}px; }}
 .us h2 .status {{ color: var(--color-warning); font-weight: 600; margin-left: 8px; }}
 .us h2 .closed {{ color: var(--color-text-muted); font-weight: 400; font-size: 15px;
   margin-left: 8px; }}
@@ -179,17 +155,20 @@ header .preopen-pending {{ height: {HEAD_LINE_H}px; line-height: {HEAD_LINE_H}px
 .ai .head {{ height: {AI_HEAD_H}px; line-height: {AI_HEAD_H}px; font-size: 15px;
   font-weight: 700; padding: 0 14px; border-top: 1px solid var(--color-border); }}
 .ai .head .v {{ font-weight: 600; margin-left: 8px; }}
-.ai .stock {{ height: {AI_LINE_H}px; line-height: {AI_LINE_H}px; font-size: 15px;
-  padding: 0 14px; display: flex; gap: 10px; }}
-.ai .stock .name {{ font-weight: 600; flex: 0 0 auto; max-width: 70%; }}
-.ai .stock .action {{ flex: 1 1 auto; text-align: right; }}
+.ai .pick {{ height: {AI_LINE_H}px; line-height: {AI_LINE_H}px; font-size: 16px;
+  padding: 0 14px; display: flex; gap: 10px; border-top: 1px solid var(--color-border); }}
+.ai .pick .name {{ font-weight: 700; flex: 0 0 auto; max-width: 60%; }}
+.ai .pick .method {{ flex: 1 1 auto; text-align: right; }}
+.ai .levels {{ height: {AI_LEVELS_H}px; line-height: {AI_LEVELS_H}px; font-size: 14px;
+  padding: 0 14px 0 28px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }}
+.ai .levels.hidden {{ font-family: var(--font-body); }}
+.ai .corp {{ height: {AI_NOTE_H}px; line-height: {AI_NOTE_H}px; font-size: 13px;
+  padding: 0 14px 0 28px; color: var(--color-warning); }}
 .ai .reason {{ height: {AI_REASON_H}px; line-height: 20px; font-size: 14px;
   padding: 0 14px 0 28px; overflow: hidden; display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical; }}
-.ai .more {{ margin: 0; height: {AI_MORE_H}px; line-height: {AI_MORE_H}px;
+.ai .more {{ margin: 0; height: {MORE_H}px; line-height: {MORE_H}px;
   padding: 0 14px; border-top: 1px solid var(--color-border); }}
-header .ai-line {{ height: {HEAD_LINE_H}px; line-height: {HEAD_LINE_H}px;
-  font-size: 15px; color: var(--color-warning); }}
 .source {{ height: {SOURCE_H}px; line-height: {SOURCE_H}px; font-size: 13px;
   padding: 0 14px; border-top: 1px solid var(--color-border); }}
 """
@@ -204,33 +183,27 @@ def esc(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
-def shown_rows(content: Content) -> list[Row]:
-    return content.rows[:MAX_ROWS]
+def shown_picks(content: Content) -> tuple[Pick, ...]:
+    return content.ai.picks[:MAX_ROWS]
 
 
 def more_count(content: Content) -> int:
-    """「另 N 檔」: what the list has and the card leaves out (the text's rule)."""
+    """「另 N 檔」: the picks the card leaves out."""
 
-    return max(len(content.rows), content.total) - len(shown_rows(content))
+    return len(content.ai.picks) - len(shown_picks(content))
 
 
 def card_height(content: Content) -> int:
     """The page's height in CSS px: the fixed heights in the order the page has them."""
 
-    from .notify import sections
-
+    ai = content.ai
     height = 2 * PAD + HEAD_TITLE_H + HEAD_LINE_H
-    if content.preopen_line:
-        height += HEAD_LINE_H
-    if content.ai_line:
-        height += HEAD_LINE_H
-    if content.note:
+    if ai.failure:
         height += HEAD_NOTE_H
-    for _mark, _title, members in sections(shown_rows(content)):
-        height += GAP + 2 + SECTION_H + TABLE_HEAD_H + len(members) * ROW_H
-        height += sum(PREOPEN_EXTRA_H for row in members if row.preopen)
-    if more_count(content):
-        height += GAP + MORE_H
+    if ai.line:
+        height += HEAD_LINE_H
+    height += ai_height(content)
+    height += GAP + MORE_H  # the rule list's line
     us = content.us
     height += GAP + 2 + US_TITLE_H
     if us.rows:
@@ -238,54 +211,29 @@ def card_height(content: Content) -> int:
         height += sum(US_NOTE_H for row in us.rows if row.close and row.note.strip())
     if us.source:
         height += SOURCE_H
-    return height + ai_height(content)
-
-
-def ai_height(content: Content) -> int:
-    """The AI section's height (0 when the reading is not done)."""
-
-    from .notify import ai_groups
-
-    ai = content.ai
-    if ai is None or not ai.done:
-        return 0
-    height = GAP + 2 + AI_TITLE_H + AI_META_H
-    height += AI_HEAD_H + len(ai.market_reasons) * AI_REASON_H
-    if ai.sectors:
-        height += AI_HEAD_H
-        height += sum(AI_LINE_H + (AI_REASON_H if why else 0) for _, why in ai.sectors)
-    for _title, members in ai_groups(ai.stocks):
-        height += AI_HEAD_H
-        height += sum(
-            AI_LINE_H
-            + (AI_REASON_H if stock.rule else 0)
-            + (AI_REASON_H if stock.reason else 0)
-            for stock in members
-        )
-    if len(ai.stocks) < ai.total:
-        height += AI_MORE_H
     return height
 
 
-def _row_html(row: Row) -> str:
-    symbol, _, name = row.name.partition(" ")
-    cells = [
-        f'<span class="name line"><span class="sym">{esc(symbol)}</span>'
-        f"{' ' if name else ''}{esc(name)}</span>"
-    ]
-    if row.entry is None:
-        cells.append(f'<span class="incomplete muted">{esc(row.levels)}</span>')
-    else:
-        for value, longest in zip(
-            (row.entry, row.stop, row.target), LONG_NUMBER, strict=True
-        ):
-            kind = "num long" if len(value or "") > longest else "num"
-            cells.append(f'<span class="{kind}">{esc(value)}</span>')
-    mark = row.preopen_mark(esc, lambda part: f'<span class="down">{esc(part)}</span>')
-    if mark is None:
-        return f'<div class="row grid">{"".join(cells)}</div>'
-    cells.append(f'<span class="preopen muted line">{mark}</span>')
-    return f'<div class="row grid marked">{"".join(cells)}</div>'
+def ai_height(content: Content) -> int:
+    """The AI list's section height (0 without a done list)."""
+
+    ai = content.ai
+    if not ai.done:
+        return 0
+    height = GAP + 2 + AI_TITLE_H + AI_META_H + AI_HEAD_H
+    if ai.market_reason:
+        height += AI_REASON_H
+    if ai.sectors:
+        height += AI_HEAD_H
+    if ai.empty:
+        height += AI_REASON_H
+    for pick in shown_picks(content):
+        height += AI_LINE_H + AI_LEVELS_H
+        height += AI_NOTE_H if pick.note else 0
+        height += AI_REASON_H if pick.reason else 0
+    if more_count(content):
+        height += MORE_H
+    return height
 
 
 def _us_html(content: Content) -> str:
@@ -320,82 +268,75 @@ def _us_html(content: Content) -> str:
     return "".join(parts)
 
 
+def _pick_html(pick: Pick) -> str:
+    parts = [
+        f'<div class="pick"><span class="name line">{esc(pick.head)}</span>'
+        f'<span class="method muted line">{esc(pick.method)}</span></div>',
+        f'<div class="levels line{"" if pick.shown else " hidden muted"}">'
+        f"{esc(pick.levels)}</div>",
+    ]
+    if pick.note:
+        parts.append(f'<div class="corp line">{esc(pick.note)}</div>')
+    if pick.reason:
+        parts.append(f'<div class="reason muted">{esc(pick.reason)}</div>')
+    return "".join(parts)
+
+
 def _ai_html(content: Content) -> str:
-    from .notify import AI_MARK, AI_TITLE, ai_groups
+    from .notify import AI_LIST_MARK, AI_LIST_TITLE
 
     ai = content.ai
-    if ai is None or not ai.done:
+    if not ai.done:
         return ""
+    market = f'<div class="head line">大盤<span class="v">{esc(ai.market)}</span></div>'
     parts = [
-        f'<section class="ai"><h2>{esc(AI_TITLE)}'
-        f'<span class="badge">{esc(AI_MARK)}</span></h2>',
+        f'<section class="ai"><h2>{esc(AI_LIST_TITLE)}'
+        f'<span class="badge">{esc(AI_LIST_MARK)}</span></h2>',
         f'<div class="meta muted line">{esc(ai.meta)}</div>',
-        f'<div class="head line">大盤<span class="v">{esc(ai.market)}</span></div>',
+        market,
     ]
-    parts += [f'<div class="reason">{esc(why)}</div>' for why in ai.market_reasons]
+    if ai.market_reason:
+        parts.append(f'<div class="reason muted">{esc(ai.market_reason)}</div>')
     if ai.sectors:
-        parts.append('<div class="head line">族群</div>')
-        for head, why in ai.sectors:
-            parts.append(
-                f'<div class="stock"><span class="name line">{esc(head)}</span></div>'
-            )
-            if why:
-                parts.append(f'<div class="reason muted">{esc(why)}</div>')
-    for title, members in ai_groups(ai.stocks):
-        parts.append(f'<div class="head line">{esc(title)}</div>')
-        for stock in members:
-            parts.append(
-                f'<div class="stock"><span class="name line">{esc(stock.name)}</span>'
-                f'<span class="action line">{esc(stock.action)}</span></div>'
-            )
-            if stock.rule:
-                # The reprice rule on its own (two lines at most): beside the name it is cut.
-                parts.append(f'<div class="reason">{esc(stock.rule)}</div>')
-            if stock.reason:
-                parts.append(f'<div class="reason muted">{esc(stock.reason)}</div>')
-    if len(ai.stocks) < ai.total:
         parts.append(
-            f'<div class="more muted">另 {ai.total - len(ai.stocks)} 檔的 AI 判讀見今日名單頁</div>'
+            f'<div class="head line">族群<span class="v">{esc(ai.sectors)}</span></div>'
         )
+    if ai.empty:
+        parts.append(f'<div class="reason">{esc(ai.empty)}</div>')
+    parts += [_pick_html(pick) for pick in shown_picks(content)]
+    more = more_count(content)
+    if more:
+        parts.append(f'<div class="more muted">另 {more} 檔見今日名單頁</div>')
     parts.append("</section>")
     return "".join(parts)
 
 
 def card_html(content: Content) -> str:
-    """The page: the head, a table per section, 「另 N 檔」, then the US block."""
+    """The page: the head (the list's date, its 「MM/DD 的名單」 mark when it is not
+    today's, the failure line), the AI list, the rule list's line, then the US block."""
 
-    from .notify import day_label, sections
+    from .notify import AI_LIST_MARK, AI_LIST_TITLE, day_label
 
+    ai = content.ai
+    day = ai.session_date or content.today
     head = [
-        '<header><div class="title"><h1>今日名單</h1>',
-        f'<span class="date">{esc(day_label(content.today))}</span>',
+        f'<header><div class="title"><h1>{esc(AI_LIST_TITLE)}</h1>',
+        f'<span class="date">{esc(day_label(day))}</span>',
     ]
-    if content.computed:
-        head.append(f'<span class="count">{esc(content.count)} 檔</span>')
-    head.append(f'</div><div class="sub muted line">{esc(content.sub)}</div>')
-    if content.preopen_line:
-        head.append(
-            f'<div class="preopen-pending line">{esc(content.preopen_line)}</div>'
-        )
-    if content.ai_line:
-        head.append(f'<div class="ai-line line">{esc(content.ai_line)}</div>')
-    if content.note:
-        head.append(f'<div class="note muted">{esc(content.note)}</div>')
+    if ai.done and ai.session_date != content.today:
+        head.append(f'<span class="stale">{esc(f"{day:%m/%d} 的名單")}</span>')
+    if ai.done:
+        head.append(f'<span class="count">{len(ai.picks)} 檔</span>')
+    sub = f"開盤前產出 · {AI_LIST_MARK}" if ai.done else AI_LIST_MARK
+    head.append(f'</div><div class="sub muted line">{esc(sub)}</div>')
+    if ai.failure:
+        head.append(f'<div class="note">{esc(ai.failure)}</div>')
+    if ai.line:
+        head.append(f'<div class="sub muted line">{esc(ai.line)}</div>')
     head.append("</header>")
-    body = head
-    for _mark, title, members in sections(shown_rows(content)):
-        body.append(
-            f'<section><h2>{esc(title)}<span class="n">{len(members)} 檔</span></h2>'
-            '<div class="thead grid"><span>代號 名稱</span><span>進場</span>'
-            "<span>停損</span><span>目標</span></div>"
-        )
-        body += [_row_html(row) for row in members]
-        body.append("</section>")
-    more = more_count(content)
-    if more:
-        body.append(f'<div class="more muted">另 {more} 檔見今日名單頁</div>')
+    body = [*head, _ai_html(content)]
+    body.append(f'<div class="more muted">{esc(content.rule_line)}</div>')
     body.append(_us_html(content))
-    body.append(_ai_html(content))
     return (
         '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
         f'<meta http-equiv="Content-Security-Policy" content="{CSP}">'
