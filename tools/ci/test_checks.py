@@ -71,6 +71,16 @@ class RoutingTests(unittest.TestCase):
                 change_flags([name]), {"python": False, "frontend": False}, name
             )
 
+    def test_the_llm_prompts_require_python(self):
+        # The worker reads them and backend tests pin their SHA-256 (PR #1151 review).
+        prompts = sorted((ROOT / "backend/worker/prompts").glob("*.md"))
+        self.assertTrue(prompts)
+        for path in prompts:
+            name = path.relative_to(ROOT).as_posix()
+            self.assertEqual(
+                change_flags([name]), {"python": True, "frontend": False}, name
+            )
+
     def test_markdown_does_not_hide_product_code(self):
         self.assertEqual(
             change_flags(["frontend/README.md", "frontend/scripts/ci-test.cjs"]),
