@@ -812,6 +812,62 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **解析耗時與記憶體**（研究 raw 唯讀、單一 python 程序、只取上列科目）：47 季依序共 2,950 秒，最大 RSS 113 MB。
   - 2013～2018 每季 15～35 秒。
   - 2019 年起每季解壓後 1.0～1.5 GB，每季 75～140 秒（例如 2024Q2 2,613 個成員，137 秒）。
+- **短期投資、有息負債與淨利**（[#1135](https://github.com/YiCheng0608/stock-lab/issues/1135)）：同一份整包、同一份成員再加選的科目，**只回補進研究 DB**（[決定 7234355063](https://github.com/YiCheng0608/stock-lab/issues/1135#issuecomment-7234355063)）；表的欄位與寫入規則等寫入單實作時再寫。以下是 2026-11-28 讀研究 volume 已存整包的實測（2014Q2、2019Q2、2024Q2 算涵蓋，2013Q2、2017Q4、2018Q2 另看名稱；[回報 7234320089](https://github.com/YiCheng0608/stock-lab/issues/1135#issuecomment-7234320089)）。
+
+  | 科目 | context | 2013Q1～2017Q4 | 2018Q1 起 | 不適用的格式 |
+  | --- | --- | --- | --- | --- |
+  | 透過損益按公允價值衡量之金融資產－流動 | 季底 instant | `CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss`（一般業，`value` 的 v 小寫）；`CurrentFinancialAssetsAtFairValueThroughProfitOrLoss`（證券） | `CurrentFinancialAssetsAtFairValueThroughProfitOrLoss` | 銀行、金控、保險 |
+  | 透過其他綜合損益按公允價值衡量之金融資產－流動 | 季底 instant | （約 25 家申報，幾乎都是 0） | `CurrentFinancialAssetsAtFairValueThroughOtherComprehensiveIncome` | 銀行、金控、保險 |
+  | 按攤銷後成本衡量之金融資產－流動 | 季底 instant | （約 20 家申報，幾乎都是 0） | `CurrentFinancialAssetsAtAmortisedCost` | 銀行、金控、保險 |
+  | 備供出售金融資產－流動（IAS 39） | 季底 instant | `CurrentAvailableForSaleFinancialAssets`；證券 `AvailableForSaleCurrentFinancialAssets` | 2018 年仍有約 570 家申報（證券是 `CurrentFinancialAssetsAvailableforsale`），值都是 0；2019 起沒有 | 銀行、金控、保險 |
+  | 持有至到期日金融資產－流動（IAS 39） | 季底 instant | `CurrentHeldToMaturityFinancialAssets`；證券 `HeldToMaturityCurrentFinancialAssets` | 2018Q2 非 0 的 1 家；2019 起沒有 | 銀行、金控、保險 |
+  | 無活絡市場之債務工具投資－流動（IAS 39） | 季底 instant | `CurrentBondInvestmentWithoutActiveMarket` | 2018Q2 非 0 的 4 家；2019 起沒有 | 銀行、金控、保險 |
+  | 以成本衡量之金融資產－流動（IAS 39） | 季底 instant | `CurrentFinancialAssetsAtCost` | 2018Q2 非 0 的 2 家；2019 起沒有 | 銀行、金控、保險 |
+  | 其他金融資產－流動（參考） | 季底 instant | `OtherCurrentFinancialAssets` | 同左 | 銀行、金控、保險 |
+  | 短期借款 | 季底 instant | `ShorttermBorrowings` | 同左 | 銀行、金控、保險 |
+  | 應付短期票券 | 季底 instant | `ShorttermNotesAndBillsPayable`；證券 `CommercialPaperPayable` | `CurrentCommercialPapersIssuedAndCurrentPortionOfNoncurrentCommercialPapersIssued` | 銀行、金控、保險 |
+  | 一年或一營業週期內到期長期負債 | 季底 instant | `LongtermLiabilitiesCurrentPortion` | 同左 | 銀行、金控、保險 |
+  | 應付公司債（非流動） | 季底 instant | `BondsPayable`；證券 `BondsPayableIncludingOverseasBonds` | `NoncurrentPortionOfNoncurrentBondsIssued` | 銀行、金控、保險 |
+  | 長期借款（非流動） | 季底 instant | `LongtermBorrowings` | 同左 | 銀行、金控、保險 |
+  | 租賃負債－流動 | 季底 instant | `CurrentLeaseObligationsPayable`（融資租賃） | 2018：`CurrentFinanceLeaseLiabilities`；2019 起：`CurrentLeaseLiabilities` | 銀行、金控、保險 |
+  | 租賃負債－非流動 | 季底 instant | `NoncurrentLeaseObligationsPayable`（融資租賃） | 2018：`FinanceLeaseLiabilities`；2019 起：`NoncurrentFinanceLeaseLiabilities`（一般業）、`NonCurrentLeaseLiabilities`（證券） | 銀行、金控、保險 |
+  | 本期淨利（合併，含非控制權益） | 1/1～季底 YTD | `ProfitLoss` | 同左 | — |
+  | 歸屬母公司業主淨利 | 1/1～季底 YTD | `ProfitLossAttributableToOwnersOfParent`；個體報表（`ir`、`er`）沒有這科，取 `ProfitLoss` | 同左 | — |
+
+  - **包含關係**：
+    - 持有供交易、指定為 FVTPL 等是 FVTPL 的明細；銀行借款等是借款的明細。這些明細不另取。
+    - 帶連字號的同名科目（例如 `ShorttermNotesAndBillsPayable-ShorttermNotesAndBillsPayable`、`BondsPayable-BondsPayable`）也是明細，有它的公司都另有基礎科目。
+    - 流動的公司債（`BondsPayableCurrentPortion`、2018 起 `CurrentBondsIssuedAndCurrentPortionOfNoncurrentBondsIssued`）與流動的長期借款（`LongtermBorrowingsCurrentPortion`、`CurrentPortionOfLongtermBorrowings`）都在「一年內到期長期負債」裡。3 季裡子項有、它沒有的公司是 0 家，所以「應付公司債」「長期借款」兩科只有非流動部分。
+  - **同一份成員兩個名稱**：上表各科，6 季裡同一家兩個名稱同時有值的只有租賃負債。
+    - 2019Q2 有 89 家、2024Q2 有 6 家，同時申報 2018 年的舊名（值是 0）和 2019 年的新名（實數），所以要先取新名。
+    - 2019Q2 的 3202 新舊名都是非 0（流動 21,086 對 14,417 千元），是兩行不同的租賃負債，只取新名會低估。這是 3 季裡唯一一家。
+  - **口徑的限制**：
+    - **一年內到期長期負債**：一般業格式裡它是「其他流動負債」（`OtherCurrentLiabilities`）的子項。個別公司財報頁上常常沒有獨立一行，例如 1301 的 2024Q2 是 21,754,072 千元，併在「其他流動負債」37,347,181 千元裡。
+      - 有長期借款或公司債、卻沒有這一項、其他流動負債也沒拆明細的公司：2014Q2 190 家、2019Q2 175 家、2024Q2 59 家（整包全部公司，不含銀行、金控、保險）。
+      - 這些公司分不出是「沒有一年內到期」還是「沒拆出來」。照存 NULL，不從其他流動負債推算，因此有息負債可能低估。
+    - **IFRS 9（2018）**：三個月以上的定期存款，2013～2017 多半列在「其他金融資產－流動」，2018 起多半列在「按攤銷後成本衡量」。
+      - 2017Q4 與 2018Q2 都有的 2,267 家一般業與證券，短期投資 7 科合計占總資產的中位數從 0.11% 變成 0.49%。加上其他金融資產是 1.54% 變成 1.87%。
+      - 其他金融資產也含受限制存款等不是投資的項目。研究用不用它，在登記假設時寫死。
+    - **IFRS 16（2019）**：2018 年以前只有融資租賃（2014Q2 流動非 0 的 42／1,487 家），2019 起營業租賃也列租賃負債（2019Q2 約 88% 的公司有）。租賃要不要算進有息負債，每個假設登記時寫死。
+    - **證券業**：證券業的 FVTPL－流動是營業證券（自營、承銷），不是閒置資金。
+    - **銀行、金控、保險**：資產負債表不分流動，只有不分流動的金融資產、`LeaseLiabilities`、金控的 `CommercialPapersIssuedNet`、`BondsPayable`、`OtherBorrowings`。主要負債是存款與保險負債，上表短期投資與負債各科都不取。
+  - **缺值**：3 季讀不了的成員 0 份。
+    - 缺的幾乎都是成員全文裡沒有那個 element，也就是公司沒有這一行。名稱有出現但本季沒有值的 2 家，都只在前期比較數的 context。
+    - 申報 0 的另外算，不是缺：2024Q2 active 的短期借款有 146 家、公司債 121 家。
+    - 缺值比例：
+      - 2024Q2 active（不含銀行、金控、保險，1,932 家）：短期借款 22.2%、應付短期票券 78.5%、一年內到期 35.8%、公司債 80.4%、長期借款 34.9%、租賃負債 6.9%、FVTPL 43.0%、攤銷後成本 39.5%、FVOCI 85.9%。
+      - 下市股比例相近，例如 2014Q2 下市 132 家的短期借款缺 18.2%。
+      - 淨利兩科 3 季全部分組 0 缺。
+  - **口徑核對**：
+    - **淨利對研究 DB 的 `t163sb04`**：本期淨利 5,230 家、歸屬母公司 4,733 家，0 異。`t163sb04` 母公司欄是 `--` 的都是個體報表，取 `ProfitLoss` 和頁面的本期淨利相同。
+    - **合併報表的母公司＋非控制權益**：除了 11 家以外都等於本期淨利。那 11 家另有「共同控制下前手權益」（`ProfitLossAttributableToFormerOwnerOfBusinessCombinationUnderCommonControl`），加上它就相等。
+    - **內部檢查**（不含銀行、金控、保險）：3 季裡借款、票券、一年內到期、公司債、長期借款、租賃加總超過負債總額的 0 家；短期投資各科加總超過流動資產的 0 家。
+    - **個別公司財報頁**：`POST https://mopsov.twse.com.tw/mops/web/ajax_t164sb03`，form 是 `encodeURIComponent=1&step=1&firstin=1&off=1&queryName=co_id&inpuType=co_id&TYPEK=all&isnew=false&co_id=<代號>&year=<民國年>&season=<01～04>`，urlencoded，multipart 會空回應。單位千元。
+      - 1301 的 103／108／113 年第 2 季，頁上有的行全部相同。
+      - 下市股沒有這一頁：2499 回「該公開發行公司不繼續公開發行」。
+      - 短期投資與負債沒有彙總頁，所以下市股只能用內部檢查。
+  - **可得日**：和上面的科目同一份季報，可得日同 EPS 的法定期限。
+  - **解析耗時**：同時讀上表與原 15 科，2024Q2 是 111～134 秒，只讀原 15 科是 107～110 秒，記憶體 98 MB。
 - **`quarterly_statements`**（[#1083](https://github.com/YiCheng0608/stock-lab/issues/1083)，實作在 [`worker/quarterly_statements.py`](../backend/worker/quarterly_statements.py)）：
   - **欄位**：唯一鍵 `(instrument_id, period_end, fiscal_period)`。上表 15 科一科一欄：季底的 `total_assets`、`total_liabilities`、`equity_parent`、`equity_total`、`current_assets`、`current_liabilities`、`cash`、`receivables`、`inventories`、`share_capital_common`（普通股）、`share_capital_total`（股本合計），以及 1/1 起累計的 `cfo_ytd`、`capex_ytd`、`gross_profit_ytd`、`operating_income_ytd`。單位千元（XBRL 的元除以 1,000），YTD 照申報值存（資本支出是負數），單季由研究工具相減。營收、EPS 不在這張表，留在 `fundamental_snapshots`。
   - **來源與可得日**：整張表只有 `source=mops_tifrs_zip`。`raw_payload_id` 指向該季整包那列 `raw_payloads`（`mops_tifrs`，和 `xbrl-apply` 共用），`data_as_of` 是季底日。`announcement_date` 照 EPS 的法定期限（產業碼對到格式，遇休市順延；期限還沒到時用抓取日）。

@@ -2982,3 +2982,92 @@ def test_a_premarket_reading_the_schedule_missed_is_reported(wd):
     result = wd.run("--dry-run", now=MORNING)
     assert "anomaly_planned key=premarket_ai_missed " in result.stdout
     assert "08:21～08:45 scheduler 沒有跑到（`too_late at=08:50`" in result.stdout
+
+
+# ai-list (#1145) ----------------------------------------------------------------------
+
+AI_LIST_DONE = (
+    "status=done session_date=2026-10-19 list_date=2026-10-16 pool_phase=evening"
+    " stocks=40 prompt_version=ai_list_v1 model=claude-sonnet-5-5 attempts=1 seconds=50"
+    " stance=neutral picks=4 levels_passed=3"
+)
+
+
+def _ai_list_log(wd: Watchdog, day: str, *runs: str | None, end: bool = True) -> Path:
+    return _job_log(wd, "ai-list", "08:21", day, *runs, end=end)
+
+
+def test_no_ai_list_log_yet_is_not_judged(wd):
+    _healthy_daily_and_news(wd)
+    _premarket_log(wd, "20261019", PREMARKET_DONE)
+    assert "key=ai_list_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+def test_a_day_without_its_ai_list_log_is_reported_from_0915(wd):
+    _healthy_daily_and_news(wd)
+    _ai_list_log(wd, "20261016", AI_LIST_DONE)
+    # premarket-ai done is no AI list.
+    _premarket_log(wd, "20261019", PREMARKET_DONE)
+    assert "key=ai_list_" not in wd.run("--dry-run", now=MORNING - 30 * 60).stdout
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=ai_list_missing " in result.stdout
+    assert "沒有 08:21 AI 名單的日誌" in result.stdout
+    assert "worker.cli ai-list --trigger manual" in result.stdout
+    assert "key=premarket_ai_" not in result.stdout
+    saturday = MORNING + 5 * 86400
+    assert "key=ai_list_" not in wd.run("--dry-run", now=saturday).stdout
+
+
+def test_an_ai_list_run_started_and_never_ended_is_missing(wd):
+    _healthy_daily_and_news(wd)
+    _ai_list_log(wd, "20261019", AI_LIST_DONE, STUCK)
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=ai_list_missing " in result.stdout
+    assert "AI 名單開始了但沒有跑完" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "status=failed reason=rate_limited session_date=2026-10-19",
+        "status=rejected reason=not_in_pool session_date=2026-10-19",
+    ],
+)
+def test_a_failed_or_rejected_ai_list_is_reported_once_a_day(wd, outcome):
+    _healthy_daily_and_news(wd)
+    _ai_list_log(wd, "20261019", outcome, "status=skipped reason=already_running")
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=ai_list_failed " in result.stdout
+    assert outcome.split(" session_date")[0] in result.stdout
+    wd.run(now=MORNING)
+    wd.run(now=MORNING + 30 * 60)
+    assert wd.text("gh_bodies.txt").count("AI 名單：今天") == 1
+
+
+def test_a_failed_ai_list_done_by_hand_later_is_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    _ai_list_log(wd, "20261019", "status=failed reason=timeout", AI_LIST_DONE)
+    assert "key=ai_list_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        AI_LIST_DONE,
+        "status=skipped reason=already_done session_date=2026-10-19 reading_id=3",
+        "status=skipped reason=non_trading_day",
+        "status=skipped reason=maintenance",
+    ],
+)
+def test_a_done_or_skipped_ai_list_is_not_reported(wd, result):
+    _healthy_daily_and_news(wd)
+    _ai_list_log(wd, "20261019", result)
+    assert "key=ai_list_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+def test_an_ai_list_the_schedule_missed_is_reported(wd):
+    _healthy_daily_and_news(wd)
+    _ai_list_log(wd, "20261019", "status=skipped reason=too_late at=08:50")
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=ai_list_missed " in result.stdout
+    assert "08:21～08:45 scheduler 沒有跑到（`too_late at=08:50`" in result.stdout

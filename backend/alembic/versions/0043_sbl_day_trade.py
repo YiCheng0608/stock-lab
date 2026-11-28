@@ -1,7 +1,7 @@
 """Add the official daily securities lending and day trade tables.
 
 Revision ID: 0043_sbl_day_trade
-Revises: 0042_quarterly_statements
+Revises: 0051_ai_list
 
 ``securities_lending_daily`` keeps one security's 借券賣出 (當日賣出、還券、餘額)
 of one session from TWSE ``TWT93U`` or TPEx ``margin/sbl``; ``day_trade_daily``
@@ -29,7 +29,7 @@ from sqlalchemy import (
 )
 
 revision = "0043_sbl_day_trade"
-down_revision = "0042_quarterly_statements"
+down_revision = "0051_ai_list"
 branch_labels = None
 depends_on = None
 

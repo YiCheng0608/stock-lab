@@ -22,7 +22,7 @@
 
 - **隔夜新聞**：發布時間（`display_time`）在名單日 13:30 之後、截止點（含）之前，`collected_at` 也在截止點之前；`status=active`、時間不衝突、只收有時間的（`time_precision=datetime`）；同一則（canonical key、dedupe cluster 或 content hash）只算一次。每則的 AI 判讀是 `news_v4`（與等價版本）在截止點前寫好的 `done` 結果；截止點之後才判的記 `ai: not_judged_by_cutoff`，不給方向。輸入自己讀這些新聞，不靠候選池的新聞來源（候選池晚上那輪之前收進來、當時還沒判讀的新聞兩輪都不收，#1048 review [7190403114](https://github.com/YiCheng0608/stock-lab/pull/1048#issuecomment-7190403114)）。
 - **每檔**：`price` 是名單日的日線與 1／5／20 日報酬、量（張）、對前 20 日均量的倍數、距 240 根最高價的距離，都用未調整的收盤（`basis=raw`），名單日沒有日線時 `status=missing`；`chips` 是最近 5 個交易日的外資、投信、自營淨買（張）與融資增減，沒有就 `status=missing`；`groups` 是名單日有效的官方產業與題材成員；`news` 是規則關聯（`symbols_json`）點到它的隔夜新聞，最多 5 則。
-- **規則價位**（3a）：只有今日名單（`app.candidate_runs.read_run` 的名單日那份）的股票有 `strategy_levels`：名次、策略與今日名單頁顯示的價位（`candidate_view._levels`：`entry`、`entry_zone`、`invalid_price`、`target_1`、`target_2`、`risk_reward`、`earliest_execution_date`）。其他股票**沒有這個欄位**，也沒有任何價位欄。
+- **規則價位**（3a）：只有今日名單（`app.candidate_runs.read_run` 的名單日那份）的股票有 `strategy_levels`：名次、策略與今日名單頁顯示的價位（`candidate_view._levels`：`entry`、`entry_zone`、`invalid_price`、`target_1`、`target_2`、`risk_reward`、`earliest_execution_date`）。其他股票**沒有這個欄位**，也沒有任何價位欄。只適用於 `premarket_v1`；AI 名單的價位由 AI 給、程式核對，見 [ai_list_v1](ai_list.md)。
 - 不給 `extra_universe`、不給我的追蹤：AI 只判池內的股票。
 - 同一個代號在上市與上櫃各有一檔時，只收池內先出現的那檔（輸出以代號對回）。
 
@@ -49,7 +49,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 | `data_gaps` | 輸入標缺漏的項目與對判讀的影響 |
 
 - 每條理由 `{text, refs}`：`refs` 引用輸入，`news:<id>`、`us:<代號>`、`tx:night`、`tx:day`、`taiex`、`stock:<代號>:<欄位>`。
-- 寫法 4A：動作代碼加「根據……，推論……」，價位只用規則價位或程式依開盤價重算的價位；重算的數字由程式在開盤後算（AI 只給暫緩門檻），不是 AI 寫的。
+- 寫法 4A：動作代碼加「根據……，推論……」，價位只用規則價位或程式依開盤價重算的價位；重算的數字由程式在開盤後算（AI 只給暫緩門檻），不是 AI 寫的。只適用於 `premarket_v1`；AI 名單見 [ai_list_v1](ai_list.md)。
 
 ## 核對
 

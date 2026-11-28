@@ -45,6 +45,13 @@ commands those tasks ran.
   writes the database). Only between 08:21 and 08:45: caught up at start inside that
   window when the day's ``logs/premarket-ai-YYYYMMDD.log`` has no result that ends it;
   after 08:45 nothing is caught up (the 08:45 message is out).
+- ai-list: Monday to Friday 08:21 (#1145), ``worker.cli ai-list --trigger scheduler``:
+  the AI list (worker.ai_list), its own ``claude -p`` call on the same input plus
+  the price facts. Started at the same minute as premarket-ai and not after it:
+  each its own lock, log and limit (12 minutes), neither waits for the other (the
+  thread pool runs both). Caught up as premarket-ai: between 08:21 and 08:45 when
+  the day's ``logs/ai-list-YYYYMMDD.log`` has no result that ends it; not in
+  maintenance mode (it writes the database).
 - notify: Monday to Friday 08:45 (#728), ``worker.cli notify --send --trigger
   scheduler``: the Telegram message of the day's list and the overnight US indexes
   (worker.notify). Not a worker.job job: it takes its own lock and log, skips a day
@@ -134,7 +141,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import intraday, job, notify, preopen, premarket_ai
+from . import ai_list, intraday, job, notify, preopen, premarket_ai
 
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
@@ -145,6 +152,7 @@ JOBS = (
     "night",
     "preopen",
     "premarket-ai",
+    "ai-list",
     "notify",
     "intraday",
     "watchdog",
@@ -172,6 +180,8 @@ PREOPEN_DAYS = "mon-fri"
 # preopen, before notify at 08:45; the job itself skips the days the stored calendar
 # marks closed.
 PREMARKET_AI_DAYS = "mon-fri"
+# ai-list (#1145): Monday to Friday 08:21 with premarket-ai, each its own job.
+AI_LIST_DAYS = "mon-fri"
 DAILY_TIMES = "21:30,23:00"
 # us (#568 decision 6729065016, #681 decision 6869771833): Taipei Tuesday to
 # Saturday, after the US close (04:00 Taipei in US summer time, 05:00 in winter).
@@ -454,6 +464,12 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
             minute=premarket_ai.RUN_TIME[1],
             timezone=TAIPEI,
         ),
+        "ai-list": CronTrigger(
+            day_of_week=AI_LIST_DAYS,
+            hour=ai_list.RUN_TIME[0],
+            minute=ai_list.RUN_TIME[1],
+            timezone=TAIPEI,
+        ),
         "notify": CronTrigger(
             day_of_week=NOTIFY_DAYS,
             hour=notify.SEND_TIME[0],
@@ -577,9 +593,9 @@ class Serve:
                 # The injected time, not only its day: the job checks 08:20 to 13:30.
                 argv += ["--now", at.isoformat()]
             return argv, environment
-        if name == "premarket-ai":
+        if name in ("premarket-ai", "ai-list"):
             argv = [
-                *job.worker_command(["premarket-ai"]),
+                *job.worker_command([name]),
                 "--trigger",
                 "scheduler",
                 "--log-dir",
@@ -788,6 +804,21 @@ class Serve:
             return None
         return "not_done"
 
+    def missed_ai_list(self) -> str | None:
+        """Why serve runs the day's AI list as it starts, or None (#1145): as
+        ``missed_premarket_ai``, on the day's ai-list log."""
+
+        now = self.now()
+        if now.weekday() >= 5:
+            return None
+        if not ai_list.in_run_window(now):
+            return None
+        if not Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"]).is_file():
+            return None
+        if ai_list.day_done(self.log_dir, now.date()):
+            return None
+        return "not_done"
+
     def missed_daily(self) -> str | None:
         """Why serve runs the day's daily as it starts, or None (see the module docstring)."""
 
@@ -847,7 +878,7 @@ class Serve:
 
     def catch_up_missed(self, scheduler) -> None:
         """At start and at the end of maintenance: the day's missing daily, us, night,
-        preopen, premarket-ai, notify and intraday."""
+        preopen, premarket-ai, ai-list, notify and intraday."""
 
         for name, missed in (
             ("daily", self.missed_daily()),
@@ -855,6 +886,7 @@ class Serve:
             ("night", self.missed_night()),
             ("preopen", self.missed_preopen()),
             ("premarket-ai", self.missed_premarket_ai()),
+            ("ai-list", self.missed_ai_list()),
             ("notify", self.missed_notify()),
             ("intraday", self.missed_intraday()),
         ):
@@ -907,6 +939,8 @@ class Serve:
             return (preopen.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
         if name == "premarket-ai":
             return (premarket_ai.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
+        if name == "ai-list":
+            return (ai_list.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
         if name == "intraday":
             return (intraday.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
         limit = getattr(self.args, f"{name}_time_limit_minutes")
