@@ -3292,7 +3292,15 @@ def _upsert_action(
 
 # data_json keys that describe a row's announcement_date (Issue #529); they stay
 # with the date when a later write keeps it.
-ANNOUNCEMENT_KEYS = ("announcement_basis", "statutory_deadline", "deadline_calendar")
+# The availability date's basis; the foreign-issuer keys (#1101) only on the
+# rows that rule applies to.
+ANNOUNCEMENT_KEYS = (
+    "announcement_basis",
+    "statutory_deadline",
+    "deadline_calendar",
+    "deadline_rule",
+    "foreign_issuer_basis",
+)
 
 
 def first_seen_announcement(
