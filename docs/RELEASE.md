@@ -109,10 +109,11 @@ docker compose -p "$P" exec scheduler python -m worker.cli maintenance status
 docker run --rm --network none -v "${P}_stock-data":/data:ro -v "$B":/out \
   -v "$TOOLS/copy_db.py":/t/copy_db.py:ro "$OLD" python /t/copy_db.py --src /data/stock.db --dest /out
 
-# 3. 發佈 checkout 換成新 tag，以新 tag 的程式 build backend image
-git -C "$R" fetch --quiet --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+# 3. 發佈 checkout 換成新 tag，以新 tag 的程式 build backend image。`$TAG` 後面緊接冒號時寫成 `${TAG}`：
+#    zsh（macOS 預設）會把 `$TAG:r`、`$TAG:t` 這類寫法當成修飾字展開，fetch 會找不到 tag
+git -C "$R" fetch --quiet --no-tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
 git -C "$R" -c advice.detachedHead=false checkout --quiet "refs/tags/$TAG"
-git -C "$R" show "$TAG:backend/app/migration_revisions.py" | grep -o '"0[0-9]*_[a-z_]*"' | tail -1   # tag 的 head
+git -C "$R" show "${TAG}:backend/app/migration_revisions.py" | grep -o '"0[0-9]*_[a-z_]*"' | tail -1   # tag 的 head
 (cd "$R" && STOCK_RELEASE_TAG="$TAG" STOCK_GIT_HEAD="$(git rev-parse HEAD)" docker compose -p "$P" build api)
 
 # 4. 以新 image 升級正式 DB（臨時容器；正在跑的舊 api 不受影響）

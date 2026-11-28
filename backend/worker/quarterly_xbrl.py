@@ -71,10 +71,13 @@ from app.models import (
 )
 from app.raw_paths import payload_file
 from worker import sources
+from worker.foreign_issuers import foreign_issuers
 from worker.quarterly_fundamentals import (
     Quarter,
     apply_record,
     availability,
+    deadline_details,
+    deadline_key,
     nominal_deadline,
     roll_to_session,
 )
@@ -136,6 +139,20 @@ INDUSTRY_FORMATS = {
     "ins": "insurance_legacy",
     "mim": "other",
 }
+# Insurers file the IFRS 17 format (``insurance``) from 2026Q1; t163sb04 calls the
+# format before it ``insurance_legacy`` (worker.quarterly_fundamentals, #1083).
+IFRS17_FIRST_QUARTER = Quarter(2026, 1)
+
+
+def report_format_of(industry: str, quarter: Quarter) -> str | None:
+    """t163sb04's report format of a member's industry code in QUARTER; None if unknown."""
+
+    found = INDUSTRY_FORMATS.get(industry)
+    if found == "insurance_legacy" and quarter >= IFRS17_FIRST_QUARTER:
+        return "insurance"
+    return found
+
+
 # A company with more than one instance: consolidated, then individual, then ``er``
 # (2014Q2: the 7 companies with ``cr`` and ``er`` have the same EPS in both).
 REPORT_KINDS = ("cr", "ir", "er")
@@ -417,7 +434,7 @@ def _inline_value(element: ElementTree.Element) -> Decimal | None:
         try:
             value = Decimal(text.replace(",", ""))
         except InvalidOperation as exc:
-            raise MemberError(f"EPS {text!r} is not a number") from exc
+            raise MemberError(f"value {text!r} is not a number") from exc
     else:
         raise MemberError(f"unknown inline XBRL format {element.get('format')!r}")
     scale = element.get("scale")
@@ -440,7 +457,25 @@ def _plain_value(element: ElementTree.Element) -> Decimal | None:
     try:
         return Decimal(text)
     except InvalidOperation as exc:
-        raise MemberError(f"EPS {text!r} is not a number") from exc
+        raise MemberError(f"value {text!r} is not a number") from exc
+
+
+def parse_instance(data: bytes) -> ElementTree.Element:
+    """One member's XML tree; MemberError for UTF-16, NUL, a DOCTYPE or entity, or bad XML.
+
+    The guards run on the bytes, before the parser sees them
+    (``worker.quarterly_statements`` reads the same tree, #1083).
+    """
+
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in data:
+        raise MemberError("instance is UTF-16 or holds a NUL byte")
+    upper = data.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+        raise MemberError("instance declares a DOCTYPE or an entity")
+    try:
+        return ElementTree.fromstring(data)
+    except ElementTree.ParseError as exc:
+        raise MemberError(f"instance is not XML: {exc}") from exc
 
 
 def parse_eps(data: bytes, quarter: Quarter) -> tuple[float | None, str | None]:
@@ -451,15 +486,14 @@ def parse_eps(data: bytes, quarter: Quarter) -> tuple[float | None, str | None]:
     and a note; a first quarter's three-month context too) must agree.
     """
 
-    if data.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in data:
-        raise MemberError("instance is UTF-16 or holds a NUL byte")
-    upper = data.upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
-        raise MemberError("instance declares a DOCTYPE or an entity")
-    try:
-        root = ElementTree.fromstring(data)
-    except ElementTree.ParseError as exc:
-        raise MemberError(f"instance is not XML: {exc}") from exc
+    return eps_of(parse_instance(data), quarter)
+
+
+def eps_of(
+    root: ElementTree.Element, quarter: Quarter
+) -> tuple[float | None, str | None]:
+    """``parse_eps`` on a tree ``parse_instance`` returned."""
+
     contexts = _year_to_date(root, quarter)
     values: set[Decimal | None] = set()
     used: set[str] = set()
@@ -822,14 +856,19 @@ def apply_quarter(
     fetched_at: datetime,
     *,
     excluded: frozenset[int] = frozenset(),
+    foreign: dict[int, str] | None = None,
 ) -> QuarterCounts:
     """Check one quarter against t163sb04, then write its missing rows (``run`` None: dry run).
 
     Raises ArchiveError when the archive cannot be trusted, and ``MismatchError`` when
     a company both sources have differs; nothing of the quarter is written then.
+    ``foreign`` (``foreign_issuers``; read here when None) gives foreign issuers
+    their own Q2 deadline (#1101).
     """
 
     counts = QuarterCounts()
+    if foreign is None:
+        foreign = foreign_issuers(db)
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
@@ -889,7 +928,10 @@ def apply_quarter(
             else:
                 counts.check_different += 1
             stored_format = (details or {}).get("report_format")
-            if stored_format and INDUSTRY_FORMATS.get(member.industry) != stored_format:
+            if (
+                stored_format
+                and report_format_of(member.industry, quarter) != stored_format
+            ):
                 counts.check_format_mismatch += 1
         compared = len(checked)
         if (
@@ -932,7 +974,7 @@ def apply_quarter(
             if not targets:
                 counts.not_target += 1
                 continue
-            report_format = INDUSTRY_FORMATS.get(member.industry)
+            report_format = report_format_of(member.industry, quarter)
             if report_format is None:
                 counts.unknown_format += 1
                 continue
@@ -964,11 +1006,16 @@ def apply_quarter(
                     continue
                 if raw is None:
                     raw = _raw_row(db, run, quarter, data, digest, fetched_at)
-                if report_format not in deadlines:
-                    deadlines[report_format] = roll_to_session(
-                        db, nominal_deadline(report_format, quarter)
+                foreign_basis = foreign.get(instrument.id)
+                key = deadline_key(report_format, quarter, foreign_basis)
+                if key not in deadlines:
+                    deadlines[key] = roll_to_session(
+                        db,
+                        nominal_deadline(
+                            report_format, quarter, foreign_basis is not None
+                        ),
                     )
-                deadline, calendar = deadlines[report_format]
+                deadline, calendar = deadlines[key]
                 available, basis = availability(deadline, first_seen)
                 record = FundamentalRecord(
                     symbol=symbol,
@@ -988,6 +1035,7 @@ def apply_quarter(
                         "announcement_basis": basis,
                         "statutory_deadline": deadline.isoformat(),
                         "deadline_calendar": calendar,
+                        **deadline_details(quarter, foreign_basis),
                     },
                     exchange=instrument.exchange,
                     source=SOURCE,
@@ -1118,6 +1166,7 @@ def _apply_each(
     """Apply the quarters oldest first; the reason of the first that stopped, or None."""
 
     aborted: str | None = None
+    foreign = foreign_issuers(db)
     for quarter in targets:
         entry = manifest["quarters"][quarter.label]
         path = directory / archive_name(quarter)
@@ -1136,6 +1185,7 @@ def _apply_each(
                 digest,
                 datetime.fromisoformat(entry["fetched_at"]),
                 excluded=excluded,
+                foreign=foreign,
             )
         except MismatchError as exc:
             db.rollback()
