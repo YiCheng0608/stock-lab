@@ -881,12 +881,20 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0041_valuation_shares', CURRENT_TIMESTAMP)"
         )
     )
-    # 0042 only adds index_constituents_daily (#1134), made by create_all with its
+    # 0042 only adds quarterly_statements (#1083), made by create_all with its
     # indexes; only the research database writes it.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0042_index_constituents', CURRENT_TIMESTAMP)"
+            "VALUES ('0042_quarterly_statements', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0049 only adds index_constituents_daily (#1134), made by create_all with its
+    # indexes; only the research database writes it.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0049_index_constituents', CURRENT_TIMESTAMP)"
         )
     )
 

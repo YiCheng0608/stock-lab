@@ -57,6 +57,7 @@ _CHILDREN = {
     "premarket_ai_stocks",
     "valuation_daily",
     "shares_outstanding_daily",
+    "quarterly_statements",
     "index_constituents_daily",
 }
 _TOKEN = re.compile(

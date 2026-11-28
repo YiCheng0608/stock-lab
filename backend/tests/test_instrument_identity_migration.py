@@ -43,6 +43,7 @@ CHILDREN = [
     "theme_cluster_members",
     "valuation_daily",
     "shares_outstanding_daily",
+    "quarterly_statements",
     "index_constituents_daily",
 ]
 HEAD = REVISIONS[-1]
@@ -281,6 +282,7 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     "trading_halts",
                     "valuation_daily",
                     "shares_outstanding_daily",
+                    "quarterly_statements",
                     "index_constituents_daily",
                 }:
                     values.update(raw_payload_id=11)

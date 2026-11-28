@@ -1,7 +1,7 @@
 """Add the official daily index constituent table.
 
-Revision ID: 0042_index_constituents
-Revises: 0041_valuation_shares
+Revision ID: 0049_index_constituents
+Revises: 0042_quarterly_statements
 
 ``index_constituents_daily`` keeps one code of an index's official constituent
 list of one session: TPEx ``indexInfo/r50`` (富櫃50, ``TPEX50``; Issue #1134).
@@ -27,8 +27,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0042_index_constituents"
-down_revision = "0041_valuation_shares"
+revision = "0049_index_constituents"
+down_revision = "0042_quarterly_statements"
 branch_labels = None
 depends_on = None
 

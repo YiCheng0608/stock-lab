@@ -139,6 +139,20 @@ INDUSTRY_FORMATS = {
     "ins": "insurance_legacy",
     "mim": "other",
 }
+# Insurers file the IFRS 17 format (``insurance``) from 2026Q1; t163sb04 calls the
+# format before it ``insurance_legacy`` (worker.quarterly_fundamentals, #1083).
+IFRS17_FIRST_QUARTER = Quarter(2026, 1)
+
+
+def report_format_of(industry: str, quarter: Quarter) -> str | None:
+    """t163sb04's report format of a member's industry code in QUARTER; None if unknown."""
+
+    found = INDUSTRY_FORMATS.get(industry)
+    if found == "insurance_legacy" and quarter >= IFRS17_FIRST_QUARTER:
+        return "insurance"
+    return found
+
+
 # A company with more than one instance: consolidated, then individual, then ``er``
 # (2014Q2: the 7 companies with ``cr`` and ``er`` have the same EPS in both).
 REPORT_KINDS = ("cr", "ir", "er")
@@ -420,7 +434,7 @@ def _inline_value(element: ElementTree.Element) -> Decimal | None:
         try:
             value = Decimal(text.replace(",", ""))
         except InvalidOperation as exc:
-            raise MemberError(f"EPS {text!r} is not a number") from exc
+            raise MemberError(f"value {text!r} is not a number") from exc
     else:
         raise MemberError(f"unknown inline XBRL format {element.get('format')!r}")
     scale = element.get("scale")
@@ -443,7 +457,25 @@ def _plain_value(element: ElementTree.Element) -> Decimal | None:
     try:
         return Decimal(text)
     except InvalidOperation as exc:
-        raise MemberError(f"EPS {text!r} is not a number") from exc
+        raise MemberError(f"value {text!r} is not a number") from exc
+
+
+def parse_instance(data: bytes) -> ElementTree.Element:
+    """One member's XML tree; MemberError for UTF-16, NUL, a DOCTYPE or entity, or bad XML.
+
+    The guards run on the bytes, before the parser sees them
+    (``worker.quarterly_statements`` reads the same tree, #1083).
+    """
+
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in data:
+        raise MemberError("instance is UTF-16 or holds a NUL byte")
+    upper = data.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+        raise MemberError("instance declares a DOCTYPE or an entity")
+    try:
+        return ElementTree.fromstring(data)
+    except ElementTree.ParseError as exc:
+        raise MemberError(f"instance is not XML: {exc}") from exc
 
 
 def parse_eps(data: bytes, quarter: Quarter) -> tuple[float | None, str | None]:
@@ -454,15 +486,14 @@ def parse_eps(data: bytes, quarter: Quarter) -> tuple[float | None, str | None]:
     and a note; a first quarter's three-month context too) must agree.
     """
 
-    if data.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in data:
-        raise MemberError("instance is UTF-16 or holds a NUL byte")
-    upper = data.upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
-        raise MemberError("instance declares a DOCTYPE or an entity")
-    try:
-        root = ElementTree.fromstring(data)
-    except ElementTree.ParseError as exc:
-        raise MemberError(f"instance is not XML: {exc}") from exc
+    return eps_of(parse_instance(data), quarter)
+
+
+def eps_of(
+    root: ElementTree.Element, quarter: Quarter
+) -> tuple[float | None, str | None]:
+    """``parse_eps`` on a tree ``parse_instance`` returned."""
+
     contexts = _year_to_date(root, quarter)
     values: set[Decimal | None] = set()
     used: set[str] = set()
@@ -897,7 +928,10 @@ def apply_quarter(
             else:
                 counts.check_different += 1
             stored_format = (details or {}).get("report_format")
-            if stored_format and INDUSTRY_FORMATS.get(member.industry) != stored_format:
+            if (
+                stored_format
+                and report_format_of(member.industry, quarter) != stored_format
+            ):
                 counts.check_format_mismatch += 1
         compared = len(checked)
         if (
@@ -940,7 +974,7 @@ def apply_quarter(
             if not targets:
                 counts.not_target += 1
                 continue
-            report_format = INDUSTRY_FORMATS.get(member.industry)
+            report_format = report_format_of(member.industry, quarter)
             if report_format is None:
                 counts.unknown_format += 1
                 continue
