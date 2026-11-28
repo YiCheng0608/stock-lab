@@ -2571,10 +2571,38 @@ AI_LIST_FAR = date(2099, 12, 31)
 AI_LIST_CORPORATE = "9103"
 AI_LIST_PICKS = (
     # symbol, setup, entry type, shown, valid_until, reason
-    ("9101", "breakout", "breakout", True, AI_LIST_FAR, "根據示範晶圓營收創新高的新聞與收盤創 20 日新高，推論突破格局成形"),
-    ("9103", "pullback_support", "pullback", True, AI_LIST_FAR, "根據伺服器需求升溫的新聞與回測 20 日均線，推論回檔到支撐"),
-    ("9201", "chip_accumulation", "breakout", False, AI_LIST_FAR, "根據外資投信同步買超，推論籌碼集中"),
-    ("9204", "theme_momentum", "breakout", True, date(2026, 10, 20), "根據生技族群轉強，推論題材發酵"),
+    (
+        "9101",
+        "breakout",
+        "breakout",
+        True,
+        AI_LIST_FAR,
+        "根據示範晶圓營收創新高的新聞與收盤創 20 日新高，推論突破格局成形",
+    ),
+    (
+        "9103",
+        "pullback_support",
+        "pullback",
+        True,
+        AI_LIST_FAR,
+        "根據伺服器需求升溫的新聞與回測 20 日均線，推論回檔到支撐",
+    ),
+    (
+        "9201",
+        "chip_accumulation",
+        "breakout",
+        False,
+        AI_LIST_FAR,
+        "根據外資投信同步買超，推論籌碼集中",
+    ),
+    (
+        "9204",
+        "theme_momentum",
+        "breakout",
+        True,
+        date(2026, 10, 20),
+        "根據生技族群轉強，推論題材發酵",
+    ),
 )
 
 
@@ -2631,7 +2659,10 @@ def _ai_list_output() -> dict[str, Any]:
             "confidence": "medium",
             "method": {"basis": ["us", "tx_day", "news"]},
             "reasons": [
-                {"text": "根據費半與加權日盤收高，推論台股開盤偏多", "refs": ["us:SOX"]},
+                {
+                    "text": "根據費半與加權日盤收高，推論台股開盤偏多",
+                    "refs": ["us:SOX"],
+                },
                 {"text": "根據台指期夜盤沒有資料，推論把握只到中", "refs": []},
             ],
         },
@@ -2707,12 +2738,30 @@ def _ai_list_pick_rows() -> list[dict[str, Any]]:
         answer = {
             "entry": {
                 "type": entry_type,
-                "low": {"price": display["entry"]["low"], "refs": [f"stock:{symbol}:high_20"], "atr_multiple": 0},
-                "high": {"price": display["entry"]["high"], "refs": [f"stock:{symbol}:high_20"], "atr_multiple": 0},
-                "condition": "若站上 20 日高點" if entry_type == "breakout" else "若回到 20 日均線附近",
+                "low": {
+                    "price": display["entry"]["low"],
+                    "refs": [f"stock:{symbol}:high_20"],
+                    "atr_multiple": 0,
+                },
+                "high": {
+                    "price": display["entry"]["high"],
+                    "refs": [f"stock:{symbol}:high_20"],
+                    "atr_multiple": 0,
+                },
+                "condition": "若站上 20 日高點"
+                if entry_type == "breakout"
+                else "若回到 20 日均線附近",
             },
-            "stop": {"price": display["stop"], "refs": [f"stock:{symbol}:close"], "atr_multiple": 0},
-            "target_1": {"price": display["target_1"], "refs": [f"stock:{symbol}:close"], "atr_multiple": 0},
+            "stop": {
+                "price": display["stop"],
+                "refs": [f"stock:{symbol}:close"],
+                "atr_multiple": 0,
+            },
+            "target_1": {
+                "price": display["target_1"],
+                "refs": [f"stock:{symbol}:close"],
+                "atr_multiple": 0,
+            },
             "target_2": None,
             "exit_conditions": [{"text": "若外資轉為連續賣超", "refs": []}],
             "valid_sessions": 5,
@@ -2721,7 +2770,11 @@ def _ai_list_pick_rows() -> list[dict[str, Any]]:
             "status": "pass" if shown else "fail",
             "problems": [] if shown else [{"check": "ref_mismatch", "where": "stop"}],
             "prices": {
-                "entry.low": {"ref": f"stock:{symbol}:high_20", "atr_multiple": 0, "price": display["entry"]["low"]},
+                "entry.low": {
+                    "ref": f"stock:{symbol}:high_20",
+                    "atr_multiple": 0,
+                    "price": display["entry"]["low"],
+                },
             },
             "rounded": [],
             "risk_reward": display["risk_reward"],
@@ -2749,7 +2802,14 @@ def _ai_list_pick_rows() -> list[dict[str, Any]]:
                 "valid_sessions": 5,
                 "valid_until": until,
                 "exit_conditions_json": answer["exit_conditions"],
-                "reasons_json": [{"text": reason, "refs": [f"news:{PREMARKET_NEWS_ID}"] if symbol == "9101" else []}],
+                "reasons_json": [
+                    {
+                        "text": reason,
+                        "refs": [f"news:{PREMARKET_NEWS_ID}"]
+                        if symbol == "9101"
+                        else [],
+                    }
+                ],
                 "rule_levels_json": levels.get(symbol),
             }
         )

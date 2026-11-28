@@ -1444,8 +1444,10 @@ def t12(run: Run) -> str:
         f"區塊順序 `熱門族群` → `{CANDIDATES_TITLE}`，預期 `{CANDIDATES_TITLE}` 在前",
     )
     expect(not text.has("重點新聞"), "首頁仍有整行 `重點新聞`（#625 已移除）")
-    return f"`{CANDIDATES_TITLE}`（{{0}}）→ `熱門族群`（{{1}}）；沒有 `重點新聞`".format(
-        *(text.at(i) for i in found.values())
+    return (
+        f"`{CANDIDATES_TITLE}`（{{0}}）→ `熱門族群`（{{1}}）；沒有 `重點新聞`".format(
+            *(text.at(i) for i in found.values())
+        )
     )
 
 
@@ -2910,7 +2912,10 @@ def t30(run: Run) -> str:
     text = run.text(TODAY)
     start, end = ai_list_section(text)
     expect(start >= 0, f"缺 `{AI_LIST_TITLE}` 開頭的標題行")
-    expect(end > start, f"`{AI_LIST_TITLE}` 之後缺 `{RULE_LIST_FOLD}` 開頭的行（段落沒有終點）")
+    expect(
+        end > start,
+        f"`{AI_LIST_TITLE}` 之後缺 `{RULE_LIST_FOLD}` 開頭的行（段落沒有終點）",
+    )
     lines = text.lines[start:end]
     marks = sum(1 for line in lines if line == AI_LIST_MARK)
     expect(marks == 1, f"段內整行 `{AI_LIST_MARK}` {marks} 行，預期 1（§7 每區塊一個）")
@@ -2919,13 +2924,18 @@ def t30(run: Run) -> str:
         expect(failure["text"] in lines, f"缺失敗句 `{failure['text']}`")
     if data.get("status") != "done":
         if not failure:
-            expect(AI_LIST_MISSING in lines, f"status={data.get('status')}，段內缺 `{AI_LIST_MISSING}`")
+            expect(
+                AI_LIST_MISSING in lines,
+                f"status={data.get('status')}，段內缺 `{AI_LIST_MISSING}`",
+            )
         return f"status={data.get('status')}：`{failure['text'] if failure else AI_LIST_MISSING}`"
     head = ai_list_head(data)
     expect(lines[0] == head, f"標題行是 {lines[0]!r}，預期 `{head}`")
     meta = f"模型 {data.get('llm_model') or '未記錄'} · 提示 {data.get('prompt_version')} · {AI_LIST_MARK}"
     expect(meta in lines, f"段內缺 `{meta}`")
-    badge = None if data.get("is_today") else f"{_mmdd(data.get('session_date'))} 的名單"
+    badge = (
+        None if data.get("is_today") else f"{_mmdd(data.get('session_date'))} 的名單"
+    )
     if badge:
         expect(badge in lines[:4], f"名單日不是今天，標題旁缺 badge `{badge}`")
     picks = data.get("picks") or []
@@ -2933,7 +2943,10 @@ def t30(run: Run) -> str:
         want = data.get("empty_text") or ""
         expect(want in lines, f"空名單，缺 `{want}`")
         return f"`{head}`；空名單 `{want}`"
-    heads = [f"{pick['rank']} {pick['symbol']} {pick.get('name') or ''}".strip() for pick in picks]
+    heads = [
+        f"{pick['rank']} {pick['symbol']} {pick.get('name') or ''}".strip()
+        for pick in picks
+    ]
     at = [
         next((n for n, line in enumerate(lines) if line.startswith(name + " ")), -1)
         for name in heads
@@ -2944,7 +2957,9 @@ def t30(run: Run) -> str:
             problems.append(f"缺以 `{name} ` 開頭的列")
             continue
         if not lines[n].endswith(pick.get("method_text") or ""):
-            problems.append(f"{name} 的判讀方式不是 `{pick.get('method_text')}`：{lines[n]!r}")
+            problems.append(
+                f"{name} 的判讀方式不是 `{pick.get('method_text')}`：{lines[n]!r}"
+            )
         following = [m for m in at if m > n]
         block = lines[n : min(following) if following else len(lines)]
         if pick.get("levels"):
@@ -2958,7 +2973,10 @@ def t30(run: Run) -> str:
             priced = [line for line in block if line.startswith(("進場 ", "進場區 "))]
             if priced:
                 problems.append(f"{name} 沒有通過核對或已過期卻有價位：{priced[0]!r}")
-        if pick.get("corporate_action_text") and pick["corporate_action_text"] not in block:
+        if (
+            pick.get("corporate_action_text")
+            and pick["corporate_action_text"] not in block
+        ):
             problems.append(f"{name} 缺除權息警示 `{pick['corporate_action_text']}`")
     order = [n for n in at if n >= 0]
     expect(order == sorted(order), f"名次順序 {heads} 與 API 不同")

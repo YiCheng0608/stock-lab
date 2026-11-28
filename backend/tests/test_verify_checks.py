@@ -4266,21 +4266,40 @@ def test_t30_passes_and_t8_leaves_the_blocks_badge_out(tmp_path):
 @pytest.mark.parametrize(
     ("block", "message"),
     [
-        (AI_BLOCK.replace("AI 推論，未經驗證\n10/19", "10/19", 1), "`AI 推論，未經驗證` 0 行"),
+        (
+            AI_BLOCK.replace("AI 推論，未經驗證\n10/19", "10/19", 1),
+            "`AI 推論，未經驗證` 0 行",
+        ),
         (AI_BLOCK.replace("10/16 的名單\n", "", 1), "缺 badge `10/16 的名單`"),
         (AI_BLOCK.replace("10/19 的 AI 名單沒有產出：呼叫逾時\n", ""), "缺失敗句"),
-        (AI_BLOCK.replace(" · 提示 ai_list_v1", ""), "段內缺 `模型 claude-sonnet-5-5 · 提示"),
-        (AI_BLOCK.replace("（08:22）", ""), "標題行是"),
-        (AI_BLOCK.replace("停損 20.05", "停損 20.00"), "9100 示範一 缺 `進場 站上 21.10"),
         (
-            AI_BLOCK.replace("價位未通過核對，未顯示\n", "進場 站上 50.00｜停損 48.00\n"),
+            AI_BLOCK.replace(" · 提示 ai_list_v1", ""),
+            "段內缺 `模型 claude-sonnet-5-5 · 提示",
+        ),
+        (AI_BLOCK.replace("（08:22）", ""), "標題行是"),
+        (
+            AI_BLOCK.replace("停損 20.05", "停損 20.00"),
+            "9100 示範一 缺 `進場 站上 21.10",
+        ),
+        (
+            AI_BLOCK.replace(
+                "價位未通過核對，未顯示\n", "進場 站上 50.00｜停損 48.00\n"
+            ),
             "9204 示範生技 缺 `價位未通過核對，未顯示`",
         ),
         (
-            AI_BLOCK.replace("價位未通過核對，未顯示\n", "價位未通過核對，未顯示\n進場 站上 50.00\n"),
+            AI_BLOCK.replace(
+                "價位未通過核對，未顯示\n", "價位未通過核對，未顯示\n進場 站上 50.00\n"
+            ),
             "9204 示範生技 沒有通過核對或已過期卻有價位",
         ),
-        (AI_BLOCK.replace("名單日後有除權息，價位以 10/15 收盤為基準，今天的漲跌停與參考價可能不同\n", ""), "缺除權息警示"),
+        (
+            AI_BLOCK.replace(
+                "名單日後有除權息，價位以 10/15 收盤為基準，今天的漲跌停與參考價可能不同\n",
+                "",
+            ),
+            "缺除權息警示",
+        ),
         (AI_BLOCK.replace(" 突破 · 技術面＞消息 · 把握中", " 突破"), "判讀方式不是"),
     ],
 )
@@ -4292,7 +4311,10 @@ def test_t30_fails(tmp_path, block, message):
 def test_t30_fails_without_its_end_or_its_title(tmp_path):
     with pytest.raises(page_checks.Fail, match="段落沒有終點"):
         page_checks.t30(
-            _t30_run(tmp_path, AI_BLOCK.replace("規則名單（背景計算，對答案用的基準） 2 檔\n", ""))
+            _t30_run(
+                tmp_path,
+                AI_BLOCK.replace("規則名單（背景計算，對答案用的基準） 2 檔\n", ""),
+            )
         )
     with pytest.raises(page_checks.Fail, match="缺 `AI 名單` 開頭的標題行"):
         page_checks.t30(_t30_run(tmp_path, ""))
@@ -4302,7 +4324,9 @@ def test_t30_checks_the_order_of_the_picks(tmp_path):
     first = "1 9100 示範一 突破 · 技術面＞消息 · 把握中\n"
     lines = AI_BLOCK.split(first)
     second_start = lines[1].index("2 9204")
-    swapped = lines[0] + lines[1][second_start:].replace("規則名單（", first + lines[1][:second_start] + "規則名單（")
+    swapped = lines[0] + lines[1][second_start:].replace(
+        "規則名單（", first + lines[1][:second_start] + "規則名單（"
+    )
     with pytest.raises(page_checks.Fail, match="名次順序"):
         page_checks.t30(_t30_run(tmp_path, swapped))
 
@@ -4312,17 +4336,26 @@ def test_t30_without_any_list_is_one_line(tmp_path):
     block = "AI 名單\nAI 推論，未經驗證\n尚無 AI 名單（每個交易日 08:21 開盤前產出）\n規則名單（背景計算，對答案用的基準） 2 檔\n"
     assert "status=missing" in page_checks.t30(_t30_run(tmp_path, block, data))
     with pytest.raises(page_checks.Fail, match="尚無 AI 名單"):
-        page_checks.t30(_t30_run(tmp_path, block.replace("尚無 AI 名單（每個交易日 08:21 開盤前產出）\n", ""), data))
+        page_checks.t30(
+            _t30_run(
+                tmp_path,
+                block.replace("尚無 AI 名單（每個交易日 08:21 開盤前產出）\n", ""),
+                data,
+            )
+        )
 
 
 def test_t30_mirrors_the_frontends_levels_line():
-    assert page_checks.ai_levels_text(
-        {
-            "entry": {"type": "pullback", "low": 1234.5, "high": 1300},
-            "stop": 1200,
-            "target_1": 1400,
-            "target_2": 1450.5,
-            "risk_reward": 1.25,
-            "valid_until": "2026-12-03",
-        }
-    ) == "進場區 1,234.50～1,300.00｜停損 1,200.00｜目標一 1,400.00／二 1,450.50｜RR 1.25 倍｜有效至 12/03"
+    assert (
+        page_checks.ai_levels_text(
+            {
+                "entry": {"type": "pullback", "low": 1234.5, "high": 1300},
+                "stop": 1200,
+                "target_1": 1400,
+                "target_2": 1450.5,
+                "risk_reward": 1.25,
+                "valid_until": "2026-12-03",
+            }
+        )
+        == "進場區 1,234.50～1,300.00｜停損 1,200.00｜目標一 1,400.00／二 1,450.50｜RR 1.25 倍｜有效至 12/03"
+    )
