@@ -295,10 +295,10 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 ## 每月檢討
 
-這一段回答：上個月每個監測對象怎麼了，哪些變差、哪些變強（[#1004](https://github.com/YiCheng0608/stock-lab/issues/1004) 的第一張 [#1062](https://github.com/YiCheng0608/stock-lab/issues/1062)；依據 #1 [決定 7200479974](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7200479974) 第 1 點、[7107588664](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107588664)）。規則在第一次真跑前由統籌決定，寫死在 `tools/research/monthly_review.py`（`worse`、`better` 與它們讀的常數）；要改就加 `monthly_review.VERSION`，在報告寫明改了什麼、為什麼（`VERSION_NOTES`；第 2 版是 #1069 加的候選池來源；[研究規則](#研究規則)第 3 條）。清單只列出：進產品、下架與檢討今日名單由使用者決定，統籌在 #1 提案；「變強」的特徵只是下一輪研究的候選，照[新策略探索](#新策略探索)的探索、驗證兩段做。
+這一段回答：上個月每個監測對象怎麼了，哪些變差、哪些變強（[#1004](https://github.com/YiCheng0608/stock-lab/issues/1004) 的第一張 [#1062](https://github.com/YiCheng0608/stock-lab/issues/1062)；依據 #1 [決定 7200479974](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7200479974) 第 1 點、[7107588664](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107588664)）。規則在第一次真跑前由統籌決定，寫死在 `tools/research/monthly_review.py`（`worse`、`better` 與它們讀的常數）；要改就加 `monthly_review.VERSION`，在報告寫明改了什麼、為什麼（`VERSION_NOTES`；第 2 版是 #1069 加的候選池來源，第 3 版是 #1147：今日名單改由 AI 產出後，成績單讀的規則名單改成只記錄、不提案，並加 AI 名單對答案月報一段；[研究規則](#研究規則)第 3 條）。清單只列出：進產品、下架由使用者決定，統籌在 #1 提案；「變強」的特徵只是下一輪研究的候選，照[新策略探索](#新策略探索)的探索、驗證兩段做。
 
 **命令**：`python tools/research/monthly_review.py --db <副本> --month <YYYY-MM> --out <目錄> [--previous <上個月的 --out 目錄>] [--min-free-gb 2]`
-- `review.json` 的格式（`REVIEW_FORMAT`）仍是 1：第 2 版只多了 `pool`、`errors` 兩個鍵，不和上個月比，第 1 版的 `review.json` 照常當 `--previous` 讀。
+- `review.json` 的格式（`REVIEW_FORMAT`）仍是 1：第 2 版只多了 `pool`、`errors` 兩個鍵，第 3 版多了一個步驟 `ai_list_score_report`，都不和上個月比，舊版的 `review.json` 照常當 `--previous` 讀。
 - 只讀。拒絕（exit 2，什麼都不跑）：正式 DB、台北 21:30～23:30、可用記憶體不足（同 `forward_watch`），以及副本在該月沒有交易日、`--previous` 的目錄沒有 `review.json` 或格式版本（`REVIEW_FORMAT`）不同、`--previous` 的月份不在 `--month` 之前、`--out` 不是空的（失敗的子入口不會留下上一次的輸出，一起被推上去）。
 - cutoff：副本裡該月的最後一個交易日，傳給每個子入口的 `--cutoff`（H1、前瞻監測）或 `--end`（成績單、特徵證據）。H1 與前瞻監測的淨值只算到 cutoff，所以月初的副本也只算到月底；成績單與特徵證據的 `--end` 只截訊號日（候選日、交易日），T+5、T+20 的報酬照常讀到副本的最後一天，所以月底前 20 個交易日內的訊號日，數字會隨複製日不同。副本的最新交易日早於月底時，`summary.md` 標「月份還沒結束」。
 - 依序跑下面的子入口（每月整個 `--out` 推 `pr-assets/699` 的 `run-<YYYYMMDD>/`，見[每月流程](#前瞻驗證-h1)），每個是它自己的命令（子程序），定義、版本與 `definitions_sha256` 不變，凍結的拒絕照常生效；輸出和單獨跑同一個命令相同（測試比對 `tables.json`）：
@@ -309,8 +309,9 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
   - `candidate_pool_score/`：`candidate_pool_score.py --end <cutoff>`（[候選池的對答案](candidate_pool.md#對答案)，#1069）。
   - `premarket_errors/cases.json`、`cases.md`：`premarket_errors.py --month <月份>`（[判錯清單與改版提案](premarket_ai.md#判錯清單與改版提案)，#1069；成功的判準是寫出 `cases.json`）。提案命令 `prompt_proposal.py` 不是子入口：它要 CLI 登入、每次的結果不同，由統籌在[每月流程](#前瞻驗證-h1)第 4 步另跑。
   - `premarket_score_report/report.md`：`worker.premarket_score_report.render`，也就是 `worker.cli premarket-score-report --month` 的同一段程式，在副本上以 `mode=ro`＋`query_only` 的 Session 跑，不讀正式 DB（[早盤 AI 月報](premarket_ai.md#月報與去留)）。
+  - `ai_list_score_report/report.md`：`worker.ai_list_score_report.render`，也就是 `worker.cli ai-list-score-report --month` 的同一段程式，在副本上照上一項的方式跑（[AI 名單對答案的月報](ai_list.md#月報)，#1147）。
 - 一個子入口失敗（拒絕、例外）時其他照跑；`summary.md` 那一段寫失敗原因（子入口的 `refused` 或最後一行錯誤），清單裡寫「`<名稱>` 失敗，未判」，命令 exit 1。每個子入口的 stdout／stderr 在 `logs/`。
-- 輸出：`summary.md`（開頭是變差、變強兩張清單，接著 H1、每個 `WATCHES` 的鍵、成績單、特徵證據、候選池的對答案、早盤 AI 判錯清單、早盤 AI 月報各一段；開頭一行寫 `monthly_review.VERSION` 這一版改了什麼（`VERSION_NOTES`）；H1 與前瞻對象那段是[每月流程](#前瞻驗證-h1)第 6 步要貼的欄位）、`review.json`（機器可讀，下個月的 `--previous` 讀它），以及上面各子入口的目錄。
+- 輸出：`summary.md`（開頭是變差、變強兩張清單，接著 H1、每個 `WATCHES` 的鍵、成績單、特徵證據、候選池的對答案、早盤 AI 判錯清單、早盤 AI 月報、AI 名單對答案月報各一段；開頭一行寫 `monthly_review.VERSION` 這一版改了什麼（`VERSION_NOTES`）；H1 與前瞻對象那段是[每月流程](#前瞻驗證-h1)第 6 步要貼的欄位）、`review.json`（機器可讀，下個月的 `--previous` 讀它），以及上面各子入口的目錄。
 
 - 實測（[#1062](https://github.com/YiCheng0608/stock-lab/issues/1062) AC-4，2026-11-26 的副本、`--month 2026-11`、容器 `--memory 4g`）：全部 253 秒，峰值記憶體 0.62 GB（子程序與本程序的最大值）；最久的是 feature_evidence 約 87 秒，其餘各 4～40 秒。
 
@@ -321,7 +322,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 | --- | --- | --- |
 | 等級順序 | 有證據 > 方向一致但不顯著 > 沒有證據 > 驗證段反轉；「無法判定」不排序：從它變過來或變成它都不算升降，只列在特徵證據段的「判定有變」表 | `RANKS`、`UNRANKED`、`feature_changes` |
 | 變差：前瞻對象 | `WATCHES` 的每個鍵與 H1 前瞻，子入口的判定（`forward_judge`）是「輸給基準」就列，不需要上個月；未滿 M 日（`WATCHES` 60、H1 250）子入口給「樣本不足」，不列。動作照該類別的 `forward_watch.KIND_NOTES`，H1 寫「只當紀錄，不改 H1 成立與否」。H1 那一項的日均、t 與日數都取它的判定窗口（前 250 日，`excess.judged`），和至今日數不同時兩個都寫 | `worse`、`LOSING`、`_forward_text` |
-| 變差：今日名單 | 候選成績單全部候選（`horizons[h].all.daily_excess`，全範圍、評分版本合併、不分策略）套 `forward_judge`，M＝60（日數），T+5、T+20 各判；判到「輸給基準」就列，動作「今日名單是產品：統籌在 #1 提案檢討（不是下架提案）」。#671 的承諾 c10（2027-01-15 滿 60 日重跑成績單）照舊 | `scorecard_verdict`、`SCORECARD_MIN_DAYS`、`SCORECARD_NOTE` |
+| 變差：規則名單 | 候選成績單全部候選（`horizons[h].all.daily_excess`，全範圍、評分版本合併、不分策略；`daily_candidates` 自 #1142 起是背景的規則名單，產品是 AI 名單）套 `forward_judge`，M＝60（日數），T+5、T+20 各判；判到「輸給基準」就列，動作「規則名單是對答案的基準：只記錄，不提案」（第 3 版，#1142 4/4 第 21 列）。#671 的承諾 c10（2027-01-15 滿 60 日重跑成績單）照舊 | `scorecard_verdict`、`SCORECARD_MIN_DAYS`、`SCORECARD_NOTE` |
 | 變差：特徵降級 | 對象是 `feature_evidence.CONDITIONS` 全部，加上 `WATCHES` 裡類別「已進產品」的列的定義（`repr`）裡出現的 `FEATURES` 鍵（整字比對，從 `WATCHES` 自動取；目前 H2-product 的 `high_gap_240`、X4-product 的 `revenue_yoy`、`eps_growth_yield`）。T+5、T+20 各比一次，上個月與本月都有等級、本月較低就列。排序或篩選鍵不在 `FEATURES` 的（X4 的 `eps_yield_raw`）沒得比，`summary.md` 寫明 | `worse`、`product_features`、`product_unmatched` |
 | 變強：前瞻對象 | `WATCHES` 的每個鍵與 H1 前瞻判「通過」就列，只當紀錄，附 `KIND_NOTES` 的動作，不觸發進產品 | `better`、`PASSING` |
 | 變強：特徵升級 | `feature_evidence.FEATURES`（條件不列）任一期間比上個月升級、本月至少「方向一致但不顯著」，而且已登記的假設沒用過；列成下一輪研究的候選，照探索、驗證兩段做，不直接進策略（[研究規則](#研究規則)第 1 條） | `better`、`BETTER_FLOOR` |
@@ -331,6 +332,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 | 變差、變強：候選池的來源（第 2 版，[#1069 決定 7203530697](https://github.com/YiCheng0608/stock-lab/issues/1069#issuecomment-7203530697)） | `candidate_pool_score` 的 16 個來源，T+5、T+20 各判（`forward_judge`，M＝60，從池的第一天起累積）：判「輸給基準」進變差、「通過」進變強（只當紀錄），動作「候選池只決定 AI 看哪些股票：統籌在 #1 提案調整來源或上限；改 `PoolConfig` 預設值要留 `決定：`」。另列的組（全池、層級、來源數、被上限擋掉、AI 判 keep／reprice）與對流動母體的參考值不進清單。子入口失敗時兩張清單都寫「`candidate_pool_score` 失敗，未判」 | `pool_items`、`POOL_NOTE`、`pool_facts` |
 | 早盤 AI 判錯清單 | 不進清單，只放一段（判錯筆數與提案步驟的原因）；提案與換版照 [premarket_ai](premarket_ai.md#判錯清單與改版提案) 自己的規則 | `error_facts` |
 | 早盤 AI 月報 | 不進清單，只放一段；換版照 [premarket_ai](premarket_ai.md#月報與去留) 自己的兩個條件 | — |
+| AI 名單對答案月報（第 3 版） | 不進清單，只放一段（依判讀方式分組，[ai_list](ai_list.md#月報)）；判錯清單與改版提案另開單 | — |
 
 ## 新策略探索
 

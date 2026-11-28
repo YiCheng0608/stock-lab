@@ -2652,6 +2652,10 @@ OMITTED_TABLES: dict[str, str] = {
         "AI 名單（#1145）只產出與存檔，五頁還不讀它（顯示是 #1144 的 T2）；"
         "由後端 test_ai_list 驗"
     ),
+    "ai_list_scores": (
+        "AI 名單對答案（#1147）只給月報（worker.cli ai-list-score-report），"
+        "五頁不讀；由後端 test_ai_list_score 驗"
+    ),
     "alembic_version": "migration 自己寫入 head 版本，假資料不寫",
     "candidate_pool_items": "同 candidate_pool_runs",
     "candidate_pool_runs": (

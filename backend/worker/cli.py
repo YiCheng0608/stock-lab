@@ -62,6 +62,8 @@ from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
 from .premarket_score import run_premarket_score
 from . import premarket_score_report
+from .ai_list_score import run_ai_list_score
+from . import ai_list_score_report
 from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUARTERS
 from .quarterly_fundamentals import (
     run_foreign_deadline_recompute,
@@ -405,6 +407,26 @@ def main() -> None:
     )
     report_parser.add_argument("--month", required=True, help="YYYY-MM")
     report_parser.add_argument("--out", help="寫到這個檔；未指定印到 stdout")
+    ai_score_parser = subparsers.add_parser(
+        "ai-list-score",
+        help="AI 名單對答案 ai_list_score_v1（#1147，daily 的 ai_list_score 步驟）：到 --date 為止已到期、還沒寫的 horizon 寫進 ai_list_scores；同日重跑不重複寫",
+    )
+    ai_score_parser.add_argument(
+        "--date",
+        dest="run_date",
+        help="YYYY-MM-DD 目標交易日（不讀之後的日 K）；未指定使用 DB 最新日線日",
+    )
+    ai_score_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只算、印出各列的 outcome，不寫 DB",
+    )
+    ai_report_parser = subparsers.add_parser(
+        "ai-list-score-report",
+        help="AI 名單對答案的月報（#1147）：依判讀方式分組，累積到該月底與當月，markdown，不寫 DB",
+    )
+    ai_report_parser.add_argument("--month", required=True, help="YYYY-MM")
+    ai_report_parser.add_argument("--out", help="寫到這個檔；未指定印到 stdout")
     levels_parser = subparsers.add_parser(
         "strategy-levels",
         help="計算訊號的條件價位 STRATEGY_LEVELS_VERSION（daily 的 strategy_levels 步驟；同日重跑冪等）",
@@ -992,6 +1014,14 @@ def main() -> None:
         if not args.out:
             print(text)
         return
+    if args.command == "ai-list-score-report":
+        problem = ai_list_score_report.month_problem(args.month)
+        if problem:
+            parser.error(problem)
+        text = ai_list_score_report.run(args.month, args.out)
+        if not args.out:
+            print(text)
+        return
     if args.command == "premarket-ai":
         problem = premarket_job.argument_problem(args)
         if problem:
@@ -1178,6 +1208,8 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         result = run_plan_tracking(parse_date(args.run_date))
     elif args.command == "premarket-score":
         result = run_premarket_score(parse_date(args.run_date), dry_run=args.dry_run)
+    elif args.command == "ai-list-score":
+        result = run_ai_list_score(parse_date(args.run_date), dry_run=args.dry_run)
     elif args.command == "strategy-levels":
         result = run_strategy_levels(parse_date(args.run_date))
     elif args.command == "action-tiers":
@@ -1415,6 +1447,7 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         "candidates",
         "track-plans",
         "premarket-score",
+        "ai-list-score",
         "market-summary",
         "strategy-levels",
         "trading-calendar",

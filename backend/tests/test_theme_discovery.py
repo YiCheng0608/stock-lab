@@ -691,8 +691,13 @@ def test_the_daily_runs_the_step_without_changing_the_run(make, monkeypatch):
     result = pipeline.run_daily(T)
     assert result["status"] == "success"
     # The real step is not one of the recorded fakes; it runs between the
-    # notes and the candidate pool (#1020); the pre-market scores are last (#1043).
-    assert steps.calls[-3:] == ["candidate_notes", "candidate_pool", "premarket_score"]
+    # notes and the candidate pool (#1020); the AI scores are last (#1043, #1147).
+    assert steps.calls[-4:] == [
+        "candidate_notes",
+        "candidate_pool",
+        "premarket_score",
+        "ai_list_score",
+    ]
     rows, by_run = runs(make)
     step = by_run[rows[0].id]["theme_discovery"]
     assert (step.status, step.records, step.sequence) == ("partial", 2, 16)
