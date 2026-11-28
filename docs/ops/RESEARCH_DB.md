@@ -643,6 +643,41 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 - **TDR 沒有淨值比**：91 開頭的存託憑證在 `BWIBBU_d` 沒有列；研究的普通股母體本來就排除它們。
 - **N/A 留空**：上櫃的 `N/A`（集中在之後下市的公司，推測是淨值為負或財報不全）與上市的 `-` 都是 NULL，研究時另計，不當成 0。
 
+## 臺灣50、中型100 成分股調整（#1149）
+
+研究 DB 的臺灣50（`TW50`）、臺灣中型100（`TWMC100`）每次定審與臨時調整的納入、刪除與候補（`index_constituent_changes`），讓「成分股納入、剔除前後」這類假設在上市這一側登記得了。來源是臺灣指數公司（TIP）網站的技術通知，算新來源，使用者同意只當研究 DB 來源；端點、欄位、挑公告的規則、整份失敗的條件與可得時點見 [DATA_SOURCES](../DATA_SOURCES.md#臺灣50臺灣中型100-成分股調整)。正式 DB 只有 0052 建的空表，不寫入。**TIP 的公告原檔不進 repo**，只留在研究 volume 的 raw。
+
+**feed**：`valuation backfill --feed tip-notices`（[`worker.tip_notices`](../../backend/worker/tip_notices.py)；只在指名時跑，不加 `--feed` 的四個逐交易日 feed 不含它）。它讀年清單與每份公告，不是逐交易日的 JSON 表，所以另開模組，間隔、等待時段、manifest 與 raw 讀法沿用 [`valuation_backfill`](#股價淨值比與發行股數1075)。
+
+1. 每年 1 頁中文清單（`--start` 的年份起，最早 2002；`--end` 的年份止），1 個請求。清單在那年結束後抓的就不再請求，當年的每次都再請求（看 manifest 記的這次抓取時間 `fetched_at`，不看 raw 列的時間：內容相同時 raw 列沿用第一次的）。
+2. 依標題挑出定審與臨時公告，網站檔案日期在 `--start`～`--end` 的才下載：每份 `/tw` 檔 1 個請求。
+3. `.doc`（`olefile`＋自己解 piece table）或 PDF（`pypdf` layout 模式）抽文字，只寫臺灣50、中型100 兩段。
+
+- **manifest**：每年清單一列、每份公告一列 `ingestion_runs`（`run_type=valuation_backfill_day`、`request_key=valuation_backfill:tip-notices:list:<年>`／`valuation_backfill:tip-notices:<id>`）；公告的 `metadata_json` 記 raw id、標題、類別、`kind`、格式、公告日、生效日與計數，失敗時記 `error`。`success` 的公告重跑不再請求（`done_before`）；請求失敗的重跑會再請求（回 200 但不是 `.doc`／PDF 的也是，例如錯誤頁：不存 raw）；檔案拿到了、讀不懂而失敗的，重跑改讀已存的 raw、不送請求（`reapplied`），留給人工判讀或修 parser。`--reapply` 完全不送請求，清單與公告都讀已存的 raw 重寫，沒有差異時 `changed 0`；沒有 raw 的計 `not_answered`。
+- **raw**：`raw/tip/<抓取日>/<sha256>.json`，內容是 JSON 包著回應原文的 base64（`url`、`bytes`、`sha256`、`base64`），讀回時比對 SHA-256。
+- **寫入**：一份公告一個 commit，整份寫入或整份不寫；同一份公告重讀時以 `source_doc_id` 對齊，多的刪、少的補、變的改。`instrument_id` 是公告日（休市時取之前 14 天內最後一個交易日）有這個代號上市日線的標的，沒有就留空、計 `unmatched`（列數；代號列在 `unmatched_codes`），不建標的。
+- **請求規則**：同一 host 間隔至少 3.5 秒（`taiwanindex.com.tw` 與 `backend.taiwanindex.com.tw` 各算；兩者也在 `sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS`，`fetch_json` 對 429／5xx／傳輸錯誤的內部重試一樣隔 3.5 秒）；台北 21:15～23:30 與偶數整點前後 10 分鐘（news）不送，程序等到窗口結束再送；同一 host 連續 5 個請求失敗就停（`aborted`、`partial`）。只在有 `research-db.json` 的 DB 跑，否則 `refused`、exit 2；持有維護模式。
+- **輸出**：`requests` 是送出請求的次數，`fetch_json` 內部的重試（每次最多再 2 次）另計、不在數字裡。`feeds.tip-notices` 記清單（`list_*`）、`listed`、`picked`（`periodic`、`ad_hoc`）、`requested`、`reapplied`、`success`、`without_rows`（臨時公告沒提到這兩個指數）、`failed` 與 `failed_notices`（id、網站日期、`kind`、原因）、列數與 `unmatched`、`formats`（`doc`／`pdf` 份數）、`waited_seconds`。
+
+**跑法**：
+
+```bash
+# IMG＝含 #1149 的 backend image；R 同「跑一批」。開跑前 df -h / 至少 5 GiB，docker ps 沒有別的研究 volume 寫入者
+docker run --rm --network none "${R[@]}" "$IMG" python -B -m worker.cli init-db
+docker run -d --name research-1149-tip "${R[@]}" "$IMG" \
+  sh -c 'python -B -m worker.cli valuation backfill --feed tip-notices --start 2002-01-01 --end <今天> > /data/logs/tip.json 2> /data/logs/tip.err; echo $? > /data/logs/tip.exit'
+# 修好 parser 後：先 --reapply（0 個請求）讀已存的 raw，再不加 --reapply 跑一次，只重問請求失敗的公告
+```
+
+估約 290 個請求（清單 25、定審 95、臨時 169）、約 20 分鐘加上等待；raw 與列數的估計見 [DATA_SOURCES](../DATA_SOURCES.md#臺灣50臺灣中型100-成分股調整)「全歷史的量」。回補後的實測、覆蓋與留給人工判讀的公告記在 [#1149](https://github.com/YiCheng0608/stock-lab/issues/1149)。
+
+**已知限制**：
+
+- **只有異動**：沒有完整名單，也沒有 2002 年發布時的初始名單，重建不出某天的成分股；事件研究只用事件本身。
+- **可得時點**：研究工具只用「`announced_date` 與 `site_file_date` 較晚的一天 < T」的公告；生效日照公告存，遇休市由研究工具取下一個交易日。
+- **臨時公告**：多數是散文，版面不固定。讀不出的整份失敗、留給人工判讀；有「延期」的段落寫成沒有 `effective_date` 的列，等後續公告再寫一列。
+- **公告原檔不進 repo**：測試的 `.doc`、PDF 與清單頁由測試自己產生（[`test_tip_notices.py`](../../backend/tests/test_tip_notices.py)）；真檔只在研究 volume 的 raw 與 `evidence/1130/`。
+
 ## 研究工具的耗時與記憶體
 
 `explore_research` 與 `trade_research` 的探索段要讀到 2019-12-31 以前的全部歷史，每個假設、每個工具版本只能跑一次，所以耗時與記憶體不能在研究 DB 上試。[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 用一份**合成的長歷史 DB** 量（量測方式是統籌決定 [6885225362](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6885225362)）。

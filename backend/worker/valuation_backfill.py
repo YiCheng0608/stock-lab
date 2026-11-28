@@ -34,6 +34,10 @@ as a number, a reported date other than the session or an empty table fails the
 whole session; nothing of it is written and nothing is guessed.  ``-``, ``N/A``,
 ``null`` and blank are NULL (and 0 shares), never 0.
 
+``tip-notices`` (臺灣50 and 中型100 changes, Issue #1149) is a fifth feed of the same
+command, in ``worker.tip_notices``: it reads notices, not sessions, and runs only
+when named (``--feed tip-notices``).
+
 Requests: at least ``REQUEST_INTERVAL_SECONDS`` apart on a host, none between
 ``QUIET_START`` and ``QUIET_END`` Taipei (the run waits), ``ABORT_AFTER_FAILURES``
 failed requests in a row to one host stop it (whatever the other host answers).  Only on the research database
@@ -884,6 +888,33 @@ def backfill(
     }
 
 
+TIP_FEED = "tip-notices"
+# ``--feed`` choices: the session feeds and worker.tip_notices.
+FEED_CHOICES = (*FEEDS, TIP_FEED)
+
+
+def _combined(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """One result of the session feeds' run and the tip-notices one."""
+
+    if len(results) == 1:
+        return results[0]
+    first, second = results
+    return {
+        "status": "success"
+        if all(r["status"] == "success" for r in results)
+        else "partial",
+        "start": first["start"],
+        "end": first["end"],
+        "requests": first["requests"] + second["requests"],
+        "aborted": first["aborted"] or second["aborted"],
+        "changed": first["changed"] + second["changed"],
+        "feeds": {**first["feeds"], **second["feeds"]},
+        "duration_seconds": round(
+            first["duration_seconds"] + second["duration_seconds"], 1
+        ),
+    }
+
+
 def run_valuation_backfill(
     start: str,
     end: str,
@@ -893,25 +924,39 @@ def run_valuation_backfill(
     fallback_raw_dir: str | None = None,
 ) -> dict[str, Any]:
     from app.db import SessionLocal
+    from worker import tip_notices
 
     try:
         first, last = date.fromisoformat(start), date.fromisoformat(end)
     except ValueError as exc:
         return {"status": "failed", "error": str(exc)}
+    session_feeds = [name for name in feeds or list(FEEDS) if name != TIP_FEED]
     previous = sources.set_minimum_host_interval(REQUEST_INTERVAL_SECONDS)
     try:
         with SessionLocal() as db:
             try:
-                return backfill(
-                    db,
-                    first,
-                    last,
-                    feeds=feeds,
-                    reapply=reapply,
-                    fallback_raw_dir=Path(fallback_raw_dir)
-                    if fallback_raw_dir
-                    else None,
-                )
+                if feeds and TIP_FEED in feeds:
+                    # Before any feed writes: a missing table fails the run whole.
+                    tip_notices.require_table(db)
+                results = []
+                if session_feeds:
+                    results.append(
+                        backfill(
+                            db,
+                            first,
+                            last,
+                            feeds=session_feeds,
+                            reapply=reapply,
+                            fallback_raw_dir=Path(fallback_raw_dir)
+                            if fallback_raw_dir
+                            else None,
+                        )
+                    )
+                if feeds and TIP_FEED in feeds:
+                    results.append(
+                        tip_notices.backfill(db, first, last, reapply=reapply)
+                    )
+                return _combined(results)
             except ValueError as exc:
                 db.rollback()
                 return {"status": "failed", "error": str(exc)}
