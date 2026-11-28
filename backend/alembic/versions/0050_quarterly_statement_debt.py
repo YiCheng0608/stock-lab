@@ -48,7 +48,8 @@ AMOUNTS = (
 
 def upgrade() -> None:
     inspector = inspect(op.get_bind())
-    # As 0045 does: only a partial schema (the old-revision fixtures) lacks it.
+    # As 0021 does: 0001 creates every model table, so only a partial schema (the
+    # old-revision fixtures) lacks it.
     if not inspector.has_table("quarterly_statements"):
         return
     columns = {

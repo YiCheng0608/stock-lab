@@ -126,7 +126,7 @@ FIELDS: dict[str, tuple[str, tuple[str, ...]]] = {
     ),
     "st_inv_amortised": (INSTANT, ("CurrentFinancialAssetsAtAmortisedCost",)),
     # IAS 39's four current lines (2013–2017; none from 2019); the second names are a
-    # securities firm's, the third 2018's.
+    # securities firm's, the available-for-sale third one its 2018 name.
     "st_inv_afs": (
         INSTANT,
         (
@@ -140,7 +140,6 @@ FIELDS: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "CurrentHeldToMaturityFinancialAssets",
             "HeldToMaturityCurrentFinancialAssets",
-            "CurrentHeldtomaturityFinancialAssets",
         ),
     ),
     "st_inv_no_active_market": (INSTANT, ("CurrentBondInvestmentWithoutActiveMarket",)),
