@@ -58,7 +58,7 @@ CANDIDATES = {
 TODAY_PAGE = (
     "資料日期未提供\n今日\n資料截至\n資料日期未提供\n"
     f"熱門族群\n產業榜\n資料日期未提供\n{NO_RUN}\n"
-    "今日名單\n資料 2026/10/22\n20 檔\n"
+    "規則名單\n資料 2026/10/22\n20 檔\n"
 )
 
 
@@ -142,7 +142,7 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
         }
     }
     # The row is there (#276 table) but its detail lost the 來源 line.
-    pages = {"today-1280": "今日名單\n資料 2026/10/22\n1 檔\n#1 2301 光寶科\n"}
+    pages = {"today-1280": "規則名單\n資料 2026/10/22\n1 檔\n#1 2301 光寶科\n"}
     _only(monkeypatch, "today", "T7", "T8")
     t7, t8 = page_checks.run_page(_run(tmp_path, payloads, pages), "today", [])
     assert (t7.status, t8.status) == ("失敗", "無法判定")
@@ -157,7 +157,7 @@ def _t12_run(tmp_path):
     return _run(
         tmp_path,
         {"dashboard": DASHBOARD},
-        {"today-1280": "今日名單\n資料 2026/10/22\n"},
+        {"today-1280": "規則名單\n資料 2026/10/22\n"},
     )
 
 
