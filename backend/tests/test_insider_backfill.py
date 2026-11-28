@@ -539,6 +539,134 @@ def test_the_block_page_stops_the_feed(factory):
     assert result["status"] == "partial"
 
 
+def test_the_block_page_stops_only_t56sb21(factory):
+    page = "<html>查詢過於頻繁</html>".encode()
+    july = date(2008, 7, 1)
+    fetch = Fetcher({ib.T56SB21_ENDPOINT: page, url("irb110", "sii", july): IRB110_SII})
+    result = run(
+        factory, fetch, date(2008, 1, 1), date(2008, 12, 1), feeds=["t56sb21", "irb110"]
+    )
+    assert result["feeds"]["t56sb21"]["requested"] == 1
+    assert result["feeds"]["t56sb21"]["blocked"]
+    # siis is another host: its 24 units are all asked.
+    assert result["feeds"]["irb110"]["requested"] == 24
+    assert result["feeds"]["irb110"]["success"] == 1
+    assert result["aborted"] is None
+
+
+def test_a_t56sb21_404_is_a_failure_not_unpublished(factory):
+    result = run(
+        factory,
+        Fetcher({}),
+        date(2010, 1, 1),
+        date(2010, 1, 1),
+        feeds=["t56sb21"],
+        markets=["sii"],
+    )
+    counts = result["feeds"]["t56sb21"]
+    assert (counts["not_published"], counts["failed"]) == (0, 1)
+    assert "404" in counts["failed_units"][0]["error"]
+    assert result["status"] == "partial"
+
+
+def test_t56sb21_reapply_reads_the_stored_year_and_asks_nothing(factory):
+    with factory() as db:
+        for code in ("1101", "4414", "6452"):
+            add_instrument(db, "TWSE", code, [date(2018, 6, 1), date(2018, 10, 1)])
+        db.commit()
+    year = date(2018, 1, 1)
+    first = run(
+        factory,
+        Fetcher({ib.T56SB21_ENDPOINT: T56_2018}),
+        year,
+        year,
+        feeds=["t56sb21"],
+        markets=["sii"],
+    )
+    assert first["feeds"]["t56sb21"]["written"] == 5
+    with factory() as db:
+        row = db.scalar(
+            select(InsiderTransferDeclaration).where(
+                InsiderTransferDeclaration.row_no == 5
+            )
+        )
+        row.method_shares_raw = "edited"
+        db.commit()
+    again = run(
+        factory,
+        Fetcher({ib.T56SB21_ENDPOINT: AssertionError("asked")}),
+        year,
+        year,
+        feeds=["t56sb21"],
+        markets=["sii"],
+        reapply=True,
+    )
+    counts = again["feeds"]["t56sb21"]
+    assert again["requests"] == 0 and counts["reapplied"] == 1
+    assert (counts["updated"], counts["unchanged"], counts["inserted"]) == (1, 4, 0)
+    with factory() as db:
+        assert (
+            db.scalar(
+                select(InsiderTransferDeclaration.method_shares_raw).where(
+                    InsiderTransferDeclaration.row_no == 5
+                )
+            )
+            == "200,000 2,000,000"
+        )
+
+
+class _Response:
+    def __init__(self, status, content=b"ok"):
+        self.status_code, self.content = status, content
+
+
+def _replay(monkeypatch, answers):
+    calls = []
+
+    def answer(*args, **kwargs):
+        calls.append(args[0])
+        item = answers.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return _Response(item)
+
+    monkeypatch.setattr(ib.httpx, "get", answer)
+    monkeypatch.setattr(ib.httpx, "post", answer)
+    return calls
+
+
+def test_fetch_retries_429_5xx_and_transport_errors_after_5_10_20_seconds(monkeypatch):
+    import httpx
+
+    slept = []
+    calls = _replay(monkeypatch, [429, 502, httpx.ConnectError("reset"), 200])
+    answer, retries = ib.fetch_official(
+        "POST", ib.T56SB21_ENDPOINT, {"TYPEK": "sii"}, sleep=slept.append
+    )
+    assert (answer.status, retries) == (200, 3)
+    assert slept == [5.0, 10.0, 20.0] and len(calls) == 4
+
+
+def test_fetch_gives_up_after_the_retries_and_fails_other_statuses(monkeypatch):
+    slept = []
+    _replay(monkeypatch, [503, 503, 503, 503])
+    with pytest.raises(sources.OfficialDataError, match="retry exhausted"):
+        ib.fetch_official(
+            "GET", "https://siis.twse.com.tw/x.HTM", None, sleep=slept.append
+        )
+    assert slept == [5.0, 10.0, 20.0]
+    _replay(monkeypatch, [403])
+    with pytest.raises(sources.OfficialDataError, match="answered 403"):
+        ib.fetch_official(
+            "GET", "https://siis.twse.com.tw/x.HTM", None, sleep=slept.append
+        )
+    _replay(monkeypatch, [404])
+    answer, retries = ib.fetch_official(
+        "GET", "https://siis.twse.com.tw/x.HTM", None, sleep=slept.append
+    )
+    assert (answer.status, retries) == (404, 0)
+
+
 def test_failed_requests_in_a_row_stop_the_run(factory):
     fetch = Fetcher(
         {

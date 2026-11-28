@@ -595,8 +595,8 @@ class InsiderTransferDeclaration(Base):
     change (``change_note``) is a row of its own, the first one stays.
     ``role_raw`` is the 申報人身分 as written; ``insider_type``, ``relation``
     and ``via_trustee`` split it, NULL when it does not split.  The share counts
-    of a row filed before 2003-05-01 whose share cells are all 0 (the site's
-    placeholder of 2002-08..2003-04) are NULL.  The names are the official
+    of a row filed before 2003-05-01 whose share cells are all 0 or blank (the
+    site's placeholder of 2002-08..2003-04) are NULL.  The names are the official
     public filing's; they stay in the research database (never in Git, a page,
     an Issue or a PR).  A signal day T uses only ``filed_date < T``.
     """

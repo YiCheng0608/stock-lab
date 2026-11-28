@@ -18,8 +18,8 @@ Each feed, market and period is one ``ingestion_runs`` row (``RUN_TYPE``, reques
 key ``insider_backfill:<feed>:<market>:<YYYY-MM|YYYY>``): the manifest.  A month
 already ``success`` is not asked again; a year is not asked again once it was
 asked after it ended (the year still running is asked again, its rows replaced).
-A 404 is ``not_published`` (a month not made yet), never a failure, and is asked
-again on the next run.  ``reapply`` sends no request: it rereads the stored raw of
+A siis 404 is ``not_published`` (a month not made yet), never a failure, and is
+asked again on the next run; a ``t56sb21`` 404 fails (the endpoint moved).  ``reapply`` sends no request: it rereads the stored raw of
 every unit that has one and rewrites the rows (``changed 0`` when nothing
 differs).  One commit a unit, so a stopped run resumes.
 
@@ -29,7 +29,7 @@ columns are not the known ones or with a number that does not read, and a
 it is written.  An answer of MOPS's block page (查詢過於頻繁, ``BLOCK_MARKERS``)
 stops the feed.  A 0 of the answer is 0, a blank is NULL; the share counts of a
 ``t56sb21`` row filed before ``PLACEHOLDER_BEFORE`` whose share cells are all 0
-or blank are NULL (decision 7233121423 item 4).
+or blank are NULL (decision 7235256756).
 
 The codes go to the research DB's instruments with a bar in the month (of the
 report, or of the filing), the report's board first and the other one next (a
@@ -91,8 +91,8 @@ T56SB21_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t56sb21"
 # 404 before), t56sb21 rows from 2002-08-01 (2001 answers 無持股轉讓之情形).
 IRB_FIRST_MONTH = date(2003, 8, 1)
 T56SB21_FIRST_YEAR = 2002
-# Decision 7233121423 item 4: before this, a row's share cells all 0 are the
-# site's placeholder, kept NULL.
+# Decision 7235256756 (#1133): before this, a row whose share cells are all 0
+# or blank is the site's placeholder; its share counts are kept NULL.
 PLACEHOLDER_BEFORE = date(2003, 5, 1)
 
 RUN_TYPE = "insider_backfill_period"
@@ -937,6 +937,12 @@ def backfill(
                             raise OfficialDataError(f"request failed: {exc}") from exc
                         failures_in_a_row[host] = 0
                         counts["retries"] += retries
+                        if answer.status == 404 and feed.yearly:
+                            # The MOPS ajax endpoint is not a file that comes
+                            # later: a 404 means it moved.
+                            raise OfficialDataError(
+                                f"official endpoint answered 404: {url}"
+                            )
                         if answer.status == 404:
                             counts["not_published"] += 1
                             run.status = "not_published"

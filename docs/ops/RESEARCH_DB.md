@@ -656,10 +656,10 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 | `irb130` | 同上，`IRB130` | `insider_pledges_monthly` | `siis_irb130` | 2003-08 | 每市場每月 1 個 |
 | `t56sb21` | `POST https://mopsov.twse.com.tw/mops/web/ajax_t56sb21`，整年一次（`smonth=01&emonth=12`） | `insider_transfer_declarations` | `mops_t56sb21` | 2002 | 每市場每年 1 個 |
 
-- **manifest**：每個 feed、市場與月（年）一列 `ingestion_runs`（`run_type=insider_backfill_period`、`request_key=insider_backfill:<feed>:<sii|otc>:<YYYY-MM|YYYY>`、`metadata_json` 記 raw id、`asked_on` 與計數），一個單位一個 commit。月報 `success` 的月重跑不再請求（`done_before`）。轉讓申報的年要在該年結束後問過一次才算完成：還沒結束的年重跑會再問，整年的列換成新的回應（以 raw＋列序為鍵，舊列刪掉）。`failed` 的單位重跑會再問；404 記 `not_published`（還沒產生的月，例如次月 18 日前的上個月），不算失敗、下次再問；早於起點的月份不請求，也計 `not_published`。`--reapply` 完全不送請求：有已存 raw 的單位改讀 raw 重寫，沒有差異時 `changed 0`。
+- **manifest**：每個 feed、市場與月（年）一列 `ingestion_runs`（`run_type=insider_backfill_period`、`request_key=insider_backfill:<feed>:<sii|otc>:<YYYY-MM|YYYY>`、`metadata_json` 記 raw id、`asked_on` 與計數），一個單位一個 commit。月報 `success` 的月重跑不再請求（`done_before`）。轉讓申報的年要在該年結束後問過一次才算完成：還沒結束的年重跑會再問，整年的列換成新的回應（以 raw＋列序為鍵，舊列刪掉）。`failed` 的單位重跑會再問；月報的 404 記 `not_published`（還沒產生的月，例如次月 18 日前的上個月），不算失敗、下次再問；`t56sb21` 是查詢端點，404 代表端點變了，記失敗；早於起點的月份不請求，也計 `not_published`。`--reapply` 完全不送請求：有已存 raw 的單位改讀 raw 重寫，沒有差異時 `changed 0`。
 - **raw**：回應原文的位元組以 base64 存進 raw JSON（`content_base64`，另記 method、form、狀態碼），月報存在 `raw/siis/`、轉讓申報 `raw/mops/`。`siis` 檔看 BOM：`FF FE`／`FE FF` 是 UTF-16（2013-07 上櫃兩份），其餘以 cp950 讀（Big5，名稱欄有少數罕用字讀成 U+FFFD，計入 `names_replaced`；代號與數字不受影響）。
 - **整份失敗、不猜**：表頭 `[IRB110]`／`[IRB130]` 不是請求的報表、「資料年月」不是請求的月份、沒有「資料日期」、欄名不是已知的版面、某列格數不對或沒有代號、代號重複、某個數字格讀不懂、表是空的，都整份記失敗，那份不寫任何列；回應照樣存 raw。轉讓申報的列數不等於表尾「總計：N筆」、申報日不在請求的年、身分／姓名／轉讓方式空白、期間或「是否申報持股未完成轉讓」讀不懂，也整份失敗。回「無持股轉讓之情形」寫 0 列（`no_transfer`）。回 MOPS 的封鎖頁（「查詢過於頻繁」等 `BLOCK_MARKERS`）就停下 `t56sb21`，輸出的 `blocked` 記原因。
-- **值**：回應裡的 0 照存 0，空白存 NULL。轉讓申報申報日早於 2003-05-01、而且該列所有股數格（轉讓股數、盤中最大、六個持股欄）都是 0 或空白的列，股數存 NULL（網站 2002-08～2003-04 的佔位 0，[#1129 決定](https://github.com/YiCheng0608/stock-lab/issues/1129#issuecomment-7233121423)第 4 項；計入 `placeholder_rows`）。預定轉讓方式可多種並列（`一般交易 盤後定價交易`），方式與股數照原文存 `method_raw`、`method_shares_raw`。
+- **值**：回應裡的 0 照存 0，空白存 NULL。轉讓申報 2002-08～2003-04 的佔位 0 存 NULL，判準見 [DATA_SOURCES](../DATA_SOURCES.md#內部人持股設質與轉讓申報)（計入 `placeholder_rows`）。預定轉讓方式可多種並列（`一般交易 盤後定價交易`），方式與股數照原文存 `method_raw`、`method_shares_raw`。
 - **身分**：月報的身分就是欄（董監合計、經理人、大股東）。轉讓申報存原文 `role_raw`，另拆 `insider_type`（`director`、`supervisor`、`manager`、`major_holder`、`specific_person`，子公司的前面加 `subsidiary_`）、`relation`（`self`、`spouse`、`minor_child`、`nominee`＝利用他人名義持有者；法人董監代表人是 `representative`、`representative_spouse`、`representative_minor_child`、`representative_nominee`）與 `via_trustee`（身分含「及由受託人持有者」是 1）；對不上這個樣式的留 NULL、不猜。變更申報（`change_note` 有「本單為變更…之申報」）是另一列，原來那列照留。
 - **代號對照**：月報代號對研究 DB 該月有日線的 `stock`／`ipo` 標的，先找報表所在市場的交易所（`sii`→TWSE、`otc`→TPEx），沒有再找另一個（轉板當月列在新市場的報表，舊市場的標的當月有日線；計入 `cross_market`）；轉讓申報以申報日所在的月對。都沒有的代號只計 `unmatched`（`metadata_json.unmatched_codes`），不建標的。同一家當月已由另一市場的報表寫入時，計 `duplicate`、不覆蓋。研究 DB 上市日線從 2004-02-11、上櫃從 2007-04-23 起，所以更早的月報與轉讓申報全部是 `unmatched`。
 - **請求規則**：同一 host 間隔至少 3.5 秒；台北 21:15～23:30 與偶數整點前後 10 分鐘不送，程序等到時段過了再接著送；連線錯誤、429、5xx 隔 5、10、20 秒重試（計 `retries`），其他狀態碼記失敗；同一 host 連續 5 個請求失敗就停（`aborted`）。只在有 `research-db.json` 的 DB 跑，否則 `refused`、exit 2；持有維護模式。
@@ -668,6 +668,7 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 
 ```bash
 # IMG＝含 #1133 的 backend image；R 同「跑一批」。研究 volume 同時只有一個寫入者：先 docker ps
+# 開跑前 df -h / 至少 5 GiB 可用；不夠就停在請求之前、在 #1133 提問，不刪任何資料（#1129 決定第 7 項）
 docker run --rm --network none "${R[@]}" "$IMG" python -B -m worker.cli init-db
 docker run -d --name research-1133-insider "${R[@]}" "$IMG" \
   sh -c 'python -B -m worker.cli insider backfill --start 2002-01 --end <最新一期的月> > /data/logs/insider.json 2> /data/logs/insider.err; echo $? > /data/logs/insider.exit'
