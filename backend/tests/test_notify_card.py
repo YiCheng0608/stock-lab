@@ -147,7 +147,9 @@ def test_the_card_shows_the_texts_picks_in_its_words():
         assert f'<span class="name line">{pick.head}</span>' in html
         assert f"<b>{pick.head}</b>｜{pick.method}" in text
         assert pick.levels in text
-        assert all(f">{notify_card.esc(line)}</div>" in html for line in pick.level_lines)
+        assert all(
+            f">{notify_card.esc(line)}</div>" in html for line in pick.level_lines
+        )
     assert '<div class="corp line">（除權息，價位以 09/04 為基準）</div>' in html
     page = Page(html)
     page_text = "".join(page.text)
@@ -539,12 +541,23 @@ def test_the_images_chromium_cuts_no_levels_or_sector_line(private_temp):
     view = _view(
         [
             _pick(1, "2330", "台積電", WIDE, corporate_action_on_session=True),
-            _pick(2, "3008", "大立光", {**WIDE, "entry": {"type": "pullback", "low": 1233.0, "high": 1286.5}}),
+            _pick(
+                2,
+                "3008",
+                "大立光",
+                {**WIDE, "entry": {"type": "pullback", "low": 1233.0, "high": 1286.5}},
+            ),
         ]
     )
     view["sectors"] = [
         {"name": name, "direction_text": "正負互見"}
-        for name in ("半導體業", "電腦及週邊設備業", "光電業", "電子零組件業", "其他電子業")
+        for name in (
+            "半導體業",
+            "電腦及週邊設備業",
+            "光電業",
+            "電子零組件業",
+            "其他電子業",
+        )
     ]
     card = _card(view, CARD_US)
     html = notify_card.card_html(card)
@@ -556,7 +569,9 @@ def test_the_images_chromium_cuts_no_levels_or_sector_line(private_temp):
         (work / "card.html").write_text(html, encoding="utf-8")
         command = [
             arg
-            for arg in notify_card.browser_command(BROWSER, work, notify_card.card_height(card))
+            for arg in notify_card.browser_command(
+                BROWSER, work, notify_card.card_height(card)
+            )
             if not arg.startswith("--screenshot")
         ]
         command.insert(-1, "--dump-dom")

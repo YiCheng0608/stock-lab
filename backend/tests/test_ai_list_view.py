@@ -640,7 +640,9 @@ def test_an_empty_list_sends_its_reason(db):
     assert '<div class="reason">今天 AI 沒有列股票：大盤偏空、信心不低</div>' in html
     assert notify.caption(card) == "<b>AI 名單 09/07（一）</b>・0 檔・AI 推論，未經驗證"
     p = notify_card
-    without = notify.Content(MONDAY, dataclasses.replace(card.ai, empty=None), card.us, 3)
+    without = notify.Content(
+        MONDAY, dataclasses.replace(card.ai, empty=None), card.us, 3
+    )
     assert p.card_height(card) == p.card_height(without) + p.AI_REASON_H
 
 
@@ -672,5 +674,8 @@ def test_the_cards_levels_are_two_lines_and_sectors_one_each(db):
     )
     assert card.ai.picks[2].level_lines == ("價位未通過核對，未顯示",)
     html = notify_card.card_html(card)
-    assert '<div class="levels line">停損 226.00｜目標 243.50／254.50｜RR 1.50</div>' in html
+    assert (
+        '<div class="levels line">停損 226.00｜目標 243.50／254.50｜RR 1.50</div>'
+        in html
+    )
     assert '<div class="sector line">PCB 可能正向</div>' in html

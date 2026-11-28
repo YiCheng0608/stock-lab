@@ -2838,11 +2838,7 @@ def ai_list_section(text: Text) -> tuple[int, int]:
     end -1 when no rule-list summary follows (T30 fails then)."""
 
     start = next(
-        (
-            n
-            for n, line in enumerate(text.lines)
-            if line == AI_LIST_TITLE
-        ),
+        (n for n, line in enumerate(text.lines) if line == AI_LIST_TITLE),
         -1,
     )
     if start < 0:
@@ -2931,7 +2927,9 @@ def t30(run: Run) -> str:
         return f"status={data.get('status')}：`{failure['text'] if failure else AI_LIST_MISSING}`"
     head = ai_list_head(data)
     second = lines[1] if len(lines) > 1 else None
-    expect(second == head, f"標題 `{AI_LIST_TITLE}` 的下一行是 {second!r}，預期 `{head}`")
+    expect(
+        second == head, f"標題 `{AI_LIST_TITLE}` 的下一行是 {second!r}，預期 `{head}`"
+    )
     meta = f"模型 {data.get('llm_model') or '未記錄'} · 提示 {data.get('prompt_version')} · {AI_LIST_MARK}"
     expect(meta in lines, f"段內缺 `{meta}`")
     badge = (
