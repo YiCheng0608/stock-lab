@@ -229,7 +229,7 @@ def _candidates(count=2, inference=True):
 # whose title line starts `#<rank> <symbol> <name>`, then the opened detail.
 TODAY_CANDIDATES = (
     "今日名單\n我的追蹤\n"
-    "今日名單\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
+    "規則名單\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
     "#1 9100 示範一 上市 · 半導體（產業 #1）\n突破型\n2026/10/16 收盤已突破 21.10 元\n"
     "收盤（元）\n21.10\n+0.48%\nRR\n1.60 倍\nAI 推論 ▸\n"
     "AI 進出點說明\nAI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a\n"
@@ -270,15 +270,16 @@ def test_t7_fails_on_the_old_candidate_rows(tmp_path):
 
 
 def test_t7_reads_the_section_title_not_the_navbar_link(tmp_path):
-    # #493: the navbar 今日名單 comes first; the date must follow the section title.
-    page = TODAY_CANDIDATES.replace("我的追蹤\n今日名單\n", "我的追蹤\n", 1)
+    # #493: the navbar 今日名單 comes first; since #1146 the section title is 規則名單 (the
+    # rule list folded under the AI list), and the navbar link is never taken for it.
+    page = TODAY_CANDIDATES.replace("規則名單\n資料", "資料", 1)
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
         {"today-1280": page},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    with pytest.raises(page_checks.Fail, match="`今日名單` 下一行是 '我的追蹤'"):
+    with pytest.raises(page_checks.Fail, match="缺整行 `規則名單`"):
         page_checks.t7(run)
 
 
@@ -354,7 +355,7 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
-        {"today-1280": "今日名單\n資料 2026/10/16\n2 檔\n"},
+        {"today-1280": "規則名單\n資料 2026/10/16\n2 檔\n"},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
     with pytest.raises(page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items"):
@@ -627,9 +628,9 @@ def test_today_shots_include_the_market_page():
 
 # The today page's one market line (Issue 549): the two indexes, the date, the link.
 SUMMARY_PAGE = (
-    "今日名單\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
+    "規則名單\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
     "大盤\n加權 46,041.43 -1.81%\n櫃買 381.69 -3.47%\n資料 2026/10/22\n看大盤 →\n"
-    "條件已成立 · 依評分排序\n今日名單\n資料 2026/10/16\n2 檔\n"
+    "條件已成立 · 依評分排序\n規則名單\n資料 2026/10/16\n2 檔\n"
 )
 
 
@@ -1086,15 +1087,15 @@ def test_t16_fails_on_a_wrong_cell_order_or_a_us_row(tmp_path):
 
 
 def test_t12_needs_the_candidates_before_groups_and_no_news_card(tmp_path):
-    page = "今日名單\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n"
+    page = "規則名單\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n"
     run = FakeRun(tmp_path, {}, {"today-1280": page})
-    assert "`今日名單`" in page_checks.t12(run)
-    run = FakeRun(tmp_path, {}, {"today-1280": "今日名單\n資料 2026/10/16\n"})
+    assert "`規則名單`" in page_checks.t12(run)
+    run = FakeRun(tmp_path, {}, {"today-1280": "規則名單\n資料 2026/10/16\n"})
     with pytest.raises(page_checks.Fail, match="缺整行 `熱門族群`"):
         page_checks.t12(run)
-    swapped = "熱門族群\n今日名單\n"
+    swapped = "熱門族群\n規則名單\n"
     run = FakeRun(tmp_path, {}, {"today-1280": swapped})
-    with pytest.raises(page_checks.Fail, match="區塊順序 `熱門族群` → `今日名單`"):
+    with pytest.raises(page_checks.Fail, match="區塊順序 `熱門族群` → `規則名單`"):
         page_checks.t12(run)
     # Issue 625: the news card left the home page.
     run = FakeRun(tmp_path, {}, {"today-1280": page + "重點新聞\n"})
@@ -1395,9 +1396,9 @@ T20_CARD = (
     "規則價位線：進場 21.10 元（虛線）、停損 20.00 元、目標 23.00 元\n"
     "最近 130 根日線\n"
 )
-T20_CLOSED = "今日名單\n2 檔\n" + T20_ROW_1 + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
+T20_CLOSED = "規則名單\n2 檔\n" + T20_ROW_1 + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
 T20_OPEN = (
-    "今日名單\n2 檔\n" + T20_ROW_1 + T20_CARD + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
+    "規則名單\n2 檔\n" + T20_ROW_1 + T20_CARD + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
 )
 
 
@@ -1444,7 +1445,7 @@ def test_t20_fails_before_issue_665_when_the_toggle_is_missing(tmp_path):
         (T20_OPEN, T20_OPEN, r"390 初次載入就有 K 線卡標題 \['9100 示範1'\]"),
         (
             T20_CLOSED,
-            "今日名單\n" + T20_ROW_1 + T20_ROW_2 + T20_CARD + "熱門族群\n",
+            "規則名單\n" + T20_ROW_1 + T20_ROW_2 + T20_CARD + "熱門族群\n",
             "不在第 1 列與下一列之間",
         ),
         (
@@ -2789,7 +2790,7 @@ US_LINE = (
 )
 SOX_ROW = "#1 2330 台積電 費半 +2.04% 上市 · 半導體（產業 #1）"
 US_PAGE = (
-    "今日名單\n10 檔\n"
+    "規則名單\n10 檔\n"
     f"{US_LINE}\n"
     f"{SOX_ROW}\n"
     "#2 2881 富邦金 上市 · 金融（產業，未排名）\n"
@@ -2898,7 +2899,7 @@ def _preopen(status="checked", news=(2, 0)):
 
 PREOPEN_LINE = "開盤前檢查 2026/11/16 08:20 · 隔夜新聞 1 檔"
 PREOPEN_PAGE = (
-    "今日名單\n10 檔\n"
+    "規則名單\n10 檔\n"
     f"{US_LINE}\n"
     f"{PREOPEN_LINE}\n"
     "#1 2330 台積電 費半 +2.04% 上市 · 半導體（產業 #1）\n"
@@ -2974,7 +2975,7 @@ def test_t25_fails_on_a_wrong_line_mark_or_panel(tmp_path):
 
 # The 今日名單 head before Issue 729 (Issue 693's line, the T+1 clause and the disclaimer) and after it.
 HEAD_BEFORE_729 = (
-    "今日名單\n10 檔\n"
+    "規則名單\n10 檔\n"
     "2026/11/13 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。評分只用於排序，不代表勝率或預期報酬。\n"
     "順勢籌碼型 · 策略說明 →\n"
     "現行規則尚無證據：照名單價位進出，回測扣成本後沒有贏過同日母體。 研究結論 →\n"
@@ -3535,7 +3536,7 @@ T26_ROWS = (
 )
 T26_CARD = "9101 示範晶圓\n日K\n週K\n最近 130 根日線\n"
 T26_PAGE = (
-    "今日名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n"
+    "規則名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n"
     "主流族群前 20\n2 檔\n"
     + T26_DEFINITION
     + "\n"
@@ -3730,7 +3731,7 @@ T27_ROWS = (
     "#3 9204 示範新上櫃 上櫃\n距一年高點 —\n收盤（元）\n20.00\n+0.50%\n"
 )
 T27_PAGE = (
-    "今日名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n接近年高前 20\n"
+    "規則名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n接近年高前 20\n"
     "接近年高前 20\n3 檔\n"
     + T27_DEFINITION
     + "\n"
@@ -3913,7 +3914,7 @@ T28_ROWS = (
     "盈餘殖利率 8.05% · 營收年增（9 月）+3.12% · 2026Q3 EPS 1.06（去年同季 -0.50）\n"
     "收盤（元）\n50.00\n-0.40%\n"
 )
-T28_TABS = "今日名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n接近年高前 20\n盈餘殖利率前 20\n"
+T28_TABS = "規則名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n接近年高前 20\n盈餘殖利率前 20\n"
 T28_PAGE = (
     T28_TABS
     + "盈餘殖利率前 20\n2 檔\n前瞻觀察（未通過驗證）\n"
@@ -4176,71 +4177,76 @@ def test_t29_without_a_list_in_the_window(tmp_path):
     assert "沒有近 60 日的名單" in page_checks.t29(run)
 
 
-# ---- T30: 早盤 AI 判讀 (#1042) ----
+# ---- T30: AI 名單 (#1146) ----
 
-PREMARKET_LEVELS = {
-    "entry_type": "breakout",
-    "entry": 21.1,
-    "entry_zone": {"low": 21.1, "high": 21.1},
-    "invalid_price": 20.05,
+AI_LEVELS = {
+    "entry": {"type": "breakout", "low": 21.1, "high": 21.3},
+    "stop": 20.05,
     "target_1": 22.78,
+    "target_2": None,
+    "risk_reward": 1.6,
+    "valid_sessions": 5,
+    "valid_until": "2099-12-31",
 }
 
 
-def _premarket(status="done", **change):
+def _ai_list(**change):
     data = {
-        "status": status,
+        "status": "done",
+        "session_date": "2026-10-16",
+        "is_today": False,
+        "finished_at": "2026-10-16T00:22:00+00:00",
         "llm_model": "claude-sonnet-5-5",
-        "prompt_version": "premarket_v1",
-        "reason_text": None,
-        "market": {
-            "reasons": [
-                {
-                    "text": "根據美股，推論偏多",
-                    "refs": [{"kind": "news", "news_id": 1, "label": "示範新聞標題"}],
-                }
-            ]
+        "prompt_version": "ai_list_v1",
+        "failure": {
+            "session_date": "2026-10-19",
+            "text": "10/19 的 AI 名單沒有產出：呼叫逾時",
         },
-        "sectors": [],
-        "stocks": [
+        "picks": [
             {
+                "rank": 1,
                 "symbol": "9100",
                 "name": "示範一",
-                "on_today_list": True,
-                "action_text": "維持",
-                "levels": PREMARKET_LEVELS,
-                "reasons": [],
+                "method_text": "突破 · 技術面＞消息 · 把握中",
+                "levels": AI_LEVELS,
+                "levels_text": None,
+                "expired_text": None,
+                "corporate_action_text": "名單日後有除權息，價位以 10/15 收盤為基準，今天的漲跌停與參考價可能不同",
             },
             {
+                "rank": 2,
                 "symbol": "9204",
                 "name": "示範生技",
-                "on_today_list": False,
-                "action_text": "暫緩",
-                "reasons": [],
+                "method_text": "題材發酵 · 族群 · 把握低",
+                "levels": None,
+                "levels_text": "價位未通過核對，未顯示",
+                "expired_text": None,
+                "corporate_action_text": None,
             },
         ],
-        "input_gaps": ["台指期夜盤無資料"],
     }
     return {**data, **change}
 
 
-PREMARKET_BLOCK = (
-    "早盤 AI 判讀\nAI 推論\n2026/10/19 開盤前 · 模型 claude-sonnet-5-5 · 提示 premarket_v1\n"
-    "大盤 偏多（把握中）\n根據美股，推論偏多\n示範新聞標題\n"
-    "今日名單的股票（1 檔）\n9100 示範一 · 維持\n規則價位 進場 21.10｜停損 20.05｜目標一 22.78\n"
-    "候選池其他股票（1 檔）\n9204 示範生技 · 暫緩\n根據缺資料，推論暫緩\n"
-    "資料缺口\n夜盤缺 12.50 點的資料\n判讀輸入的資料缺口：台指期夜盤無資料\n"
+AI_BLOCK = (
+    "AI 名單 · 2026/10/16 開盤前產出（08:22）\n10/16 的名單\nAI 推論，未經驗證\n"
+    "10/19 的 AI 名單沒有產出：呼叫逾時\n"
+    "模型 claude-sonnet-5-5 · 提示 ai_list_v1 · AI 推論，未經驗證\n"
+    "大盤 偏多（把握中） · 依據：美股\n根據美股，推論偏多\n"
+    "1 9100 示範一 突破 · 技術面＞消息 · 把握中\n"
+    "進場 站上 21.10（不追價 21.30）｜停損 20.05｜目標一 22.78｜RR 1.60 倍｜有效至 12/31\n"
+    "名單日後有除權息，價位以 10/15 收盤為基準，今天的漲跌停與參考價可能不同\n"
+    "根據收盤創新高，推論突破\n"
+    "2 9204 示範生技 題材發酵 · 族群 · 把握低\n價位未通過核對，未顯示\n根據族群轉強，推論題材發酵\n"
+    "規則名單（背景計算，對答案用的基準） 2 檔\n"
 )
 
 
-def _t30_run(tmp_path, block=PREMARKET_BLOCK, data=None):
-    page = TODAY_CANDIDATES.replace("熱門族群\n", block + "熱門族群\n", 1)
+def _t30_run(tmp_path, block=AI_BLOCK, data=None):
+    page = TODAY_CANDIDATES.replace("規則名單\n資料", block + "規則名單\n資料", 1)
     return FakeRun(
         tmp_path,
-        {
-            "candidates": _candidates(),
-            "premarket-ai?list_date=2026-10-16": data or _premarket(),
-        },
+        {"candidates": _candidates(), "ai-list": data or _ai_list()},
         {"today-1280": page},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
@@ -4249,11 +4255,9 @@ def _t30_run(tmp_path, block=PREMARKET_BLOCK, data=None):
 def test_t30_passes_and_t8_leaves_the_blocks_badge_out(tmp_path):
     run = _t30_run(tmp_path)
     result = page_checks.t30(run)
-    assert (
-        "`AI 推論` 1 行" in result
-        and "2 檔（今日名單 1 檔有規則價位、其他沒有價位）" in result
-    )
-    # T8 still counts one badge per candidate note: the block's own is T30's.
+    assert "`AI 推論，未經驗證` 1 行" in result and "badge `10/16 的名單`" in result
+    assert "2 檔依名次（1 檔有價位、1 檔寫原因；除權息警示 1 檔）" in result
+    # T8 still counts one badge per candidate note: the block's is T30's.
     assert "`AI 推論` 2 行" in page_checks.t8(run)
     # The list's rank rows are not counted again (T7).
     assert "名次列 2" in page_checks.t7(run)
@@ -4262,140 +4266,63 @@ def test_t30_passes_and_t8_leaves_the_blocks_badge_out(tmp_path):
 @pytest.mark.parametrize(
     ("block", "message"),
     [
-        (PREMARKET_BLOCK.replace("AI 推論\n", "", 1), r"`AI 推論` 0 行"),
+        (AI_BLOCK.replace("AI 推論，未經驗證\n10/19", "10/19", 1), "`AI 推論，未經驗證` 0 行"),
+        (AI_BLOCK.replace("10/16 的名單\n", "", 1), "缺 badge `10/16 的名單`"),
+        (AI_BLOCK.replace("10/19 的 AI 名單沒有產出：呼叫逾時\n", ""), "缺失敗句"),
+        (AI_BLOCK.replace(" · 提示 ai_list_v1", ""), "段內缺 `模型 claude-sonnet-5-5 · 提示"),
+        (AI_BLOCK.replace("（08:22）", ""), "標題行是"),
+        (AI_BLOCK.replace("停損 20.05", "停損 20.00"), "9100 示範一 缺 `進場 站上 21.10"),
         (
-            PREMARKET_BLOCK.replace("AI 推論\n", "AI 推論\nAI 推論\n", 1),
-            r"`AI 推論` 2 行",
+            AI_BLOCK.replace("價位未通過核對，未顯示\n", "進場 站上 50.00｜停損 48.00\n"),
+            "9204 示範生技 缺 `價位未通過核對，未顯示`",
         ),
         (
-            PREMARKET_BLOCK.replace(" · 提示 premarket_v1", ""),
-            "缺 `模型 claude-sonnet-5-5 · 提示",
+            AI_BLOCK.replace("價位未通過核對，未顯示\n", "價位未通過核對，未顯示\n進場 站上 50.00\n"),
+            "9204 示範生技 沒有通過核對或已過期卻有價位",
         ),
-        (
-            PREMARKET_BLOCK.replace(
-                "· 暫緩\n", "· 暫緩\n規則價位 進場 50.00｜停損 48.00｜目標一 53.00\n", 1
-            ),
-            "9204 示範生技 不在今日名單卻有價位",
-        ),
-        (
-            PREMARKET_BLOCK.replace("規則價位 進場 21.10", "規則價位 進場 21.00"),
-            "9100 示範一 缺 `規則價位",
-        ),
-        (
-            PREMARKET_BLOCK.replace("9100 示範一 · 維持", "9100 示範一 · 暫緩"),
-            "9100 示範一 的動作不是 `維持`",
-        ),
-        (PREMARKET_BLOCK.replace("示範新聞標題\n", ""), "缺引用的新聞 `示範新聞標題`"),
-        (
-            PREMARKET_BLOCK.replace("判讀輸入的資料缺口：台指期夜盤無資料\n", ""),
-            "缺 `判讀輸入的資料缺口",
-        ),
+        (AI_BLOCK.replace("名單日後有除權息，價位以 10/15 收盤為基準，今天的漲跌停與參考價可能不同\n", ""), "缺除權息警示"),
+        (AI_BLOCK.replace(" 突破 · 技術面＞消息 · 把握中", " 突破"), "判讀方式不是"),
     ],
 )
 def test_t30_fails(tmp_path, block, message):
-    with pytest.raises(
-        page_checks.Fail, match=re.escape(message) if "`AI" not in message else message
-    ):
+    with pytest.raises(page_checks.Fail, match=re.escape(message)):
         page_checks.t30(_t30_run(tmp_path, block))
 
 
 def test_t30_fails_without_its_end_or_its_title(tmp_path):
-    run = _t30_run(tmp_path)
-    run.pages["today-1280"] = run.pages["today-1280"].replace(
-        "熱門族群\n#1\n半導體\n", ""
-    )
     with pytest.raises(page_checks.Fail, match="段落沒有終點"):
-        page_checks.t30(run)
-    with pytest.raises(page_checks.Fail, match="缺整行 `早盤 AI 判讀`"):
+        page_checks.t30(
+            _t30_run(tmp_path, AI_BLOCK.replace("規則名單（背景計算，對答案用的基準） 2 檔\n", ""))
+        )
+    with pytest.raises(page_checks.Fail, match="缺 `AI 名單` 開頭的標題行"):
         page_checks.t30(_t30_run(tmp_path, ""))
 
 
-@pytest.mark.parametrize(
-    ("data", "line"),
-    [
-        (_premarket("failed", reason_text="呼叫逾時"), "早盤 AI 判讀失敗：呼叫逾時"),
-        (
-            _premarket("rejected", reason_text="判讀格式不符"),
-            "早盤 AI 判讀失敗：判讀格式不符",
-        ),
-        (_premarket("missing"), "尚無早盤 AI 判讀（每個交易日 08:21 判讀）"),
-    ],
-)
-def test_t30_a_reading_not_done_is_one_line(tmp_path, data, line):
-    assert page_checks.t30(
-        _t30_run(tmp_path, f"早盤 AI 判讀\nAI 推論\n{line}\n", data)
-    ) == (f"status={data['status']}：`{line}`")
-    with pytest.raises(page_checks.Fail, match="段內缺"):
-        page_checks.t30(_t30_run(tmp_path, "早盤 AI 判讀\nAI 推論\n別的字\n", data))
+def test_t30_checks_the_order_of_the_picks(tmp_path):
+    first = "1 9100 示範一 突破 · 技術面＞消息 · 把握中\n"
+    lines = AI_BLOCK.split(first)
+    second_start = lines[1].index("2 9204")
+    swapped = lines[0] + lines[1][second_start:].replace("規則名單（", first + lines[1][:second_start] + "規則名單（")
+    with pytest.raises(page_checks.Fail, match="名次順序"):
+        page_checks.t30(_t30_run(tmp_path, swapped))
 
 
-def test_t30_takes_percents_ratios_and_news_titles_for_no_price(tmp_path):
-    # 3a forbids prices only (#1042 review 7198038610, 2).
-    data = _premarket()
-    data["stocks"][1]["reasons"] = [
+def test_t30_without_any_list_is_one_line(tmp_path):
+    data = _ai_list(status="missing", failure=None, picks=[], session_date=None)
+    block = "AI 名單\nAI 推論，未經驗證\n尚無 AI 名單（每個交易日 08:21 開盤前產出）\n規則名單（背景計算，對答案用的基準） 2 檔\n"
+    assert "status=missing" in page_checks.t30(_t30_run(tmp_path, block, data))
+    with pytest.raises(page_checks.Fail, match="尚無 AI 名單"):
+        page_checks.t30(_t30_run(tmp_path, block.replace("尚無 AI 名單（每個交易日 08:21 開盤前產出）\n", ""), data))
+
+
+def test_t30_mirrors_the_frontends_levels_line():
+    assert page_checks.ai_levels_text(
         {
-            "text": "x",
-            "refs": [{"kind": "news", "news_id": 2, "label": "示範生技營收 12.34 億"}],
+            "entry": {"type": "pullback", "low": 1234.5, "high": 1300},
+            "stop": 1200,
+            "target_1": 1400,
+            "target_2": 1450.5,
+            "risk_reward": 1.25,
+            "valid_until": "2026-12-03",
         }
-    ]
-    block = PREMARKET_BLOCK.replace(
-        "根據缺資料，推論暫緩\n",
-        "根據量比 1.85 倍、5 日漲 3.25%、量比1.20倍，推論暫緩\n示範生技營收 12.34 億\n",
-    )
-    assert "其他沒有價位" in page_checks.t30(_t30_run(tmp_path, block, data))
-    priced = block.replace("推論暫緩\n", "收盤 85.30，推論暫緩\n", 1)
-    with pytest.raises(page_checks.Fail, match="9204 示範生技 不在今日名單卻有價位"):
-        page_checks.t30(_t30_run(tmp_path, priced, data))
-
-
-def test_t30_and_the_readings_check_share_one_price_test(tmp_path):
-    # #1058 AC-4: T30 loads backend/worker/price_mentions.py by path, the function the
-    # reading's check (premarket_reading.prices_without_levels) calls; same examples, same
-    # answers on both sides.
-    from test_premarket_ai import PRICE_EXAMPLES, PRICE_NAMES, PRICE_TITLES
-    from worker.price_mentions import price_mentions
-
-    shared = ROOT / "backend" / "worker" / "price_mentions.py"
-    assert Path(page_checks.price_mentions.__code__.co_filename) == shared
-    for text, want in PRICE_EXAMPLES:
-        assert page_checks.premarket_prices(text, PRICE_TITLES, PRICE_NAMES) == want
-        assert price_mentions(text, PRICE_TITLES, PRICE_NAMES) == want, text
-
-
-@pytest.mark.parametrize(
-    ("line", "priced"),
-    [
-        ("推論 85 元附近有賣壓", True),
-        ("目標價 85 元的報告", True),
-        ("2026.11.26 公布，EPS 3.25 元，推論暫緩", False),
-        ("理由含價位，未顯示", False),
-    ],
-)
-def test_t30_uses_the_shared_test_on_a_stock_off_the_list(tmp_path, line, priced):
-    block = PREMARKET_BLOCK.replace("根據缺資料，推論暫緩\n", line + "\n", 1)
-    run = _t30_run(tmp_path, block)
-    if priced:
-        with pytest.raises(
-            page_checks.Fail, match="9204 示範生技 不在今日名單卻有價位"
-        ):
-            page_checks.t30(run)
-    else:
-        page_checks.t30(run)
-
-
-def test_t30_takes_a_stock_named_with_yuan_for_no_price(tmp_path):
-    # #1060 review 1: the line 「2885 元大金 · 暫緩」 has no 「2885 元」.
-    data = _premarket()
-    data["stocks"][1].update(symbol="2885", name="元大金")
-    block = PREMARKET_BLOCK.replace("9204 示範生技 · 暫緩", "2885 元大金 · 暫緩")
-    assert "其他沒有價位" in page_checks.t30(_t30_run(tmp_path, block, data))
-    priced = block.replace("根據缺資料，推論暫緩\n", "元大金 85 元附近\n", 1)
-    with pytest.raises(page_checks.Fail, match="2885 元大金 不在今日名單卻有價位"):
-        page_checks.t30(_t30_run(tmp_path, priced, data))
-
-
-def test_t30_takes_prices_joined_by_a_slash(tmp_path):
-    # #1060 review 2: 「85.30/86.00」 is two prices, not a date.
-    block = PREMARKET_BLOCK.replace("根據缺資料，推論暫緩\n", "支撐 85.30/86.00\n", 1)
-    with pytest.raises(page_checks.Fail, match="9204 示範生技 不在今日名單卻有價位"):
-        page_checks.t30(_t30_run(tmp_path, block))
+    ) == "進場區 1,234.50～1,300.00｜停損 1,200.00｜目標一 1,400.00／二 1,450.50｜RR 1.25 倍｜有效至 12/03"

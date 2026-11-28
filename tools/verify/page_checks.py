@@ -1162,9 +1162,10 @@ RANK_ROW = re.compile(r"^#([0-9]+)\t")
 # symbol, name on one line). The hot group rows put `#1` on a line of its own, so the symbol
 # after the rank tells a candidate row.
 CANDIDATE_ROW = re.compile(r"^#([0-9]+) [0-9A-Z]+ ")
-# CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#510: no eyebrow); the
-# navbar has a 今日名單 link too and comes first, so the title is the last line that reads it.
-CANDIDATES_TITLE = "今日名單"
+# CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#510: no eyebrow): since #1146
+# the background rule list, folded under the AI list and titled 規則名單 (the 今日名單 tab and the
+# navbar link keep their names), so the title is the last line that reads it.
+CANDIDATES_TITLE = "規則名單"
 
 
 def candidates_title(text: Text) -> int:
@@ -1250,9 +1251,9 @@ def t8(run: Run) -> str:
         if "推論" in text.lines[row]
     ]
     expect(not problems, "；".join(problems))
-    # One 「AI 推論」 badge per AI note block, none repeated inside it; the 早盤 AI 判讀 block's own badge
-    # (#1042, its lines from its title to 熱門族群) is T30's.
-    start, end = premarket_section(text)
+    # One 「AI 推論」 badge per AI note block, none repeated inside it; the AI list's own badge
+    # (#1146, its lines from its title to the folded rule list) is T30's.
+    start, end = ai_list_section(text)
     notes = sum(
         1
         for n, line in enumerate(text.lines)
@@ -1443,7 +1444,7 @@ def t12(run: Run) -> str:
         f"區塊順序 `熱門族群` → `{CANDIDATES_TITLE}`，預期 `{CANDIDATES_TITLE}` 在前",
     )
     expect(not text.has("重點新聞"), "首頁仍有整行 `重點新聞`（#625 已移除）")
-    return "`今日名單`（{0}）→ `熱門族群`（{1}）；沒有 `重點新聞`".format(
+    return f"`{CANDIDATES_TITLE}`（{{0}}）→ `熱門族群`（{{1}}）；沒有 `重點新聞`".format(
         *(text.at(i) for i in found.values())
     )
 
@@ -2818,185 +2819,156 @@ def t29(run: Run) -> str:
     )
 
 
-# ---- T30: 早盤 AI 判讀 (#1042; UI_COPY_SPEC §10 早盤 AI 判讀, DESIGN_SYSTEM §7) ----
+# ---- T30: AI 名單 (#1146; UI_COPY_SPEC §10 AI 名單, DESIGN_SYSTEM §7) ----
 #
-# Mirrors frontend/src/today/premarketAi.ts (PREMARKET_AI_*, premarketAiState, premarketAiMeta,
-# premarketAiLevels, premarketAiStockName) and PremarketAiSection.tsx: the block sits after the
-# lists and ends at the page's fixed heading 熱門族群.
-PREMARKET_TITLE = "早盤 AI 判讀"
-PREMARKET_END = "熱門族群"
-PREMARKET_FAILED = "早盤 AI 判讀失敗："
-PREMARKET_MISSING = "尚無早盤 AI 判讀（每個交易日 08:21 判讀）"
-PREMARKET_INPUT_GAPS = "判讀輸入的資料缺口："
-PREMARKET_GAPS = "資料缺口"
-PREMARKET_JOIN = " · "
-PREMARKET_LISTED = "今日名單的股票"
-PREMARKET_OTHERS = "候選池其他股票"
-# 3a forbids prices, not percents, ratios, amounts, dates or a quoted news title: the same test
-# as the reading's check (premarket_reading.prices_without_levels, #1058), shared by path so
-# that page_checks imports nothing of the worker package (as db_facts).
-price_mentions = _load(
-    ROOT / "backend" / "worker" / "price_mentions.py", "price_mentions"
-).price_mentions
+# Mirrors frontend/src/today/aiList.ts (AI_LIST_*, aiListHead, aiListMeta, aiListStaleBadge,
+# aiLevelsText, aiNoLevelsText) and AiListSection.tsx: the block opens the 今日名單 tab and
+# ends at the folded rule list's summary (RULE_LIST_FOLD).
+AI_LIST_TITLE = "AI 名單"
+AI_LIST_MARK = "AI 推論，未經驗證"
+AI_LIST_MISSING = "尚無 AI 名單（每個交易日 08:21 開盤前產出）"
+RULE_LIST_FOLD = "規則名單（背景計算，對答案用的基準）"
+TAIPEI_TZ = timezone(timedelta(hours=8))
 
 
-def premarket_prices(line: str, titles=(), names=()) -> list[str]:
-    """The price wordings of LINE (price_mentions); TITLES are the cited news titles,
-    NAMES the (symbol, name) of the reading's stocks (「8069 元太 · 維持」 has no price)."""
+def ai_list_section(text: Text) -> tuple[int, int]:
+    """(title line, rule-list summary line) of the AI list; (-1, -1) without a title, and
+    end -1 when no rule-list summary follows (T30 fails then)."""
 
-    return price_mentions(line, titles, names)
-
-
-def premarket_section(text: Text) -> tuple[int, int]:
-    """(title line, 熱門族群 line) of the 早盤 AI 判讀 block; (-1, -1) without a title, and
-    end -1 when no 熱門族群 follows (T30 fails then; it does not count to the page's end)."""
-
-    start = text.find(PREMARKET_TITLE)
+    start = next(
+        (
+            n
+            for n, line in enumerate(text.lines)
+            if line == AI_LIST_TITLE or line.startswith(AI_LIST_TITLE + " · ")
+        ),
+        -1,
+    )
     if start < 0:
         return -1, -1
-    return start, text.find(PREMARKET_END, start + 1)
-
-
-def _premarket_price(value: Any) -> str | None:
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
-        return f"{value:,.2f}"
-    return None
-
-
-def premarket_levels(stock: dict) -> str | None:
-    """premarketAiLevels: the rule's levels on a today-list stock, None on any other."""
-
-    if not stock.get("on_today_list"):
-        return None
-    levels = stock.get("levels")
-    if not levels:
-        return "規則價位不完整"
-    zone = levels.get("entry_zone") or {}
-    stop, target = (
-        _premarket_price(levels.get("invalid_price")),
-        _premarket_price(levels.get("target_1")),
+    end = next(
+        (
+            n
+            for n in range(start + 1, len(text.lines))
+            if text.lines[n].startswith(RULE_LIST_FOLD)
+        ),
+        -1,
     )
-    if levels.get("entry_type") == "pullback":
-        low, high = (
-            _premarket_price(zone.get("low")),
-            _premarket_price(zone.get("high")),
-        )
-        entry = f"進場區 {low}～{high}" if low and high else None
+    return start, end
+
+
+def _mmdd(iso: str | None) -> str | None:
+    return f"{iso[5:7]}/{iso[8:10]}" if iso else None
+
+
+def ai_list_head(data: dict) -> str:
+    """aiListHead: 「AI 名單 · 2026/10/16 開盤前產出（08:22）」."""
+
+    day = data.get("session_date")
+    if not day:
+        return AI_LIST_TITLE
+    at = ""
+    if data.get("finished_at"):
+        moment = datetime.fromisoformat(data["finished_at"]).astimezone(TAIPEI_TZ)
+        at = f"（{moment:%H:%M}）"
+    return f"{AI_LIST_TITLE} · {day.replace('-', '/')} 開盤前產出{at}"
+
+
+def _ai_price(value: Any) -> str:
+    return f"{value:,.2f}"
+
+
+def ai_levels_text(levels: dict) -> str:
+    """aiLevelsText: 「進場 站上 233.00（不追價 236.50）｜停損 226.00｜目標一 243.50／二 254.50｜RR 1.50 倍｜有效至 12/02」."""
+
+    entry = levels["entry"]
+    if entry.get("type") == "breakout":
+        head = f"進場 站上 {_ai_price(entry['low'])}"
+        if entry["high"] > entry["low"]:
+            head += f"（不追價 {_ai_price(entry['high'])}）"
     else:
-        value = levels.get("entry")
-        value = _premarket_price(value if value is not None else zone.get("low"))
-        entry = f"進場 {value}" if value else None
-    if not entry or not stop or not target:
-        return "規則價位不完整"
-    return f"規則價位 {entry}｜停損 {stop}｜目標一 {target}"
+        head = f"進場區 {_ai_price(entry['low'])}～{_ai_price(entry['high'])}"
+    target = _ai_price(levels["target_1"])
+    if levels.get("target_2") is not None:
+        target += f"／二 {_ai_price(levels['target_2'])}"
+    parts = [head, f"停損 {_ai_price(levels['stop'])}", f"目標一 {target}"]
+    if isinstance(levels.get("risk_reward"), (int, float)):
+        parts.append(f"RR {levels['risk_reward']:.2f} 倍")
+    if levels.get("valid_until"):
+        parts.append(f"有效至 {_mmdd(levels['valid_until'])}")
+    return "｜".join(parts)
 
 
 @check("today", "T30")
 def t30(run: Run) -> str:
-    """#1042: the reading of the shown list (/premarket-ai?list_date=<candidates trading_date>) in one §7 block
-    between the lists and 熱門族群: one 「AI 推論」, the model and the prompt version; each stock's name and action,
-    the rule's levels on a today-list stock and no price on any other (3a); the cited news by title; the input's
-    data gaps. A reading that is not done is one line (failed／rejected／missing)."""
+    """#1146: the AI list (/ai-list) opens the 今日名單 tab in one §7 block before the folded rule
+    list: its date and 「AI 推論，未經驗證」 (AC-1), the 「MM/DD 的名單」 badge on a list of another day,
+    the failure line of a day without its own list (AC-2), each pick's rank, name and method in API
+    order, its levels or the sentence in their place (no price on a pick that failed its check), and
+    the corporate-action warning."""
 
-    listing = candidates(run)
-    day = listing.get("trading_date")
-    if not day:
-        return "沒有名單日，頁面不放早盤 AI 判讀"
-    data = run.get(f"premarket-ai?list_date={day}", "premarket-ai.json")
+    data = run.get("ai-list", "ai-list.json")
     text = run.text(TODAY)
-    start, end = premarket_section(text)
-    expect(start >= 0, f"缺整行 `{PREMARKET_TITLE}`")
-    expect(
-        end > start, f"`{PREMARKET_TITLE}` 之後缺整行 `{PREMARKET_END}`（段落沒有終點）"
-    )
-    lines = text.lines[start + 1 : end]
-    titles = [n for n, line in enumerate(text.lines) if line == CANDIDATES_TITLE]
-    expect(titles and titles[-1] < start, f"`{PREMARKET_TITLE}` 不在今日名單之後")
-    marks = sum(1 for line in lines if line == "AI 推論")
-    expect(marks == 1, f"段內整行 `AI 推論` {marks} 行，預期 1（§7 每區塊一個）")
-    status = data.get("status")
-    if status != "done":
-        want = (
-            f"{PREMARKET_FAILED}{data.get('reason_text') or '其他原因'}"
-            if status in ("failed", "rejected")
-            else PREMARKET_MISSING
-        )
-        expect(want in lines, f"status={status}，段內缺 `{want}`")
-        return f"status={status}：`{want}`"
-    meta = (
-        f"模型 {data.get('llm_model') or '未記錄'} · 提示 {data.get('prompt_version')}"
-    )
-    expect(any(meta in line for line in lines), f"段內缺 `{meta}`")
-    problems = []
-    stocks = data.get("stocks") or []
-    news = {
-        ref["label"]
-        for part in [data.get("market") or {}, *(data.get("sectors") or []), *stocks]
-        for reason in part.get("reasons") or []
-        for ref in reason.get("refs") or []
-        if ref.get("kind") == "news" and ref.get("label")
-    }
-    names = [
-        " ".join(part for part in (stock.get("symbol"), stock.get("name")) if part)
-        for stock in stocks
-    ]
-    pairs = [(stock.get("symbol") or "", stock.get("name") or "") for stock in stocks]
-    # premarketAiStockName and the action on one line (PREMARKET_AI_JOIN): 「9101 示範晶圓 · 維持」.
+    start, end = ai_list_section(text)
+    expect(start >= 0, f"缺 `{AI_LIST_TITLE}` 開頭的標題行")
+    expect(end > start, f"`{AI_LIST_TITLE}` 之後缺 `{RULE_LIST_FOLD}` 開頭的行（段落沒有終點）")
+    lines = text.lines[start:end]
+    marks = sum(1 for line in lines if line == AI_LIST_MARK)
+    expect(marks == 1, f"段內整行 `{AI_LIST_MARK}` {marks} 行，預期 1（§7 每區塊一個）")
+    failure = data.get("failure")
+    if failure:
+        expect(failure["text"] in lines, f"缺失敗句 `{failure['text']}`")
+    if data.get("status") != "done":
+        if not failure:
+            expect(AI_LIST_MISSING in lines, f"status={data.get('status')}，段內缺 `{AI_LIST_MISSING}`")
+        return f"status={data.get('status')}：`{failure['text'] if failure else AI_LIST_MISSING}`"
+    head = ai_list_head(data)
+    expect(lines[0] == head, f"標題行是 {lines[0]!r}，預期 `{head}`")
+    meta = f"模型 {data.get('llm_model') or '未記錄'} · 提示 {data.get('prompt_version')} · {AI_LIST_MARK}"
+    expect(meta in lines, f"段內缺 `{meta}`")
+    badge = None if data.get("is_today") else f"{_mmdd(data.get('session_date'))} 的名單"
+    if badge:
+        expect(badge in lines[:4], f"名單日不是今天，標題旁缺 badge `{badge}`")
+    picks = data.get("picks") or []
+    if not picks:
+        want = data.get("empty_text") or ""
+        expect(want in lines, f"空名單，缺 `{want}`")
+        return f"`{head}`；空名單 `{want}`"
+    heads = [f"{pick['rank']} {pick['symbol']} {pick.get('name') or ''}".strip() for pick in picks]
     at = [
-        next(
-            (
-                n
-                for n, line in enumerate(lines)
-                if line.startswith(name + PREMARKET_JOIN)
-            ),
-            -1,
-        )
-        for name in names
+        next((n for n, line in enumerate(lines) if line.startswith(name + " ")), -1)
+        for name in heads
     ]
-    # A stock's lines end at the next stock, group head, 資料缺口 or the input's gaps.
-    heads = [
-        n
-        for n, line in enumerate(lines)
-        if line.startswith((PREMARKET_LISTED, PREMARKET_OTHERS, PREMARKET_INPUT_GAPS))
-        or line == PREMARKET_GAPS
-    ]
-    for stock, name, n in zip(stocks, names, at):
+    problems = []
+    for pick, name, n in zip(picks, heads, at):
         if n < 0:
-            problems.append(f"缺 `{name}`")
+            problems.append(f"缺以 `{name} ` 開頭的列")
             continue
-        following = [m for m in at + heads if m > n]
+        if not lines[n].endswith(pick.get("method_text") or ""):
+            problems.append(f"{name} 的判讀方式不是 `{pick.get('method_text')}`：{lines[n]!r}")
+        following = [m for m in at if m > n]
         block = lines[n : min(following) if following else len(lines)]
-        levels = premarket_levels(stock)
-        if levels is None:
-            # A cited news title is the source's words (「營收 12.34 億」), not a price.
-            priced = [
-                line
-                for line in block
-                if line not in news
-                and (premarket_prices(line, news, pairs) or "規則價位" in line)
-            ]
+        if pick.get("levels"):
+            want = ai_levels_text(pick["levels"])
+            if want not in block:
+                problems.append(f"{name} 缺 `{want}`")
+        else:
+            want = pick.get("expired_text") or pick.get("levels_text")
+            if want not in block:
+                problems.append(f"{name} 缺 `{want}`")
+            priced = [line for line in block if line.startswith(("進場 ", "進場區 "))]
             if priced:
-                problems.append(f"{name} 不在今日名單卻有價位：{priced[0]!r}")
-        elif levels not in block:
-            problems.append(f"{name} 缺 `{levels}`")
-        action = stock.get("action_text") or ""
-        if not block[0].startswith(name + PREMARKET_JOIN + action):
-            problems.append(f"{name} 的動作不是 `{action}`：{block[0]!r}")
-    order = [n for stock, n in zip(stocks, at) if n >= 0]
-    expect(order == sorted(order), f"個股順序 {names} 與 API 不同")
-    problems += [
-        f"缺引用的新聞 `{title}`" for title in sorted(news) if title not in lines
-    ]
-    gaps = data.get("input_gaps") or []
-    if gaps:
-        want = PREMARKET_INPUT_GAPS + "；".join(gaps)
-        if want not in lines:
-            problems.append(f"缺 `{want}`")
+                problems.append(f"{name} 沒有通過核對或已過期卻有價位：{priced[0]!r}")
+        if pick.get("corporate_action_text") and pick["corporate_action_text"] not in block:
+            problems.append(f"{name} 缺除權息警示 `{pick['corporate_action_text']}`")
+    order = [n for n in at if n >= 0]
+    expect(order == sorted(order), f"名次順序 {heads} 與 API 不同")
     expect(not problems, "；".join(problems))
-    listed = sum(1 for stock in stocks if stock.get("on_today_list"))
+    shown = sum(1 for pick in picks if pick.get("levels"))
+    corporate = sum(1 for pick in picks if pick.get("corporate_action_text"))
     return (
-        f"`{PREMARKET_TITLE}` 到 `{PREMARKET_END}` {len(lines)} 行；`AI 推論` 1 行、`{meta}`；"
-        f"{len(stocks)} 檔（今日名單 {listed} 檔有規則價位、其他沒有價位）；引用新聞 {len(news)} 則；資料缺口 {len(gaps)} 項"
+        f"`{head}`、`{AI_LIST_MARK}` 1 行{f'、badge `{badge}`' if badge else ''}"
+        f"{'、失敗句' if failure else ''}；{len(picks)} 檔依名次（{shown} 檔有價位、"
+        f"{len(picks) - shown} 檔寫原因；除權息警示 {corporate} 檔）"
     )
 
 
