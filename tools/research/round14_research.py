@@ -287,7 +287,7 @@ def definitions() -> dict[str, Any]:
                 "eps_min": EPS_MIN,
                 "latest": LATEST_RULE,
                 "quarter_eps": "feature_evidence._quarter_eps",
-                "feature_evidence": features.VERSION,
+                "feature_evidence": features.SHARED_VERSION,
                 "sale": SALE,
             },
             "inst_sell_5q": {

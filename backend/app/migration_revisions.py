@@ -48,10 +48,12 @@ REVISIONS = (
     "0040_premarket_ai",
     "0041_valuation_shares",
     "0042_quarterly_statements",
-    # 0043 to 0050 are the research database's queued migrations (#1145).
     "0051_ai_list",
     # 0052 is #1149's (#1147 決定 7238340331).
     "0053_ai_list_scores",
+    # 0043 to 0050 are the research database's queued migrations (#1145); they
+    # come after 0053.
+    "0043_sbl_day_trade",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]

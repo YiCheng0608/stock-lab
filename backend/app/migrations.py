@@ -905,6 +905,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0053_ai_list_scores', CURRENT_TIMESTAMP)"
         )
     )
+    # 0043 only adds securities_lending_daily / day_trade_daily (#1089), made by
+    # create_all with their indexes; only the research database writes them.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0043_sbl_day_trade', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

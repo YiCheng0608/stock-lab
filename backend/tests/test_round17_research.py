@@ -232,7 +232,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "REFERENCE_STATUSES", ("delisted",)),
         (r14, "DEADLINES", ((3, 31, 12, -1), (5, 15, 3, 0), (8, 14, 6, 0), (11, 15, 9, 0))),
         (r14, "EVENT_DAY_RULE", "the first session on or after the deadline"),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         # the overlaps' lists
         (ex, "HYPOTHESES", _other(ex, "X8", "top", 19)),
         (ex, "BUYBACK_LOOKBACK", 10),

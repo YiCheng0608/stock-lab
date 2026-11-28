@@ -326,7 +326,7 @@ def definitions() -> dict[str, Any]:
         "hypotheses": HYPOTHESES,
         "order": ORDER,
         "short": SHORT_RULE,
-        "single_quarter": [SINGLE_QUARTER, features.VERSION],
+        "single_quarter": [SINGLE_QUARTER, features.SHARED_VERSION],
         "deadlines": [r14.DEADLINES, r14.EVENT_DAY_RULE],  # N2's events
         "features": {
             "st_20": {

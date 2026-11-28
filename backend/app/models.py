@@ -495,6 +495,79 @@ class SharesOutstandingDaily(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class SecuritiesLendingDaily(Base):
+    """One security's 借券賣出 of one session (Issue #1089).
+
+    TWSE ``TWT93U`` and TPEx ``margin/sbl`` (信用額度總量管制餘額表), in shares.  A
+    code the table does not list has no row (no data, never 0); a blank or ``-``
+    cell is NULL.  Only the research database is written
+    (``worker.sbl_daytrade_backfill``); the production one has the empty table.
+    """
+
+    __tablename__ = "securities_lending_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "trading_date",
+            "source",
+            name="uq_securities_lending_daily",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    # 當日賣出 (TWSE before 2012-03-19: 賣出, the same column).
+    sbl_sell_shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 當日還券; NULL in the TWSE layout before 2012-03-19 (only 庫存異動 there).
+    sbl_return_shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 當日餘額 (今日餘額); TWSE changed its formula on 2012-03-19, the balances
+    # before and after do not join.
+    sbl_balance_shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 備註 as published (X, Z, ! ...), stripped; NULL when blank.
+    note: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class DayTradeDaily(Base):
+    """One security's 當日沖銷交易 of one session (Issue #1089).
+
+    TWSE ``TWTB4U`` and TPEx ``intraday/stat`` (當日沖銷交易標的及成交量值): shares
+    and values (元).  Only that day's day-trade securities are listed; any other
+    code has no row (no data, never 0).  The exchanges revise a day until T+2; a
+    backfill reads the final values.  Only the research database is written.
+    """
+
+    __tablename__ = "day_trade_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id", "trading_date", "source", name="uq_day_trade_daily"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    day_trade_shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    day_trade_buy_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    day_trade_sell_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 暫停現股賣出後現款買進當沖註記 as published, stripped; NULL when blank and in
+    # the TPEx layout of 2014 (no such column).
+    sell_first_suspended: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

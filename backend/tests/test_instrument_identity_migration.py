@@ -44,6 +44,8 @@ CHILDREN = [
     "valuation_daily",
     "shares_outstanding_daily",
     "quarterly_statements",
+    "securities_lending_daily",
+    "day_trade_daily",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -282,6 +284,8 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     "valuation_daily",
                     "shares_outstanding_daily",
                     "quarterly_statements",
+                    "securities_lending_daily",
+                    "day_trade_daily",
                 }:
                     values.update(raw_payload_id=11)
                 if table.name == "tracking_plans":

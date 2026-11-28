@@ -236,7 +236,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "EVENT_DAY_RULE", "the first session on or after the date"),
         (r14, "EVENT_DAY_RULE", "the first session on or after the deadline"),
         (tool, "SINGLE_QUARTER", "the cumulative figure"),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         # the overlaps' lists
         (
             r14,

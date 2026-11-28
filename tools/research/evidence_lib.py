@@ -61,6 +61,15 @@ CHIP_FIELDS = (
     "borrowed_sell",
     "day_trade_ratio",
 )
+# Read from their own tables into ``Series.chips`` by ``load_panel`` (Issue
+# #1089): ``securities_lending_daily.sbl_sell_shares`` and
+# ``day_trade_daily.day_trade_shares``, shares.  An instrument the official table
+# does not list that day has no row: NaN, never 0.  ``_load_chips`` (and so the
+# round tools that call it) does not read them.
+LENDING_DAY_TRADE_FIELDS = {
+    "sbl_sell_shares": ("securities_lending_daily", "sbl_sell_shares"),
+    "day_trade_shares": ("day_trade_daily", "day_trade_shares"),
+}
 # A revenue month older than this many calendar days at T is not "the latest".
 REVENUE_STALE_DAYS = 80
 # The same for a quarter's end: the next quarter is due within about 135 days,
@@ -153,6 +162,7 @@ def load_panel(db: Path, start: date, raw_dir: Path) -> Panel:
             for instrument_id, instrument in instruments.items()
         }
         _load_chips(con, series, start)
+        _load_lending_day_trade(con, series, start)
         _load_revenues(con, series)
         _load_quarters(con, series)
         symbols = {
@@ -228,6 +238,38 @@ def _load_chips(
             continue
         for name, value in zip(CHIP_FIELDS, values):
             if value is not None:
+                item.chips[name][at] = float(value)
+
+
+def _load_lending_day_trade(
+    con: sqlite3.Connection,
+    series: dict[int, Series],
+    start: date,
+    end: date | None = None,
+) -> None:
+    """``LENDING_DAY_TRADE_FIELDS`` into ``chips``; NaN where no row or no table."""
+
+    tables = {
+        row[0]
+        for row in con.execute("select name from sqlite_master where type = 'table'")
+    }
+    until, extra = _until("trading_date", end)
+    for name, (table, column) in LENDING_DAY_TRADE_FIELDS.items():
+        for item in series.values():
+            item.chips[name] = array("d", [NAN]) * len(item.dates)
+        if table not in tables:
+            continue
+        rows = con.execute(
+            f"select instrument_id, trading_date, {column} from {table} "
+            f"where trading_date >= ?{until}",
+            (start.isoformat(), *extra),
+        )
+        for instrument_id, day, value in rows:
+            item = series.get(instrument_id)
+            if item is None or value is None:
+                continue
+            at = item.position.get(date.fromisoformat(day))
+            if at is not None:
                 item.chips[name][at] = float(value)
 
 

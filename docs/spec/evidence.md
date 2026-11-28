@@ -62,12 +62,13 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 ## 工具版本
 
-`feature_evidence.VERSION` 寫在報告標題與 `tables.json` 的 `version`；分組或判定規則一改就加一，並在報告寫明改了什麼、為什麼（研究規則第 3 條）。`explore_research` 與 `trade_research` 的版本表在[第 2 步的工具](#第-2-步的工具)。
+`feature_evidence.VERSION` 寫在報告標題與 `tables.json` 的 `version`；分組或判定規則一改就加一，並在報告寫明改了什麼、為什麼（研究規則第 3 條）。其他工具借用的輔助函式（`INSTITUTIONS`、`_flow` 與它用的 `_total`、`_mean_volume`、`_quarter_eps`、`_revenues_known`、特徵 `revenue_yoy`）另有 `feature_evidence.SHARED_VERSION`，round11～20 把它寫進自己的 `definitions_sha256`；改了這些函式就把 `SHARED_VERSION` 加一，借用它的各輪雜湊會刻意跟著變（#1089）。`explore_research` 與 `trade_research` 的版本表在[第 2 步的工具](#第-2-步的工具)。
 
 | 版本 | 任務 | 改了什麼 |
 | --- | --- | --- |
 | 1 | #616 | 第一版；#619 的第一輪報告用這版。離散值特徵的五分位差永遠缺值，五分位差缺值或異號一律記「沒有證據」 |
 | 2 | #643 | **看完第一輪（#619）結果後提出**：同值讓最高或最低一組整段為空時改用高低兩組（上面的「分組」）；判定表補上五分位差缺值記「無法判定」、驗證段五分位差異號記「方向一致但不顯著」。母體、報酬口徑、切分與門檻不變；#619 的報告與結論不回頭改 |
+| 3 | #1089 | 只改兩個特徵的輸入，分組與判定規則不變：`borrowed_sell_surge` 改讀研究 DB 的 `securities_lending_daily.sbl_sell_shares`（官方 TWT93U／`margin/sbl` 的借券賣出當日賣出股數），`day_trade_ratio` 改為 `day_trade_daily.day_trade_shares`（官方 TWTB4U／`intraday/stat` 的當沖成交股數）÷ 同日日線成交股數，分母 0 或缺值時缺值。為什麼：這兩個值在 `chip_snapshots` 從來沒有接過來源、全部是空值（#1085），兩個特徵在第 1、2 版永遠缺值；其他特徵在同一份 fixture 上的輸出不變（`test_evidence_tools.py`）。另加 `--coverage-only`（每年日線與各特徵有值的列數，不算報酬） |
 
 ## 出場規則研究
 

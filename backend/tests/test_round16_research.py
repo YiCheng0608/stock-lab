@@ -245,7 +245,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (r14, "DEADLINES", ((3, 31, 12, -1), (5, 15, 3, 0), (8, 14, 6, 0), (11, 15, 9, 0))),
         (r14, "EVENT_DAY_RULE", "the first session on or after the deadline"),
         (tool, "SINGLE_QUARTER", "the cumulative figure"),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         # the overlaps' lists
         (r5, "HYPOTHESES", _other(r5, "V2", "top", 19)),
         (r7, "HYPOTHESES", _other(r7, "Y4", "top", 19)),

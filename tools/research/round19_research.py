@@ -285,7 +285,7 @@ def definitions() -> dict[str, Any]:
         "short": SHORT_RULE,
         "sale": SALE,
         "reference_statuses": list(REFERENCE_STATUSES),
-        "single_quarter": [SINGLE_QUARTER, features.VERSION],
+        "single_quarter": [SINGLE_QUARTER, features.SHARED_VERSION],
         "deadlines": [r14.DEADLINES, r14.EVENT_DAY_RULE],  # D2's events
         "features": {
             "tk_60": {

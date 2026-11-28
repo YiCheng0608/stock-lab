@@ -72,8 +72,8 @@ def markers(path, alembic, fallback):
 
 
 def test_current_head_and_fallback_count_in_memory():
-    assert len(readiness.REVISIONS) == 44
-    assert readiness.REVISIONS[-1] == "0053_ai_list_scores"
+    assert len(readiness.REVISIONS) == 45
+    assert readiness.REVISIONS[-1] == "0043_sbl_day_trade"
     with sqlite3.connect(":memory:") as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
         connection.execute(
@@ -137,9 +137,10 @@ def test_actual_forced_fallback_nine_revisions(tmp_path, monkeypatch):
     migrations.upgrade_database(engine)
     engine.dispose()
     with sqlite3.connect(path) as connection:
+        # Sorted by name: the chain runs 0051 and 0053 before 0043 (#1145).
         assert connection.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
-        ).fetchall() == [(v,) for v in readiness.REVISIONS]
+        ).fetchall() == [(v,) for v in sorted(readiness.REVISIONS)]
         assert not connection.execute(
             "SELECT name FROM sqlite_schema WHERE name='alembic_version'"
         ).fetchall()
@@ -157,10 +158,10 @@ def test_operations_doc_names_the_code_head():
     ]
 
 
-def test_head_0053_is_ready_but_a_0051_database_is_not(ready_db):
+def test_head_0043_is_ready_but_a_0053_database_is_not(ready_db):
     assert readiness.REVISIONS[-2:] == (
-        "0051_ai_list",
         "0053_ai_list_scores",
+        "0043_sbl_day_trade",
     )
     markers(ready_db, [readiness.REVISIONS[-1]], None)
     check_unchanged(ready_db)

@@ -182,7 +182,7 @@ def test_the_definitions_hash_holds_every_value_the_verdicts_depend_on(monkeypat
         (tool, "LATEST_RULE", "the latest quarter, any quarter"),
         (tool, "NEEDED_RULE", "q only"),
         (tool, "SINGLE_QUARTER", "the cumulative figures"),
-        (features, "VERSION", features.VERSION + 1),
+        (features, "SHARED_VERSION", features.SHARED_VERSION + 1),
         (tool, "REVENUE_MIN", -1.0),
         (tool, "OP_MARGIN", "sum op / sum rev; a single rev <= 0: missing"),
         (tool, "OP_MARGIN", "sum op / sum rev; sum op 0: missing"),
