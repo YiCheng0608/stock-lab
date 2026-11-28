@@ -5480,12 +5480,12 @@ AH1 用[假設登記表](#假設登記表)（買前 N 名、持有 K 天）與[�
 - 候選清單：#1124 AC-1 提問 [7231049518](https://github.com/YiCheng0608/stock-lab/issues/1124#issuecomment-7231049518)。
   - 4 個候選（AJ1～AJ4），只依公開研究、交易規則和 repo 的文件。
   - 沒有讀研究 DB（沒有掛研究 volume），也沒有跑研究工具。涵蓋只引用：
-    - [DATA_SOURCES](../DATA_SOURCES.md) 的「外資持股」、「各來源最早可得」的兩列外資持股；
+    - [DATA_SOURCES](../DATA_SOURCES.md) 的「外資持股」、「各來源最早可得」的兩列外資持股、「整包的資產負債表與現金流量表」；
     - [#1117 回報 7230080923](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230080923)（兩市的欄位、口徑、最早可得與下市股覆蓋）與 [#1121](https://github.com/YiCheng0608/stock-lab/issues/1121) 本文的 AC；
     - 本檔（第二十三～二十五輪的相關段落與實作釋義，第十八～二十一輪提到外資持股的「研究 DB 沒有的」與「提問時另外考慮過」，全部的定義列，X5、X6、U1、K3 的定義與 U1 的關係段）；
-    - 資料單 #1083、#1089、#1090、#1094、#1100、#1121 的留言。
+    - 資料單 #1083、#1089、#1090、#1094、#1100、#1121 的留言第一行；其餘涵蓋沿用 #1118 提問與第二十五輪登記段。
     - 查不到的留給工具單的 `--coverage-only`。
-  - **AF1、AF2、AG2、AH1 的時點**：候選在 AF1、AF2、AG2、AH1 結果公開前選定。提問 2026-11-28 台北約 08:40 發出；發出前（08:35）看過 [#1107](https://github.com/YiCheng0608/stock-lab/issues/1107)、[#1116](https://github.com/YiCheng0608/stock-lab/issues/1116) 與 [#1123](https://github.com/YiCheng0608/stock-lab/issues/1123) 的留言第一行：#1107 只有承諾、開工、等外部，與 AF1 的 `--coverage-only` 提問 [7228069659](https://github.com/YiCheng0608/stock-lab/issues/1107#issuecomment-7228069659)、決定 [7228091362](https://github.com/YiCheng0608/stock-lab/issues/1107#issuecomment-7228091362)（只有覆蓋與缺值，沒有報酬，沒有拿來當任何候選的理由）；#1116、#1123 各只有一則兌現承諾的回報。四個的探索段到登記時都還沒跑。前二十五輪的報告都沒開，狀態紀錄照任務檔讀過，只拿來確認哪些結構用過、哪些狀態已知。
+  - **AF1、AF2、AG2、AH1 的時點**：候選在 AF1、AF2、AG2、AH1 結果公開前選定。提問 2026-11-28 台北約 08:37 發出；發出前（08:35）看過 [#1107](https://github.com/YiCheng0608/stock-lab/issues/1107)、[#1116](https://github.com/YiCheng0608/stock-lab/issues/1116) 與 [#1123](https://github.com/YiCheng0608/stock-lab/issues/1123) 的留言第一行：#1107 只有承諾、開工、等外部，與 AF1 的 `--coverage-only` 提問 [7228069659](https://github.com/YiCheng0608/stock-lab/issues/1107#issuecomment-7228069659)、決定 [7228091362](https://github.com/YiCheng0608/stock-lab/issues/1107#issuecomment-7228091362)（只有覆蓋與缺值，沒有報酬，沒有拿來當任何候選的理由）；#1116、#1123 各只有一則兌現承諾的回報。四個的探索段到登記時都還沒跑。前二十五輪的報告都沒開，狀態紀錄照任務檔讀過，只拿來確認哪些結構用過、哪些狀態已知。
 - 選定與細節：#1124 統籌決定 [7231203026](https://github.com/YiCheng0608/stock-lab/issues/1124#issuecomment-7231203026)。提問裡的 AJ1 照原代號、照提問的表登記，定了這幾處：
   - 門檻：統籌以同一算法驗算，M＝76 得 3.406550、M＝77 得 3.410117（決定第 1 點）。
   - AJ1：用官方持股比率、只讀 T 日同市場那一列、不往前沿用、兩市一起排序、金融業不排除；方向事先定為買持股比率高的，反面文獻一起寫（決定第 2 點）。
@@ -5516,7 +5516,7 @@ AH1 用[假設登記表](#假設登記表)（買前 N 名、持有 K 天）與[�
   | [#1094](https://github.com/YiCheng0608/stock-lab/issues/1094) | `market_bars.trade_count`（官方成交筆數） | 上市 2004-02-11 起、上櫃 2007-04-23 起 | **無**：同日線 | #1094 AC-2、AC-3（PR #1097 還沒合併） | 沒列 |
   | [#1100](https://github.com/YiCheng0608/stock-lab/issues/1100) | `financial_report_filings`（季報的實際上傳時間） | 2013 年起；抽樣 303 家年（含下市、轉板）全部查得到；抓取約 11/30 完成 | **小**：下市、合併消滅的也查得到 | #1100 AC-2、AC-3（PR #1104 還沒合併） | 沒列（提早申報同 AD2；盈餘漂移是 AE1 的變形） |
   | [#1101](https://github.com/YiCheng0608/stock-lab/issues/1101) | 外國發行人 Q2 的 `announcement_date` 修正 | 2021Q2～2026Q2 共 694 列 | 不適用（修可得日） | 已可用（#1101 已結案，研究 DB 與正式 DB 都已重算） | 不用（本輪不讀季報） |
-  | [#1121](https://github.com/YiCheng0608/stock-lab/issues/1121) | `foreign_holdings_daily`（外資持股比率、持有股數、發行股數、上限、異動原因） | 上市 2004-02-11 起（2009-04-30 以前是「外資」舊版面；2004-02-11～07-23 的上限存 NULL）、上櫃 2007-05-10 起（上櫃日線 2007-04-23～05-09 的 12 個交易日沒有）；到研究 DB 日線截止日 | **小**：依當天名單，含之後下市的；#1117 的三個抽樣日（2008、2013、2018 年 7 月）有日線的普通股 0 檔沒有列；全期間由 #1121 AC-3 的覆蓋表確認 | #1121 AC-2、AC-3（PR #1122 還沒合併，研究 DB 還沒寫） | AJ1；AJ2～AJ4 沒登記 |
+  | [#1121](https://github.com/YiCheng0608/stock-lab/issues/1121) | `foreign_holdings_daily`（外資持股比率、持有股數、發行股數、上限、異動原因） | 上市 2004-02-11 起（2009-04-30 以前是「外資」舊版面；2004-02-11～07-23 的上限存 NULL）、上櫃 2007-05-10 起（上櫃日線 2007-04-23～05-09 的 12 個交易日沒有）；到研究 DB 日線截止日 | **小**：依當天名單，含之後下市的；#1117 的三個抽樣日（2008、2013、2018 年 7 月）有日線的普通股 0 檔沒有列；依年的覆蓋看 #1121 AC-3 的覆蓋表（每年 7 月第一個交易日抽樣），每天的缺值由工具單的 `--coverage-only` 列出 | #1121 AC-2、AC-3（PR #1122 還沒合併，研究 DB 還沒寫） | AJ1；AJ2～AJ4 沒登記 |
 
 - 月營收、EPS 的舊彙總頁沒有下市公司，這點不變；AJ1 不用營收、EPS 與季報。
 - **仍沒用的**：同第二十五輪那一段，拿掉本輪新用的外資持股比率的水準（AJ1），另加外資持股的一年變化（AJ2 沒登記）、外資尚可投資比率與上限（AJ3 沒登記）。
@@ -5563,7 +5563,7 @@ AJ1 用[假設登記表](#假設登記表)（買前 N 名、持有 K 天）與[�
 4. **選股與調倉**：照「共同」。母體中 `foreign_pct` **大者先**取前 20 名，K＝60。兩市一起排序；金融業不排除（持股比率不是會計科目）。方向依 Huang & Shiu (2009) 事先定為買持股比率高的，不比較另一邊。
 5. **參數**：用官方持股比率、只讀 T 日一列、兩市一起排序、金融業不排除、N＝20、K＝60（外資持股變動慢，持有期照 X4、U1 的 60），都是事先定的，沒有比較別的值。
 6. **KY 與 TDR**：不排除、只列出（統籌決定 7231203026 第 4 點）。
-7. **存活者偏差**：上市 `MI_QFIIS`、上櫃 `insti/qfii` 都依當天的掛牌名單產生，含之後下市的公司；#1117 的三個抽樣日有日線的普通股 0 檔沒有列（[#1117 回報 7230080923](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230080923)）。全期間的覆蓋看 #1121 AC-3 的覆蓋表；不另列對照基準，依年的缺值檔次見第 8 點。
+7. **存活者偏差**：上市 `MI_QFIIS`、上櫃 `insti/qfii` 都依當天的掛牌名單產生，含之後下市的公司；#1117 的三個抽樣日有日線的普通股 0 檔沒有列（[#1117 回報 7230080923](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230080923)）。依年的覆蓋看 #1121 AC-3 的覆蓋表（每年 7 月第一個交易日抽樣），每天的缺值由工具單的 `--coverage-only` 列出；不另列對照基準，依年的缺值檔次見第 8 點。
 8. **另列**（只列出、不判定；統籌決定 7231203026 第 5 點）：
    - 每天的檔數與平均投入比例。
    - 每天有 `foreign_pct` 的檔數，以及缺值的檔數（沒有列、NULL 分開）。
@@ -5577,13 +5577,12 @@ AJ1 用[假設登記表](#假設登記表)（買前 N 名、持有 K 天）與[�
    - **上市公布時刻未公開**，本假設假設 T+1 開盤前已公布；上櫃回補抓的是 22:00 定版（統籌決定 7231203026 第 3 點）。
    - **名單偏大型股**：和 X5（成交金額前 50 名，狀態已知）的關係看第 8 點的重疊比例；Huang & Shiu 說控制規模後仍在。
    - **和法人流量的關係**：X3、X6、L2 用 `institutional_flow_20`（三大法人 20 日淨買超 ÷ 均量），K3 用外資＋投信連續 5 個 60 根區塊的淨賣超，都是買賣的**流量**；AJ1 是累積多年持有的**存量水準**，不是近期買賣，不是它們的變形。
-   - **和前 76 個假設的關係**：沒有已登記的同類（外資持股的水準前二十五輪沒有資料）。和 U1 的方向相反：U1 依 Arbel & Strebel 買法人不碰的股票，AJ1 依台股的直接證據買外資持有多的股票；U1 量的是近 60 根有沒有法人進出，AJ1 量的是持有多少。
 
 **理由**
-- AJ1：資訊優勢：外資在台股有研究資源與長期持有的傾向，持股比率是它們累積判斷的水準，市場沒有完全定價。外資持股的個股資料台股每天公開，是本地特有的資料。來源：Huang & Shiu (2009), "Local effects of foreign ownership in an emerging financial market: Evidence from qualified foreign institutional investors in Taiwan", *Financial Management* 38(3), 567–602（[EconPapers](https://econpapers.repec.org/RePEc:bla:finmgt:v:38:y:2009:i:3:p:567-602)、[IDEAS](https://ideas.repec.org/a/bla/finmgt/v38y2009i3p567-602.html)；台股外資持股高的股票報酬高於持股低的，控制出口、規模、透明度後仍在；外資持股和研發支出、當期與之後的營運表現正相關，作者解讀為外資有長期的資訊優勢）。反方向的文獻：Arbel, Carvell & Strebel (1983), "Giraffes, Institutions and Neglected Firms", *Financial Analysts Journal* 39(3)（[CFA Institute](https://rpc.cfainstitute.org/research/financial-analysts-journal/1983/giraffes-institutions-and-neglected-firms)；美國法人少持有的股票報酬較高）。
+- AJ1：資訊優勢：外資在台股有研究資源與長期持有的傾向，持股比率是它們累積判斷的水準，市場沒有完全定價。外資持股的個股資料台股每天公開，是本地特有的資料。來源：Huang & Shiu (2009), "Local effects of foreign ownership in an emerging financial market: Evidence from qualified foreign institutional investors in Taiwan", *Financial Management* 38(3), 567–602（[EconPapers](https://econpapers.repec.org/RePEc:bla:finmgt:v:38:y:2009:i:3:p:567-602)、[IDEAS](https://ideas.repec.org/a/bla/finmgt/v38y2009i3p567-602.html)、[EconBiz](https://econbiz.de/Record/local-effects-of-foreign-ownership-in-an-emerging-financial-market-evidence-from-qualified-foreign-institutional-investors-in-taiwan-huang-roger/10003929318)；台股外資持股高的股票報酬高於持股低的，控制出口、規模、透明度後仍在；外資持股和研發支出、當期與之後的營運表現正相關，作者解讀為外資有長期的資訊優勢）。反方向的文獻：Arbel, Carvell & Strebel (1983), "Giraffes, Institutions and Neglected Firms", *Financial Analysts Journal* 39(3)（[CFA Institute](https://rpc.cfainstitute.org/research/financial-analysts-journal/1983/giraffes-institutions-and-neglected-firms)；美國法人少持有的股票報酬較高）。
 
 **和前 76 個假設的關係**（提問 7231049518、決定 7231203026）
-- AJ1：沒有已登記的同類；**和 X5（規模）、X3／X6／L2／K3（法人流量）、U1（關注）的關係**見 AJ1 第 8、9 點。新的是單一類投資人的持股存量。
+- AJ1：沒有已登記的同類；**和 X5（規模）、X3／X6／L2／K3（法人流量）的關係**見 AJ1 第 8、9 點。新的是單一類投資人的持股存量。
 
 **需要的資料**
 
