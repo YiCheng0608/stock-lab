@@ -84,7 +84,7 @@ TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news", "us", "night")
 # The locks of the scheduled runs that write stock.db (``running_jobs``): the jobs here,
 # worker.preopen's (#755) and worker.premarket_ai's (#1041), which are not worker.job jobs.
-WRITER_LOCKS = (*JOBS, "preopen", "premarket_ai")
+WRITER_LOCKS = (*JOBS, "preopen", "premarket_ai", "ai_list")
 TRIGGERS = ("scheduler", "manual", "simulation")
 # daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
 # serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger

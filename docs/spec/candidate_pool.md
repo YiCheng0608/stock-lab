@@ -1,7 +1,7 @@
 <!-- owns: candidate_pool_v1、候選池的對答案 -->
 # candidate_pool_v1
 
-候選池：每個交易日 T 從多個來源取聯集，列出「今天值得 AI 看的」股票，每檔標出為什麼進池（`source`），交給早盤 AI 判讀（[#1041](https://github.com/YiCheng0608/stock-lab/issues/1041)）讀。候選池**不是買賣訊號**，也不是「規則選出可以買的」：今日名單照常產出、不讀它，也不被它取代。依據是 [#1003 AC-3](https://github.com/YiCheng0608/stock-lab/issues/1003#issuecomment-7108004301) 第 2～4 節與 #1 的決定（[7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228) Q3：晚上 40、早上最多補 10、同一題材最多 4；[7187528140](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187528140)：AI 不從池外補股）。程式在 `backend/app/candidate_pool.py`，門檻是 `PoolConfig`，每個 run 存進 `config_json`；三個上限是設定值，改預設值要在 #1020 或後續單留 `決定：`。
+候選池：每個交易日 T 從多個來源取聯集，列出「今天值得 AI 看的」股票，每檔標出為什麼進池（`source`），交給早盤 AI 判讀（[#1041](https://github.com/YiCheng0608/stock-lab/issues/1041)）讀。候選池**不是買賣訊號**，也不是「規則選出可以買的」：今日名單（AI 名單，[#1142](https://github.com/YiCheng0608/stock-lab/issues/1142)，[ai_list_v1](ai_list.md)）只從候選池挑；背景的規則名單不讀它。依據是 [#1003 AC-3](https://github.com/YiCheng0608/stock-lab/issues/1003#issuecomment-7108004301) 第 2～4 節與 #1 的決定（[7114503228](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228) Q3：晚上 40、早上最多補 10、同一題材最多 4；[7187528140](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7187528140)：AI 不從池外補股）。程式在 `backend/app/candidate_pool.py`，門檻是 `PoolConfig`，每個 run 存進 `config_json`；三個上限是設定值，改預設值要在 #1020 或後續單留 `決定：`。
 
 ## 兩輪
 
@@ -22,7 +22,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `watchlist` | 1 | 自選（`instruments.is_watchlisted`），不看流動性 | — | T | `instrument:<id>` |
 | `holding` | 1 | 持股（`portfolio_positions.shares > 0`），不看流動性 | `shares` | T | `portfolio_position:<id>` |
-| `rule_signal` | 2 | T 的今日名單（`candidate_runs.read_run` 那份）全收，直到使用者同意替換 | `rank`、`strategy`、`score_version`、`signal_id` | 名單的 `data_as_of` | `daily_candidate:<id>` |
+| `rule_signal` | 2 | T 的規則名單（`candidate_runs.read_run` 那份，#1142 起是背景名單）全收 | `rank`、`strategy`、`score_version`、`signal_id` | 名單的 `data_as_of` | `daily_candidate:<id>` |
 | `hot_theme` | 3 | T 的 `theme_heat_v1` 前 5 名題材，加上新聞分項原值（3 日比 20 日）≥ 3 的題材；每題材最多 4 檔流動成員：龍頭 1 檔（近 20 日平均成交金額最大），其餘依「5 日超額＋法人 5 日比率」在題材流動成員內的百分位合計 | `theme_id`、`heat`、`theme_rank`、`reason`（`top`／`news_surge`）、`role`（`leader`／`second`）、`news_ratio` | 熱度的交易日 | `theme_heat_score:<id>` |
 | `h2` | 4 | T 的 H2 名單前 10 | `rank`、`version` | 名單日 | `strategy_list_item:<id>` |
 | `x4` | 4 | T 的 X4 名單前 10 | 同上 | 名單日 | `strategy_list_item:<id>` |
