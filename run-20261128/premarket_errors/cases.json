@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "design": "1069",
+  "month": "2026-11",
+  "prompt_version": "premarket_v1",
+  "shadow_prompt_version": null,
+  "score_version": "premarket_score_v1",
+  "synthetic": false,
+  "days": {
+    "done": 0,
+    "failed": 0,
+    "rejected": 0
+  },
+  "other_versions": [],
+  "found": {
+    "errors": 0,
+    "controls": 0,
+    "by_category": {
+      "market": 0,
+      "defer": 0,
+      "levels_stop": 0,
+      "no_levels_keep": 0
+    },
+    "incomparable": 0,
+    "pending": 0,
+    "later_month": 0
+  },
+  "month_stats": {
+    "market_d0_days": 0,
+    "market_d0_hit_rate": null,
+    "open_hold_t5_by_effective_action": {}
+  },
+  "proposal_gate": {
+    "status": "insufficient_sample",
+    "text": "樣本不足，不提案",
+    "why": "大盤 d0 已對答案 0 天（至少 15），判錯 0 筆（至少 10）",
+    "market_d0_days": 0,
+    "errors": 0,
+    "min_market_days": 15,
+    "min_errors": 10
+  },
+  "sessions": {},
+  "cases": [],
+  "refs": [],
+  "command": "python tools/research/premarket_errors.py --db /db/stock.db --month 2026-11 --out /out/run-20261128/premarket_errors --min-free-gb 0"
+}

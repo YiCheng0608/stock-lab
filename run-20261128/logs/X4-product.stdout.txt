@@ -1,0 +1,1 @@
+{"out": "/out/run-20261128/X4-product", "watch": "X4-product", "days": 3, "min_days": 60, "verdict": "樣本不足", "elapsed_seconds": 23.5}

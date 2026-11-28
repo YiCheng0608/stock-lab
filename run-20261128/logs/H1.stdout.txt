@@ -1,0 +1,1 @@
+{"out": "/out/run-20261128/H1", "hypothesis": "H1", "window": "forward", "days": 9, "min_days": 250, "verdict": "樣本不足", "elapsed_seconds": 13.7}

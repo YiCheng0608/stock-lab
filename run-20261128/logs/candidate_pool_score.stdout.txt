@@ -1,0 +1,1 @@
+{"out": "/out/run-20261128/candidate_pool_score", "pool_days": 1, "elapsed_seconds": 2.0}

@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "design": "868",
+  "watch": "X4-product",
+  "kind": "已進產品",
+  "note": "已進產品的策略：滿 60 日起每月判一次，判到「輸給基準」由統籌在 #1 提案下架；其餘判定只列出",
+  "entry": {
+    "kind": "已進產品",
+    "source": "explore_research",
+    "source_version": 2,
+    "code": "X4",
+    "definitions_sha256": "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63",
+    "since": "2026-11-24",
+    "min_days": 60,
+    "registered": "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7114503228"
+  },
+  "definition": {
+    "direction": "籌碼＋基本面",
+    "label": "只取 `revenue_yoy` > 0 且 `eps_growth_yield` > 0，依最新一季 EPS × 4 ÷ T 日未還原收盤大者先",
+    "rule": "daily",
+    "subset": null,
+    "filters": [
+      [
+        "revenue_yoy",
+        ">",
+        0.0
+      ],
+      [
+        "eps_growth_yield",
+        ">",
+        0.0
+      ]
+    ],
+    "keys": [
+      "eps_yield_raw"
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "date",
+      "2014-08-14"
+    ]
+  },
+  "command": "python tools/research/forward_watch.py --db /db/stock.db --watch X4-product --out /out/run-20261128/X4-product --cutoff 2026-11-27 --min-free-gb 0",
+  "tool_commit": "627d79e5d27a55f1466a19b459980ecaac246ee1",
+  "copy": {
+    "latest": "2026-11-27",
+    "alembic": "0041_valuation_shares",
+    "mtime": "2026-11-28T02:19:58.163112+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "since": "2026-11-24",
+  "cutoff": "2026-11-27",
+  "first_signal": "2026-11-24",
+  "first_session": "2026-11-25",
+  "last_session": "2026-11-27",
+  "signal_days": 3,
+  "days": 3,
+  "min_days": 60,
+  "verdict": "樣本不足",
+  "excess": {
+    "taiex": {
+      "days": 3,
+      "mean": 0.006582857844499042,
+      "annual": 1.6588801768137587,
+      "t": 0.3092623851951042
+    },
+    "population": {
+      "days": 3,
+      "mean": 0.00024354991591990505,
+      "annual": 0.06137457881181607,
+      "t": 3.0108417418185827
+    }
+  },
+  "absolute": {
+    "days": 3,
+    "mean": 0.000250993629809589
+  },
+  "curves": {
+    "taiex": {
+      "days": 3,
+      "total": -0.02029467366692128,
+      "annual": -0.8213432578257933,
+      "volatility": 0.597050089842322,
+      "max_drawdown": -0.04802610016611686,
+      "invested": 1.0,
+      "turnover": 0.0
+    },
+    "X4": {
+      "days": 3,
+      "total": 0.0007522063877316576,
+      "annual": 0.06519894472314802,
+      "volatility": 0.015583134871463565,
+      "max_drawdown": -0.0003731690586470382,
+      "invested": 0.033773723012643454,
+      "turnover": 4.199111726220478
+    },
+    "population": {
+      "days": 3,
+      "total": 2.159584158456518e-05,
+      "annual": 0.0018156774551949528,
+      "volatility": 0.013616067706956303,
+      "max_drawdown": -0.0004977970780004615,
+      "invested": 0.03333192777906462,
+      "turnover": 4.197551703690647
+    }
+  },
+  "win": {
+    "bought": 60,
+    "won": 31,
+    "rate": 0.5166666666666667,
+    "unsold": 60
+  },
+  "counts": {
+    "X4": {
+      "bought": 60,
+      "unsold": 60
+    },
+    "population": {
+      "bought": 1755,
+      "limit_up": 1,
+      "unsold": 1755
+    }
+  },
+  "coverage": {
+    "2026": {
+      "days": 3,
+      "members": 1756,
+      "missing": {
+        "revenue_yoy": 12,
+        "eps_growth_yield": 12,
+        "eps_yield_raw": 9
+      }
+    }
+  },
+  "elapsed_seconds": 23.502779609058052,
+  "peak_memory_gb": 0.3041801452636719
+}

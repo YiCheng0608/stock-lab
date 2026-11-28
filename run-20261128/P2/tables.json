@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "design": "868",
+  "watch": "P2",
+  "kind": "前瞻觀察",
+  "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+  "entry": {
+    "kind": "前瞻觀察",
+    "source": "round15_research",
+    "source_version": 1,
+    "code": "P2",
+    "definitions_sha256": "dbbeb3e2626bbd4642c7b8732da3f376c9905e50575bee8f2dbed60273ea824e",
+    "since": "2026-11-23",
+    "min_days": 60,
+    "registered": "https://github.com/YiCheng0608/stock-lab/issues/986#issuecomment-7097870215"
+  },
+  "definition": {
+    "engine": "events",
+    "direction": "基本面：三率三升",
+    "label": "每季法定期限的事件日，`margins_up`（最新一季單季毛利率、營益率、淨利率都高於上一季，也都高於去年同季）成立，以雜湊取 20 檔、不排序；持有到下一個事件日",
+    "rule": "quarterly",
+    "conditions": [
+      [
+        "margins_up",
+        "is",
+        true
+      ]
+    ],
+    "order": "the hash only",
+    "short": "cash, not filled",
+    "top": 20,
+    "hold": "next_event",
+    "start": [
+      "date",
+      "2014-05-15"
+    ]
+  },
+  "command": "python tools/research/forward_watch.py --db /db/stock.db --watch P2 --out /out/run-20261128/P2 --cutoff 2026-11-27 --min-free-gb 0",
+  "tool_commit": "627d79e5d27a55f1466a19b459980ecaac246ee1",
+  "copy": {
+    "latest": "2026-11-27",
+    "alembic": "0041_valuation_shares",
+    "mtime": "2026-11-28T02:19:58.163112+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "since": "2026-11-23",
+  "cutoff": "2026-11-27",
+  "first_signal": null,
+  "first_session": null,
+  "last_session": null,
+  "signal_days": 0,
+  "days": 0,
+  "min_days": 60,
+  "verdict": "樣本不足",
+  "excess": {
+    "taiex": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    },
+    "population": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    },
+    "reference": {
+      "days": 0,
+      "mean": null,
+      "annual": null,
+      "t": null
+    }
+  },
+  "absolute": {
+    "days": 0,
+    "mean": null
+  },
+  "curves": {
+    "taiex": {
+      "days": 0
+    },
+    "P2": {
+      "days": 0
+    },
+    "population": {
+      "days": 0
+    }
+  },
+  "win": null,
+  "counts": {},
+  "coverage": {},
+  "next_deadline": "2027-03-31",
+  "overlaps": {
+    "P2_K2": {
+      "days": 0,
+      "mean": null,
+      "years": {}
+    },
+    "P2_X4": {
+      "days": 0,
+      "mean": null,
+      "years": {}
+    }
+  },
+  "rebalances": [],
+  "elapsed_seconds": 31.241997034987435,
+  "peak_memory_gb": 0.32159423828125
+}

@@ -1,0 +1,793 @@
+{
+  "format": 1,
+  "version": 2,
+  "design": "1062",
+  "month": "2026-11",
+  "cutoff": "2026-11-27",
+  "month_complete": false,
+  "copy": {
+    "latest": "2026-11-27",
+    "alembic": "0041_valuation_shares",
+    "mtime": "2026-11-28T02:19:58.163112+00:00"
+  },
+  "previous": null,
+  "command": "python tools/research/monthly_review.py --db /db/stock.db --month 2026-11 --out /out/run-20261128 --min-free-gb 0",
+  "tool_commit": "627d79e5d27a55f1466a19b459980ecaac246ee1",
+  "steps": {
+    "H1": {
+      "tool": "portfolio_research",
+      "command": "python tools/research/portfolio_research.py --db /db/stock.db --hypothesis H1 --window forward --out /out/run-20261128/H1 --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 14.4,
+      "status": "ok"
+    },
+    "X4": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch X4 --out /out/run-20261128/X4 --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 37.6,
+      "status": "ok"
+    },
+    "H2": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch H2 --out /out/run-20261128/H2 --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 25.2,
+      "status": "ok"
+    },
+    "H2-product": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch H2-product --out /out/run-20261128/H2-product --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 29.5,
+      "status": "ok"
+    },
+    "F2": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch F2 --out /out/run-20261128/F2 --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 27.2,
+      "status": "ok"
+    },
+    "P2": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch P2 --out /out/run-20261128/P2 --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 32.3,
+      "status": "ok"
+    },
+    "A1": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch A1 --out /out/run-20261128/A1 --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 27.6,
+      "status": "ok"
+    },
+    "X4-product": {
+      "tool": "forward_watch",
+      "command": "python tools/research/forward_watch.py --db /db/stock.db --watch X4-product --out /out/run-20261128/X4-product --cutoff 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 24.7,
+      "status": "ok"
+    },
+    "candidate_scorecard": {
+      "tool": "candidate_scorecard",
+      "command": "python tools/research/candidate_scorecard.py --db /db/stock.db --out /out/run-20261128/candidate_scorecard --end 2026-11-27",
+      "returncode": 0,
+      "elapsed_seconds": 4.4,
+      "status": "ok"
+    },
+    "feature_evidence": {
+      "tool": "feature_evidence",
+      "command": "python tools/research/feature_evidence.py --db /db/stock.db --out /out/run-20261128/feature_evidence --end 2026-11-27",
+      "returncode": 0,
+      "elapsed_seconds": 109.0,
+      "status": "ok"
+    },
+    "candidate_pool_score": {
+      "tool": "candidate_pool_score",
+      "command": "python tools/research/candidate_pool_score.py --db /db/stock.db --out /out/run-20261128/candidate_pool_score --end 2026-11-27 --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 2.7,
+      "status": "ok"
+    },
+    "premarket_errors": {
+      "tool": "premarket_errors",
+      "command": "python tools/research/premarket_errors.py --db /db/stock.db --month 2026-11 --out /out/run-20261128/premarket_errors --min-free-gb 0",
+      "returncode": 0,
+      "elapsed_seconds": 2.0,
+      "status": "ok"
+    },
+    "premarket_score_report": {
+      "tool": null,
+      "command": "premarket_score_report.render(2026-11)",
+      "status": "ok",
+      "elapsed_seconds": 1.3
+    }
+  },
+  "failed": [],
+  "forward": {
+    "H1": {
+      "code": "H1",
+      "kind": "H1 前瞻",
+      "note": "只當紀錄，不改 H1 成立與否（H1 成立以歷史樣本外的判定為準）",
+      "verdict": "樣本不足",
+      "days": 9,
+      "min_days": 250,
+      "excess": {
+        "taiex": {
+          "days": 9,
+          "mean": 0.004270539275471336,
+          "annual": 1.0761758974187767,
+          "t": 0.3635248491557098
+        },
+        "population": {
+          "days": 9,
+          "mean": 0.0012317781495689356,
+          "annual": 0.3104080936913718,
+          "t": 1.0812571858882902
+        }
+      }
+    },
+    "X4": {
+      "code": "X4",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 5,
+      "min_days": 60,
+      "first_signal": "2026-11-20",
+      "signal_days": 5,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 5,
+          "mean": -0.01802686953703465,
+          "annual": -4.542771123332732,
+          "t": -0.8360288525846981
+        },
+        "population": {
+          "days": 5,
+          "mean": 0.00019767818254803337,
+          "annual": 0.04981490200210441,
+          "t": 1.4493350321267922
+        }
+      }
+    },
+    "H2": {
+      "code": "H2",
+      "kind": "通過驗證",
+      "note": "通過驗證、待使用者決定進不進產品的策略：只當紀錄，不判下架；判到「輸給基準」時由統籌在 #1 的進產品提案補一則（是事實，不是下架提案），其餘判定只記錄",
+      "verdict": "樣本不足",
+      "days": 5,
+      "min_days": 60,
+      "first_signal": "2026-11-20",
+      "signal_days": 5,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 5,
+          "mean": -0.018686813291089878,
+          "annual": -4.70907694935465,
+          "t": -0.8550415418306302
+        },
+        "population": {
+          "days": 5,
+          "mean": -0.00046226557150719216,
+          "annual": -0.11649092401981243,
+          "t": -0.8556071118497868
+        }
+      }
+    },
+    "H2-product": {
+      "code": "H2",
+      "kind": "已進產品",
+      "note": "已進產品的策略：滿 60 日起每月判一次，判到「輸給基準」由統籌在 #1 提案下架；其餘判定只列出",
+      "verdict": "樣本不足",
+      "days": 4,
+      "min_days": 60,
+      "first_signal": "2026-11-23",
+      "signal_days": 4,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 4,
+          "mean": -0.017961405852001955,
+          "annual": -4.526274274704493,
+          "t": -0.6318772079371587
+        },
+        "population": {
+          "days": 4,
+          "mean": -0.00014998577034747163,
+          "annual": -0.03779641412756285,
+          "t": -0.408083257786199
+        }
+      }
+    },
+    "F2": {
+      "code": "F2",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 4,
+      "min_days": 60,
+      "first_signal": null,
+      "signal_days": 4,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 4,
+          "mean": -0.01773337590858376,
+          "annual": -4.468810728963107,
+          "t": -0.621212863263521
+        },
+        "population": {
+          "days": 4,
+          "mean": 7.804417307072375e-05,
+          "annual": 0.019667131613822386,
+          "t": 0.1609034375933401
+        }
+      }
+    },
+    "P2": {
+      "code": "P2",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 0,
+      "min_days": 60,
+      "first_signal": null,
+      "signal_days": 0,
+      "next_deadline": "2027-03-31",
+      "excess": {
+        "taiex": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        },
+        "population": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        }
+      }
+    },
+    "A1": {
+      "code": "A1",
+      "kind": "前瞻觀察",
+      "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+      "verdict": "樣本不足",
+      "days": 0,
+      "min_days": 60,
+      "first_signal": null,
+      "signal_days": 0,
+      "next_deadline": "2027-03-31",
+      "excess": {
+        "taiex": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        },
+        "population": {
+          "days": 0,
+          "mean": null,
+          "annual": null,
+          "t": null
+        }
+      }
+    },
+    "X4-product": {
+      "code": "X4",
+      "kind": "已進產品",
+      "note": "已進產品的策略：滿 60 日起每月判一次，判到「輸給基準」由統籌在 #1 提案下架；其餘判定只列出",
+      "verdict": "樣本不足",
+      "days": 3,
+      "min_days": 60,
+      "first_signal": "2026-11-24",
+      "signal_days": 3,
+      "next_deadline": null,
+      "excess": {
+        "taiex": {
+          "days": 3,
+          "mean": 0.006582857844499042,
+          "annual": 1.6588801768137587,
+          "t": 0.3092623851951042
+        },
+        "population": {
+          "days": 3,
+          "mean": 0.00024354991591990505,
+          "annual": 0.06137457881181607,
+          "t": 3.0108417418185827
+        }
+      }
+    }
+  },
+  "scorecard": {
+    "range": [
+      "2026-10-19",
+      "2026-11-27"
+    ],
+    "candidates": 336,
+    "last_session": "2026-11-27",
+    "horizons": {
+      "5": {
+        "candidates": 336,
+        "comparable": 321,
+        "pending": 14,
+        "days": 21,
+        "mean": 0.019692477570922323,
+        "t": 1.007187223014288,
+        "verdict": "樣本不足"
+      },
+      "20": {
+        "candidates": 336,
+        "comparable": 156,
+        "pending": 176,
+        "days": 8,
+        "mean": 0.09774682835694418,
+        "t": null,
+        "verdict": "樣本不足"
+      }
+    }
+  },
+  "features": {
+    "version": 2,
+    "range": [
+      "2024-09-30",
+      "2026-11-27"
+    ],
+    "verdicts": {
+      "features": {
+        "momentum_20": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "momentum_60": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "momentum_120": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "high_gap_60": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "high_gap_240": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "volume_ratio": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "institutional_flow_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "institutional_flow_20": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "foreign_flow_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "trust_flow_5": {
+          "5": "weak",
+          "20": "not_selected"
+        },
+        "trust_buy_days_5": {
+          "5": "evidence",
+          "20": "not_selected"
+        },
+        "margin_change_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "short_change_5": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "borrowed_sell_surge": {
+          "5": "cannot_tell",
+          "20": "cannot_tell"
+        },
+        "day_trade_ratio": {
+          "5": "cannot_tell",
+          "20": "cannot_tell"
+        },
+        "revenue_yoy": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "revenue_yoy_change": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "revenue_high_12": {
+          "5": "weak",
+          "20": "not_selected"
+        },
+        "eps_yield": {
+          "5": "evidence",
+          "20": "not_selected"
+        },
+        "eps_growth_yield": {
+          "5": "not_selected",
+          "20": "not_selected"
+        }
+      },
+      "conditions": {
+        "breakout_price": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "breakout_volume": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "breakout_rule": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "pullback_setup": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "institutional_ok": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "margin_ok": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "breakout_confirmed": {
+          "5": "not_selected",
+          "20": "not_selected"
+        },
+        "pullback_confirmed": {
+          "5": "not_selected",
+          "20": "not_selected"
+        }
+      }
+    }
+  },
+  "pool": {
+    "version": 1,
+    "range": [
+      "2026-11-27",
+      "2026-11-27"
+    ],
+    "pool_days": 1,
+    "comparisons": 54,
+    "min_days": 60,
+    "ai_check": {
+      "5": {
+        "compared": 0,
+        "differ": []
+      },
+      "20": {
+        "compared": 0,
+        "differ": []
+      }
+    },
+    "sources": {
+      "watchlist": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "holding": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "rule_signal": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "hot_theme": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "h2": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "x4": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "cluster": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "news": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "mops_event": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "revenue": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "chips": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "volume": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "near_high_240": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "limit": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "gap": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      },
+      "morning_news": {
+        "5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        },
+        "20": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "verdict": "樣本不足",
+          "liquid_mean": null
+        }
+      }
+    }
+  },
+  "errors": {
+    "version": 1,
+    "prompt_version": "premarket_v1",
+    "days": {
+      "done": 0,
+      "failed": 0,
+      "rejected": 0
+    },
+    "found": {
+      "errors": 0,
+      "controls": 0,
+      "by_category": {
+        "market": 0,
+        "defer": 0,
+        "levels_stop": 0,
+        "no_levels_keep": 0
+      },
+      "incomparable": 0,
+      "pending": 0,
+      "later_month": 0
+    },
+    "cases": 0,
+    "proposal_gate": {
+      "status": "insufficient_sample",
+      "text": "樣本不足，不提案",
+      "why": "大盤 d0 已對答案 0 天（至少 15），判錯 0 筆（至少 10）",
+      "market_d0_days": 0,
+      "errors": 0,
+      "min_market_days": 15,
+      "min_errors": 10
+    }
+  },
+  "feature_comparison": "沒有上個月可比（沒有 --previous），不列",
+  "feature_changes": [],
+  "lists": {
+    "worse": [
+      {
+        "kind": "note",
+        "name": "feature_evidence",
+        "text": "特徵與條件降級：沒有上個月可比（沒有 --previous），不列",
+        "action": "—"
+      }
+    ],
+    "better": [
+      {
+        "kind": "note",
+        "name": "feature_evidence",
+        "text": "特徵升級：沒有上個月可比（沒有 --previous），不列",
+        "action": "—"
+      }
+    ]
+  },
+  "elapsed_seconds": 338.00365231500473,
+  "peak_memory_gb": 0.616607666015625
+}

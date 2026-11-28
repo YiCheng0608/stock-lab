@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "design": "868",
+  "watch": "F2",
+  "kind": "前瞻觀察",
+  "note": "前瞻觀察的對象：只當紀錄，不判下架，判到「輸給基準」也只記錄；不改成「通過」；放上頁面另由使用者決定",
+  "entry": {
+    "kind": "前瞻觀察",
+    "source": "round10_research",
+    "source_version": 1,
+    "code": "F2",
+    "definitions_sha256": "453f65124f86b5643ef1ce79dd079530a603e9434ed719a5f942090eeaf85dd9",
+    "since": "2026-11-22",
+    "min_days": 60,
+    "registered": "https://github.com/YiCheng0608/stock-lab/issues/944#issuecomment-7072993427"
+  },
+  "definition": {
+    "engine": "portfolio",
+    "direction": "多因子合成",
+    "label": "保守公式：`vol_720` 較小的一半裡，`cash_yield_12m` 與 `mom_240_20` 的平均名次小者先",
+    "rule": "daily",
+    "half": [
+      "vol_720",
+      "low"
+    ],
+    "ranks": [
+      [
+        "cash_yield_12m",
+        "high"
+      ],
+      [
+        "mom_240_20",
+        "high"
+      ]
+    ],
+    "score": "low",
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2007-12-03",
+      721
+    ]
+  },
+  "command": "python tools/research/forward_watch.py --db /db/stock.db --watch F2 --out /out/run-20261128/F2 --cutoff 2026-11-27 --min-free-gb 0",
+  "tool_commit": "627d79e5d27a55f1466a19b459980ecaac246ee1",
+  "copy": {
+    "latest": "2026-11-27",
+    "alembic": "0041_valuation_shares",
+    "mtime": "2026-11-28T02:19:58.163112+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "since": "2026-11-22",
+  "cutoff": "2026-11-27",
+  "first_signal": null,
+  "first_session": "2026-11-24",
+  "last_session": "2026-11-27",
+  "signal_days": 4,
+  "days": 4,
+  "min_days": 60,
+  "verdict": "樣本不足",
+  "excess": {
+    "taiex": {
+      "days": 4,
+      "mean": -0.01773337590858376,
+      "annual": -4.468810728963107,
+      "t": -0.621212863263521
+    },
+    "population": {
+      "days": 4,
+      "mean": 7.804417307072375e-05,
+      "annual": 0.019667131613822386,
+      "t": 0.1609034375933401
+    }
+  },
+  "absolute": {
+    "days": 4,
+    "mean": 0.0
+  },
+  "curves": {
+    "taiex": {
+      "days": 4,
+      "total": 0.06780934094935076,
+      "annual": 61.38843415653339,
+      "volatility": 0.9063193375601534,
+      "max_drawdown": -0.04802610016611686,
+      "invested": 1.0,
+      "turnover": 0.0
+    },
+    "F2": {
+      "days": 4,
+      "total": 0.0,
+      "annual": 0.0,
+      "volatility": 0.0,
+      "max_drawdown": 0.0,
+      "invested": 0.0,
+      "turnover": 0.0
+    },
+    "population": {
+      "days": 4,
+      "total": -0.0003135509821248217,
+      "annual": -0.01956292262099768,
+      "volatility": 0.015399457685522993,
+      "max_drawdown": -0.0010464915681940301,
+      "invested": 0.03461470219745147,
+      "turnover": 3.7741421173220355
+    }
+  },
+  "win": {
+    "bought": 0,
+    "won": 0,
+    "rate": null,
+    "unsold": 0
+  },
+  "counts": {
+    "F2": {},
+    "population": {
+      "bought": 2105,
+      "limit_up": 239,
+      "unsold": 2105
+    }
+  },
+  "coverage": {
+    "2026": {
+      "days": 4,
+      "members": 2344,
+      "missing": {
+        "vol_720": 2344,
+        "cash_yield_12m": 0,
+        "mom_240_20": 15
+      },
+      "half": 0
+    }
+  },
+  "overlap": {
+    "days": 0,
+    "mean": null,
+    "years": {}
+  },
+  "elapsed_seconds": 26.1525843400741,
+  "peak_memory_gb": 0.33434295654296875
+}

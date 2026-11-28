@@ -1,0 +1,711 @@
+{
+  "version": 1,
+  "design": "1069",
+  "min_days": 60,
+  "range": [
+    "2026-11-27",
+    "2026-11-27"
+  ],
+  "end": "2026-11-27",
+  "pool_days": 1,
+  "rows": 187,
+  "selected": 40,
+  "rejected": {
+    "cap": 147
+  },
+  "only_source": {
+    "watchlist": 2,
+    "hot_theme": 5,
+    "x4": 6,
+    "h2": 1
+  },
+  "sources": [
+    "watchlist",
+    "holding",
+    "rule_signal",
+    "hot_theme",
+    "h2",
+    "x4",
+    "cluster",
+    "news",
+    "mops_event",
+    "revenue",
+    "chips",
+    "volume",
+    "near_high_240",
+    "limit",
+    "gap",
+    "morning_news"
+  ],
+  "comparisons": 54,
+  "horizons": {
+    "5": {
+      "pending_days": 1,
+      "population": [],
+      "groups": {
+        "source:watchlist": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:holding": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:rule_signal": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:hot_theme": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:h2": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:x4": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:cluster": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:news": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:mops_event": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:revenue": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:chips": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:volume": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:near_high_240": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:limit": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:gap": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:morning_news": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "pool": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:1": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:2": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:3": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:4": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "sources:1": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "sources:2": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "sources:3+": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "rejected": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "ai_keep_reprice": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        }
+      },
+      "ai_check": {
+        "compared": 0,
+        "differ": []
+      }
+    },
+    "20": {
+      "pending_days": 1,
+      "population": [],
+      "groups": {
+        "source:watchlist": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:holding": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:rule_signal": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:hot_theme": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:h2": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:x4": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:cluster": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:news": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:mops_event": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:revenue": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:chips": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:volume": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:near_high_240": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:limit": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:gap": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "source:morning_news": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "pool": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:1": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:2": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:3": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:4": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "tier:5": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "sources:1": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "sources:2": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "sources:3+": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "rejected": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        },
+        "ai_keep_reprice": {
+          "days": 0,
+          "mean": null,
+          "t": null,
+          "stocks": 0,
+          "verdict": "樣本不足",
+          "liquid_reference": {
+            "days": 0,
+            "mean": null
+          },
+          "daily": []
+        }
+      },
+      "ai_check": {
+        "compared": 0,
+        "differ": []
+      }
+    }
+  }
+}
