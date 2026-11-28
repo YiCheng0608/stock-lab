@@ -30,13 +30,10 @@ from app.models import (
     Instrument,
     MarketBar,
     RawPayload,
-    ScheduleRun,
     TradingCalendarDay,
 )
-from app.preopen_news import check_rows, replace_check
+from test_ai_list_view import _reading as _ai_reading
 from test_candidates import T, signal, stock
-from test_preopen import CHECKED, _news, _recomputed, _taipei
-from test_preopen import _list as _preopen_list
 from worker import job, notify, notify_card, pipeline
 from worker.candidates import compute_daily_candidates
 
@@ -51,48 +48,8 @@ MONDAY = date(2026, 9, 7)
 # --- the message, from the API's shapes ------------------------------------------------
 
 
-def _item(rank, symbol, name, levels):
-    return {
-        "rank": rank,
-        "instrument": {"symbol": symbol, "name": name},
-        "levels": levels,
-    }
-
-
-def _breakout(entry, stop, target):
-    return {
-        "entry_type": "breakout",
-        "entry": entry,
-        "entry_zone": {"low": entry, "high": entry},
-        "invalid_price": stop,
-        "target_1": target,
-    }
-
-
-def _pullback(low, high, stop, target):
-    return {
-        "entry_type": "pullback",
-        "entry": (low + high) / 2,
-        "entry_zone": {"low": low, "high": high},
-        "invalid_price": stop,
-        "target_1": target,
-    }
-
-
-# The list was checked before the open (#759): the rows without overnight news show no
-# mark and the card no 「尚未完成」 line.
-CHECK = {"status": "checked"}
-BREAKOUT = _breakout(61.1, 58.5, 65.27)
-PULLBACK = _pullback(110.99, 115.21, 110.29, 121.24)
-LISTING = {
-    "status": "success",
-    "preopen_check": CHECK,
-    "candidate_count": 2,
-    "items": [_item(1, "2453", "凌群", BREAKOUT), _item(2, "2882", "國泰金", PULLBACK)],
-}
-TITLE = "📋 <b>今日名單｜09/07（一）</b>"
-BREAKOUT_LINE = "　進場 61.10｜停損 58.50｜目標 65.27"
-PULLBACK_LINE = "　進場 110.99～115.21｜停損 110.29｜目標 121.24"
+TITLE = "📋 <b>AI 名單 2026/09/07（一）開盤前</b> · AI 推論，未經驗證"
+CAPTION = "<b>AI 名單 09/07（一）</b>・3 檔・AI 推論，未經驗證"
 
 
 def _us(symbol, close, pct, day="2026-09-04", freshness="latest", series=None):
@@ -139,19 +96,7 @@ def _well_formed(text):
     assert ">" not in re.sub(r"</?b>", "", text)
 
 
-# AC-1 (#742): both sections with two rows or more, one row without its levels, a type of
-# neither section, more rows than the twenty shown, and a US index up, down, flat and
-# missing.
-CARD_ITEMS = [
-    _item(1, "2453", "凌群", BREAKOUT),
-    _item(2, "2882", "國泰金", PULLBACK),
-    _item(3, "2618", "長榮航", _breakout(47.75, 46.31, 50.05)),
-    _item(4, "2881", "富邦金", _pullback(88.1, 90.0, 87.0, 95.5)),
-    _item(5, "1101", "台泥", {**BREAKOUT, "entry": 70.0}),  # entry above the target
-    _item(6, "0006", "名", BREAKOUT),
-    _item(7, "9999", "別型", {**BREAKOUT, "entry_type": "reversal"}),
-    *(_item(rank, f"{rank:04d}", "名", BREAKOUT) for rank in range(8, 21)),
-]
+RULES = {"status": "success", "candidate_count": 23, "items": []}
 CARD_US = [
     _us("SPX", 7561.67, -0.004),
     _us("IXIC", 25136.27, 0.0),
@@ -160,45 +105,18 @@ CARD_US = [
 ]
 
 
-def test_the_card_has_the_sections_the_levels_line_and_the_marked_us_indexes():
-    listing = {
-        "status": "success",
-        "preopen_check": CHECK,
-        "candidate_count": 23,
-        "items": CARD_ITEMS,
-    }
-    text = notify.compose(MONDAY, T, listing, CARD_US)
-    generic = [
-        line
-        for rank in range(8, 21)
-        for line in (f"<b>{rank:04d} 名</b>", BREAKOUT_LINE)
-    ]
+def _text(indexes, rules=RULES):
+    """The text without an AI list (its own tests: test_ai_list_view.py)."""
+
+    return notify.compose(MONDAY, None, indexes, rules)
+
+
+def test_without_an_ai_list_the_text_has_one_line_the_rule_count_and_the_us_block():
+    text = _text(CARD_US)
     assert text == "\n".join(
         [
-            TITLE,
-            "09/04（五）收盤後產生・23 檔",
-            "",
-            "🚀 <b>突破（17 檔）</b>",
-            "<b>2453 凌群</b>",
-            BREAKOUT_LINE,
-            "<b>2618 長榮航</b>",
-            "　進場 47.75｜停損 46.31｜目標 50.05",
-            "<b>1101 台泥</b>",
-            "　價位不完整",
-            "<b>0006 名</b>",
-            BREAKOUT_LINE,
-            *generic,
-            "",
-            "↩️ <b>回踩（2 檔）</b>",
-            "<b>2882 國泰金</b>",
-            PULLBACK_LINE,
-            "<b>2881 富邦金</b>",
-            "　進場 88.10～90.00｜停損 87.00｜目標 95.50",
-            "",
-            "<b>其他（1 檔）</b>",
-            "<b>9999 別型</b>",
-            "　價位不完整",
-            "另 3 檔見今日名單頁",
+            notify.AI_LIST_MISSING,
+            "（規則名單 23 檔見今日名單頁）",
             "",
             "🌎 <b>隔夜美股</b>（09/04 收盤）",
             "🟢 S&amp;P 500　7,561.67　−0.40%",
@@ -218,97 +136,25 @@ def test_the_card_on_a_us_holiday():
         _us(i["symbol"], i["close"], i["change_pct"], "2026-09-03", "us_market_closed")
         for i in US
     ]
-    assert notify.compose(MONDAY, T, LISTING, closed) == "\n".join(
-        [
-            TITLE,
-            "09/04（五）收盤後產生・2 檔",
-            "",
-            "🚀 <b>突破（1 檔）</b>",
-            "<b>2453 凌群</b>",
-            BREAKOUT_LINE,
-            "",
-            "↩️ <b>回踩（1 檔）</b>",
-            "<b>2882 國泰金</b>",
-            PULLBACK_LINE,
-            "",
-            "🌎 <b>隔夜美股</b> 美股休市（09/03 收盤）",
-            *US_ROWS,
-            "來源 FinMind",
-        ]
-    )
-
-
-@pytest.mark.parametrize(
-    "status, head",
-    [
-        ("partial", "名單：無資料（09/04（五）的名單沒有產生；daily：partial）"),
-        (None, "名單：無資料（09/04（五）的名單沒有產生；daily 沒有紀錄）"),
-    ],
-)
-def test_a_missing_list_says_no_data_and_still_sends_the_us_indexes(status, head):
-    text = notify.compose(
-        MONDAY, T, {"status": "not_computed", "items": []}, US, status
-    )
-    assert text == "\n".join(
-        [
-            TITLE,
-            head,
-            "",
-            "🌎 <b>隔夜美股</b>（09/04 收盤）",
-            *US_ROWS,
-            "來源 FinMind",
-        ]
-    )
-
-
-def test_an_empty_list_gives_its_reason():
-    listing = {
-        "status": "success",
-        "preopen_check": CHECK,
-        "candidate_count": 0,
-        "zero_reason_text": "當日沒有成立（條件成立）的策略訊號",
-        "items": [],
-    }
-    lines = notify.compose(MONDAY, T, listing, US).splitlines()
-    assert lines[:3] == [
-        TITLE,
-        "09/04（五）收盤後產生・0 檔（當日沒有成立（條件成立）的策略訊號）",
+    assert _text(closed).splitlines()[2:] == [
         "",
+        "🌎 <b>隔夜美股</b> 美股休市（09/03 收盤）",
+        *US_ROWS,
+        "來源 FinMind",
     ]
-    assert lines[3].startswith("🌎 ")
 
 
-def test_the_data_texts_are_escaped():
-    """AC-2 (#742): a name, a reason or a status with & < > reaches Telegram escaped."""
-
-    listing = {
-        "status": "success",
-        "preopen_check": CHECK,
-        "candidate_count": 1,
-        "items": [_item(1, "1234", "A&B<C>", BREAKOUT)],
-    }
-    text = notify.compose(MONDAY, T, listing, US)
-    assert "<b>1234 A&amp;B&lt;C&gt;</b>" in text.splitlines()
-    _well_formed(text)
-    empty = {
-        "status": "success",
-        "preopen_check": CHECK,
-        "candidate_count": 0,
-        "zero_reason_text": "<沒有> & 訊號",
-        "items": [],
-    }
-    assert "（&lt;沒有&gt; &amp; 訊號）" in notify.compose(MONDAY, T, empty, US)
-    missing = notify.compose(
-        MONDAY, T, {"status": "not_computed", "items": []}, US, "<x>&"
+def test_a_rule_list_not_computed_says_no_data():
+    text = _text(US, {"status": "not_computed", "items": []})
+    assert text.splitlines()[1] == notify.RULE_LIST_MISSING
+    assert _text(US, {"status": "success", "candidate_count": 0}).splitlines()[1] == (
+        "（規則名單 0 檔見今日名單頁）"
     )
-    assert "daily：&lt;x&gt;&amp;）" in missing
-    _well_formed(missing)
 
 
 def test_missing_us_indexes_say_no_data():
     nothing = [_missing(symbol) for symbol in ("SPX", "IXIC", "DJI", "SOX")]
-    text = notify.compose(MONDAY, T, LISTING, nothing)
-    assert text.endswith("\n🌎 <b>隔夜美股</b>：無資料（美股尚未更新）")
+    assert _text(nothing).endswith("\n🌎 <b>隔夜美股</b>：無資料（美股尚未更新）")
 
 
 def test_the_us_freshness_follows_the_today_page():
@@ -317,7 +163,7 @@ def test_the_us_freshness_follows_the_today_page():
 
     # One index behind: its own date and 非最新.
     behind = [*US[:3], _us("SOX", 10000.0, 0.01, "2026-09-03", "stale")]
-    lines = notify.compose(MONDAY, T, LISTING, behind).splitlines()
+    lines = _text(behind).splitlines()
     assert head(lines) == "🌎 <b>隔夜美股</b>"
     assert "🔴 費半　10,000.00　+1.00%（09/03 收盤） 非最新" in lines
     assert "🟢 S&amp;P 500　7,561.67　−0.40%（09/04 收盤）" in lines
@@ -325,7 +171,7 @@ def test_the_us_freshness_follows_the_today_page():
     stale = [
         _us(i["symbol"], i["close"], i["change_pct"], "2026-09-02", "stale") for i in US
     ]
-    lines = notify.compose(MONDAY, T, LISTING, stale).splitlines()
+    lines = _text(stale).splitlines()
     assert head(lines) == "🌎 <b>隔夜美股</b> 美股尚未更新（09/02 收盤）"
     assert not any("非最新" in line for line in lines)
 
@@ -336,7 +182,7 @@ def test_the_us_marks_follow_the_rounded_change_and_two_sources_are_named():
         _us("IXIC", 25136.27, None),
         {**_us("DJI", 52347.55, 0.001), "source": {"label": "FRED"}},
     ]
-    lines = notify.compose(MONDAY, T, LISTING, tiny).splitlines()
+    lines = _text(tiny).splitlines()
     # -0.001% shows as 0.00%: flat, not down.
     assert "⚪ S&amp;P 500　7,561.67　0.00%" in lines
     # An unknown change has no mark.
@@ -344,49 +190,8 @@ def test_the_us_marks_follow_the_rounded_change_and_two_sources_are_named():
     assert lines[-1] == "來源 FinMind；FRED"
 
 
-def test_rows_past_the_twenty_shown_are_counted_in_the_last_line():
-    """Review 6882303076 item 7: N is the list's count less the rows shown."""
-
-    items = [_item(rank, f"{rank:04d}", "名", BREAKOUT) for rank in range(1, 22)]
-    listing = {
-        "status": "success",
-        "preopen_check": CHECK,
-        "candidate_count": 25,
-        "items": items,
-    }
-    lines = notify.compose(MONDAY, T, listing, US).splitlines()
-    assert lines[1] == "09/04（五）收盤後產生・25 檔"
-    assert lines[3] == "🚀 <b>突破（20 檔）</b>"
-    assert lines.count(BREAKOUT_LINE) == 20
-    assert "<b>0021 名</b>" not in lines
-    assert "另 5 檔見今日名單頁" in lines
-
-
-def test_a_long_list_is_cut_to_telegrams_limit_with_its_tags():
-    """AC-2 (#742): the limit counts the tags, the entities and an emoji as two."""
-
+def test_the_length_counts_the_tags_entities_and_an_emoji_as_two():
     assert notify.length("🚀") == 2 and notify.length("<b>&amp;</b>") == 12
-    items = [
-        _item(rank, f"{rank:04d}", "&" * 150, BREAKOUT if rank % 2 else PULLBACK)
-        for rank in range(1, 21)
-    ]
-    listing = {
-        "status": "success",
-        "preopen_check": CHECK,
-        "candidate_count": 20,
-        "items": items,
-    }
-    text = notify.compose(MONDAY, T, listing, US)
-    assert notify.length(text) <= notify.MAX_CHARS
-    _well_formed(text)
-    lines = text.splitlines()
-    shown = sum(1 for line in lines if line.startswith("　進場"))
-    assert 0 < shown < 20
-    assert f"另 {20 - shown} 檔見今日名單頁" in lines
-    # Cut from the end of the list: the lowest ranks go first.
-    assert f"<b>{shown:04d} {'&amp;' * 150}</b>" in lines
-    assert f"<b>{shown + 1:04d} {'&amp;' * 150}</b>" not in lines
-    assert lines[-1] == "來源 FinMind"
 
 
 # --- the message, from the database ---------------------------------------------------
@@ -465,34 +270,30 @@ def _list_of_t(db):
     db.commit()
 
 
-def test_the_message_reads_the_list_of_the_session_before_and_todays_us_indexes(db):
+def test_the_message_reads_the_ai_list_the_rule_count_of_the_session_before_and_us(db):
     _list_of_t(db)
+    _ai_reading(db)
     lines = notify.message(db, MONDAY).splitlines()
-    assert lines[1:8] == [
-        "09/04（五）收盤後產生・1 檔",
-        # No pre-open check of the list was stored (#759).
-        "開盤前檢查：尚未完成",
-        # Nor a pre-market AI reading (#1042).
-        "今日 AI 判讀尚未完成",
-        "",
-        "🚀 <b>突破（1 檔）</b>",
-        "<b>1101 名1101</b>",
-        "　進場 100.00｜停損 98.00｜目標 103.20",
-    ]
+    assert lines[0] == TITLE
+    assert "<b>1. 1477 聚陽</b>｜突破｜把握中" in lines
+    assert "（規則名單 1 檔見今日名單頁）" in lines
     # Only SOX is stored: the others say so; SOX is Friday's, the night before Monday.
     assert "🔴 費半　103.00　+3.00%" in lines
     assert "S&amp;P 500　無資料（未取得）" in lines
     assert lines[-1] == "來源 FinMind"
 
 
-def test_no_older_list_stands_in_for_the_missing_one(db):
+def test_a_day_without_its_ai_list_sends_the_one_before_with_the_reason(db):
     _list_of_t(db)
-    db.add(ScheduleRun(job="daily", target_date=date(2026, 9, 7), status="failed"))
-    db.commit()
-    # Tuesday's message wants Monday's list: Friday's is not shown instead.
-    text = notify.message(db, date(2026, 9, 8))
-    assert "名單：無資料（09/07（一）的名單沒有產生；daily：failed）" in text
-    assert "1101" not in text
+    _ai_reading(db)
+    # Tuesday has no row: Monday's list, with the reason.
+    lines = notify.message(db, date(2026, 9, 8)).splitlines()
+    assert lines[:2] == [
+        "今天的 AI 名單沒有產出（沒有產出紀錄）；以下是 09/07 的名單",
+        TITLE,
+    ]
+    # Tuesday wants Monday's rule list: Friday's is not counted instead.
+    assert notify.RULE_LIST_MISSING in lines
 
 
 def test_the_session_before_skips_the_closed_days(db):
@@ -501,81 +302,7 @@ def test_the_session_before_skips_the_closed_days(db):
     assert notify.is_trading_day(db, date(2026, 9, 7)) is False
     assert notify.is_trading_day(db, date(2026, 9, 5)) is False  # Saturday
     assert notify.previous_session(db, date(2026, 9, 8)) == T
-    assert "09/04（五）收盤後產生・1 檔" in notify.message(db, date(2026, 9, 8))
-
-
-# AC-1 (#759): the pre-open check of the list, as /api/candidates judges it.
-PENDING_HTML = '<div class="preopen-pending line">開盤前檢查：尚未完成</div>'
-
-
-def _preopen_case(db, case):
-    """The list of T (1101, 2330) and its pre-open check of CASE."""
-
-    run, _ = _preopen_list(db)
-    late = _taipei(2026, 9, 4, 23, 0)
-    if case == "news":
-        _news(db, ["1101"], published=late, collected=late)  # 可能負向
-        _news(db, ["1101"], published=late, direction="positive", collected=late)
-        _news(db, ["2330"], published=late, direction=None, collected=late)
-        db.commit()
-    if case in ("news", "no_news", "other_run"):
-        replace_check(db, run, check_rows(db, run, CHECKED))
-        db.commit()
-    if case == "other_run":
-        # The list recomputed after the check: the check is the older run's.
-        _recomputed(db, run, CHECKED + timedelta(minutes=1), move=True)
-    return notify.read(db, MONDAY)
-
-
-def _rows_html(card):
-    return [notify_card._row_html(row) for row in card.rows]
-
-
-def test_rows_with_overnight_news_are_marked_as_the_today_page_marks_them(db):
-    card = _preopen_case(db, "news")
-    lines = notify.text(card).splitlines()
-    assert "<b>1101 名1101</b>　隔夜新聞 2（可能負向 1）" in lines
-    # No 可能負向 one: no brackets (the not judged yet item counts as news).
-    assert "<b>2330 名2330</b>　隔夜新聞 1" in lines
-    assert notify.PREOPEN_PENDING not in lines
-    html = notify_card.card_html(card)
-    assert PENDING_HTML not in html
-    marks = {
-        row.name: notify_card._row_html(row).split('<span class="preopen', 1)[1]
-        for row in card.rows
-    }
-    assert marks == {
-        "1101 名1101": ' muted line">隔夜新聞 2（<span class="down">可能負向 1</span>）'
-        "</span></div>",
-        "2330 名2330": ' muted line">隔夜新聞 1</span></div>',
-    }
-    assert all('class="row grid marked"' in row for row in _rows_html(card))
-
-
-def test_a_checked_list_without_overnight_news_marks_nothing(db):
-    card = _preopen_case(db, "no_news")
-    text = notify.text(card)
-    assert "隔夜新聞" not in text and notify.PREOPEN_PENDING not in text
-    assert "<b>1101 名1101</b>" in text.splitlines()
-    html = notify_card.card_html(card)
-    assert PENDING_HTML not in html and "隔夜新聞" not in html
-    assert all('class="row grid"' in row for row in _rows_html(card))
-
-
-@pytest.mark.parametrize("case", ["none", "other_run"])
-def test_a_list_without_its_own_check_says_not_done_yet(db, case):
-    """No check stored, or the check of an older run of the date (the list recomputed
-    after it): one 「尚未完成」 line, no older result."""
-
-    card = _preopen_case(db, case)
-    lines = notify.text(card).splitlines()
-    assert lines[1].startswith("09/04（五）收盤後產生・")
-    assert lines[2] == "開盤前檢查：尚未完成"
-    assert "<b>1101 名1101</b>" in lines and "<b>2330 名2330</b>" in lines
-    assert "隔夜新聞" not in "".join(lines)
-    html = notify_card.card_html(card)
-    assert html.count(PENDING_HTML) == 1 and "隔夜新聞" not in html
-    assert html.index(PENDING_HTML) < html.index("</header>")
+    assert "（規則名單 1 檔見今日名單頁）" in notify.message(db, date(2026, 9, 8))
 
 
 # --- the runs --------------------------------------------------------------------------
@@ -700,6 +427,7 @@ def run_env(tmp_path, monkeypatch, db):
         return server
 
     _list_of_t(db)
+    _ai_reading(db)
 
     def fail_render(reason):
         drawn["value"] = notify_card.Rendered(None, reason, 30.0)
@@ -752,12 +480,12 @@ def test_a_trading_day_sends_once_and_a_restart_does_not_send_again(run_env, cap
     assert request["content_type"].startswith("multipart/form-data; boundary=")
     assert request["body"] == {
         "chat_id": CHAT,
-        "caption": "<b>今日名單 09/07（一）</b>・突破 1",
+        "caption": CAPTION,
         "parse_mode": "HTML",
         "photo": ("card.png", "image/png", FAKE_PNG),
     }
     # The card was drawn from the message's one read.
-    assert [card.rows[0].name for card in run_env.renders] == ["1101 名1101"]
+    assert [card.ai.picks[0].name for card in run_env.renders] == ["1477 聚陽"]
     log = _log(run_env)
     assert (
         "--- result status=sent mode=photo attempts=1 message_id=1 photo=1080x2356"
@@ -765,7 +493,7 @@ def test_a_trading_day_sends_once_and_a_restart_does_not_send_again(run_env, cap
     )
     # The text is logged as before, with the caption and the card's size.
     assert f"\n{TITLE}\n" in log
-    assert "--- caption <b>今日名單 09/07（一）</b>・突破 1" in log
+    assert f"--- caption {CAPTION}" in log
     assert f"--- card width=1080 height=2356 bytes={len(FAKE_PNG)} seconds=0.1" in log
     # Again the same day (a restarted scheduler's catch-up, a second trigger): no send.
     assert _send(run_env) == 0
@@ -1113,9 +841,7 @@ def test_the_dry_run_prints_the_message_and_sends_and_writes_nothing(run_env, ca
     assert notify.run(_args("--dry-run", "--date", MONDAY.isoformat())) == 0
     out = capsys.readouterr().out
     # The caption, then the text as it is sent, with its tags (#742, #754).
-    assert out.startswith(
-        "configured=yes\ncaption=<b>今日名單 09/07（一）</b>・突破 1\n" + TITLE + "\n"
-    )
+    assert out.startswith(f"configured=yes\ncaption={CAPTION}\n" + TITLE + "\n")
     assert TOKEN not in out and CHAT not in out
     assert server.requests == []
     assert not run_env.logs.exists()
@@ -1194,41 +920,40 @@ def test_serve_reads_the_day_results_from_the_log(tmp_path):
     assert Path(path).name == "notify-20260907.log"
 
 
-# --- the pre-market AI reading cannot break the message (#1042 review 7198038610, 1) ----
+# --- the AI list cannot break the message (as #1042 review 7198038610, 1) -------------
 
 
 def _broken(*args, **kwargs):
     raise KeyError("output_json of another shape")
 
 
-@pytest.mark.parametrize("where", ["view", "ai_view"])
-def test_an_ai_reading_that_cannot_be_read_still_sends_the_list(db, monkeypatch, where):
-    import app.premarket_ai
+@pytest.mark.parametrize("where", ["view", "ai_list"])
+def test_an_ai_list_that_cannot_be_read_still_sends_the_rest(db, monkeypatch, where):
+    import app.ai_list
 
     if where == "view":
-        monkeypatch.setattr(app.premarket_ai, "view", _broken)
+        monkeypatch.setattr(app.ai_list, "view", _broken)
     else:
-        monkeypatch.setattr(notify, "_ai_view", _broken)
+        monkeypatch.setattr(notify, "_ai_list", _broken)
     _list_of_t(db)
     card = notify.read(db, MONDAY)
     message = notify.text(card)
     assert card.ai.status == notify.AI_ERROR and card.ai.error == "KeyError"
     assert notify.AI_UNREADABLE in message.splitlines()
-    assert "<b>1101 名1101</b>" in message and "隔夜美股" in message
+    assert "（規則名單 1 檔見今日名單頁）" in message and "隔夜美股" in message
     html = notify_card.card_html(card)
-    assert f'<div class="ai-line line">{notify.AI_UNREADABLE}</div>' in html
-    assert "1101" in html and notify_card.card_height(card) > 0
+    assert notify.AI_UNREADABLE in html and notify_card.card_height(card) > 0
 
 
 @linux_only
-def test_a_run_with_an_unreadable_ai_reading_is_sent(run_env, monkeypatch):
-    import app.premarket_ai
+def test_a_run_with_an_unreadable_ai_list_is_sent(run_env, monkeypatch):
+    import app.ai_list
 
-    monkeypatch.setattr(app.premarket_ai, "view", _broken)
+    monkeypatch.setattr(app.ai_list, "view", _broken)
     server = run_env.telegram()
     assert _send(run_env) == 0
     assert len(server.requests) == 1
     log = _log(run_env)
     assert "--- result status=sent mode=photo" in log
-    assert "--- premarket_ai unreadable error=KeyError" in log
+    assert "--- ai_list unreadable error=KeyError" in log
     assert notify.AI_UNREADABLE in log

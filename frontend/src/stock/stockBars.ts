@@ -622,8 +622,14 @@ function indicatorSeries(bars: readonly StockBarRow[], panelId: IndicatorPanelId
 
 // The rule levels of the strategy that holds on the data day, drawn on the price pane (DESIGN_SYSTEM §6 規則價位線):
 // where to enter, where the condition fails, where the first target is. Prices are the signal's own, on the chart's raw basis.
-export type ChartLevels = { entry: number; stop: number; target: number }
+// source 'ai' (#1146): the AI list's checked levels on the today page; each line and the note say 「AI」 (UI_COPY_SPEC §10).
+export type ChartLevels = { entry: number; stop: number; target: number; source?: 'rule' | 'ai' }
 export const CHART_LEVEL_LABELS = { entry: '進場', stop: '停損', target: '目標' } as const
+export const AI_LEVEL_MARK = 'AI'
+const levelLabel = (levels: ChartLevels, key: keyof typeof CHART_LEVEL_LABELS) =>
+  levels.source === 'ai' ? `${AI_LEVEL_MARK} ${CHART_LEVEL_LABELS[key]}` : CHART_LEVEL_LABELS[key]
+// The chart's accessible name: 「含規則價位線」 or 「含 AI 價位線」.
+export const levelsLineName = (levels: ChartLevels): string => levels.source === 'ai' ? 'AI 價位線' : '規則價位線'
 
 // Only a conditional row with a complete, ordered set of levels draws lines: an observation's 觀察價位 are not levels to
 // act on (PRODUCT_SPEC §2), and a line from half a set would read as a level that is not there.
@@ -643,7 +649,8 @@ export function chartLevels(row: StrategyBoardRow | null | undefined): ChartLeve
 // priceDigits stays with the candles and the axis.
 export function levelsNote(levels: ChartLevels): string {
   const price = formatLevelPrice
-  return `規則價位線：${CHART_LEVEL_LABELS.entry} ${price(levels.entry)} 元（虛線）、${CHART_LEVEL_LABELS.stop} ${price(levels.stop)} 元、${CHART_LEVEL_LABELS.target} ${price(levels.target)} 元`
+  const head = levels.source === 'ai' ? 'AI 價位線（AI 推論，未經驗證）' : '規則價位線'
+  return `${head}：${levelLabel(levels, 'entry')} ${price(levels.entry)} 元（虛線）、${levelLabel(levels, 'stop')} ${price(levels.stop)} 元、${levelLabel(levels, 'target')} ${price(levels.target)} 元`
 }
 
 // A line label sits above its line (insideStartTop): 12px text plus ECharts' gap, rounded up.
@@ -663,11 +670,11 @@ export function levelsPriceRange(levels: ChartLevels, plotHeight: number) {
 }
 
 function levelMarks(levels: ChartLevels, theme: ChartTheme) {
-  const line = (key: keyof ChartLevels, color: string, type: 'solid' | 'dashed') => ({
-    name: CHART_LEVEL_LABELS[key],
+  const line = (key: keyof typeof CHART_LEVEL_LABELS, color: string, type: 'solid' | 'dashed') => ({
+    name: levelLabel(levels, key),
     yAxis: levels[key],
     lineStyle: { color, type, width: 1.5 },
-    label: { formatter: `${CHART_LEVEL_LABELS[key]} ${formatLevelPrice(levels[key])}`, color, position: 'insideStartTop' as const, fontFamily: theme.fontMono, fontSize: 12, fontWeight: 600 },
+    label: { formatter: `${levelLabel(levels, key)} ${formatLevelPrice(levels[key])}`, color, position: 'insideStartTop' as const, fontFamily: theme.fontMono, fontSize: 12, fontWeight: 600 },
   })
   const band = (name: string, from: number, to: number, color: string) => [{ name, yAxis: from, itemStyle: { color, opacity: 0.1 } }, { yAxis: to }]
   return {

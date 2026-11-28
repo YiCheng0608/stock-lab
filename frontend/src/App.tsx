@@ -79,7 +79,7 @@ import { useMinWidth } from './components/useMinWidth'
 import { TERMINAL_MIN_WIDTH } from './candidates/candidates'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart, StockIndicatorCard, useBarsView } from './stock/StockBarsChart'
-import { CandidateChart } from './today/CandidateChart'
+import { AiPickChart, CandidateChart } from './today/CandidateChart'
 import { PRICE_BASIS, chartLevels, priceDigits } from './stock/stockBars'
 import { closestStrategy } from './stock/stockSummary'
 import { LEVELS_IN_BOARD_TEXT, boardLevelsRow } from './stock/strategyBoard'
@@ -96,7 +96,7 @@ import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingC
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseThemeTab, type ThemeTab } from './themes/themeBoards'
 import { NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketSummaryLine, TodayHeader } from './today/TodayViews'
-import { PremarketAiSection } from './today/PremarketAiSection'
+import { AiListSection } from './today/AiListSection'
 import { MarketPage } from './market/MarketPage'
 import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams, type NewsFilters } from './news/newsView'
 import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
@@ -494,8 +494,8 @@ export function TodayPage() {
         <>
           <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
-          <TodayListsSection today={{ data: candidates.data, loading: candidates.isLoading, error: candidates.error }} renderChart={(item) => <CandidateChart item={item} />} renderMainstreamChart={(item) => <MainstreamChart item={item} />} wide={wide} />
-          <PremarketAiSection listDate={candidates.data?.trading_date} />
+          <TodayListsSection today={{ data: candidates.data, loading: candidates.isLoading, error: candidates.error }} renderChart={(item) => <CandidateChart item={item} />} renderMainstreamChart={(item) => <MainstreamChart item={item} />} wide={wide}
+            aiList={<AiListSection renderChart={(pick) => <AiPickChart pick={pick} />} wide={wide} />} />
           <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
           {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>

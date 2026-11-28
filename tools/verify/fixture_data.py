@@ -2555,6 +2555,267 @@ def _premarket_stock_rows() -> list[dict[str, Any]]:
     return rows
 
 
+# ---- the AI list (#1146) ----
+#
+# Session T's done list (list date the session before T) and NEXT_SESSION's failed run
+# (timeout): the page shows T's list with 「今天的 AI 名單沒有產出」 (or 「10/19 的…」) and
+# the 「10/16 的名單」 badge (1/4 Q1-5 A). The CI runs on a later real date, so the list
+# is never today's and two picks hold to 2099-12-31 to keep their levels shown: 9101 a
+# breakout, 9103 a pullback with a corporate action after the list date (the warning),
+# 9201 a pick whose levels failed the check, 9204 one past its validity.
+AI_LIST_PROMPT_VERSION = "ai_list_v1"  # worker.ai_list_reading.PROMPT_VERSION
+AI_LIST_SESSION = T
+AI_LIST_DATE = SESSIONS[-2]
+AI_LIST_FAILED_SESSION = NEXT_SESSION
+AI_LIST_FAR = date(2099, 12, 31)
+AI_LIST_CORPORATE = "9103"
+AI_LIST_PICKS = (
+    # symbol, setup, entry type, shown, valid_until, reason
+    (
+        "9101",
+        "breakout",
+        "breakout",
+        True,
+        AI_LIST_FAR,
+        "根據示範晶圓營收創新高的新聞與收盤創 20 日新高，推論突破格局成形",
+    ),
+    (
+        "9103",
+        "pullback_support",
+        "pullback",
+        True,
+        AI_LIST_FAR,
+        "根據伺服器需求升溫的新聞與回測 20 日均線，推論回檔到支撐",
+    ),
+    (
+        "9201",
+        "chip_accumulation",
+        "breakout",
+        False,
+        AI_LIST_FAR,
+        "根據外資投信同步買超，推論籌碼集中",
+    ),
+    (
+        "9204",
+        "theme_momentum",
+        "breakout",
+        True,
+        date(2026, 10, 20),
+        "根據生技族群轉強，推論題材發酵",
+    ),
+)
+
+
+def _ai_close(symbol: str) -> float:
+    return next(bar["close"] for bar in SERIES[symbol] if bar["day"] == AI_LIST_DATE)
+
+
+def _ai_display(symbol: str, entry_type: str, until: date) -> dict[str, Any]:
+    close = _ai_close(symbol)
+    if entry_type == "breakout":
+        low, high = round(close, 2), round(close * 1.01, 2)
+        reference = low
+    else:
+        low, high = round(close * 0.98, 2), round(close, 2)
+        reference = (low + high) / 2
+    stop, target_1, target_2 = (
+        round(close * 0.95, 2),
+        round(close * 1.08, 2),
+        round(close * 1.12, 2),
+    )
+    return {
+        "entry": {"type": entry_type, "low": low, "high": high},
+        "stop": stop,
+        "target_1": target_1,
+        "target_2": target_2,
+        "risk_reward": round((target_1 - reference) / (reference - stop), 2),
+        "valid_sessions": 5,
+        "valid_until": until.isoformat(),
+    }
+
+
+def _ai_list_input() -> dict[str, Any]:
+    payload = _premarket_input()
+    payload["session_date"] = AI_LIST_SESSION.isoformat()
+    payload["list_date"] = AI_LIST_DATE.isoformat()
+    payload["level_facts_version"] = "ai_list_facts_v1"
+    for item in payload["candidates"]:
+        close = _ai_close(item["symbol"])
+        item["level_facts"] = {
+            "basis": "list_date_raw",
+            "as_of": AI_LIST_DATE.isoformat(),
+            "close": close,
+            "high_20": {"price": close, "date": AI_LIST_DATE.isoformat()},
+            "corporate_action_in_window": False,
+            "corporate_action_on_session": item["symbol"] == AI_LIST_CORPORATE,
+        }
+    return payload
+
+
+def _ai_list_output() -> dict[str, Any]:
+    return {
+        "market": {
+            "stance": "bullish",
+            "confidence": "medium",
+            "method": {"basis": ["us", "tx_day", "news"]},
+            "reasons": [
+                {
+                    "text": "根據費半與加權日盤收高，推論台股開盤偏多",
+                    "refs": ["us:SOX"],
+                },
+                {"text": "根據台指期夜盤沒有資料，推論把握只到中", "refs": []},
+            ],
+        },
+        "sectors": _premarket_output("")["sectors"],
+        "picks": [{"symbol": symbol} for symbol, *_ in AI_LIST_PICKS],
+        "empty_reason": None,
+        "data_gaps": [{"text": "台指期夜盤沒有資料", "refs": []}],
+    }
+
+
+def _ai_list_reading_rows() -> list[dict[str, Any]]:
+    payload = _ai_list_input()
+    base = {
+        "role": "champion",
+        "sequence": 1,
+        "trigger": "scheduler",
+        "prompt_version": AI_LIST_PROMPT_VERSION,
+        "prompt_sha256": _sha("ai_list_v1 prompt"),
+        "schema_sha256": _sha("ai_list_v1 schema"),
+        "model_alias": "sonnet",
+        "pool_phase": "morning",
+        "input_hash": _sha(json.dumps(payload, sort_keys=True)),
+        "input_json": payload,
+        "checks_json": {},
+        "usage_json": {"input_tokens": 60000, "output_tokens": 5000},
+    }
+    done = {
+        **base,
+        "id": 1,
+        "session_date": AI_LIST_SESSION,
+        "list_date": AI_LIST_DATE,
+        "cutoff_at": _at(AI_LIST_SESSION, 0, 15),
+        "llm_model": LLM_MODEL,
+        "status": "done",
+        "reason": None,
+        "error": None,
+        "output_json": _ai_list_output(),
+        "market_method_json": ["us", "tx_day", "news"],
+        "attempts": 1,
+        "attempts_json": [{"reason": None, "duration_ms": 45000}],
+        "duration_ms": 45000,
+        "started_at": _at(AI_LIST_SESSION, 0, 21),
+        "finished_at": _at(AI_LIST_SESSION, 0, 22),
+    }
+    failed = {
+        **base,
+        "id": 2,
+        "session_date": AI_LIST_FAILED_SESSION,
+        "list_date": T,
+        "cutoff_at": _at(AI_LIST_FAILED_SESSION, 0, 15),
+        "llm_model": None,
+        "status": "failed",
+        "reason": "timeout",
+        "error": "timeout: claude -p took over 300 s",
+        "output_json": None,
+        "market_method_json": None,
+        "attempts": 2,
+        "attempts_json": [{"reason": "timeout", "duration_ms": 300000}] * 2,
+        "duration_ms": 600000,
+        "started_at": _at(AI_LIST_FAILED_SESSION, 0, 21),
+        "finished_at": _at(AI_LIST_FAILED_SESSION, 0, 31),
+    }
+    return [done, failed]
+
+
+def _ai_list_pick_rows() -> list[dict[str, Any]]:
+    levels = _premarket_levels()
+    rows = []
+    for rank, (symbol, setup, entry_type, shown, until, reason) in enumerate(
+        AI_LIST_PICKS, start=1
+    ):
+        display = _ai_display(symbol, entry_type, until)
+        answer = {
+            "entry": {
+                "type": entry_type,
+                "low": {
+                    "price": display["entry"]["low"],
+                    "refs": [f"stock:{symbol}:high_20"],
+                    "atr_multiple": 0,
+                },
+                "high": {
+                    "price": display["entry"]["high"],
+                    "refs": [f"stock:{symbol}:high_20"],
+                    "atr_multiple": 0,
+                },
+                "condition": "若站上 20 日高點"
+                if entry_type == "breakout"
+                else "若回到 20 日均線附近",
+            },
+            "stop": {
+                "price": display["stop"],
+                "refs": [f"stock:{symbol}:close"],
+                "atr_multiple": 0,
+            },
+            "target_1": {
+                "price": display["target_1"],
+                "refs": [f"stock:{symbol}:close"],
+                "atr_multiple": 0,
+            },
+            "target_2": None,
+            "exit_conditions": [{"text": "若外資轉為連續賣超", "refs": []}],
+            "valid_sessions": 5,
+        }
+        check = {
+            "status": "pass" if shown else "fail",
+            "problems": [] if shown else [{"check": "ref_mismatch", "where": "stop"}],
+            "prices": {
+                "entry.low": {
+                    "ref": f"stock:{symbol}:high_20",
+                    "atr_multiple": 0,
+                    "price": display["entry"]["low"],
+                },
+            },
+            "rounded": [],
+            "risk_reward": display["risk_reward"],
+        }
+        rows.append(
+            {
+                "id": rank,
+                "reading_id": 1,
+                "session_date": AI_LIST_SESSION,
+                "prompt_version": AI_LIST_PROMPT_VERSION,
+                "role": "champion",
+                "rank": rank,
+                "instrument_id": INSTRUMENT_IDS[symbol],
+                "symbol": symbol,
+                "pool_sources_json": [{"source": "today_list"}],
+                "on_rule_list": symbol in levels,
+                "setup": setup,
+                "basis_json": ["technical", "news"],
+                "basis_primary": "technical",
+                "confidence": "medium",
+                "levels_json": answer,
+                "levels_check_json": check,
+                "display_levels_json": display if shown else None,
+                "risk_reward": display["risk_reward"] if shown else None,
+                "valid_sessions": 5,
+                "valid_until": until,
+                "exit_conditions_json": answer["exit_conditions"],
+                "reasons_json": [
+                    {
+                        "text": reason,
+                        "refs": [f"news:{PREMARKET_NEWS_ID}"]
+                        if symbol == "9101"
+                        else [],
+                    }
+                ],
+                "rule_levels_json": levels.get(symbol),
+            }
+        )
+    return rows
+
+
 TABLES: dict[str, list[dict[str, Any]]] = {
     "ingestion_runs": _ingestion_rows(),
     "raw_payloads": _raw_payload_rows(),
@@ -2591,9 +2852,17 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "portfolio_positions": _portfolio_rows(),
     "premarket_ai_readings": _premarket_reading_rows(),
     "premarket_ai_stocks": _premarket_stock_rows(),
+    "ai_list_readings": _ai_list_reading_rows(),
+    "ai_list_picks": _ai_list_pick_rows(),
 }
 
 INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
+    "ai_list_readings": {
+        "ingestion_run_id": "假資料不寫 ai_list 的 ingestion run；頁面不讀它",
+    },
+    "ai_list_picks": {
+        "pool_item_id": "假資料沒有候選池（candidate_pool_items 在 OMITTED_TABLES）",
+    },
     "premarket_ai_readings": {
         "ingestion_run_id": "假資料不寫 premarket_ai 的 ingestion run；頁面不讀它",
     },
@@ -2646,11 +2915,6 @@ OMITTED_TABLES: dict[str, str] = {
     "action_tier_snapshots": (
         "沒有預算列時首頁與行動頁即時計算 action tier（#476），結果相同；"
         "預算與即時一致由後端測試驗"
-    ),
-    "ai_list_picks": "同 ai_list_readings",
-    "ai_list_readings": (
-        "AI 名單（#1145）只產出與存檔，五頁還不讀它（顯示是 #1144 的 T2）；"
-        "由後端 test_ai_list 驗"
     ),
     "ai_list_scores": (
         "AI 名單對答案（#1147）只給月報（worker.cli ai-list-score-report），"
@@ -2734,41 +2998,25 @@ TARGET_PLAN = next(row for row in TABLES["tracking_plans"] if row["id"] == 3)
 EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "today": [
         ("dashboard", "as_of", D),
-        # The pre-market AI reading of T's list (#1042): the champion's done run (sequence
-        # 2, not the failed sequence 1 or the shadow), the today list first, 9204 without
-        # a levels key (3a).
-        (f"premarket-ai?list_date={T.isoformat()}", "status", "done"),
+        # The AI list (#1146): NEXT_SESSION failed, so the latest is T's done list with
+        # the failure (1/4 Q1-5 A); 9201 failed its level check, 9103 has a corporate
+        # action after the list date, 9204 is past its validity.
+        ("ai-list", "status", "done"),
+        ("ai-list", "session_date", AI_LIST_SESSION.isoformat()),
+        ("ai-list", "is_today", False),
+        ("ai-list", "failure.session_date", AI_LIST_FAILED_SESSION.isoformat()),
+        ("ai-list", "failure.reason", "timeout"),
+        ("ai-list", "llm_model", LLM_MODEL),
+        ("ai-list", "prompt_version", AI_LIST_PROMPT_VERSION),
+        ("ai-list", "picks[].symbol", ["9101", "9103", "9201", "9204"]),
+        ("ai-list", "picks[].levels_status", ["pass", "pass", "fail", "pass"]),
+        ("ai-list", "picks[].expired", [False, False, False, True]),
         (
-            f"premarket-ai?list_date={T.isoformat()}",
-            "session_date",
-            PREMARKET_SESSION.isoformat(),
+            "ai-list",
+            "picks[].corporate_action_on_session",
+            [False, True, False, False],
         ),
-        (f"premarket-ai?list_date={T.isoformat()}", "llm_model", LLM_MODEL),
-        (
-            f"premarket-ai?list_date={T.isoformat()}",
-            "prompt_version",
-            PREMARKET_PROMPT_VERSION,
-        ),
-        (
-            f"premarket-ai?list_date={T.isoformat()}",
-            "stocks[].symbol",
-            ["9101", "9103", "9201", "9204"],
-        ),
-        (
-            f"premarket-ai?list_date={T.isoformat()}",
-            "stocks[].on_today_list",
-            [True, True, True, False],
-        ),
-        (
-            f"premarket-ai?list_date={T.isoformat()}",
-            "sectors.0.reasons.0.refs.0.news_id",
-            PREMARKET_NEWS_ID,
-        ),
-        (
-            f"premarket-ai?list_date={T.isoformat()}",
-            "input_gaps",
-            ["台指期夜盤無資料", "9204 示範生技 無籌碼資料"],
-        ),
+        ("ai-list", "picks.2.levels", None),
         # The navbar date (#601) is the dashboard as_of; groups ship on include only.
         ("data-date", "as_of", D),
         ("dashboard?include=groups", "groups", len(GROUPS)),

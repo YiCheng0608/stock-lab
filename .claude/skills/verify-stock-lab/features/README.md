@@ -120,6 +120,7 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /coverage` | 回補覆蓋頁，不在主導航 |
 | `GET /strategies` | 系統資料與策略頁，不在主導航 |
 | `GET /candidate-pool` | 早盤 AI 判讀（#1041）的輸入，沒有頁面讀；後端 test_candidate_pool 涵蓋 |
+| `GET /premarket-ai` | 早盤 AI 判讀（#1042）自 #1146 起只記錄、頁面與 Telegram 不讀（今日名單頁讀 `GET /ai-list`）；後端 test_premarket_ai_view 涵蓋 |
 
 ## 結果表
 

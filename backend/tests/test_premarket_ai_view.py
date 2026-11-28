@@ -1,21 +1,13 @@
-"""The pre-market AI reading as 08:45 and the today page show it (#1042).
-
-``app.premarket_ai.view`` (the champion of the current prompt version only),
-``GET /api/premarket-ai``, and the AI part of the Telegram text and card
-(``worker.notify``, ``worker.notify_card``) in the four cases of a day: done,
-failed, rejected and no reading yet (not run or still running). The session
-is MONDAY (2026-09-07), its list date T (2026-09-04).
+"""The pre-market AI reading's view (#1042): ``app.premarket_ai.view`` (the
+champion of the current prompt version only) and ``GET /api/premarket-ai``, in the
+four cases of a day: done, failed, rejected and no reading yet. Since #1146 the
+page and the 08:45 message show the AI list instead (test_ai_list_view.py); the
+API stays. The session is MONDAY (2026-09-07), its list date T (2026-09-04).
 """
 
 from __future__ import annotations
 
-import dataclasses
-import os
-import re
-import shutil
-import tempfile
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,9 +22,8 @@ from app.db import Base, enable_sqlite_foreign_keys
 from app.main import app
 from app.models import Instrument, PremarketAiReading, PremarketAiStock
 from test_candidates import T
-from test_notify import MONDAY, _list_of_t
-from test_notify_card import _blank, _pixels
-from worker import notify, notify_card, pipeline
+from test_notify import MONDAY
+from worker import pipeline
 from worker.premarket_reading import PROMPT_VERSION, directive_words
 
 MODEL = "claude-sonnet-5-5"
@@ -350,155 +341,20 @@ def test_the_api_reads_the_reading_of_a_list_date_or_says_missing(client, db):
     assert other.json()["status"] == "missing"
 
 
-# --- 08:45: the text and the card ------------------------------------------------------
+def test_the_texts_have_no_order_wording():
+    """AC-3 (#1042): every fixed wording of the view passes the job's own check
+    (``directive_words``). The page and the message show the AI list since #1146."""
 
-
-def _content(db, **reading):
-    _list_of_t(db)
-    if reading.get("status") != "none":
-        _reading(db, **reading)
-    return notify.read(db, MONDAY)
-
-
-def _ai_part(message: str) -> str:
-    """The text from the AI section's title on."""
-
-    at = message.find(notify.AI_TITLE)
-    return message[at:] if at >= 0 else ""
-
-
-def test_a_done_reading_is_sent_in_its_own_section_after_the_list(db):
-    card = _content(db)
-    message = notify.text(card)
-    assert card.ai_line is None
-    assert "AI 判讀失敗" not in message and notify.AI_PENDING not in message
-    ai = _ai_part(message)
-    lines = ai.splitlines()
-    assert lines[0] == "早盤 AI 判讀</b>（AI 推論）"
-    assert lines[1] == f"模型 {MODEL}・提示 {PROMPT_VERSION}"
-    assert lines[2] == "<b>大盤</b> 偏多（把握中）"
-    assert f"　{MARKET_REASON}" in lines
-    assert f"　半導體 可能正向：{SECTOR_REASON}" in lines
-    # The today list first, then the pool's others; no price in the section (3a).
-    assert lines.index("<b>今日名單的股票</b>") < lines.index("<b>候選池其他股票</b>")
-    assert (
-        "<b>1101 台泥</b>　依開盤價重算（開盤漲幅逾 5.0%、跌幅逾 3.0%或重算後 RR 低於 1.5 倍即暫緩）"
-        in lines
-    )
-    assert "<b>2330 台積電</b>　暫緩" in lines
-    assert not re.search(r"進場|停損|目標|\d+\.\d{2}(?!%)", ai)
-    # The section comes after the list and the US block.
-    assert message.index("隔夜美股") < message.index(notify.AI_TITLE)
-    html = notify_card.card_html(card)
-    assert (
-        '<section class="ai"><h2>早盤 AI 判讀<span class="badge">AI 推論</span></h2>'
-        in html
-    )
-    assert f"模型 {MODEL}・提示 {PROMPT_VERSION}" in html
-    assert "2330 台積電" in html and '<div class="ai-line' not in html
-    assert notify_card.ai_height(card) > 0
-
-
-@pytest.mark.parametrize(
-    ("case", "line"),
-    [
-        ({"status": "failed", "reason": "timeout"}, "今日 AI 判讀失敗：呼叫逾時"),
-        (
-            {"status": "rejected", "reason": "coverage"},
-            "今日 AI 判讀失敗：判讀漏了或多了股票",
-        ),
-        ({"status": "none"}, "今日 AI 判讀尚未完成"),
-    ],
-    ids=["failed", "rejected", "not_yet"],
-)
-def test_a_reading_not_done_sends_the_list_only_with_one_line(db, case, line):
-    card = _content(db, **case)
-    message = notify.text(card)
-    assert card.ai_line == line
-    lines = message.splitlines()
-    # Under the head (and the pre-open line), before the list's rows.
-    assert line in lines[2:4] and lines.index(line) < lines.index(
-        "🚀 <b>突破（1 檔）</b>"
-    )
-    assert notify.AI_TITLE not in message and "AI 推論" not in message
-    html = notify_card.card_html(card)
-    assert f'<div class="ai-line line">{line}</div>' in html
-    assert 'class="ai"' not in html and notify_card.ai_height(card) == 0
-    # The line is one more head line of the card, nothing else.
-    without = dataclasses.replace(card, ai=None)
-    assert (
-        notify_card.card_height(card)
-        == notify_card.card_height(without) + notify_card.HEAD_LINE_H
-    )
-
-
-def test_the_texts_have_no_order_wording(db):
-    """AC-3: the message (text, card) and every fixed wording of the AI part pass the
-    job's own check (``directive_words``)."""
-
-    card = _content(db)
-    page = re.sub(r"<[^>]+>", "\n", notify_card.card_html(card))
-    assert directive_words([notify.text(card), page]) == []
     fixed = [
         *premarket_ai.ACTION_TEXT.values(),
         *premarket_ai.REASON_TEXT.values(),
         *premarket_ai.STANCE_TEXT.values(),
         *premarket_ai.DIRECTION_TEXT.values(),
         premarket_ai.reprice_text(REPRICE),
-        notify.AI_FAILED,
-        notify.AI_PENDING,
-        notify.AI_LISTED,
-        notify.AI_OTHERS,
     ]
     assert directive_words(fixed) == []
     # The check would catch one (the test is not empty).
     assert directive_words(["今日買進"]) != []
-
-
-def test_a_long_reading_cuts_its_stocks_before_the_lists_rows(db, monkeypatch):
-    card = _content(db, listed_reason="根據" + "外資買超" * 1100 + "，推論維持")
-    message = notify.text(card)
-    assert notify.length(message) <= notify.MAX_CHARS
-    assert "另 2 檔的 AI 判讀見今日名單頁" in message
-    # The list's own row is still there.
-    assert "　進場 " in message
-
-
-BROWSER = notify_card.find_browser()
-
-
-@pytest.fixture
-def card_temp(monkeypatch):
-    """Its own system temp directory, as test_notify_card's private_temp (a short path:
-    Chromium's profile socket)."""
-
-    temp = Path(tempfile.mkdtemp(prefix="nc-"))
-    monkeypatch.setattr(tempfile, "tempdir", str(temp))
-    yield temp
-    shutil.rmtree(temp, ignore_errors=True)
-
-
-@pytest.mark.skipif(
-    BROWSER is None, reason="no Chromium (the image has it: docker job)"
-)
-def test_the_images_chromium_draws_the_ai_section_in_its_height(
-    db,
-    card_temp,
-    monkeypatch,
-):
-    card = _content(db)
-    height = notify_card.card_height(card)
-    extra = 40
-    monkeypatch.setattr(notify_card, "card_height", lambda _card: height + extra)
-    drawn = notify_card.render(card, timeout=120.0)
-    assert drawn.reason is None, drawn.reason
-    scale = notify_card.SCALE
-    _width, channels, rows = _pixels(drawn.png)
-    assert all(_blank(row, channels) for row in rows[height * scale :])
-    edge = (height - notify_card.PAD) * scale
-    assert not all(_blank(row, channels) for row in rows[edge - 4 : edge])
-    assert all(_blank(row, channels) for row in rows[edge + 2 : height * scale])
-    assert os.listdir(card_temp) == []
 
 
 # --- #1058: a price in a reason of a stock without levels is not shown (3a) ----------
@@ -555,14 +411,3 @@ def test_hidden_prices_reads_only_well_formed_entries():
         }
     )
     assert reasons == {"2330": frozenset({2})} and gaps == frozenset({0})
-
-
-def test_the_message_and_card_show_the_fixed_line_not_the_price(db):
-    card = _content(db, **PRICED)
-    message = notify.text(card)
-    ai = _ai_part(message)
-    assert "<b>2330 台積電</b>　暫緩" in ai.splitlines()
-    assert f"　{premarket_ai.PRICE_HIDDEN_TEXT}" in ai.splitlines()
-    assert "85.30" not in message
-    html = notify_card.card_html(card)
-    assert premarket_ai.PRICE_HIDDEN_TEXT in html and "85.30" not in html

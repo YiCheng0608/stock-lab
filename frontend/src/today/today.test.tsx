@@ -8,11 +8,12 @@ import * as ActionModule from '../actions/ActionViews'
 import * as CandidateModule from '../candidates/CandidateViews'
 import { NOTE_DISCLAIMER, NOTE_MISSING_TEXT, NOTE_PENDING_TEXT, NOT_COMPUTED_TEXT, candidateChange, candidateSourceText } from '../candidates/candidates'
 import { completeItem, listResponse, longList, notComputedResponse, partialItem, zeroResponse } from '../candidates/candidates.fixtures'
-import type { ActionSummary } from '../types'
+import type { ActionSummary, AiListPick } from '../types'
 import * as TodayModule from './TodayViews'
-import { overviewBoth, overviewNone, overviewTwseOnly, premarketAiDone, premarketAiNotDone, riskActions } from './today.fixtures'
-import * as PremarketModule from './PremarketAiSection'
-import { PREMARKET_AI_FAILED, PREMARKET_AI_MISSING, PREMARKET_AI_TITLE, premarketAiShown } from './premarketAi'
+import { aiListDone, aiPick, overviewBoth, overviewNone, overviewTwseOnly, riskActions } from './today.fixtures'
+import * as AiListModule from './AiListSection'
+import { AI_LIST_ERROR, AI_LIST_LOADING, AI_LIST_MARK, AI_LIST_MISSING, AI_LIST_TITLE, aiChartLevels } from './aiList'
+import { levelsNote } from '../stock/stockBars'
 import { StrategyBoardPanel } from '../stock/StrategyBoardPanel'
 import { board, conditionalBreakout, observationPullback } from '../stock/strategyBoard.fixtures'
 import { removedCopyIn } from '../removedCopy.fixtures'
@@ -240,45 +241,57 @@ const held = { ...conditional, action_state: 'reduce_exit', held: true, stop_pri
 const heldCard = render('ActionTierSectionView held', () => { const View = component(ActionModule as Record<string, unknown>, 'ActionTierSectionView'); return <View section={tierSection(0, held)} canLoadMore onMore={() => {}} /> })
 check(/<td class="num level-stop">19\.50<\/td>/.test(heldCard), '行動頁列表: a holding stop is a stop level too')
 
-// ---- 早盤 AI 判讀 (#1042, UI_COPY_SPEC §10): the inference block, the news it cites linked, the gaps as they are, prices on the today list only ----
-const PremarketAiView = component(PremarketModule as Record<string, unknown>, 'PremarketAiView')
-const ai = render('PremarketAiView done', () => <PremarketAiView data={premarketAiDone()} />)
+// ---- AI 名單 (#1146, UI_COPY_SPEC §10 AI 名單, DESIGN_SYSTEM §7): the list's date and 「AI 推論，未經驗證」, the badge on a list of
+// another day, the failure line, no level of a pick that failed its check, the warning of a corporate action ----
+const AiListView = component(AiListModule as Record<string, unknown>, 'AiListView')
+const ai = render('AiListView done', () => <AiListView data={aiListDone()} />)
 const aiText = text(ai)
-check(ai.startsWith('<section class="ai-inference premarket-ai"') && count(ai, 'AI 推論') === 1 && count(ai, 'badge-accent') === 1, `早盤 AI 判讀: one §7 block with one AI 推論 badge, got ${ai.slice(0, 200)}`)
-check(aiText.includes(PREMARKET_AI_TITLE) && aiText.includes('模型 claude-sonnet-5-5') && aiText.includes('提示 premarket_v1') && !aiText.includes('提示版本') && aiText.includes('2026/11/30 開盤前') && aiText.includes('判讀於 2026/11/30 08:24'), `早盤 AI 判讀: the model, the prompt version and the time, got ${aiText}`)
-check(aiText.includes('大盤 偏多（把握中）') && aiText.includes('半導體 · 可能正向') && aiText.includes('1101 台泥 · 依開盤價重算（開盤漲幅逾 5.0%、跌幅逾 3.0%或重算後 RR 低於 1.5 倍即暫緩）'), `早盤 AI 判讀: market, sectors and actions, got ${aiText}`)
-check(ai.includes('href="/news/777"') && ai.includes('href="/news/501"') && aiText.includes('台泥擴產') && aiText.includes('美股收高 費半大漲'), '早盤 AI 判讀: a cited news links to its news page with its title')
-check(aiText.includes('依據 1101 籌碼') && !aiText.includes('weird'), '早盤 AI 判讀: other refs by their label, an unknown one left out')
-check(aiText.includes('資料缺口台指期夜盤沒有資料，大盤判讀信心降低') && aiText.includes('判讀輸入的資料缺口：台指期夜盤無資料；2330 台積電 名單日無日線'), `早盤 AI 判讀: the AI's and the input's data gaps as they are, got ${aiText}`)
-const listedStock = slice(ai, 'data-symbol="1101"', '</li><li')
-const otherStock = slice(ai, 'data-symbol="2330"', '</ul>')
-// DESIGN_SYSTEM §7 進出點 (#1042 review 7198038610, 3): each rule price in its colour class, with its label, unbroken.
-check(listedStock.includes('<b class="level-entry">101.00</b>') && listedStock.includes('<b class="level-stop">98.00</b>') && listedStock.includes('<b class="level-target">103.20</b>') && count(listedStock, 'class="premarket-ai-level"') === 3, `早盤 AI 判讀: the rule levels carry .level-entry/.level-stop/.level-target, got ${listedStock}`)
-const premarketCss = fs.readFileSync(path.join(__dirname, 'premarketAi.css'), 'utf8')
-check(/\.premarket-ai-level\s*\{[^}]*white-space:\s*nowrap/.test(premarketCss), '早盤 AI 判讀: a label and its price do not break')
-check(text(listedStock).includes('規則價位 進場 101.00｜停損 98.00｜目標一 103.20') && text(listedStock).includes('1101 台泥 · ') && !text(ai).includes('#1'), `早盤 AI 判讀: a today-list stock has the rule's levels, got ${text(listedStock)}`)
-check(otherStock !== '' && !/\d+\.\d{2}|規則價位|進場|停損|目標/.test(text(otherStock)), `早盤 AI 判讀: a pool stock has no price (3a), got ${text(otherStock)}`)
-// A pool stock with levels in the response still shows none: only the today list's are prices.
-const leaky = premarketAiDone()
-leaky.stocks[1] = { ...leaky.stocks[1], levels: leaky.stocks[0].levels, rank: 9 }
-check(!/\d+\.\d{2}/.test(text(slice(render('PremarketAiView leaky', () => <PremarketAiView data={leaky} />), 'data-symbol="2330"', '</ul>'))), '早盤 AI 判讀: never a price on a pool stock')
-check(aiText.indexOf('今日名單的股票（1 檔）') < aiText.indexOf('候選池其他股票（1 檔）'), '早盤 AI 判讀: the today list first, then the pool')
-// AC-3: no order wording in the block (the job's check, backend premarket_reading.directive_words, in short).
+check(ai.startsWith('<section class="ai-inference ai-list"') && count(ai, AI_LIST_MARK) === 2 && count(ai, 'badge-accent') === 1, `AI 名單: one §7 block, one badge 「AI 推論，未經驗證」 and the meta line, got ${ai.slice(0, 300)}`)
+check(ai.includes('<h2 id="ai-list-title">AI 名單</h2><span class="ai-list-date">2026/11/27 開盤前產出（08:22）</span>') && aiText.includes('模型 claude-sonnet-5-5 · 提示 ai_list_v1 · AI 推論，未經驗證'), `AI 名單 (AC-1): the list's date, the model and the prompt version, got ${aiText}`)
+check(!ai.includes('ai-list-stale') && !ai.includes('ai-list-failure'), 'AI 名單: today\'s list has no date badge and no failure line')
+check(aiText.includes('大盤 中性（把握低） · 依據：台指期夜盤＞加權指數＞隔夜消息＞美股') && aiText.includes('族群：PCB 可能正向'), `AI 名單: market with its basis, the sectors, got ${aiText}`)
+const firstPick = slice(ai, 'data-ai-rank="1"', '</li><li')
+check(text(firstPick).includes('1477 聚陽 突破 · 技術面＞籌碼 · 把握中') && firstPick.includes('href="/stocks/TWSE/1477"'), `AI 名單: rank, name (to the stock page) and method in words, got ${text(firstPick)}`)
+check(text(firstPick).includes('進場 站上 233.00（不追價 236.50）｜停損 226.00｜目標一 243.50／二 254.50｜RR 1.50 倍｜有效至 12/02'), `AI 名單: the AI levels in one line, got ${text(firstPick)}`)
+check(firstPick.includes('class="ai-list-price level-entry"') && firstPick.includes('class="ai-list-price level-stop"') && firstPick.includes('class="ai-list-price level-target"'), 'AI 名單: entry/stop/target carry the §7 level classes')
+check(firstPick.includes('<p class="ai-list-corporate">名單日後有除權息，價位以 11/26 收盤為基準，今天的漲跌停與參考價可能不同</p>'), `AI 名單 (decision 7238366814): the corporate-action warning beside the levels, got ${firstPick}`)
+check(firstPick.includes('href="/news/501"') && text(firstPick).includes('依據 1477 籌碼') && text(firstPick).includes('進場條件：若站上 20 日高點') && text(firstPick).includes('出場條件：若外資與投信轉為連續賣超') && text(firstPick).includes('價位依據進場下緣 233.00＝20 日高點（11/26）'), `AI 名單: reasons, cited news, conditions and the levels' basis, got ${text(firstPick)}`)
+check(text(slice(ai, 'data-ai-rank="2"', '</li><li')).includes('進場區 44.40～46.05｜停損 42.00'), 'AI 名單: a pullback writes 進場區')
+const failedPick = slice(ai, 'data-ai-rank="3"', '</ol>')
+check(failedPick.includes('data-levels="hidden"') && text(failedPick).includes('價位未通過核對，未顯示') && !failedPick.includes('ai-list-price') && !text(failedPick).includes('停損') && !text(failedPick).includes('進場條件'), `AI 名單 (AC-2): a failed check shows no price, got ${text(failedPick)}`)
+const aiCss = fs.readFileSync(path.join(__dirname, 'aiList.css'), 'utf8')
+// PR #1153 review 4: the first focus's title is DESIGN_SYSTEM §3's 今日名單 title (--text-2xl／700), no fixed size.
+check(/\.ai-list-head h2\s*\{[^}]*font-size:\s*var\(--text-2xl\);\s*font-weight:\s*700/.test(aiCss) && !/font-size:\s*\d+px/.test(aiCss), 'AI 名單: the title uses --text-2xl／700 and the block no fixed px size')
+// PR #1153 review 3: the market's reasons and each pick's conditions are folded, so two picks fit 1280×800's first screen.
+check(/<details class="ai-list-block ai-list-market"[^>]*><summary>大盤 /.test(ai) && !/<details class="ai-list-block ai-list-market"[^>]*open/.test(ai) && count(ai, '<details class="ai-list-more">') === 3, `AI 名單: the market reasons and the conditions are folded, got ${slice(ai, 'ai-list-market', '</summary>')}`)
+check(/\.ai-list-level\s*\{[^}]*white-space:\s*nowrap/.test(aiCss) && /\.ai-list-price\s*\{[^}]*font-family:\s*var\(--font-mono\)[^}]*tabular-nums/.test(aiCss), 'AI 名單: a price is mono, tabular and stays with its label')
+check(/\.ai-list-expired, \.ai-list-corporate\s*\{\s*color:\s*var\(--color-warning\)/.test(aiCss), 'AI 名單: the expired and corporate-action lines use the warning token')
+// A list of another day (AC-1), and the list before a failed day (AC-2, 1/4 Q1-5 A).
+const stale = render('AiListView stale', () => <AiListView data={aiListDone({ is_today: false, today: '2026-11-28' })} />)
+check(stale.includes('badge-warning') && text(slice(stale, 'ai-list-stale', '</span>')).includes('11/27 的名單'), `AI 名單 (AC-1): a warning badge 「11/27 的名單」 on a list of another day, got ${stale.slice(0, 400)}`)
+const fallback = render('AiListView failed day', () => <AiListView data={aiListDone({ is_today: false, today: '2026-11-30', failure: { session_date: '2026-11-30', status: 'failed', reason: 'timeout', reason_text: '呼叫逾時', text: '今天的 AI 名單沒有產出：呼叫逾時' } })} />)
+check(text(fallback).includes('今天的 AI 名單沒有產出：呼叫逾時') && text(fallback).includes('11/27 的名單') && text(fallback).includes('1477 聚陽'), `AI 名單 (AC-2): the failure line over the list before, with its date badge, got ${text(fallback).slice(0, 300)}`)
+const expired = render('AiListView expired', () => <AiListView data={aiListDone({ picks: [aiPick(1, { levels: null, expired: true, expired_text: '價位已過有效期（3 個交易日，至 12/02）' })] })} />)
+check(expired.includes('<p class="ai-list-no-levels ai-list-expired">價位已過有效期（3 個交易日，至 12/02）</p>') && !/站上 \d/.test(text(expired)), 'AI 名單: a pick past its validity says so without levels')
+const empty = text(render('AiListView empty', () => <AiListView data={aiListDone({ picks: [], empty_reason: '大盤偏空', empty_text: '今天 AI 沒有列股票：大盤偏空' })} />))
+check(empty.includes('今天 AI 沒有列股票：大盤偏空'), `AI 名單: an empty list says why, got ${empty}`)
+const none = text(render('AiListView none', () => <AiListView data={{ ...aiListDone(), status: 'missing', session_date: null, picks: [], market: null, sectors: [], missing_text: AI_LIST_MISSING }} />))
+check(none === `${AI_LIST_TITLE}${AI_LIST_MARK}${AI_LIST_MISSING}`, `AI 名單: no list at all is one line, got ${none}`)
+check(text(render('AiListView loading', () => <AiListView data={undefined} loading />)).includes(AI_LIST_LOADING), 'AI 名單: loading')
+check(text(render('AiListView error', () => <AiListView data={undefined} error={new Error('x')} />)).includes(AI_LIST_ERROR), 'AI 名單: a failed load')
+// The chart (#1142 4/4 row 26): beside the list from 1280px with the AI lines; none for a pick without levels.
+const wideAi = render('AiListView wide', () => <AiListView data={aiListDone()} wide renderChart={(pick: AiListPick) => <div data-test-chart={pick.symbol} />} />)
+check(wideAi.includes('class="ai-list-terminal"') && wideAi.includes('data-ai-chart-rank="1"') && wideAi.includes('data-test-chart="1477"'), 'AI 名單: the first pick\'s chart beside the list from 1280px')
+const narrowAi = render('AiListView narrow', () => <AiListView data={aiListDone()} initialChartRank={2} renderChart={(pick: AiListPick) => <div data-test-chart={pick.symbol} />} />)
+check(!narrowAi.includes('ai-list-terminal') && count(narrowAi, 'data-test-chart=') === 1 && narrowAi.includes('data-test-chart="2618"'), 'AI 名單: below 1280px only the opened row\'s card')
+const lines = aiChartLevels(aiListDone().picks[0])
+check(lines?.entry === 233 && lines.stop === 226 && lines.target === 243.5 && lines.source === 'ai', `AI 名單: a breakout's line is its low, marked AI, got ${JSON.stringify(lines)}`)
+check(Math.abs((aiChartLevels(aiListDone().picks[1])?.entry ?? 0) - 45.225) < 1e-9 && aiChartLevels(aiListDone().picks[2]) === null, 'AI 名單: a pullback\'s line is its middle; no lines without levels')
+check(levelsNote(lines!) === 'AI 價位線（AI 推論，未經驗證）：AI 進場 233.00 元（虛線）、AI 停損 226.00 元、AI 目標 243.50 元', `AI 名單: the chart note marks the lines AI, got ${levelsNote(lines!)}`)
+check(levelsNote({ entry: 101, stop: 98, target: 103.2 }).startsWith('規則價位線：進場 101.00 元'), 'the stock page keeps the rule lines')
+// AC-3 (#1042): no order wording in the block (the job's check, backend premarket_reading.directive_words, in short).
 const ORDER = /下單|掛單|(?:建議|可以|宜|應該|應|請|今日|今天|明日|明天|立即|馬上|逢低|逢高|開盤|分批|考慮|不宜|暫不)\s*(?:買進|買入|賣出|進場|出場)/
-check(!ORDER.test(aiText), `早盤 AI 判讀: no order wording, got ${aiText}`)
+check(!ORDER.test(aiText) && !ORDER.test(text(fallback)), `AI 名單: no order wording, got ${aiText}`)
 check(ORDER.test('建議買進') && ORDER.test('下單'), 'the order pattern catches an order')
-for (const [name, data, line] of [
-  ['failed', premarketAiNotDone('failed', '呼叫逾時'), `${PREMARKET_AI_FAILED}呼叫逾時`],
-  ['rejected', premarketAiNotDone('rejected', '判讀漏了或多了股票'), `${PREMARKET_AI_FAILED}判讀漏了或多了股票`],
-  ['missing', premarketAiNotDone('missing'), PREMARKET_AI_MISSING],
-] as const) {
-  const markup = render(`PremarketAiView ${name}`, () => <PremarketAiView data={data} />)
-  const body = text(markup)
-  check(body === `${PREMARKET_AI_TITLE}AI 推論${line}`, `早盤 AI 判讀（${name}）: only the title and one line, got ${body}`)
-}
-check(text(render('PremarketAiView loading', () => <PremarketAiView data={undefined} loading />)).includes('早盤 AI 判讀載入中…'), '早盤 AI 判讀: loading')
-check(text(render('PremarketAiView error', () => <PremarketAiView data={undefined} error={new Error('x')} />)).includes('早盤 AI 判讀暫時無法載入'), '早盤 AI 判讀: a failed load')
-check(premarketAiShown(new URLSearchParams(''), '2026-11-27') && !premarketAiShown(new URLSearchParams('list=h2'), '2026-11-27') && !premarketAiShown(new URLSearchParams(''), null), '早盤 AI 判讀: only under the 今日名單 tab, with a list date')
-check(render('PremarketAiSection no list', () => { const Section = component(PremarketModule as Record<string, unknown>, 'PremarketAiSection'); return <Section listDate={null} /> }) === '', '早盤 AI 判讀: nothing without a list date')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} today checks failed:\n- ${failures.join('\n- ')}`)

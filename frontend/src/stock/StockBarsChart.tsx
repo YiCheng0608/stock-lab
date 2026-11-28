@@ -19,6 +19,7 @@ import {
   SPLIT_MAIN_HEIGHT,
   STOCK_BARS_MAX_LIMIT,
   buildBarsChartOption,
+  levelsLineName,
   levelsNote,
   type ChartLevels,
   chartLayout,
@@ -280,7 +281,7 @@ export function StockBarsChart({
   const panelState = data ? indicatorPanelState(data, panel) : null
   const option = useMemo(
     () => data && panelState && zoom ? buildBarsChartOption(data, { panel, panelState, visibleMa, theme, layout, zoom, digits, levels, parts: split ? 'price' : 'all' }) : null,
-    [data, panel, panelState?.kind, visibleMa, theme, layout, zoom, digits, levels?.entry, levels?.stop, levels?.target, split],
+    [data, panel, panelState?.kind, visibleMa, theme, layout, zoom, digits, levels?.entry, levels?.stop, levels?.target, levels?.source, split],
   )
   const toggleMa = (field: MaField) => setVisibleMa((current) => {
     const next = new Set(current)
@@ -303,8 +304,8 @@ export function StockBarsChart({
   )
   const basisLabel = data ? priceBasisLabel(data.indicators.price_basis) : null
   const chartLabel = split
-    ? `${unit} K 線與成交量圖${levels ? '，含規則價位線' : ''}；指標與數值見走勢分頁`
-    : `${unit} K 線、成交量與 ${INDICATOR_PANELS.find((item) => item.id === panel)?.label} 指標圖${levels ? '，含規則價位線' : ''}；數值見下方資料表`
+    ? `${unit} K 線與成交量圖${levels ? `，含${levelsLineName(levels)}` : ''}；指標與數值見走勢分頁`
+    : `${unit} K 線、成交量與 ${INDICATOR_PANELS.find((item) => item.id === panel)?.label} 指標圖${levels ? `，含${levelsLineName(levels)}` : ''}；數值見下方資料表`
 
   return (
     <Card

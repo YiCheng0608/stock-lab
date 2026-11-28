@@ -8,6 +8,7 @@ import type { CandidateItem, CandidatesResponse, MainstreamItem, MainstreamRespo
 import '../styles/mainstream.css'
 import { formatDate } from './candidates'
 import { CandidatesSection } from './CandidateViews'
+import { RULE_LIST_FOLD, RULE_LIST_TITLE } from '../today/aiList'
 import { H2Section, h2QueryOptions } from './H2Views'
 import { X4Section, x4QueryOptions } from './X4Views'
 import { recentView, recentViewSearch, type RecentView } from './recentPicks'
@@ -41,6 +42,8 @@ export type TodayListsProps = {
   // The K-line card of 主流族群前 20, 接近年高前 20 and 盈餘殖利率前 20 (no rule level lines): it reads the stock only.
   renderMainstreamChart?: (item: ScreenItem) => ReactNode
   wide?: boolean
+  // #1146: the AI list of the 今日名單 tab; with it the rule list is folded under it (Q3-5 A).
+  aiList?: ReactNode
 }
 
 // /api/mainstream only once the second list is open (decision 6893166683): the today list's page requests nothing more.
@@ -73,7 +76,7 @@ function markEdges(strip: HTMLElement) {
   strip.classList.toggle('tabs-more-right', edges.right)
 }
 
-export function TodayListsSection({ today, renderChart, renderMainstreamChart, wide = false }: TodayListsProps) {
+export function TodayListsSection({ today, renderChart, renderMainstreamChart, wide = false, aiList }: TodayListsProps) {
   const [search, setSearch] = useSearchParams()
   const kind = todayListKind(search)
   const mainstream = useQuery(mainstreamQueryOptions(kind))
@@ -99,7 +102,18 @@ export function TodayListsSection({ today, renderChart, renderMainstreamChart, w
       <Tabs items={TODAY_LISTS} value={kind} onChange={change} label="名單" idPrefix={LISTS_ID} className="tabs-compact today-list-tabs" />
       <div id={tabPanelId(LISTS_ID, kind)} role="tabpanel" aria-labelledby={tabId(LISTS_ID, kind)}>
         {kind === 'today'
-          ? <CandidatesSection data={today.data} loading={today.loading} error={today.error} renderChart={renderChart} wide={wide} pick={search.get(PICK_PARAM)} />
+          ? (aiList
+            ? (
+              // #1146: the AI list first; the background rule list folded under it, closed unless ?pick= names one of its rows.
+              <>
+                {aiList}
+                <details className="rule-list-fold" open={Boolean(search.get(PICK_PARAM)) || undefined}>
+                  <summary>{RULE_LIST_FOLD}{today.data?.status !== 'not_computed' && typeof today.data?.candidate_count === 'number' ? ` ${today.data.candidate_count} 檔` : ''}</summary>
+                  <CandidatesSection data={today.data} loading={today.loading} error={today.error} renderChart={renderChart} wide={wide} pick={search.get(PICK_PARAM)} title={RULE_LIST_TITLE} />
+                </details>
+              </>
+            )
+            : <CandidatesSection data={today.data} loading={today.loading} error={today.error} renderChart={renderChart} wide={wide} pick={search.get(PICK_PARAM)} />)
           : kind === 'mainstream'
             ? <MainstreamSection data={mainstream.data} loading={mainstream.isLoading} error={mainstream.error} renderChart={renderMainstreamChart} wide={wide} todayDate={todayDate} />
             : kind === 'h2'
