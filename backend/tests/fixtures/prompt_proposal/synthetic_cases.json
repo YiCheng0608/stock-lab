@@ -1,0 +1,752 @@
+{
+  "version": 1,
+  "design": "1069",
+  "month": "2026-12",
+  "prompt_version": "premarket_v1",
+  "shadow_prompt_version": null,
+  "score_version": "premarket_score_v1",
+  "synthetic": true,
+  "synthetic_note": "造的案例，只驗證呼叫，不當提案（#1069 決定 7203530697）",
+  "days": {
+    "done": 20,
+    "failed": 0,
+    "rejected": 0
+  },
+  "other_versions": [],
+  "found": {
+    "errors": 11,
+    "controls": 3,
+    "by_category": {
+      "market": 3,
+      "defer": 8,
+      "levels_stop": 0,
+      "no_levels_keep": 0
+    },
+    "incomparable": 0,
+    "pending": 0
+  },
+  "month_stats": {
+    "market_d0_days": 20,
+    "market_d0_hit_rate": 0.45,
+    "open_hold_t5_by_effective_action": {
+      "defer": {
+        "n": 40,
+        "mean": 0.012
+      },
+      "keep": {
+        "n": 600,
+        "mean": 0.004
+      }
+    }
+  },
+  "proposal_gate": {
+    "status": "ok",
+    "text": "達到提案門檻，跑 prompt_proposal.py",
+    "why": "造的案例",
+    "market_d0_days": 20,
+    "errors": 11,
+    "min_market_days": 15,
+    "min_errors": 10
+  },
+  "sessions": {
+    "2026-12-01": {
+      "reading_id": null,
+      "list_date": null,
+      "pool_phase": "evening",
+      "llm_model": "claude-sonnet-5-5",
+      "market_input": {
+        "session_date": "2026-12-01",
+        "us_indices": {
+          "SOX": {
+            "change_pct": 0.012
+          }
+        },
+        "tx_futures": {
+          "night": {
+            "change_pct": -0.004
+          }
+        }
+      },
+      "market_output": {
+        "stance": "bullish",
+        "confidence": "medium"
+      }
+    },
+    "2026-12-02": {
+      "reading_id": null,
+      "list_date": null,
+      "pool_phase": "evening",
+      "llm_model": "claude-sonnet-5-5",
+      "market_input": {
+        "session_date": "2026-12-02",
+        "us_indices": {
+          "SOX": {
+            "change_pct": 0.012
+          }
+        },
+        "tx_futures": {
+          "night": {
+            "change_pct": -0.004
+          }
+        }
+      },
+      "market_output": {
+        "stance": "bullish",
+        "confidence": "medium"
+      }
+    },
+    "2026-12-03": {
+      "reading_id": null,
+      "list_date": null,
+      "pool_phase": "evening",
+      "llm_model": "claude-sonnet-5-5",
+      "market_input": {
+        "session_date": "2026-12-03",
+        "us_indices": {
+          "SOX": {
+            "change_pct": 0.012
+          }
+        },
+        "tx_futures": {
+          "night": {
+            "change_pct": -0.004
+          }
+        }
+      },
+      "market_output": {
+        "stance": "bullish",
+        "confidence": "medium"
+      }
+    },
+    "2026-12-04": {
+      "reading_id": null,
+      "list_date": null,
+      "pool_phase": "evening",
+      "llm_model": "claude-sonnet-5-5",
+      "market_input": {
+        "session_date": "2026-12-04",
+        "us_indices": {
+          "SOX": {
+            "change_pct": 0.012
+          }
+        },
+        "tx_futures": {
+          "night": {
+            "change_pct": -0.004
+          }
+        }
+      },
+      "market_output": {
+        "stance": "bullish",
+        "confidence": "medium"
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "2026-12-01:market:market",
+      "kind": "error",
+      "category": "market",
+      "session_date": "2026-12-01",
+      "list_date": null,
+      "result_date": "2026-12-01",
+      "symbol": null,
+      "outcome": {
+        "stance": "bullish",
+        "confidence": "medium",
+        "return": -0.008,
+        "realized": "down",
+        "band": 0.005,
+        "hit": false
+      },
+      "reasons": [
+        {
+          "text": "根據費城半導體指數隔夜上漲，推論台股開高。",
+          "refs": [
+            "us:SOX"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "2026-12-02:market:market",
+      "kind": "error",
+      "category": "market",
+      "session_date": "2026-12-02",
+      "list_date": null,
+      "result_date": "2026-12-02",
+      "symbol": null,
+      "outcome": {
+        "stance": "bullish",
+        "confidence": "medium",
+        "return": -0.009000000000000001,
+        "realized": "down",
+        "band": 0.005,
+        "hit": false
+      },
+      "reasons": [
+        {
+          "text": "根據費城半導體指數隔夜上漲，推論台股開高。",
+          "refs": [
+            "us:SOX"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "2026-12-03:market:market",
+      "kind": "error",
+      "category": "market",
+      "session_date": "2026-12-03",
+      "list_date": null,
+      "result_date": "2026-12-03",
+      "symbol": null,
+      "outcome": {
+        "stance": "bullish",
+        "confidence": "medium",
+        "return": -0.01,
+        "realized": "down",
+        "band": 0.005,
+        "hit": false
+      },
+      "reasons": [
+        {
+          "text": "根據費城半導體指數隔夜上漲，推論台股開高。",
+          "refs": [
+            "us:SOX"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "2026-12-01:9901:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-01",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9901",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-01"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9901:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9901",
+        "name": "造9901",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 900,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.05
+      }
+    },
+    {
+      "case_id": "2026-12-02:9902:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-02",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9902",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-02"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9902:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9902",
+        "name": "造9902",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 901,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.049
+      }
+    },
+    {
+      "case_id": "2026-12-03:9903:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-03",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9903",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-03"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9903:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9903",
+        "name": "造9903",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 902,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.048
+      }
+    },
+    {
+      "case_id": "2026-12-04:9904:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-04",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9904",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-04"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9904:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9904",
+        "name": "造9904",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 903,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.047
+      }
+    },
+    {
+      "case_id": "2026-12-01:9905:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-01",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9905",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-01"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9905:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9905",
+        "name": "造9905",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 904,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.046
+      }
+    },
+    {
+      "case_id": "2026-12-02:9906:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-02",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9906",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-02"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9906:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9906",
+        "name": "造9906",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 905,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.045000000000000005
+      }
+    },
+    {
+      "case_id": "2026-12-03:9907:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-03",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9907",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-03"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9907:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9907",
+        "name": "造9907",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 906,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.044000000000000004
+      }
+    },
+    {
+      "case_id": "2026-12-04:9908:defer",
+      "kind": "error",
+      "category": "defer",
+      "session_date": "2026-12-04",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9908",
+      "on_today_list": false,
+      "pool_sources": [
+        {
+          "source": "news",
+          "value": {
+            "news_count": 1
+          },
+          "data_date": "2026-12-04"
+        }
+      ],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據隔夜單一則利空新聞，推論開盤承壓。",
+          "refs": [
+            "stock:9908:news"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9908",
+        "name": "造9908",
+        "price": {
+          "return_5d": 0.04,
+          "volume_ratio": 1.8
+        },
+        "chips": {
+          "foreign_5d": 1200
+        },
+        "news": [
+          {
+            "id": 907,
+            "title": "單一則利空"
+          }
+        ]
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": 0.06,
+        "population_mean": 0.01,
+        "excess": 0.043000000000000003
+      }
+    },
+    {
+      "case_id": "2026-12-04:market:market",
+      "kind": "control",
+      "category": "market",
+      "session_date": "2026-12-04",
+      "list_date": null,
+      "result_date": "2026-12-04",
+      "symbol": null,
+      "outcome": {
+        "stance": "neutral",
+        "confidence": "medium",
+        "return": 0.001,
+        "realized": "flat",
+        "band": 0.005,
+        "hit": true
+      },
+      "reasons": [
+        {
+          "text": "根據費城半導體指數隔夜上漲，推論台股開高。",
+          "refs": [
+            "us:SOX"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "2026-12-01:9911:defer",
+      "kind": "control",
+      "category": "defer",
+      "session_date": "2026-12-01",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9911",
+      "on_today_list": false,
+      "pool_sources": [],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據法人連續賣超與利空新聞，推論短線偏弱。",
+          "refs": [
+            "stock:9911:chips"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9911",
+        "name": "造9911",
+        "chips": {
+          "foreign_5d": -3000
+        }
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": -0.04,
+        "population_mean": 0.01,
+        "excess": -0.05
+      }
+    },
+    {
+      "case_id": "2026-12-02:9912:defer",
+      "kind": "control",
+      "category": "defer",
+      "session_date": "2026-12-02",
+      "list_date": null,
+      "result_date": "2026-12-10",
+      "symbol": "9912",
+      "on_today_list": false,
+      "pool_sources": [],
+      "action": "defer",
+      "reprice_rule": null,
+      "reprice_deferred": false,
+      "levels": null,
+      "reasons": [
+        {
+          "text": "根據法人連續賣超與利空新聞，推論短線偏弱。",
+          "refs": [
+            "stock:9912:chips"
+          ]
+        }
+      ],
+      "input": {
+        "symbol": "9912",
+        "name": "造9912",
+        "chips": {
+          "foreign_5d": -3000
+        }
+      },
+      "outcome": {
+        "horizon": "t5",
+        "open_hold_return": -0.04,
+        "population_mean": 0.01,
+        "excess": -0.05
+      }
+    }
+  ],
+  "refs": []
+}

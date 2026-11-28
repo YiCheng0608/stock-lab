@@ -278,18 +278,27 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 **每月流程**（統籌；#1062 起由[每月檢討](#每月檢討)的一個入口跑完）
 1. 每月第一個交易日之後的白天（不在台北 21:30～23:30），以 `copy_db.py` 複製唯讀副本到任務 volume（空閒記憶體 ≥ 5 GB）。
 2. 取回上個月的 `review.json`：`git show origin/pr-assets/699:run-<上次的 YYYYMMDD>/review.json > <上月目錄>/review.json`（第一次，也就是 2026-11 那一次沒有，不給 `--previous`）。
-3. 跑 `python tools/research/monthly_review.py --db <副本> --month <上個月 YYYY-MM> --out <目錄> --previous <上月目錄> --min-free-gb 0`。它依序跑 H1（`--window forward`）、`forward_watch.WATCHES` 的每個鍵、候選成績單、特徵證據與早盤 AI 判讀月報，cutoff 是副本裡該月的最後一個交易日。剛複製完時，容器看到的可用記憶體會被頁面快取吃掉（2026-11-14 試跑讀到 0.1 GB，被 `--min-free-gb 2` 擋下）：先在主機確認空閒 ≥ 5 GB，再加 `--min-free-gb 0`，與 #689 相同。耗時與峰值記憶體見[每月檢討](#每月檢討)。exit 1 是有子入口失敗，那段的失敗原因在 `summary.md`，其餘照常貼。
-4. 原始輸出：整個 `<目錄>`（`summary.md`、`review.json`、`logs/` 與各子入口的目錄）推 `pr-assets/699` 的 `run-<YYYYMMDD>/`，只推這一處（#1062 決定 [7200751860](https://github.com/YiCheng0608/stock-lab/issues/1062#issuecomment-7200751860)）；H1 在 `run-<YYYYMMDD>/H1/`，前瞻監測對象在 `run-<YYYYMMDD>/<WATCHES 的鍵>/`（兩列 H2、兩列 X4 的代號各自相同，子目錄用鍵分開）。2026-11 以前的輸出在 `pr-assets/691`（H1）與 `pr-assets/868`（前瞻監測對象）。
-5. 在追蹤 Issue「H1 前瞻驗證月報」（[#699](https://github.com/YiCheng0608/stock-lab/issues/699)）留言，H1 與每個對象各一則：
+3. 跑 `python tools/research/monthly_review.py --db <副本> --month <上個月 YYYY-MM> --out <目錄> --previous <上月目錄> --min-free-gb 0`。它依序跑 H1（`--window forward`）、`forward_watch.WATCHES` 的每個鍵、候選成績單、特徵證據、候選池的對答案、早盤 AI 判錯清單與早盤 AI 判讀月報，cutoff 是副本裡該月的最後一個交易日。剛複製完時，容器看到的可用記憶體會被頁面快取吃掉（2026-11-14 試跑讀到 0.1 GB，被 `--min-free-gb 2` 擋下）：先在主機確認空閒 ≥ 5 GB，再加 `--min-free-gb 0`，與 #689 相同。耗時與峰值記憶體見[每月檢討](#每月檢討)。exit 1 是有子入口失敗，那段的失敗原因在 `summary.md`，其餘照常貼。
+4. 提案（[#1069](https://github.com/YiCheng0608/stock-lab/issues/1069)，[判錯清單與改版提案](premarket_ai.md#判錯清單與改版提案)）：`<目錄>/premarket_errors/cases.json` 的 `proposal_gate.status` 是 `ok` 才跑，否則 `summary.md`「早盤 AI 判錯清單」段已寫原因（樣本不足、已有 shadow），這一步跳過。在 scheduler 容器跑（容器裡有 `claude` 的登入；agent 不讀、不建、不印認證檔，見 [SETUP](../ops/SETUP.md#容器內的-claude-與-gh-認證env)），避開台北 21:30～23:30、08:00～08:50 與偶數整點前後 10 分鐘（news 與 news_llm）：
+   ```bash
+   docker exec -i stock-lab-scheduler-1 sh -c 'cat > /tmp/cases-<YYYYMMDD>.json' < <目錄>/premarket_errors/cases.json
+   docker exec stock-lab-scheduler-1 python /app/tools/research/prompt_proposal.py --cases /tmp/cases-<YYYYMMDD>.json --out /tmp/prompt_proposal-<YYYYMMDD>
+   docker cp stock-lab-scheduler-1:/tmp/prompt_proposal-<YYYYMMDD> <目錄>/prompt_proposal
+   docker exec stock-lab-scheduler-1 rm -r /tmp/cases-<YYYYMMDD>.json /tmp/prompt_proposal-<YYYYMMDD>
+   ```
+   `cases.json` 以 `docker exec -i … cat >` 放進去，不用 `docker cp`：`docker cp` 放的檔屬於主機的 uid，容器的 `/tmp` 是 sticky（1777），以 `app` 跑的 `rm` 刪不掉它；正式容器裡也不以 root（`-u 0`）執行命令。輸出只在容器的 `/tmp`，不寫 `/data`、不讀寫 DB。`failed`（逾時、限流等）時可在同一天換個時段手動重跑一次，加 `--attempt 2`、`--out` 用另一個新目錄，`proposal.json` 記第幾次；`rejected` 不重跑，該月就不提案。之後統籌 review `proposal.md`，照[判錯清單與改版提案](premarket_ai.md#判錯清單與改版提案)的「從提案到 shadow」做。
+5. 原始輸出：整個 `<目錄>`（`summary.md`、`review.json`、`logs/`、各子入口的目錄與 `prompt_proposal/`）推 `pr-assets/699` 的 `run-<YYYYMMDD>/`，只推這一處（#1062 決定 [7200751860](https://github.com/YiCheng0608/stock-lab/issues/1062#issuecomment-7200751860)）；H1 在 `run-<YYYYMMDD>/H1/`，前瞻監測對象在 `run-<YYYYMMDD>/<WATCHES 的鍵>/`（兩列 H2、兩列 X4 的代號各自相同，子目錄用鍵分開）。2026-11 以前的輸出在 `pr-assets/691`（H1）與 `pr-assets/868`（前瞻監測對象）。
+6. 在追蹤 Issue「H1 前瞻驗證月報」（[#699](https://github.com/YiCheng0608/stock-lab/issues/699)）留言，H1 與每個對象各一則：
    - **H1**：第一個列對加權指數的超額，再貼判定與 pr-assets 連結（`monthly_review` 的 `summary.md`「H1」段就是這兩行）。滿 250 日的那一則照常寫出判定，標明只當紀錄、不改 H1 成立與否，不另在 #1 回報。
    - **前瞻監測對象**：第一行寫「`<代號>`（前瞻觀察，只當紀錄）」、「`<代號>`（通過驗證，只當紀錄）」或「`<代號>`（已進產品，監測）」，目前是「`X4`（前瞻觀察，只當紀錄）」、「`H2`（通過驗證，只當紀錄）」、「`H2`（已進產品，監測）」（鍵 `H2-product`）、「`F2`（前瞻觀察，只當紀錄）」、「`P2`（前瞻觀察，只當紀錄）」、「`A1`（前瞻觀察，只當紀錄）」與「`X4`（已進產品，監測）」（鍵 `X4-product`）（代號用 `summary.md` 第一行的，不寫鍵）；接著照該對象 `summary.md` 開頭三行的順序貼（`monthly_review` 的 `summary.md` 裡該鍵那段已照這個順序抄好）：對加權指數的超額日均與 t、對母體的超額日均、t 與累積日數、判定，最後是 pr-assets 連結。F2 還沒有名單的月份（正式 DB 個股日線不足 721 根，見[前瞻監測與下架](#前瞻監測與下架)的對象清單），第一行之後加一句「本月沒有名單（`vol_720` 缺值 100%，個股日線不足 721 根）」，數字照列；第一次出現名單的那個月，寫明第一個有名單的訊號日（`picks.csv` 的第一列）。P2 與 A1 在起日後的第一個事件日（兩個都是 2027-03-31）以前，判定照 `summary.md` 寫「樣本不足（起日後還沒有事件日）」與下一個事件日，數字照列。未滿 60 日的判定寫「樣本不足（累積 X／60 日）」，數字照列、標明不是判定。判到「輸給基準」之後的動作依類別（[前瞻監測與下架](#前瞻監測與下架)的「判定之後」）：前瞻觀察只記錄，不在 #1 提案；通過驗證的對象，統籌在 #1 的進產品提案補一則（事實，不是下架提案）；已進產品的策略，統籌另在 #1 提案下架。
-6. 刪副本並讀回。
+7. 刪副本並讀回。
 
 ## 每月檢討
 
-這一段回答：上個月每個監測對象怎麼了，哪些變差、哪些變強（[#1004](https://github.com/YiCheng0608/stock-lab/issues/1004) 的第一張 [#1062](https://github.com/YiCheng0608/stock-lab/issues/1062)；依據 #1 [決定 7200479974](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7200479974) 第 1 點、[7107588664](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107588664)）。規則在第一次真跑前由統籌決定，寫死在 `tools/research/monthly_review.py`（`worse`、`better` 與它們讀的常數）；要改就加 `monthly_review.VERSION`，在報告寫明改了什麼、為什麼（[研究規則](#研究規則)第 3 條）。清單只列出：進產品、下架與檢討今日名單由使用者決定，統籌在 #1 提案；「變強」的特徵只是下一輪研究的候選，照[新策略探索](#新策略探索)的探索、驗證兩段做。
+這一段回答：上個月每個監測對象怎麼了，哪些變差、哪些變強（[#1004](https://github.com/YiCheng0608/stock-lab/issues/1004) 的第一張 [#1062](https://github.com/YiCheng0608/stock-lab/issues/1062)；依據 #1 [決定 7200479974](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7200479974) 第 1 點、[7107588664](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7107588664)）。規則在第一次真跑前由統籌決定，寫死在 `tools/research/monthly_review.py`（`worse`、`better` 與它們讀的常數）；要改就加 `monthly_review.VERSION`，在報告寫明改了什麼、為什麼（`VERSION_NOTES`；第 2 版是 #1069 加的候選池來源；[研究規則](#研究規則)第 3 條）。清單只列出：進產品、下架與檢討今日名單由使用者決定，統籌在 #1 提案；「變強」的特徵只是下一輪研究的候選，照[新策略探索](#新策略探索)的探索、驗證兩段做。
 
 **命令**：`python tools/research/monthly_review.py --db <副本> --month <YYYY-MM> --out <目錄> [--previous <上個月的 --out 目錄>] [--min-free-gb 2]`
+- `review.json` 的格式（`REVIEW_FORMAT`）仍是 1：第 2 版只多了 `pool`、`errors` 兩個鍵，不和上個月比，第 1 版的 `review.json` 照常當 `--previous` 讀。
 - 只讀。拒絕（exit 2，什麼都不跑）：正式 DB、台北 21:30～23:30、可用記憶體不足（同 `forward_watch`），以及副本在該月沒有交易日、`--previous` 的目錄沒有 `review.json` 或格式版本（`REVIEW_FORMAT`）不同、`--previous` 的月份不在 `--month` 之前、`--out` 不是空的（失敗的子入口不會留下上一次的輸出，一起被推上去）。
 - cutoff：副本裡該月的最後一個交易日，傳給每個子入口的 `--cutoff`（H1、前瞻監測）或 `--end`（成績單、特徵證據）。H1 與前瞻監測的淨值只算到 cutoff，所以月初的副本也只算到月底；成績單與特徵證據的 `--end` 只截訊號日（候選日、交易日），T+5、T+20 的報酬照常讀到副本的最後一天，所以月底前 20 個交易日內的訊號日，數字會隨複製日不同。副本的最新交易日早於月底時，`summary.md` 標「月份還沒結束」。
 - 依序跑下面的子入口（每月整個 `--out` 推 `pr-assets/699` 的 `run-<YYYYMMDD>/`，見[每月流程](#前瞻驗證-h1)），每個是它自己的命令（子程序），定義、版本與 `definitions_sha256` 不變，凍結的拒絕照常生效；輸出和單獨跑同一個命令相同（測試比對 `tables.json`）：
@@ -297,9 +306,11 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
   - `<WATCHES 的鍵>/`：`forward_watch.py --watch <鍵> --cutoff <cutoff>`，`WATCHES` 的每一個鍵，從 `WATCHES` 讀，加一列就跑到（[前瞻監測與下架](#前瞻監測與下架)）。
   - `candidate_scorecard/`：`candidate_scorecard.py --end <cutoff>`。
   - `feature_evidence/`：`feature_evidence.py --end <cutoff>`。
+  - `candidate_pool_score/`：`candidate_pool_score.py --end <cutoff>`（[候選池的對答案](candidate_pool.md#對答案)，#1069）。
+  - `premarket_errors/cases.json`、`cases.md`：`premarket_errors.py --month <月份>`（[判錯清單與改版提案](premarket_ai.md#判錯清單與改版提案)，#1069；成功的判準是寫出 `cases.json`）。提案命令 `prompt_proposal.py` 不是子入口：它要 CLI 登入、每次的結果不同，由統籌在[每月流程](#前瞻驗證-h1)第 4 步另跑。
   - `premarket_score_report/report.md`：`worker.premarket_score_report.render`，也就是 `worker.cli premarket-score-report --month` 的同一段程式，在副本上以 `mode=ro`＋`query_only` 的 Session 跑，不讀正式 DB（[早盤 AI 月報](premarket_ai.md#月報與去留)）。
 - 一個子入口失敗（拒絕、例外）時其他照跑；`summary.md` 那一段寫失敗原因（子入口的 `refused` 或最後一行錯誤），清單裡寫「`<名稱>` 失敗，未判」，命令 exit 1。每個子入口的 stdout／stderr 在 `logs/`。
-- 輸出：`summary.md`（開頭是變差、變強兩張清單，接著 H1、每個 `WATCHES` 的鍵、成績單、特徵證據、早盤 AI 月報各一段；H1 與前瞻對象那段是[每月流程](#前瞻驗證-h1)第 5 步要貼的欄位）、`review.json`（機器可讀，下個月的 `--previous` 讀它），以及上面各子入口的目錄。
+- 輸出：`summary.md`（開頭是變差、變強兩張清單，接著 H1、每個 `WATCHES` 的鍵、成績單、特徵證據、候選池的對答案、早盤 AI 判錯清單、早盤 AI 月報各一段；開頭一行寫 `monthly_review.VERSION` 這一版改了什麼（`VERSION_NOTES`）；H1 與前瞻對象那段是[每月流程](#前瞻驗證-h1)第 6 步要貼的欄位）、`review.json`（機器可讀，下個月的 `--previous` 讀它），以及上面各子入口的目錄。
 
 - 實測（[#1062](https://github.com/YiCheng0608/stock-lab/issues/1062) AC-4，2026-11-26 的副本、`--month 2026-11`、容器 `--memory 4g`）：全部 253 秒，峰值記憶體 0.62 GB（子程序與本程序的最大值）；最久的是 feature_evidence 約 87 秒，其餘各 4～40 秒。
 
@@ -317,6 +328,8 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 | 「用過」怎麼查 | `explore_ledger.json` 每一筆（沒寫 `tool` 的是 `explore_research`）的工具的 `HYPOTHESES[代號]`，加上 `portfolio_research.HYPOTHESES` 與 `forward_watch.WATCHES` 的定義，`repr` 裡出現特徵鍵（整字）就算用過。只用中文標籤描述、沒寫鍵名的假設比對不到，可能被誤列成沒用過，`summary.md` 的變強段寫明這個限制，統籌看清單時刪掉 | `registered_features`、`USED_NOTE` |
 | 沒有上個月可比 | 沒有 `--previous`：特徵升降兩項寫「沒有上個月可比（沒有 --previous），不列」，前瞻對象與今日名單照列。上個月沒有、本月有的特徵、條件或期間（新加的鍵或期間，`feature_evidence.VERSION` 沒升）不比，那一項寫「`<鍵>` T+<h>：上個月沒有，不比」：條件與已進產品策略用到的特徵列在變差，`FEATURES` 列在變強，「判定有變」表也列出；上個月 feature_evidence 失敗寫「上個月 feature_evidence 失敗，不比」；`feature_evidence.VERSION` 不同整段不比，寫「判定規則改版（第 v 版→第 v 版），不比」（研究規則第 3 條）。`--previous` 沒有 `review.json` 或格式版本不同，跑之前就拒絕（exit 2） | `_comparison`、`_missing`、`NOT_LAST_MONTH`、`read_previous`、`REVIEW_FORMAT` |
 | 子入口失敗 | 本月某個前瞻對象或 H1 失敗，變差、變強兩張清單都寫「`<名稱>` 失敗，未判」（「（沒有）」不代表沒跑）；成績單失敗，變差寫同一句；本月 feature_evidence 失敗，特徵兩項寫「本月 feature_evidence 失敗，未判」 | `worse`、`better`、`_failed_items`、`_comparison` |
+| 變差、變強：候選池的來源（第 2 版，[#1069 決定 7203530697](https://github.com/YiCheng0608/stock-lab/issues/1069#issuecomment-7203530697)） | `candidate_pool_score` 的 16 個來源，T+5、T+20 各判（`forward_judge`，M＝60，從池的第一天起累積）：判「輸給基準」進變差、「通過」進變強（只當紀錄），動作「候選池只決定 AI 看哪些股票：統籌在 #1 提案調整來源或上限；改 `PoolConfig` 預設值要留 `決定：`」。另列的組（全池、層級、來源數、被上限擋掉、AI 判 keep／reprice）與對流動母體的參考值不進清單。子入口失敗時兩張清單都寫「`candidate_pool_score` 失敗，未判」 | `pool_items`、`POOL_NOTE`、`pool_facts` |
+| 早盤 AI 判錯清單 | 不進清單，只放一段（判錯筆數與提案步驟的原因）；提案與換版照 [premarket_ai](premarket_ai.md#判錯清單與改版提案) 自己的規則 | `error_facts` |
 | 早盤 AI 月報 | 不進清單，只放一段；換版照 [premarket_ai](premarket_ai.md#月報與去留) 自己的兩個條件 | — |
 
 ## 新策略探索
