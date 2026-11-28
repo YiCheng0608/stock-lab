@@ -122,6 +122,12 @@ NOT_APPLICABLE: dict[str, frozenset[str]] = {
 NOTES_MARK = "notes"
 EQUITY_FALLBACK = "Equity"
 _WANTED = {name for _context, names in FIELDS.values() for name in names}
+# The (element, context) pairs read: a fact of a wanted element in the other context
+# is never a number we use (2013Q1 has a cash policy note tagged as a year-to-date
+# CashAndCashEquivalents), so it is skipped, not parsed.
+_SLOTS = {(name, context) for context, names in FIELDS.values() for name in names} | {
+    (EQUITY_FALLBACK, INSTANT)
+}
 
 # --- the checks -------------------------------------------------------------------------
 # The fundamental_snapshots rows naming today's company of a code: t163sb04, and the
@@ -210,8 +216,9 @@ def parse_statement(
 ) -> Statement:
     """The ``FIELDS`` of one instance (``.xml`` or inline ``.html``).
 
-    Only contexts without dimensions: the quarter-end instant and the year to date.
-    Facts of one element and context must agree, else MemberError.  An item the
+    Only contexts without dimensions: the quarter-end instant and the year to date,
+    and of each element only the one its field reads.  Facts of one element and
+    context must agree, else MemberError.  An item the
     INDUSTRY's format has no line for is None and listed in ``not_applicable``.
     """
 
@@ -238,7 +245,7 @@ def parse_statement(
             continue
         context = element.get("contextRef") or ""
         slot = contexts.get(context)
-        if slot is None:
+        if slot is None or (local, slot) not in _SLOTS:
             continue
         facts.setdefault((local, slot), {})[reader(element)] = context
     values: dict[str, Decimal | None] = {}

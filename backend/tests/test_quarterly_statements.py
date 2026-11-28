@@ -406,6 +406,27 @@ def test_only_the_quarter_end_and_year_to_date_contexts_without_dimensions_count
     assert statement.thousands("total_liabilities") == 4.0
 
 
+def test_a_fact_in_the_context_its_field_does_not_read_is_not_parsed():
+    """2013Q1 1213: a cash policy note tagged as a year-to-date CashAndCashEquivalents."""
+
+    note = "1.本集團合併現金流量表中，現金及約當現金包括庫存現金、銀行存款。"
+    data = statement_xml(
+        [
+            ("ifrs:CashAndCashEquivalents", "I", "1500000"),
+            ("ifrs:CashAndCashEquivalents", "Y", note),
+            ("ifrs:CashFlowsFromUsedInOperatingActivities", "I", note),
+            ("ifrs:CashFlowsFromUsedInOperatingActivities", "Y", "800000"),
+        ]
+    )
+    statement = qs.parse_statement(data, Q, industry="ci", kind="cr")
+    assert statement.thousands("cash") == 1500.0
+    assert statement.thousands("cfo_ytd") == 800.0
+    # In the context its field reads, text is still refused.
+    bad = statement_xml([("ifrs:CashAndCashEquivalents", "I", note)])
+    with pytest.raises(qs.MemberError, match="is not a number"):
+        qs.parse_statement(bad, Q, industry="ci", kind="cr")
+
+
 def test_facts_of_one_element_and_context_must_agree():
     same = statement_xml([("ifrs:Assets", "I", "1000"), ("ifrs:Assets", "I", "1000")])
     assert (
