@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、整包的資產負債表與現金流量表、標的狀態同步、官方來源限制、新聞來源清單、盤中報價來源、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、官方成交筆數、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、股價淨值比與發行股數、外資持股、借券賣出與當沖、季報的實際上傳時間、注意股票與處置股票、內部人持股設質與轉讓申報、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、各來源最早可得、整包的資產負債表與現金流量表、標的狀態同步、官方來源限制、新聞來源清單、盤中報價來源、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、官方成交筆數、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、減資停止買賣、公司行動欄位、股價淨值比與發行股數、外資持股、借券賣出與當沖、季報的實際上傳時間、注意股票與處置股票、內部人持股設質與轉讓申報、富櫃50 成分股、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [CAPABILITIES](CAPABILITIES.md) 為準。
@@ -42,7 +42,7 @@
 | 月營收（下市公司，只在研究 DB） | MOPS 單一公司月營收 `ajax_t05st10_ifrs`（`POST https://mopsov.twse.com.tw/mops/web/ajax_t05st10_ifrs`，表單 `co_id`、民國 `year`、兩位數 `month`、`TYPEK=all`，UTF-8 HTML） | 手動的 `revenue company-classify`／`revenue company-backfill`，每家每月 1 個請求，寫入 `monthly_revenues`（`source=mops_t05st10`）；轉板公司另由 `revenue transfers` 從同一家公司的另一個標的複製（`source=mops_t21sc03_transfer`，0 個請求）。 | 只有仍公開發行的公司查得到；可得日同 `t21sc03`。規則見[下市與轉板公司的月營收](#下市與轉板公司的月營收)。 |
 | 公司基本資料（候選題材的證據） | MOPS 公司基本資料 `ajax_t05st03`（`GET https://mopsov.twse.com.tw/mops/web/ajax_t05st03?...&TYPEK=all&co_id=<代號>`，HTML） | daily 的 theme_discovery 步驟（[#1018](https://github.com/YiCheng0608/stock-lab/issues/1018)）每晚只抓要送 AI 的群的成員（最多 3 群、每群最多 20 檔），一次一頁、間隔 3 秒，取「主要經營業務」那一格給 AI 摘錄，並以 `check_member` 核對摘錄（[候選題材](INDUSTRY_CLASSIFICATION.md#73-候選題材)）。 | 頁面不另存 raw，也不寫成資料表；只在那次 `claude -p` 的 prompt raw 裡留每檔前 600 字。抓到的是當下的頁面，不是分群那天的版本。 |
 
-**選定、還沒有 collector 呼叫的端點**：股價淨值比與發行股數只回補進[研究 DB](ops/RESEARCH_DB.md)，正式 DB 先不收（[#1074 決定](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205622705)）。上市淨值比 `BWIBBU_d`、上市發行股數 `MI_QFIIS`、上櫃淨值比 `peQryDate` 三個網站端點，上櫃發行股數讀已存的 `dailyQuotes`。它們算現有官方來源（TWSE、TPEx）的新端點，不算新來源；欄位、可得時點與限制見[股價淨值比與發行股數](#股價淨值比與發行股數)。外資持股也只回補進研究 DB、正式 DB 先不收（[#1117 決定](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230109916)）：上市重讀已存的 `MI_QFIIS` raw，上櫃 `insti/qfii` 一個網站端點，算現有官方來源（TPEx）的新端點；見[外資持股](#外資持股)。借券賣出與當沖也一樣只回補進研究 DB、正式 DB 先不收（[#1085 決定](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208519530)）：上市 `TWT93U`、`TWTB4U`，上櫃 `margin/sbl`、`intraday/stat` 四個網站端點，同樣算現有官方來源的新端點（[#1 7208515806](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7208515806)）；見[借券賣出與當沖](#借券賣出與當沖)。季報的實際上傳時間（TWSE 電子書 `doc.twse.com.tw` 的 `t57sb01`）也只回補進研究 DB、正式 DB 先不收，算現有官方來源的新端點（[#1096 決定](https://github.com/YiCheng0608/stock-lab/issues/1096#issuecomment-7212859011)）；見[季報的實際上傳時間](#季報的實際上傳時間)。注意股票與處置股票同樣只回補進研究 DB、正式 DB 先不收（[#1086 決定](https://github.com/YiCheng0608/stock-lab/issues/1086#issuecomment-7208544050)）：上市 `announcement/notice`、`announcement/punish`，上櫃 `bulletin/attention`、`bulletin/disposal` 四個網站端點，也算現有官方來源的新端點（#1 [7208540612](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7208540612)），見[注意股票與處置股票](#注意股票與處置股票)。
+**選定、還沒有 collector 呼叫的端點**：股價淨值比與發行股數只回補進[研究 DB](ops/RESEARCH_DB.md)，正式 DB 先不收（[#1074 決定](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205622705)）。上市淨值比 `BWIBBU_d`、上市發行股數 `MI_QFIIS`、上櫃淨值比 `peQryDate` 三個網站端點，上櫃發行股數讀已存的 `dailyQuotes`。它們算現有官方來源（TWSE、TPEx）的新端點，不算新來源；欄位、可得時點與限制見[股價淨值比與發行股數](#股價淨值比與發行股數)。外資持股也只回補進研究 DB、正式 DB 先不收（[#1117 決定](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230109916)）：上市重讀已存的 `MI_QFIIS` raw，上櫃 `insti/qfii` 一個網站端點，算現有官方來源（TPEx）的新端點；見[外資持股](#外資持股)。借券賣出與當沖也一樣只回補進研究 DB、正式 DB 先不收（[#1085 決定](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208519530)）：上市 `TWT93U`、`TWTB4U`，上櫃 `margin/sbl`、`intraday/stat` 四個網站端點，同樣算現有官方來源的新端點（[#1 7208515806](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7208515806)）；見[借券賣出與當沖](#借券賣出與當沖)。季報的實際上傳時間（TWSE 電子書 `doc.twse.com.tw` 的 `t57sb01`）也只回補進研究 DB、正式 DB 先不收，算現有官方來源的新端點（[#1096 決定](https://github.com/YiCheng0608/stock-lab/issues/1096#issuecomment-7212859011)）；見[季報的實際上傳時間](#季報的實際上傳時間)。注意股票與處置股票同樣只回補進研究 DB、正式 DB 先不收（[#1086 決定](https://github.com/YiCheng0608/stock-lab/issues/1086#issuecomment-7208544050)）：上市 `announcement/notice`、`announcement/punish`，上櫃 `bulletin/attention`、`bulletin/disposal` 四個網站端點，也算現有官方來源的新端點（#1 [7208540612](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7208540612)），見[注意股票與處置股票](#注意股票與處置股票)。富櫃50 的每日成分股也只回補進研究 DB、正式 DB 先不收（[#1130 決定](https://github.com/YiCheng0608/stock-lab/issues/1130#issuecomment-7233275054)）：TPEx `indexInfo/r50` 一個網站端點，算現有官方來源（TPEx）的新端點（#1 [7233265682](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7233265682)），見[富櫃50 成分股](#富櫃50-成分股)。
 
 每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。raw 檔（`raw/<來源>/<擷取日>/<SHA-256>.json` 與旁邊的 `.meta.json`）先寫同目錄的暫存檔、`fsync` 後換名再同步目錄，DB 才記它的路徑；目標已存在但大小或 SHA-256 不符（例如斷電留下的 0 bytes 檔）時，下一次寫同一個路徑會以同 SHA-256 的內容重寫，內容的 SHA-256 與檔名不同就不寫、拋錯。目錄是擷取日，所以隔天重抓（例如回補 `--force`）會寫進當天的目錄；同一個 run 已有同 endpoint、同 SHA-256 的 `raw_payloads` 列時沿用那一列，它引用的檔不存在、0 bytes 或 SHA-256 不符就以這次的內容寫回原路徑（含 `.meta.json`），DB 不改，寫回失敗則 run 失敗（[#772](https://github.com/YiCheng0608/stock-lab/issues/772) 決定 [6893166947](https://github.com/YiCheng0608/stock-lab/issues/772#issuecomment-6893166947)）。列出 DB 引用、但不存在、0 bytes 或 SHA-256 不符的 raw 檔，用 [`tools/audit/raw_files.py`](../tools/audit/raw_files.py)（[讀 raw 的工具](ops/LOCAL.md#讀-raw-的工具)）。重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖與借券欄位（`day_trade_ratio`、`borrowed_sell`），現有寫入路徑從沒接來源，正式 DB 與研究 DB 都是 0 列非空；研究 DB 的回補改寫進另外兩張表，這兩欄先不動（[借券賣出與當沖](#借券賣出與當沖)）；融券餘額 2026-11 起收集（[籌碼來源](#籌碼來源)，[#662](https://github.com/YiCheng0608/stock-lab/issues/662)）。券商分點列後版，collector 不接入。
 
@@ -95,7 +95,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 ## 各來源最早可得
 
-2026-11-14 以少量請求實測各端點最早回得出資料的日子（[#692 AC-1](https://github.com/YiCheng0608/stock-lab/issues/692#issuecomment-6873790108)，59 個請求、同 host 間隔 3.5 秒）；淨值比與發行股數 4 列是 2026-11-27 的實測（[#1074 回報](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205579479)，45 個請求，同樣的間隔）；借券賣出與當沖 4 列是 2026-11-27 的實測（[#1085 回報](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208492301)，62 個請求，同樣的間隔）；季報上傳時間 1 列是 2026-11-27 的實測（[#1096 回報](https://github.com/YiCheng0608/stock-lab/issues/1096#issuecomment-7211851841)與[提問](https://github.com/YiCheng0608/stock-lab/issues/1096#issuecomment-7212826604)，`doc.twse.com.tw` 356 個請求，間隔 3.5～6 秒）；注意與處置 4 列也是 2026-11-27 的實測（[#1086 回報](https://github.com/YiCheng0608/stock-lab/issues/1086#issuecomment-7208497574)，39 個請求，同 host 間隔 3.5 秒）；外資持股 2 列是 2026-11-28 的實測（[#1117 回報](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230080923)，上市讀已存的 raw、0 個請求，上櫃 `insti/qfii` 18 個請求，同 host 間隔 3.5 秒）；內部人持股、設質與轉讓申報 3 列是 2026-11-28 的實測（[#1129 回報](https://github.com/YiCheng0608/stock-lab/issues/1129#issuecomment-7233000370)，官方請求 95 個，同 host 間隔 3.5 秒）。正式 DB 的個股歷史從 2024-09-30 起；更早的歷史只補進獨立的[研究 DB](ops/RESEARCH_DB.md)（#692 決定）。
+2026-11-14 以少量請求實測各端點最早回得出資料的日子（[#692 AC-1](https://github.com/YiCheng0608/stock-lab/issues/692#issuecomment-6873790108)，59 個請求、同 host 間隔 3.5 秒）；淨值比與發行股數 4 列是 2026-11-27 的實測（[#1074 回報](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205579479)，45 個請求，同樣的間隔）；借券賣出與當沖 4 列是 2026-11-27 的實測（[#1085 回報](https://github.com/YiCheng0608/stock-lab/issues/1085#issuecomment-7208492301)，62 個請求，同樣的間隔）；季報上傳時間 1 列是 2026-11-27 的實測（[#1096 回報](https://github.com/YiCheng0608/stock-lab/issues/1096#issuecomment-7211851841)與[提問](https://github.com/YiCheng0608/stock-lab/issues/1096#issuecomment-7212826604)，`doc.twse.com.tw` 356 個請求，間隔 3.5～6 秒）；注意與處置 4 列也是 2026-11-27 的實測（[#1086 回報](https://github.com/YiCheng0608/stock-lab/issues/1086#issuecomment-7208497574)，39 個請求，同 host 間隔 3.5 秒）；外資持股 2 列是 2026-11-28 的實測（[#1117 回報](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230080923)，上市讀已存的 raw、0 個請求，上櫃 `insti/qfii` 18 個請求，同 host 間隔 3.5 秒）；內部人持股、設質與轉讓申報 3 列是 2026-11-28 的實測（[#1129 回報](https://github.com/YiCheng0608/stock-lab/issues/1129#issuecomment-7233000370)，官方請求 95 個，同 host 間隔 3.5 秒）；富櫃50 成分股 1 列是 2026-11-28 的實測（[#1130 回報](https://github.com/YiCheng0608/stock-lab/issues/1130#issuecomment-7233164427)，請求 103 個，其中 `indexInfo/r50` 8 個，同 host 間隔 3.5 秒）。正式 DB 的個股歷史從 2024-09-30 起；更早的歷史只補進獨立的[研究 DB](ops/RESEARCH_DB.md)（#692 決定）。
 
 | 資料 | 端點 | 最早可得 | 更早時的回應 | 回補路徑怎麼處理更早的日子 |
 | --- | --- | --- | --- | --- |
@@ -137,6 +137,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 內部人持股與增減（月） | `siis` 靜態月報 `IRB110` | 2003-08（資料年月 9208；上市、上櫃都是） | HTTP 404（上市 2003-07、2003-01、2002-06、2001-01，上櫃 2003-07） | 回補單還沒做；從 2003-08 起每市場每月 1 個請求，404 記 `not_published`（[內部人持股、設質與轉讓申報](#內部人持股設質與轉讓申報)） |
 | 內部人設質（月） | `siis` 靜態月報 `IRB130` | 2003-08 | HTTP 404（上市 2003-07） | 同上 |
 | 內部人轉讓事前申報 | MOPS `ajax_t56sb21` | 2002-08-01（上市、上櫃都是）；股數欄 2003-05 起才有值 | 「無持股轉讓之情形」（查 2001 全年） | 回補單還沒做；每市場每年 1 個請求。2002-08～2003-04 的佔位 0 存 NULL |
+| 富櫃50 每日成分股 | `indexInfo/r50`（`type=cnst`） | 2010-04-30（頁面：「本資訊自民國99年4月30日起開始提供」） | `stat ok`、`totalCount 0` 的空表（2010-04-29） | 回補單還沒做；早於這天不請求。指數基期 2008-12-31，2009-01～2010-04-29 的名單拿不到（[富櫃50 成分股](#富櫃50-成分股)） |
 
 ## 新聞來源
 
@@ -1015,6 +1016,27 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   - **轉讓申報 2002-08～2003-04 的股數是佔位的 0**（2002 年全部、2003 年 1～3 月全部、4 月 122／125 筆），2003-05 起正常。判準寫死：申報日早於 2003-05-01、而且該列所有股數欄都是 0 的列，股數存 NULL。研究 DB 日線從 2004-02 起，研究工具實際用不到這段。
   - 轉讓申報的「預定轉讓總股數」是有效期間內**可**轉讓的股數，不是實際轉讓；實際轉讓要看事後申報（不收），月報只有董監合計的增減。刪除的申報看不出來。
   - 設質只有月資料，比逐筆公告晚約 3～7 週可得。
+
+### 富櫃50 成分股
+
+研究 DB 沒有指數成分股的歷史，「成分股納入、剔除前後」這類假設登記不了（[策略證據](spec/evidence.md)第十八輪起的「研究 DB 沒有的」）。[#1130](https://github.com/YiCheng0608/stock-lab/issues/1130) 評估後選定富櫃50 的每日成分股，**只回補進研究 DB**，寫進 `index_constituents_daily`；正式 DB 先不收（[#1130 決定](https://github.com/YiCheng0608/stock-lab/issues/1130#issuecomment-7233275054)）。端點算現有官方來源（TPEx）的新端點，不算新來源（#1 [7233265682](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7233265682)）。回補由另一張任務單做，跑法與覆蓋寫在 [RESEARCH_DB](ops/RESEARCH_DB.md)。最早可得見[各來源最早可得](#各來源最早可得)。
+
+| 資料 | 端點 | 一次涵蓋 | 欄位 |
+| --- | --- | --- | --- |
+| 富櫃50 每日成分股 | `POST https://www.tpex.org.tw/www/zh-tw/indexInfo/r50`，form `type=cnst&date=YYYY/MM/DD&response=json`（頁面「富櫃50指數成分股資訊」`zh-tw/indices/stock-index/thematic/IX0060/consti.html`） | 一天的完整名單（不是異動） | 回應 `date`（`20130628`）、`tables[0].date`（民國 `102/06/28`）、`totalCount`；`data` 每列 8 欄 `序號`／`股票代號名稱` 交錯，一格是 `代號&nbsp;名稱`（`1565&nbsp;精華`），4 組一列、13 列 |
+
+- **用途**：每天每檔一列，存代號、名稱原文、`source`（`tpex_indexinfo_r50`）與資料日期；研究 DB 當天沒有這個代號時只計 `unmatched`，不建標的。納入與剔除由研究工具用相鄰兩個交易日的名單相減，不另存。2021-04-16 → 04-19 相減得納入 3078、3691、6244、6411，刪除 3131、4167、6643、8044，和當時報導的生效日與檔數一致。
+- **整天失敗的條件**：`totalCount` 和實際列數不符、空表（最早可得以後）、`date` 與表內民國日期不符、讀不懂的格。檔數不是 50 照寫，回補時逐日列出，不當失敗。
+- **下市股覆蓋**：名單照當天產生。2010-04-30、2013-06-28、2018-06-29 的 50 檔在研究 DB 都有標的、當天都有上櫃日線，含現在下市的 4／8／3 檔、轉板的 2／2／3 檔（[#1130 回報](https://github.com/YiCheng0608/stock-lab/issues/1130#issuecomment-7233164427)）。
+- **可得時點**：櫃買中心沒有公布調整公告（新聞稿 2017-10-31 起以「富櫃50」「成分股」搜尋，沒有定審結果），最早的官方證據是生效那天的名單。研究工具只用 T 以前（含 T）的名單、T+1 執行，**不能研究公告後、生效前那段**；登記假設時要寫明。
+- **授權與限流**：網站端點，條款照[官方來源共同限制](#官方來源共同限制)的 TPEx 第五條，和 `insti/qfii`、`peQryDate` 同一類；data.gov.tw 沒有查。頁面寫「凡使用前揭指數者，應經本中心書面同意」，指的是以指數發行商品的授權，不是讀名單。只在研究 DB 回補時、以有上限的批次請求，同 host 間隔 3.5 秒；限流未公開，2026-11-28 的 8 個請求每個 0.08～0.49 秒。
+- **全歷史的量**：研究 DB 2010-04-30 起有上櫃日線的交易日 4,055 天（日線到 2026-11-13），一天 1 個請求，約 4 小時（加上台北 21:15～23:30 的等待）；每天約 1.4 KB，raw 約 6 MB；約 20 萬列。開跑前 `df -h /` 至少 5 GiB 可用，不到就停在請求之前。
+- **為什麼正式 DB 先不收**：沒有產品需求，只為研究登記假設。migration 兩邊同一份 schema，正式 DB 只建空表；要進規則時再開正式 DB 的任務，那時可改讀 OpenAPI `tpex50_constituents`。
+- **限制**：
+  - 沒有公告日、沒有異動原因（定期審核或臨時剔除分不出來）。
+  - 指數基期 2008-12-31，2009-01～2010-04-29 的名單拿不到。
+  - OpenAPI `tpex50_constituents` 只有當天（2026-11-28 回 50 列，`Date` `1151127`），沒有歷史。
+  - 臺灣50、臺灣中型100：官方免費來源沒有歷史完整名單（TWSE OpenAPI 只有指數值 `TAI50I`，臺灣指數公司的指數頁也沒有名單）；FTSE Russell 與 MSCI 的成分股檔受使用條款限制或要付費，不用。
 
 ## FinMind 補缺口規則
 
