@@ -37,8 +37,8 @@ from test_premarket_ai import (
     valid,
 )
 
-# The fixtures under other names: pytest registers them by their own (db, world,
-# no_network), and the test parameters do not shadow an import.
+# test_premarket_ai's fixtures, imported under other names and given back their own
+# below (a test parameter named like an import would shadow it).
 from test_premarket_ai import db as premarket_db  # noqa: F401
 from test_premarket_ai import no_network as premarket_no_network  # noqa: F401
 from test_premarket_ai import world as premarket_world  # noqa: F401
@@ -59,6 +59,21 @@ from app.models import (
 from worker import ai_list, ai_list_input, ai_list_reading, premarket_ai
 from worker.news_llm import LlmBatchError
 from worker.premarket_score import score_readings
+
+
+@pytest.fixture(autouse=True)
+def no_network(request):
+    return request.getfixturevalue("premarket_no_network")
+
+
+@pytest.fixture
+def db(request):
+    return request.getfixturevalue("premarket_db")
+
+
+@pytest.fixture
+def world(request):
+    return request.getfixturevalue("premarket_world")
 
 
 def snapshot(db):
