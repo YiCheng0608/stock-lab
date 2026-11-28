@@ -429,6 +429,72 @@ class TradingHalt(Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class ValuationDaily(Base):
+    """One security's official P/B, P/E and yield of one session (Issue #1075).
+
+    TWSE ``BWIBBU_d`` and TPEx ``peQryDate`` (個股日本益比、殖利率及股價淨值比), as
+    published that day: the exchanges compute them with the latest statement filed
+    then and do not recompute them later.  A value the source leaves blank, ``-`` or
+    ``N/A`` is NULL, never 0.  Only the research database is written
+    (``worker.valuation_backfill``); the production one has the empty table.
+    """
+
+    __tablename__ = "valuation_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id", "trading_date", "source", name="uq_valuation_daily"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    pb_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 殖利率(%), as the source prints it (3.21 is 3.21%).
+    dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 財報年/季 as ``2018Q1``: TWSE from 2017-04-12, TPEx since its newer layout;
+    # NULL before.
+    report_period: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class SharesOutstandingDaily(Base):
+    """One security's official number of issued shares of one session (Issue #1075).
+
+    TWSE ``MI_QFIIS`` 發行股數 and the TPEx daily quote table's 發行股數, in shares.
+    Market value is the close times this, computed by the research tools, never
+    stored.  A blank or 0 is NULL.  Only the research database is written.
+    """
+
+    __tablename__ = "shares_outstanding_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "trading_date",
+            "source",
+            name="uq_shares_outstanding_daily",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    shares_issued: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class SecuritiesLendingDaily(Base):
     """One security's 借券賣出 of one session (Issue #1089).
 
@@ -876,6 +942,63 @@ class FundamentalSnapshot(Base):
     )
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class QuarterlyStatement(Base):
+    """One company's balance sheet and cash flow items of one quarter (Issue #1083).
+
+    Read from the MOPS quarterly XBRL archive (``source=mops_tifrs_zip``) by
+    ``worker.quarterly_statements``.  Amounts are thousand NTD, as
+    ``fundamental_snapshots.revenue``.  The balance sheet items are the quarter-end
+    values; ``*_ytd`` are year to date as filed (capital expenditure is negative,
+    an outflow), a single quarter is the research tools' difference.  A value the
+    company did not file, or one its report format has no line for, is NULL, never
+    0; ``data_json.not_applicable`` names the latter.  Revenue and EPS stay in
+    ``fundamental_snapshots``.  ``announcement_date`` is the statutory deadline as
+    for the archive's EPS.  Only the research database is written; the production
+    one has the empty table.
+    """
+
+    __tablename__ = "quarterly_statements"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "period_end",
+            "fiscal_period",
+            name="uq_quarterly_statements_period",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+    fiscal_period: Mapped[str] = mapped_column(String(10))
+    announcement_date: Mapped[date] = mapped_column(Date)
+    total_assets: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_liabilities: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Equity attributable to owners of the parent; an individual report's Equity.
+    equity_parent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    equity_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_assets: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_liabilities: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cash: Mapped[float | None] = mapped_column(Float, nullable=True)
+    receivables: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inventories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Ordinary shares, for per-share figures.
+    share_capital_common: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # All share capital (the summary page t163sb05's 股本).
+    share_capital_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cfo_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    capex_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gross_profit_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operating_income_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    data_as_of: Mapped[date] = mapped_column(Date)
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class MonthlyRevenue(Base):

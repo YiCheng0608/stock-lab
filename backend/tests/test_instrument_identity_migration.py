@@ -41,6 +41,9 @@ CHILDREN = [
     "mainstream_items",
     "strategy_list_items",
     "theme_cluster_members",
+    "valuation_daily",
+    "shares_outstanding_daily",
+    "quarterly_statements",
     "securities_lending_daily",
     "day_trade_daily",
 ]
@@ -278,6 +281,9 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     "no_trade_days",
                     "monthly_revenues",
                     "trading_halts",
+                    "valuation_daily",
+                    "shares_outstanding_daily",
+                    "quarterly_statements",
                     "securities_lending_daily",
                     "day_trade_daily",
                 }:

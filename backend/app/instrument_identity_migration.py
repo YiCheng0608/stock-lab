@@ -55,6 +55,9 @@ _CHILDREN = {
     "theme_cluster_members",
     "candidate_pool_items",
     "premarket_ai_stocks",
+    "valuation_daily",
+    "shares_outstanding_daily",
+    "quarterly_statements",
     "securities_lending_daily",
     "day_trade_daily",
 }
