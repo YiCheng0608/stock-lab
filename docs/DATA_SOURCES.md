@@ -875,7 +875,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 
 ### 外資持股
 
-研究 DB 沒有外資持股比率，「外資持股的水準與變化」這類假設登記不了（[策略證據](spec/evidence.md)第十七輪起的「研究 DB 沒有的」）。[#1117](https://github.com/YiCheng0608/stock-lab/issues/1117) 評估後選定下列做法，**只回補進研究 DB**，寫進另一張表 `foreign_holdings_daily`，不加欄到 `shares_outstanding_daily`；正式 DB 先不收（[#1117 決定](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230109916)）。上櫃端點算現有官方來源（TPEx）的新端點，不算新來源。回補由另一張任務單做，跑法與覆蓋寫在 [RESEARCH_DB](ops/RESEARCH_DB.md)。最早可得見[各來源最早可得](#各來源最早可得)。
+研究 DB 沒有外資持股比率，「外資持股的水準與變化」這類假設登記不了（[策略證據](spec/evidence.md)第十七輪起的「研究 DB 沒有的」）。[#1117](https://github.com/YiCheng0608/stock-lab/issues/1117) 評估後選定下列做法，**只回補進研究 DB**，寫進另一張表 `foreign_holdings_daily`，不加欄到 `shares_outstanding_daily`；正式 DB 先不收（[#1117 決定](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230109916)）。上櫃端點算現有官方來源（TPEx）的新端點，不算新來源。回補是 `valuation backfill` 的 `twse-foreign`、`tpex-foreign` 兩個 feed（[#1121](https://github.com/YiCheng0608/stock-lab/issues/1121)），跑法、覆蓋與限制寫在 [RESEARCH_DB](ops/RESEARCH_DB.md#外資持股1121)。最早可得見[各來源最早可得](#各來源最早可得)。
 
 | 資料 | 端點 | 一次涵蓋 | 欄位 |
 | --- | --- | --- | --- |

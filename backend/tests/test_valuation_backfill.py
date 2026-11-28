@@ -10,6 +10,12 @@ The fixtures under ``fixtures/valuation`` are answers of the #1074 probe
 - ``pe_qry_date_20261126``: TPEx with 財報年/季 (1569 本益比 ``N/A``);
   ``pe_qry_date_20070423``: without it (1408 本益比、股價淨值比 ``N/A``).
 - ``mi_qfiis_20040211`` (外資) and ``mi_qfiis_20261126`` (外資及陸資).
+- ``mi_qfiis_20130701`` and ``mi_qfiis_20240701``: the rows the #1117 scan kept
+  (evidence/1117/out/qfiis_samples.json), 0050 holding 0 shares in 2013 and the
+  MOPS link around 異動原因 2 in 2024 (Issue #1121).
+- ``qfii_20180702``: TPEx ``insti/qfii`` (evidence/1117/raw), 6497 已達上限,
+  4413 禁止投資, 3147 holding 0 shares; ``qfii_20070423_empty``: the empty table
+  before 2007-05-10.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import (
+    ForeignHoldingsDaily,
     IngestionRun,
     Instrument,
     MarketBar,
@@ -563,7 +570,14 @@ def test_the_run_keeps_three_and_a_half_seconds_and_restores_the_floor(monkeypat
 # --- the migration --------------------------------------------------------------------
 
 
-def test_the_migration_adds_two_empty_tables_and_goes_down_again(tmp_path):
+@pytest.mark.parametrize(
+    "suffix, tables",
+    [
+        ("_valuation_shares", {"valuation_daily", "shares_outstanding_daily"}),
+        ("_foreign_holdings", {"foreign_holdings_daily"}),
+    ],
+)
+def test_the_migration_adds_empty_tables_and_goes_down_again(tmp_path, suffix, tables):
     pytest.importorskip("alembic")
     from alembic import command
     from alembic.config import Config
@@ -571,7 +585,7 @@ def test_the_migration_adds_two_empty_tables_and_goes_down_again(tmp_path):
     from app import migrations
     from app.migration_revisions import REVISIONS
 
-    revision = next(name for name in REVISIONS if name.endswith("_valuation_shares"))
+    revision = next(name for name in REVISIONS if name.endswith(suffix))
     previous = REVISIONS[REVISIONS.index(revision) - 1]
     engine = create_engine(f"sqlite:///{(tmp_path / 'm.db').as_posix()}")
     enable_sqlite_foreign_keys(engine)
@@ -580,7 +594,6 @@ def test_the_migration_adds_two_empty_tables_and_goes_down_again(tmp_path):
         "script_location", str(Path(migrations.ALEMBIC_CONFIG_PATH).parent / "alembic")
     )
     config.attributes["connection"] = engine
-    tables = {"valuation_daily", "shares_outstanding_daily"}
     try:
         command.upgrade(config, revision)
         assert tables <= set(inspect(engine).get_table_names())
@@ -597,10 +610,9 @@ def test_the_migration_adds_two_empty_tables_and_goes_down_again(tmp_path):
                 )
             }
         assert {
-            "ix_valuation_daily_trading_date",
-            "ix_valuation_daily_raw_payload_id",
-            "ix_shares_outstanding_daily_trading_date",
-            "ix_shares_outstanding_daily_raw_payload_id",
+            f"ix_{table}_{column}"
+            for table in tables
+            for column in ("trading_date", "raw_payload_id")
         } <= indexes
         command.downgrade(config, previous)
         assert not tables & set(inspect(engine).get_table_names())
@@ -808,3 +820,299 @@ def test_reapply_writes_no_manifest_row_for_a_session_never_asked(factory):
     assert result["feeds"]["twse-pb"]["not_answered"] == 2
     with factory() as db:
         assert db.scalar(select(func.count()).select_from(IngestionRun)) == 0
+
+
+# --- foreign holdings (Issue #1121) ------------------------------------------------
+
+QFII = load("qfii_20180702.json")
+QFII_EMPTY = load("qfii_20070423_empty.json")
+Q_2013 = load("mi_qfiis_20130701.json")
+Q_2024 = load("mi_qfiis_20240701.json")
+MOPS_LINK = " <a href='https://mopsov.twse.com.tw/mops/web/t98sb02' target=_blank>2</a>"
+
+
+def test_twse_foreign_reads_the_old_layout_and_the_early_limit_is_null():
+    rows = vb.parse_twse_foreign(Q_OLD, date(2004, 2, 11))
+    assert rows["1101"] == {
+        "shares_issued": 2_546_396_409,
+        "foreign_shares_held": 424_513_358,
+        "foreign_held_pct": 16.67,
+        "foreign_available_shares": 848_684_846,
+        # 0.00 on every row up to 2004-07-23: no data (#1117 decision point 4).
+        "foreign_limit_pct": None,
+        "mainland_limit_pct": None,
+        "change_reason": "1",
+        "last_filing_date": date(2003, 9, 16),
+        "note": None,
+    }
+    # The number 0: never filed.
+    assert rows["0050"]["last_filing_date"] is None
+
+
+def test_twse_foreign_reads_both_layouts_either_side_of_2009_05_04():
+    before = redate(Q_OLD, date(2009, 4, 30))
+    before["data"][1][8] = "50.00"
+    before["data"][2][8] = "0.00"
+    old = vb.parse_twse_foreign(before, date(2009, 4, 30))
+    assert old["1101"]["foreign_limit_pct"] == 50.0
+    # After 2004-07-23 a 0.00 limit is as published.
+    assert old["2330"]["foreign_limit_pct"] == 0.0
+    assert old["2330"]["mainland_limit_pct"] is None
+    new = vb.parse_twse_foreign(redate(Q_NEW, date(2009, 5, 4)), date(2009, 5, 4))
+    assert new["2330"] == {
+        "shares_issued": 25_932_370_067,
+        "foreign_shares_held": 17_526_865_407,
+        "foreign_held_pct": 67.58,
+        "foreign_available_shares": 8_405_504_660,
+        "foreign_limit_pct": 100.0,
+        "mainland_limit_pct": 100.0,
+        "change_reason": None,
+        "last_filing_date": date(2026, 5, 26),
+        "note": None,
+    }
+
+
+def test_twse_foreign_strips_the_html_of_the_change_reason():
+    rows = vb.parse_twse_foreign(Q_2024, date(2024, 7, 1))
+    assert Q_2024["data"][0][10] == MOPS_LINK
+    assert rows["0050"]["change_reason"] == "2"
+    assert rows["0050"]["last_filing_date"] == date(2024, 7, 1)
+    assert rows["0052"]["change_reason"] is None
+    combined = copy.deepcopy(Q_2024)
+    combined["data"][0][10] = MOPS_LINK + " 4"
+    assert (
+        vb.parse_twse_foreign(combined, date(2024, 7, 1))["0050"]["change_reason"]
+        == "2 4"
+    )
+    combined["data"][0][10] = MOPS_LINK + "3"
+    assert (
+        vb.parse_twse_foreign(combined, date(2024, 7, 1))["0050"]["change_reason"]
+        == "23"
+    )
+    combined["data"][0][10] = "<a>x</a>"
+    with pytest.raises(vb.LayoutError, match="change reason"):
+        vb.parse_twse_foreign(combined, date(2024, 7, 1))
+
+
+def test_twse_foreign_zero_shares_held_is_zero_not_null():
+    rows = vb.parse_twse_foreign(Q_2013, date(2013, 7, 1))
+    assert rows["0050"]["foreign_shares_held"] == 0
+    assert rows["0050"]["foreign_held_pct"] == 0.0
+    assert rows["0050"]["foreign_available_shares"] == 1_425_000_000
+    assert rows["0050"]["last_filing_date"] is None
+
+
+@pytest.mark.parametrize(
+    "column, cell, error",
+    [(11, "92/13/40", "filing date"), (5, "1.5", "share count"), (7, "x", "value")],
+)
+def test_twse_foreign_unreadable_cells_fail_the_day(column, cell, error):
+    payload = copy.deepcopy(Q_NEW)
+    payload["data"][1][column] = cell
+    with pytest.raises(vb.LayoutError, match=error):
+        vb.parse_twse_foreign(payload, date(2026, 11, 26))
+
+
+def test_tpex_foreign_reads_the_table():
+    day = date(2018, 7, 2)
+    rows = vb.parse_tpex_foreign(QFII, day)
+    assert set(rows) == {"6497", "4413", "1569", "3147"}
+    assert rows["6497"] == {
+        "shares_issued": 130_128_940,
+        "foreign_shares_held": 130_128_940,
+        "foreign_held_pct": 100.0,
+        "foreign_available_shares": 0,
+        "foreign_limit_pct": 100.0,
+        "mainland_limit_pct": None,
+        "change_reason": None,
+        "last_filing_date": None,
+        "note": "已達上限",
+    }
+    assert rows["4413"]["note"] == "禁止投資"
+    assert rows["4413"]["foreign_held_pct"] == 7.57
+    # 0 shares held is 0, never missing.
+    assert rows["3147"]["foreign_shares_held"] == 0
+    assert rows["3147"]["foreign_held_pct"] == 0.0
+    assert rows["3147"]["note"] is None
+
+
+def test_tpex_foreign_empty_or_miscounted_or_misdated_tables_fail_the_day():
+    with pytest.raises(vb.LayoutError, match="no rows"):
+        vb.parse_tpex_foreign(QFII_EMPTY, date(2007, 4, 23))
+    short = copy.deepcopy(QFII)
+    short["tables"][0]["totalCount"] = 5
+    with pytest.raises(vb.LayoutError, match="totalCount 5 but 4 rows"):
+        vb.parse_tpex_foreign(short, date(2018, 7, 2))
+    del short["tables"][0]["totalCount"]
+    with pytest.raises(vb.LayoutError, match="totalCount"):
+        vb.parse_tpex_foreign(short, date(2018, 7, 2))
+    with pytest.raises(vb.LayoutError, match="reported date"):
+        vb.parse_tpex_foreign(QFII, date(2018, 7, 3))
+    table_day = copy.deepcopy(QFII)
+    table_day["tables"][0]["date"] = "107/07/03"
+    with pytest.raises(vb.LayoutError, match="table date"):
+        vb.parse_tpex_foreign(table_day, date(2018, 7, 2))
+
+
+@pytest.mark.parametrize(
+    "column, cell, error",
+    [(7, "7.57", "ratio"), (7, "a%", "ratio"), (5, "1,2.5", "share count")],
+)
+def test_tpex_foreign_unreadable_cells_fail_the_day(column, cell, error):
+    payload = copy.deepcopy(QFII)
+    payload["tables"][0]["data"][1][column] = cell
+    with pytest.raises(vb.LayoutError, match=error):
+        vb.parse_tpex_foreign(payload, date(2018, 7, 2))
+
+
+def test_tpex_foreign_unknown_columns_fail_the_day():
+    payload = copy.deepcopy(QFII)
+    payload["tables"][0]["fields"][5] = "外資持有股數"
+    with pytest.raises(vb.LayoutError, match="unknown columns"):
+        vb.parse_tpex_foreign(payload, date(2018, 7, 2))
+
+
+@pytest.mark.parametrize(
+    "feed, endpoint",
+    [
+        ("tpex-pb", "https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate"),
+        ("tpex-foreign", "https://www.tpex.org.tw/www/zh-tw/insti/qfii"),
+    ],
+)
+def test_fetch_official_posts_each_tpex_feed_to_its_endpoint(
+    monkeypatch, feed, endpoint
+):
+    calls = []
+    monkeypatch.setattr(
+        sources, "fetch_json", lambda url, **kwargs: calls.append((url, kwargs))
+    )
+    vb.fetch_official(feed, date(2018, 7, 2))
+    assert calls == [
+        (
+            endpoint,
+            {"method": "POST", "data": {"date": "2018/07/02", "response": "json"}},
+        )
+    ]
+
+
+def test_tpex_foreign_posts_to_insti_qfii():
+    method, url, form = vb.request_of("tpex-foreign", date(2018, 7, 2))
+    assert (method, form) == ("POST", {"date": "2018/07/02", "response": "json"})
+    assert url.split("?")[0] == "https://www.tpex.org.tw/www/zh-tw/insti/qfii"
+    with pytest.raises(ValueError, match="no request"):
+        vb.request_of("twse-foreign", date(2018, 7, 2))
+
+
+FOREIGN = {"twse-shares": Q_NEW, "tpex-foreign": QFII}
+
+
+def test_twse_foreign_rereads_the_twse_shares_raw_and_tpex_foreign_requests(
+    factory,
+):
+    with factory() as db:
+        seed(db)
+    fetch = Fetcher(FOREIGN)
+    # twse-foreign named first still runs after twse-shares within a session.
+    feeds = ["twse-foreign", "twse-shares", "tpex-foreign"]
+    first = run(factory, fetch, feeds=feeds)
+    assert first["status"] == "success"
+    assert sorted(fetch.calls) == sorted(
+        [("twse-shares", d) for d in (D1, D2)] + [("tpex-foreign", d) for d in (D1, D2)]
+    )
+    twse = first["feeds"]["twse-foreign"]
+    assert (twse["requested"], twse["reapplied"], twse["success"]) == (0, 2, 2)
+    # 1101, 2330, 1108's missing row on D1; 0050 has no bar.
+    assert (twse["inserted"], twse["unmatched"], twse["no_row"]) == (4, 2, 1)
+    tpex = first["feeds"]["tpex-foreign"]
+    # 1569 on D1 only; 1240 is not in the table; 6497, 4413, 3147 have no bar.
+    assert (tpex["requested"], tpex["inserted"], tpex["no_row"]) == (2, 1, 2)
+    assert tpex["unmatched"] == 3 + 4
+    with factory() as db:
+        shares_run = db.scalar(
+            select(IngestionRun).where(
+                IngestionRun.request_key == f"valuation_backfill:twse-shares:{D1}"
+            )
+        )
+        row = db.scalar(
+            select(ForeignHoldingsDaily)
+            .join(Instrument)
+            .where(Instrument.symbol == "2330", ForeignHoldingsDaily.trading_date == D1)
+        )
+        assert row.raw_payload_id == shares_run.metadata_json["raw_payload_id"]
+        assert (row.source, row.data_as_of) == ("twse_mi_qfiis", D1)
+        assert (row.foreign_shares_held, row.mainland_limit_pct) == (
+            17_526_865_407,
+            100.0,
+        )
+        assert row.last_filing_date == date(2026, 5, 26)
+        otc = db.scalar(
+            select(ForeignHoldingsDaily).where(
+                ForeignHoldingsDaily.source == "tpex_insti_qfii"
+            )
+        )
+        assert (otc.trading_date, otc.foreign_limit_pct) == (D1, 100.0)
+        raw = db.get(RawPayload, otc.raw_payload_id)
+        assert raw.source == "tpex" and "insti/qfii?date=2018/07/02" in raw.endpoint
+
+    again = run(factory, Fetcher(FOREIGN), feeds=feeds)
+    assert again["requests"] == 0 and again["changed"] == 0
+    assert again["feeds"]["twse-foreign"]["done_before"] == 2
+    reapplied = run(factory, Fetcher({}), feeds=feeds, reapply=True)
+    assert reapplied["requests"] == 0 and reapplied["changed"] == 0
+    assert reapplied["feeds"]["twse-foreign"]["unchanged"] == 4
+    assert reapplied["feeds"]["tpex-foreign"]["unchanged"] == 1
+
+
+def test_twse_foreign_waits_for_the_twse_shares_capture(factory):
+    with factory() as db:
+        seed(db)
+    alone = run(factory, Fetcher({}), feeds=["twse-foreign"])
+    assert alone["requests"] == 0
+    assert alone["feeds"]["twse-foreign"]["not_answered"] == 2
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(IngestionRun)) == 0
+    run(factory, Fetcher(FOREIGN), feeds=["twse-shares"])
+    later = run(factory, Fetcher({}), feeds=["twse-foreign"])
+    assert (
+        later["status"] == "success" and later["feeds"]["twse-foreign"]["success"] == 2
+    )
+
+
+def test_a_twse_shares_answer_that_does_not_read_fails_twse_foreign_too(factory):
+    with factory() as db:
+        seed(db)
+    broken = copy.deepcopy(Q_NEW)
+    broken["fields"][5] = "外資持有"
+    result = run(
+        factory, Fetcher({"twse-shares": broken}), feeds=["twse-shares", "twse-foreign"]
+    )
+    assert result["status"] == "partial"
+    assert result["feeds"]["twse-foreign"]["failed"] == 2
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(ForeignHoldingsDaily)) == 0
+
+
+def test_tpex_foreign_asks_nothing_before_2007_05_10(factory):
+    days = [date(2007, 5, 9), date(2007, 5, 10)]
+    with factory() as db:
+        add_instrument(db, "TPEx", "1569", days)
+        db.commit()
+    fetch = Fetcher({"tpex-foreign": QFII})
+    with factory() as db:
+        result = vb.backfill(
+            db, days[0], days[1], feeds=["tpex-foreign"], fetch=fetch, now=lambda: NOON
+        )
+    assert fetch.calls == [("tpex-foreign", days[1])]
+    assert result["feeds"]["tpex-foreign"]["not_published"] == 1
+
+
+def test_an_empty_tpex_foreign_answer_writes_nothing_and_is_asked_again(factory):
+    with factory() as db:
+        seed(db)
+    empty = run(factory, Fetcher({"tpex-foreign": QFII_EMPTY}), feeds=["tpex-foreign"])
+    assert empty["status"] == "partial"
+    assert empty["feeds"]["tpex-foreign"]["failed"] == 2
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(ForeignHoldingsDaily)) == 0
+    again = run(factory, Fetcher({"tpex-foreign": QFII}), feeds=["tpex-foreign"])
+    assert again["requests"] == 2 and again["status"] == "success"

@@ -2681,6 +2681,7 @@ OMITTED_TABLES: dict[str, str] = {
         "由後端 test_futures_night 驗"
     ),
     "premarket_ai_scores": "對答案表（#1043 寫入）；今日名單頁的早盤 AI 判讀不讀它",
+    "foreign_holdings_daily": "同 valuation_daily（#1121 外資持股）",
     "shares_outstanding_daily": "同 valuation_daily",
     "theme_cluster_members": "同 theme_cluster_runs",
     "theme_cluster_runs": (
