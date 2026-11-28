@@ -28,12 +28,12 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 
 提示詞 `ai_list_v1`，schema `ai_list_reading.OUTPUT_SCHEMA`（以 `--json-schema` 傳給 CLI，程式再驗一次）：
 
-- `market`：`stance`（`bullish`／`bearish`／`neutral`）、`confidence`（`high`／`medium`／`low`）、`method.basis`（1～5 個，依重要性排、不重複：`us`、`tx_night`、`tx_day`、`news`、`taiex`）、`reasons`。
+- `market`：`stance`（`bullish`／`bearish`／`neutral`）、`confidence`（`high`／`medium`／`low`）、`method.basis`（1～5 個，依重要性排、不重複：`us`、`tx_night`、`tx_day`、`news`、`taiex`）、`reasons`（2～4 條）。
 - `sectors`：同 `premarket_v1`。
 - `picks`：最多 10 檔，每檔：
   - `symbol`、`rank`（1 起連號，1 是 AI 最看好的）；
   - `method`：`setup`（`breakout` 突破、`pullback_support` 回檔到支撐、`oversold_rebound` 跌深反彈、`theme_momentum` 題材發酵、`news_catalyst` 消息催化、`chip_accumulation` 籌碼集中）、`basis`（1～3 個，陣列順序就是主次：`news`、`chips`、`technical`、`sector`、`market`）、`confidence`；
-  - `reasons`：1～3 條 `{text, refs}`，「根據……，推論……」，價位寫成名詞（進場區、停損、目標）；
+  - `reasons`：1～3 條 `{text, refs}`（條數由 schema 擋），「根據……，推論……」，價位寫成名詞（進場區、停損、目標）；
   - `levels`：`entry`（`type`：`breakout` 站上 `low` 才算、`high` 是不追價上限；`pullback` 回到 `low`～`high` 之間才算；`low`、`high`、`condition`）、`stop`、`target_1`、`target_2`（可為 null），每個價位是 `{price, refs, atr_multiple}`；`exit_conditions` 0～2 條；`valid_sessions` 1～5 個交易日。
 - `empty_reason`：空名單時必填，否則 null。大盤偏空可以空名單（1/4 Q1-4 A），提示詞寫「偏空且信心不是 low 時傾向空名單」，程式不強制。
 - `data_gaps`：`{text, refs}`。
@@ -46,7 +46,7 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 
 | 層 | 檢查 | 不過時 |
 | --- | --- | --- |
-| 整份 | schema：結構、代碼表外的值、`basis` 重複、`valid_sessions` 超出 1～5、超過 10 檔（`schema`） | 重試 1 次，仍不過 `rejected` |
+| 整份 | schema：結構、代碼表外的值、`basis` 重複、`valid_sessions` 超出 1～5、理由條數（每檔 1～3、大盤 2～4）、超過 10 檔（`schema`；超過上限由 schema 擋、重試 1 次，決定 [7237841394](https://github.com/YiCheng0608/stock-lab/issues/1145#issuecomment-7237841394)） | 重試 1 次，仍不過 `rejected` |
 | 整份 | 代號不在候選池（`not_in_pool`）、重複（`duplicate_pick`）、`rank` 不是 1～n 連號（`rank_not_contiguous`）、空名單沒寫原因（`empty_without_reason`） | `rejected`，不重試 |
 | 整份 | `news:<id>` 不在輸入（`unknown_news_ref`）、下單指示用語（`directive_words`，同 [premarket_v1](premarket_ai.md#核對)；查所有理由、進場條件、出場條件、資料缺口與 `empty_reason`） | `rejected`，不重試 |
 | 單檔 | 見下面「每檔的價位」 | 單檔不過，整份照 `done` |
@@ -69,7 +69,7 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 | 取整後 停損＜進場下緣≤進場上緣＜目標一＜目標二 | `order` |
 | RR ≥ 1.0（2/4 Q2-4 A） | `risk_reward_below_min` |
 
-- **RR**：(目標一 − 參考進場) ÷ (參考進場 − 停損)，用取整後的價位；參考進場在突破是進場下緣、拉回是進場區中點（同規則價位的 `risk_reward_basis`）。程式算，兩位小數存；參考進場不高於停損時是 null。
+- **RR**：(目標一 − 參考進場) ÷ (參考進場 − 停損)，用取整後的價位；參考進場在突破是進場下緣、拉回是進場區中點（同規則價位的 `risk_reward_basis`）。程式算，四捨五入到兩位小數，存的和判「≥ 1.0」用的是同一個兩位小數（0.995 存 1.0、算過；PR #1151 review 必修 2）；參考進場不高於停損時是 null。
 - **單檔不過**（2/4 Q2-5 A）：名次、判讀方式、理由照留，`display_levels_json` 是 null（不顯示價位、不進盤中通知、不能加入追蹤，由後續任務照此讀）。
 
 ## 紀錄

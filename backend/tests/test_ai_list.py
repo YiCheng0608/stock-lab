@@ -140,7 +140,8 @@ def answer(payload, picks=None, **change):
                 {
                     "text": "根據美股與隔夜消息，推論大盤開盤持平。",
                     "refs": [f"news:{news_id}", "us:SPX"],
-                }
+                },
+                {"text": "根據台指期夜盤，推論開盤波動有限。", "refs": ["tx:night"]},
             ],
         },
         "sectors": [],
@@ -365,6 +366,54 @@ def test_each_failing_level_check(item, change, check):
     assert check in problems(result)
 
 
+def _cheap_item(stop, target):
+    """A TWSE stock at 9 (tick 0.01 below 10, 0.05 from 10) without limits: a breakout
+    at high_20 9.00, stop low_20 STOP, target high_60 TARGET (each on its base)."""
+
+    return {
+        "symbol": "2330",
+        "exchange": "TWSE",
+        "price": {"close": 9.0},
+        "level_facts": {
+            "instrument_type": "stock",
+            "close": 9.0,
+            "tick": 0.01,
+            "atr14": 0.1,
+            "high_20": {"price": 9.0, "date": L.isoformat()},
+            "low_20": {"price": stop, "date": L.isoformat()},
+            "high_60": {"price": target, "date": L.isoformat()},
+            "limit_up": None,
+            "limit_down": None,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "stop, target, stored, passed",
+    [
+        # (11.00 − 9.00) ÷ (9.00 − 6.99) = 0.99502: stored 1.0, and so it passes.
+        (6.99, 11.0, 1.0, True),
+        # (11.00 − 9.00) ÷ (9.00 − 6.98) = 0.99010: stored 0.99, below 1.0.
+        (6.98, 11.0, 0.99, False),
+        # (11.05 − 9.00) ÷ (9.00 − 6.95) = 1.0 exactly.
+        (6.95, 11.05, 1.0, True),
+    ],
+)
+def test_the_rr_judged_is_the_rr_stored(stop, target, stored, passed):
+    """PR #1151 review, 2: no row stores risk_reward=1.0 with risk_reward_below_min."""
+
+    pick = good_pick(
+        stop=_price(stop, "low_20"),
+        target_1=_price(target, "high_60"),
+    )
+    pick["levels"]["entry"]["low"] = _price(9.0, "high_20")
+    pick["levels"]["entry"]["high"] = _price(9.05, "high_20", 0.5)
+    result = ai_list_reading.check_levels(pick, _cheap_item(stop, target), D)
+    assert result["risk_reward"] == stored
+    assert ("risk_reward_below_min" not in problems(result)) is passed
+    assert (result["status"] == "pass") is passed
+
+
 def test_no_atr_with_a_multiple_fails(item):
     item["level_facts"]["atr14"] = None
     result = ai_list_reading.check_levels(good_pick(), item, D)
@@ -479,6 +528,10 @@ def _code(payload, path, value):
         (("market", "method", "basis"), ["us", "us"]),
         (("picks", 0, "levels", "valid_sessions"), 6),
         (("picks", 0, "levels", "entry", "type"), "gap"),
+        # Reason counts (PR #1151 review suggestion 1): a pick 1 to 3, the market 2 to 4.
+        (("picks", 0, "reasons"), []),
+        (("picks", 0, "reasons"), [{"text": "根據籌碼，推論偏多。", "refs": []}] * 4),
+        (("market", "reasons"), [{"text": "根據美股，推論持平。", "refs": ["us:SPX"]}]),
     ],
 )
 def test_a_code_off_the_table_is_retried_once_then_rejected(db, world, path, value):
@@ -503,6 +556,14 @@ def test_more_than_ten_picks_is_a_schema_failure(db, world):
     picks = [good_pick(rank=rank) for rank in range(1, 12)]
     with pytest.raises(LlmBatchError, match="11 items"):
         ai_list_reading.validate_schema(answer(_payload(db), picks))
+
+
+def test_an_edited_prompt_without_a_new_version_is_not_called(db, world, monkeypatch):
+    monkeypatch.setitem(ai_list_reading.PROMPTS, "ai_list_v1", "0" * 64)
+    cli = FakeCli(ok)
+    _shot, outcome = read(db, cli)
+    assert (outcome.status, outcome.reason) == ("failed", "prompt_hash_mismatch")
+    assert cli.prompts == [] and outcome.attempts == []
 
 
 @pytest.mark.parametrize("first", [TIMEOUT, BROKEN])
@@ -574,7 +635,7 @@ def test_the_prompt_and_schema_are_pinned():
     assert ai_list_reading._sha256(text) == ai_list_reading.PROMPTS["ai_list_v1"]
     # Changing the schema needs a new version too.
     assert ai_list_reading.SCHEMA_SHA256 == (
-        "a85d3c963035ea34b6ec9bdb1656dfd04b57007fd1938e60ffe2995210560adc"
+        "5cbc238882cbdab744e21c55c27706b2e6901ce0ec169d661457955cf522a494"
     )
     assert "最多 10 檔" in text and "1.0" in text
 
@@ -846,6 +907,33 @@ def test_the_two_jobs_have_their_own_locks_and_logs(run_env):
     finally:
         own.release()
     assert not (run_env.logs / "premarket-ai-20261124.log").exists()
+
+
+def _no_pending_write(db) -> bool:
+    return not db.connection().connection.dbapi_connection.in_transaction
+
+
+@linux_only
+def test_no_write_is_open_during_the_calls(run_env):
+    """A retry never holds SQLite's write lock (as premarket-ai, review 7194545794, 2)."""
+
+    seen = []
+
+    def watching(reply):
+        def call(payload):
+            seen.append(_no_pending_write(run_env.db))
+            return reply(payload) if callable(reply) else reply
+
+        return call
+
+    code, _ = job(run_env, FakeCli(watching(BROKEN), watching(ok)))
+    assert code == 0 and seen == [True, True]
+    (reading,) = _rows(run_env.db)
+    assert reading.attempts == 2 and reading.status == "done"
+    # The raw rows came with the reading, one per call.
+    ids = [attempt["raw_payload_id"] for attempt in reading.attempts_json]
+    assert len(set(ids)) == 2
+    assert all(run_env.db.get(RawPayload, raw_id) is not None for raw_id in ids)
 
 
 @linux_only

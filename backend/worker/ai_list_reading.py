@@ -159,7 +159,7 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                             }
                         }
                     ),
-                    "reasons": _REASONS,
+                    "reasons": {**_REASONS, "minItems": 2, "maxItems": 4},
                 }
             ),
             "sectors": {
@@ -192,7 +192,7 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                                 "confidence": {"enum": list(CONFIDENCES)},
                             }
                         ),
-                        "reasons": _REASONS,
+                        "reasons": {**_REASONS, "minItems": 1, "maxItems": 3},
                         "levels": _obj(
                             {
                                 "entry": _obj(
@@ -480,15 +480,18 @@ def check_levels(
         values["stop"],
         values["target_1"],
     )
-    out["risk_reward"] = None if ratio is None else round(ratio, 2)
+    # The two-decimal ratio is both what is stored and what is judged (PR #1151
+    # review, 2): a 0.995 is stored 1.0 and passes, as the row says.
+    stored = None if ratio is None else round(ratio, 2)
+    out["risk_reward"] = stored
     out["reference_entry"] = round(
         reference_entry(entry_type, values["entry.low"], values["entry.high"]), 4
     )
-    if ratio is not None and ratio < MIN_RISK_REWARD - 1e-9:
+    if stored is not None and stored < MIN_RISK_REWARD:
         problems.append(
             {
                 "check": "risk_reward_below_min",
-                "risk_reward": round(ratio, 2),
+                "risk_reward": stored,
                 "minimum": MIN_RISK_REWARD,
             }
         )
