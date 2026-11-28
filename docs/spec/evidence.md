@@ -1430,6 +1430,52 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #1107 | 第一版；沒有人用它對回補資料跑過 |
 
+**第二十四輪的假設**（[第二十四輪：AG2](#第二十四輪ag2)）：`tools/research/round24_research.py`（[#1116](https://github.com/YiCheng0608/stock-lab/issues/1116)）。AG2 寫在 `round24_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES`、`trade_research.HYPOTHESES` 或 `round4_research`～`round23_research` 裡；命令列一樣沒有改參數、起日、門檻或 cutoff 的旗標（不讀成員表，沒有 `--members`）。AG2 走 X7 的事件日帳戶（`explore_research.simulate_events`），事件日是 K2 的取法（`round14_research.quarter_events`）；母體（`evidence_lib.universe`）、載入（`explore_research.load_context`）、`explore_judge`、「最新一季」的讀法（`round23_research._known`，即 `round15_research._known`，同 AF2）、`quarterly_statements` 的表、來源、金融業產業碼與外國發行人 Q2 的標記（`round23_research` 的 `STATEMENT_TABLE`、`STATEMENT_SOURCE`、`FINANCIAL_CODES`、`FOREIGN_KEY`／`FOREIGN_RULE`，`foreign_late`）、標的狀態（`round15_research.load_statuses`）、依年的下市、轉板股（`round23_research.delisted_by_year`）、公開檢查、紀錄檔與紀錄檔可寫的檢查（`ledger_write_problem`）都 import 自現有工具；和 AF1、AF2 的重疊，名單用 `round23_research.pb`（AF1）、`round23_research.accruals_4q`（AF2），照 `round23_research.plan_events` 的小者先（`round5_research.order_key`，同分以雜湊）取前 20 名（`round23_research` 第 1 版的 `HYPOTHESES["AF1"]`、`HYPOTHESES["AF2"]`），比例與摘要用 `round10_research`（`overlap_share`、`overlap_summary`）。新寫的只有 `cash_to_assets`、第 4 點的缺值原因與另列的檔數。`explore_research` 第 2 版、`trade_research` 第 1 版、`round4_research`～`round23_research` 與 `portfolio_research.ranking_key` 不變。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足、紀錄檔寫不進）、分段、段長與先決條件都和上面的 `explore_research` 相同；探索段與驗證段另在 DB 沒有 `valuation_daily`（AF1 的名單）或 `quarterly_statements` 表時拒絕（exit 2，讀資料前，`table_problems`），`--coverage-only` 不拒絕、在 `coverage.md` 的「表」寫哪一張沒有（那一張的特徵全部缺值）：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/round24_research.py --db /research/stock.db --segment exploration --coverage-only --out /out/coverage
+```
+
+- **一份 panel**：`round24_research.load` 用 `explore_research.load_context` 讀一份 panel，另讀：
+  - AG2 與 AF2 的名單：`quarterly_statements`（`source`＝`mops_tifrs_zip`）`announcement_date` 到該段最後一天的每一列，讀一次（`cash`、`total_assets`、`operating_income_ytd`、`cfo_ytd` 與 `data_json` 的 `industry_code`、`deadline_rule`；列是 `round23_research.QuarterStatement` 加上 `cash`，`round23_research.accruals_4q` 直接讀同一份）；
+  - AF1 的名單：`round23_research.load_valuations`，`valuation_daily` 中 `data_as_of` 是 panel 的事件日的列，每一檔只讀它交易所自己的來源；
+  - 標的狀態讀 `instruments.status`。
+
+  三段都從副本起點讀（`LOAD_FROM`，規則 `LOAD_RULE` 算進 `definitions_sha256`），不讀段末以後的任何列。
+- **算法**：照[第二十四輪：AG2](#第二十四輪ag2)與[第二十四輪實作釋義](#第二十四輪實作釋義)。每季的事件日（`round14_research.quarter_events`，一般公司的 4 個法定期限，週六補班日跳過）、母體中 `cash_to_assets` 大者先（`round5_research.order_key`，同分以 `sha256("<T>:<instrument_id>")`）取前 20 名；帳戶照 X7、K2（T+1 開盤每檔 1／20，買不到的略過、不遞補，下一個事件日 T′ 收盤賣，T′ 的新名單在 T′+1 開盤買，順延同「X7 的金額與順延」），母體同一個帳戶規則、同一組事件日，段內第一個事件日之前沒有淨值。沒有對照基準（登記段不另列）。
+  - AG2：`round24_research.cash_to_assets`：q 是 `announcement_date` ≤ T 的全部列中期末最晚的一季（`round23_research._known`，同一季取較晚公告的那一列）；`cash_to_assets`＝`cash`(q) ÷ `total_assets`(q)，只用 q 一季的季底值。退化的判準：最新一季（`announcement_date` ≤ T 的 `quarterly_statements` 列中期末最晚的一季）不是事件日對應的那一季、q 那一列 `data_json` 的產業碼是 `basi`／`fh`／`ins`／`bd`、q 沒有 `announcement_date` ≤ T 的列（在第 1 種之後判，實際上不會發生，那一欄都是 0）、q 的 `cash` 或 `total_assets` 是 NULL（含 `not_applicable`），或 q 的 `total_assets` ≤ 0 時缺值、排最後；缺值的原因依序判：最新一季、金融業的格式、q 沒有列、`cash` 或 `total_assets` 是 NULL、`total_assets` ≤ 0，每檔只算第一個；`cash` 是 0 時 `cash_to_assets`＝0，照值排序，不是缺值；`cash` 是負數（不該有）時也照值排序；有值的不足 20 檔時以缺值的依雜湊補，母體不足 20 檔時餘額留現金。
+  - 報告開頭寫「定義照摘要與索引頁，未讀全文」與存活者偏差：
+    - 存活者偏差（AG2）：`quarterly_statements` 含之後下市、轉板的公司（季底起 670 天內有日線就寫），剩下的缺口是日線跨過季底、但整包沒有那一季的下市股，2013～2024 年 16 個公司年，偏差方向事先定不出來。不另列對照基準；依年的下市、轉板股缺值檔次在 `AG2/summary.md` 的「依年的下市、轉板股」
+
+    另列（只列出、不判定）：每次調倉的檔數與平均投入比例：名單檔數是取前 20 名之後，投入比例是買進那天收盤時部位占淨值的比例；AG2 與 AF1（`round23_research` 第 1 版的 `HYPOTHESES["AF1"]`，同一個 T 算）每個事件日名單的重疊比例：|AG2 的名單 ∩ AF1 的前 20 名| ÷ AG2 當天的名單檔數；AG2 或 AF1 當天沒有名單的事件日（AF1 的第一個訊號日 2013-05-15 以前）不計。看 AG2 有沒有變成 AF1 的子集。只列出、不判定；AG2 與 AF2（`round23_research` 第 1 版的 `HYPOTHESES["AF2"]`，同一個 T 算）每個事件日名單的重疊比例：|AG2 的名單 ∩ AF2 的前 20 名| ÷ AG2 當天的名單檔數；AG2 或 AF2 當天沒有名單的事件日（AF2 的第一個訊號日 2014-05-15 以前）不計。只列出、不判定；依年（T 的年）列母體裡 `status` 是 `delisted`／`transferred` 的檔次（每個事件日數一次）與其中 `cash_to_assets` 缺值的檔次，另列其他檔次（現存股）的缺值比例對照。只列出、不判定。`explore.json` 的 AG2 列有 `overlap_af1`、`overlap_af2`、`names`、`invested`、`unsold_share`。
+  - 限制（`LIMITS`，`summary.md` 與 `explore.md` 照寫）：
+    - AG2：定義照摘要與索引頁，未讀全文；`cash` 不含短期投資：文獻常用「現金及短期投資」，`quarterly_statements` 沒有短期投資這一科，只用現金及約當現金；整包存的是更正後的值：同一份季報更正過，更正後的值在原期限就被看到，同 `t163sb04` 的限制；外國發行人的 Q2：事件日用一般公司的期限（8/14），外國發行人 2021 年起的 Q2 期限是 8/31，`announcement_date` 照它算時，8/14 那天最新一季不是事件日對應的那一季，那一季它們不成訊號，只是少收、不會偷看；金融業的格式都缺值，名單只會是一般業與「其他」格式；`cash` 的缺值比例文件沒寫，由 `--coverage-only` 先看；和前 74 個假設的關係：沒有已登記的同類，前二十三輪的資產負債表只有 AF2 用了總資產當分母，AG2 用現金的水準，AF2 用營業利益減營業現金流的流量；AF1、AF2 的結果在提問時都還沒出來，AG2 不是看它們挑的，看和 AF1、AF2 的重疊比例；不加淨值比的條件，以免變成 AF1 的子集；和 V1、Z3、U3 這類「安全股」也不同：它們用價格波動或配息紀錄。
+  - 漲跌幅依日期：`exit_research.daily_limit`（2015-05-29 以前 ±7%、2015-06-01 起 ±10%，[#922](https://github.com/YiCheng0608/stock-lab/issues/922)），表算進 `definitions_sha256`。
+  - 判定是 `explore_research.explore_judge`：探索段 t ≥ 2；驗證段 t ≥ `VALIDATION_MIN_T`＝3.403（t < 3.403 判「前瞻觀察」，沒有 t 下限），寫死、不在執行時重算，算進 `definitions_sha256`。本輪 1 個、累計 75 個。
+- **探索**：`python tools/research/round24_research.py --db /research/stock.db --segment exploration --hypotheses AG2 --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，從頭讀（同 `explore_research`）。第一個訊號日是 2013-05-15。
+- **驗證**：`python tools/research/round24_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `1116`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27；第一個事件日是 2020-03-31。判「通過」的另跑已用段，寫在 `AG2/used/`。載入已用段之前先放掉驗證段的資料（PR #905 review [7053124013](https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-7053124013)），同一時間只留一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬、不記紀錄檔，跑幾次都可以（照樣載入整份 panel，AF1、AF2 的名單會讀 T 與 T 以前的資料，只計時、不算重疊）。缺值比例的分母是母體檔次；每個事件日都數。
+  - AG2：每個事件日一列：對應的季、母體檔次、有 `cash_to_assets` 的檔數、名單檔數與其中有值的、最新一季不是對應的那一季、金融業的格式、q 沒有列（都是 0）、`cash` 或 `total_assets` 是 NULL 與其中 `cash` 是 NULL 的、`total_assets` ≤ 0 的檔數、缺值比例、外國發行人 Q2（8/14 事件日因最新一季不是對應的那一季缺值，而那一季的列 `data_json` 的 `deadline_rule` 是 `foreign_issuer_q2_two_months`、`announcement_date` 在 T 之後的檔數；外國發行人的 Q2 期限從 2021 年起才適用，探索段這一欄都是 0；2021～2024 的值在驗證段的 `summary.md`）、母體裡的下市、轉板股檔次與其中缺值的檔次。
+  - 另依年列：事件日、母體檔次、缺值的檔次、母體裡的下市、轉板股檔次與其中缺值的檔次、下市與轉板股的缺值比例、其他檔次的缺值比例。
+  - 耗時：總耗時、載入耗時（另列 panel、事件日的 `pb`（AF1 的名單）、`quarterly_statements` 與標的狀態）、峰值記憶體、讀到的日線根數，以及排序與覆蓋耗時和特徵的計算時間（`cash_to_assets`、`foreign`（外國發行人 Q2 的計數）、`af1_order`、`af2_order`（同一個 T 算 AF1、AF2 的名單））。
+  - 有明顯斷點或缺值比例異常的年份或事件日（含 `cash` 是 NULL 的比例）、某個事件日能進名單的檔數（有值的檔數）不到 20，或下市、轉板股的缺值比例明顯高於現存股時，先在工具單提問、不跑探索段。
+- **紀錄檔**：和其他工具共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "round24_research"`、`"round": 24`。代號不重疊，各工具互不擋；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」，接著是「定義照摘要與索引頁，未讀全文」、AG2 的存活者偏差、本輪 1 個、累計 75 個、探索段與驗證段的門檻、引擎、AG2 的限制；驗證段另寫前瞻觀察的條件（t < 3.403（沒有 t 下限））；總表列方向、日數（有淨值的交易日）、對加權指數的超額與 t（第一個列）、對母體的超額與 t、絕對報酬與判定；總表下另列每次調倉的名單檔數、和 AF1、AF2 的重疊、平均投入比例與期末未賣的比例。
+  - `explore.json`：同上的總表（另有 `engine` 與上面列出的欄位），另有 `tool`、`design`（`1116`）、`validation_min_t`、`engines`、`definitions_sha256`、工具 commit、副本資訊與先決條件。
+  - `AG2/summary.md`（開頭先寫「定義照摘要與索引頁，未讀全文」與存活者偏差，再列退化的判準與限制；另有「每次調倉」、「和 AF1／AF2 的重疊」、「依年的下市、轉板股」與資料覆蓋同 `--coverage-only` 的表）、`tables.json`、`equity.csv`、`picks.csv`（每個訊號日的名單，有 `quarter`、`cash_to_assets`、`cash`、`total_assets`）、`trades.csv`。
+  - `ledger-entries.json`：本次寫進紀錄檔的那一筆。
+- **耗時與記憶體**：`--coverage-only` 的實測與探索段的估計見 [#1116](https://github.com/YiCheng0608/stock-lab/issues/1116) AC-4 的回報。建議照上面的跑法 `--memory 4g --memory-swap 4g`（探索段與 `--coverage-only` 加 `--oom-score-adj 1000`，驗證段不加）。
+- 文件與程式用同一套說法：AG2 的退化判準、重疊比例、另列的檔數、存活者偏差、限制與「定義照摘要與索引頁，未讀全文」的說明是 `round24_research` 的 `DEGENERATE`、`OVERLAP_NOTE`、`LIMITS`（`coverage.md` 的說明句 `COVERAGE_NOTES` 引用同一份 `DEGENERATE`），本段逐字照抄，`backend/tests/test_round24_research.py` 比對本段，改了一邊沒改另一邊就紅。
+
+**`round24_research` 的版本**：`round24_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`（AG2 的定義；表與來源、`cash`、`total_assets` 兩個欄位、`cash_to_assets` 的公式（只用 q 一季的季底值）、「最新一季必須是對應的那一季」、缺值的各條（含金融業產業碼 `basi`／`fh`／`ins`／`bd`、`total_assets` ≤ 0）與原因的順序；大者先、N 20、持有到下一個事件日、T+1 開盤買、`sha256("<T>:<instrument_id>")`、起日 2013-05-15；事件日（`round14_research` 的法定期限、取法與版本、雜湊）、帳戶（`explore_research` 的版本與雜湊）、最新一季的讀法（`round15_research` 與 `round23_research` 的版本與雜湊）；另列用的外國發行人 Q2 的標記、`delisted`／`transferred`、AF1、AF2 的定義（`round23_research` 第 1 版的定義、版本與雜湊，以及 AF2 的名單一起讀的 `operating_income_ytd`、`cfo_ytd`）、重疊比例（`round10_research` 的版本與雜湊）；分段、兩段的門檻、本輪與累計的個數、成本與讀取的起點）；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #1116 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
