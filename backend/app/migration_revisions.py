@@ -47,6 +47,7 @@ REVISIONS = (
     "0039_candidate_pool",
     "0040_premarket_ai",
     "0041_valuation_shares",
+    "0042_index_constituents",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]

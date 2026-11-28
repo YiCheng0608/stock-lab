@@ -1,6 +1,7 @@
-"""Daily P/B and issued shares of the research database (Issue #1075).
+"""Daily P/B, issued shares and index constituents of the research database.
 
-Four feeds, one ``valuation backfill`` command (#1074 decision 7205622705):
+Five feeds, one ``valuation backfill`` command (#1074 decision 7205622705; the
+TPEx 50 one #1130 decision 7233275054, Issue #1134):
 
 - ``twse-pb``: TWSE ``BWIBBU_d`` (個股日本益比、殖利率及股價淨值比), one request a
   session from ``BWIBBU_FIRST_DATE``, into ``valuation_daily``.
@@ -12,6 +13,13 @@ Four feeds, one ``valuation backfill`` command (#1074 decision 7205622705):
   OpenAPI ``tpex_mainboard_daily_close_quotes`` and its ``Capitals``).  The
   research DB's seed rows (from the production copy) cite files of the production
   volume; ``fallback_raw_dir`` reads them there, read-only.
+- ``tpex50-daily``: TPEx ``indexInfo/r50`` (富櫃50指數成分股資訊), the whole list of
+  the day, one request a session from ``TPEX50_FIRST_DATE``, into
+  ``index_constituents_daily``.  Every listed code is written; one the research DB
+  has no TPEx bar of that day keeps ``instrument_id`` NULL and is ``unmatched``.
+  A table of ``totalCount`` rows other than the cells read, an empty table or a
+  cell other than ``代號&nbsp;名稱`` fails the session; a list of other than 50
+  codes is written and listed (``not_50_days``; #1130 decision 7233275054).
 
 The sessions are the research DB's: the days with a TWSE or TPEx bar of a stock,
 ``ipo`` or ETF in the range, from each feed's first day (no request before it).
@@ -60,6 +68,7 @@ from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.models import (
+    IndexConstituentDaily,
     IngestionRun,
     Instrument,
     MarketBar,
@@ -80,6 +89,7 @@ from worker.sources import (
 BWIBBU_ENDPOINT = "https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d"
 MI_QFIIS_ENDPOINT = "https://www.twse.com.tw/rwd/zh/fund/MI_QFIIS"
 PE_QRY_DATE_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate"
+TPEX50_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/indexInfo/r50"
 
 # docs/DATA_SOURCES.md 各來源最早可得 (#1074): BWIBBU_d answers 「查詢日期小於94年9月
 # 2日」 before this; MI_QFIIS answers on the research DB's first TWSE session;
@@ -88,6 +98,11 @@ BWIBBU_FIRST_DATE = date(2005, 9, 2)
 MI_QFIIS_FIRST_DATE = TWSE_QUOTES_FIRST_DATE
 PE_QRY_DATE_FIRST_DATE = date(2007, 1, 2)
 TPEX_SHARES_FIRST_DATE = TPEX_QUOTES_FIRST_DATE
+# r50: 「本資訊自民國99年4月30日起開始提供」; 2010-04-29 answers stat ok, totalCount 0
+# (#1130 report 7233164427).
+TPEX50_FIRST_DATE = date(2010, 4, 30)
+TPEX50_INDEX_CODE = "TPEX50"
+TPEX50_SIZE = 50
 
 DAY_RUN_TYPE = "valuation_backfill_day"
 REQUEST_KEY = "valuation_backfill:{feed}:{day}"
@@ -180,6 +195,9 @@ TPEX_MANAGED_TITLE = "管理股票"
 _TWSE_PERIOD = re.compile(r"(\d{2,3})/([1-4])")
 _TPEX_PERIOD = re.compile(r"(\d{2,3})Q([1-4])")
 _ROC_DAY = re.compile(r"(\d{2,3})/(\d{1,2})/(\d{1,2})")
+# r50: four (序號, 股票代號名稱) pairs a row; the last row pads with ("", "").
+TPEX50_LAYOUT = ("序號", "股票代號名稱") * 4
+_TPEX50_CELL = re.compile(r"([0-9A-Z]{4,6})&nbsp;(\S(?:.*\S)?)")
 
 
 class LayoutError(OfficialDataError):
@@ -220,13 +238,23 @@ FEEDS: dict[str, Feed] = {
             "tpex",
             False,
         ),
+        Feed(
+            "tpex50-daily",
+            "TPEx",
+            IndexConstituentDaily,
+            TPEX50_FIRST_DATE,
+            "tpex",
+            True,
+        ),
     )
 }
 SOURCES = {
     "twse-pb": "twse_bwibbu_d",
     "twse-shares": "twse_mi_qfiis",
     "tpex-pb": "tpex_pe_qry_date",
+    "tpex50-daily": "tpex_indexinfo_r50",
 }
+TABLES = ("valuation_daily", "shares_outstanding_daily", "index_constituents_daily")
 # tpex-shares: by the endpoint of the capture read.
 TPEX_SHARES_SOURCES = {
     TPEX_HISTORY_API: "tpex_daily_quotes",
@@ -247,13 +275,17 @@ def request_of(feed: str, day: date) -> tuple[str, str, dict[str, str] | None]:
     if feed == "tpex-pb":
         form = {"date": day.strftime("%Y/%m/%d"), "response": "json"}
         return "POST", f"{PE_QRY_DATE_ENDPOINT}?date={form['date']}&response=json", form
+    if feed == "tpex50-daily":
+        form = {"type": "cnst", "date": day.strftime("%Y/%m/%d"), "response": "json"}
+        url = f"{TPEX50_ENDPOINT}?type=cnst&date={form['date']}&response=json"
+        return "POST", url, form
     raise ValueError(f"{feed} sends no request")
 
 
 def fetch_official(feed: str, day: date) -> Any:
     method, url, form = request_of(feed, day)
     if method == "POST":
-        return sources.fetch_json(PE_QRY_DATE_ENDPOINT, method="POST", data=form)
+        return sources.fetch_json(url.split("?")[0], method="POST", data=form)
     return sources.fetch_json(url)
 
 
@@ -477,11 +509,54 @@ def parse_tpex_quote_shares(payload: Any, day: date) -> dict[str, dict[str, Any]
     return _by_code(rows, "code", lambda row: {"shares_issued": _shares(row["shares"])})
 
 
+def parse_tpex50(payload: Any, day: date) -> dict[str, dict[str, Any]]:
+    """{code: {"name_in_source": name}} of the day's r50 list, in 序號 order."""
+
+    table = _tpex_table(payload, day)
+    fields, data = table.get("fields"), table.get("data")
+    count = table.get("totalCount")
+    if not isinstance(fields, list) or tuple(fields) != TPEX50_LAYOUT:
+        raise LayoutError(f"unknown columns {fields!r}")
+    if not isinstance(data, list) or not data:
+        raise LayoutError("the table has no rows")
+    if not isinstance(count, int) or isinstance(count, bool):
+        raise LayoutError(f"unreadable totalCount {count!r}")
+    cells: dict[int, Any] = {}
+    for row in data:
+        if not isinstance(row, list) or len(row) != len(fields):
+            raise LayoutError(f"a row does not match the columns: {row!r}")
+        for number, cell in zip(row[0::2], row[1::2]):
+            if number == "" and cell == "":
+                continue  # the last row's padding
+            if not isinstance(number, int) or isinstance(number, bool):
+                raise LayoutError(f"unreadable 序號 {number!r}")
+            if number in cells:
+                raise LayoutError(f"序號 {number} is listed twice")
+            cells[number] = cell
+    if count != len(cells):
+        raise LayoutError(f"totalCount {count!r} but {len(cells)} codes")
+    if sorted(cells) != list(range(1, len(cells) + 1)):
+        raise LayoutError(f"序號 are not 1..{len(cells)}: {sorted(cells)!r}")
+    result: dict[str, dict[str, Any]] = {}
+    for number in sorted(cells):
+        match = _TPEX50_CELL.fullmatch(str(cells[number]))
+        if not isinstance(cells[number], str) or not match:
+            raise LayoutError(f"unreadable cell {cells[number]!r}")
+        code, name = match.groups()
+        if "&nbsp;" in name:
+            raise LayoutError(f"unreadable cell {cells[number]!r}")
+        if code in result:
+            raise LayoutError(f"code {code} is listed twice")
+        result[code] = {"name_in_source": name}
+    return result
+
+
 PARSERS: dict[str, Callable[[Any, date], dict[str, dict[str, Any]]]] = {
     "twse-pb": parse_twse_pb,
     "twse-shares": parse_twse_shares,
     "tpex-pb": parse_tpex_pb,
     "tpex-shares": parse_tpex_quote_shares,
+    "tpex50-daily": parse_tpex50,
 }
 
 
@@ -613,6 +688,76 @@ def write_rows(
     }
 
 
+def write_constituents(
+    db: Session,
+    feed: Feed,
+    source: str,
+    day: date,
+    parsed: dict[str, dict[str, Any]],
+    raw: RawPayload,
+) -> dict[str, Any]:
+    """Make the index's list of ``day`` the parsed one; the counts.
+
+    Every code is written; ``instrument_id`` is the TPEx instrument with a bar that
+    day, NULL (``unmatched``) when there is none; no instrument is created.
+    """
+
+    barred = _barred(db, feed.exchange, day)
+    counts = Counter()
+    kept = {
+        row.symbol: row
+        for row in db.scalars(
+            select(IndexConstituentDaily).where(
+                IndexConstituentDaily.index_code == TPEX50_INDEX_CODE,
+                IndexConstituentDaily.trading_date == day,
+            )
+        )
+    }
+    for code, values in parsed.items():
+        fields = {
+            "instrument_id": barred.get(code),
+            "name_in_source": values["name_in_source"],
+            "source": source,
+            "data_as_of": day,
+            "raw_payload_id": raw.id,
+            "collected_at": raw.collected_at,
+        }
+        row = kept.get(code)
+        if row is None:
+            db.add(
+                IndexConstituentDaily(
+                    index_code=TPEX50_INDEX_CODE,
+                    trading_date=day,
+                    symbol=code,
+                    **fields,
+                )
+            )
+            counts["inserted"] += 1
+        elif any(getattr(row, name) != value for name, value in fields.items()):
+            for name, value in fields.items():
+                setattr(row, name, value)
+            counts["updated"] += 1
+        else:
+            counts["unchanged"] += 1
+    for code, row in kept.items():
+        if code not in parsed:
+            db.delete(row)
+            counts["removed"] += 1
+    unmatched = sorted(code for code in parsed if code not in barred)
+    return {
+        "rows": len(parsed),
+        "written": len(parsed),
+        "inserted": counts["inserted"],
+        "updated": counts["updated"],
+        "removed": counts["removed"],
+        "unchanged": counts["unchanged"],
+        "unmatched": len(unmatched),
+        "unmatched_codes": unmatched[:MAX_LISTED],
+        "no_row": 0,
+        "nulls": {},
+    }
+
+
 def _feed_sources(feed: Feed) -> set[str]:
     if feed.name == "tpex-shares":
         return set(TPEX_SHARES_SOURCES.values())
@@ -724,6 +869,11 @@ def _empty_counts(feed: Feed) -> dict[str, Any]:
         "unmatched": 0,
         "no_row": 0,
         "first_date": feed.first_date.isoformat(),
+        **(
+            {"not_50": 0, "not_50_days": []}
+            if feed.table is IndexConstituentDaily
+            else {}
+        ),
     }
 
 
@@ -745,7 +895,7 @@ def backfill(
     unknown = [name for name in names if name not in FEEDS]
     if unknown:
         raise ValueError(f"unknown feeds {unknown}; known: {list(FEEDS)}")
-    for table in ("valuation_daily", "shares_outstanding_daily"):
+    for table in TABLES:
         if not inspect(db.get_bind()).has_table(table):
             raise ValueError(f"{table} is missing: run init-db first")
     started = time.monotonic()
@@ -820,7 +970,12 @@ def backfill(
                         source = TPEX_SHARES_SOURCES[raw.endpoint.split("?")[0]]
                     payload = read_raw(raw, fallback_raw_dir)
                 parsed = PARSERS[name](payload, day)
-                written = write_rows(db, feed, source, day, parsed, raw)
+                writer = (
+                    write_constituents
+                    if feed.table is IndexConstituentDaily
+                    else write_rows
+                )
+                written = writer(db, feed, source, day, parsed, raw)
             except OfficialDataError as exc:
                 run.status = "failed"
                 run.error = str(exc)
@@ -858,6 +1013,12 @@ def backfill(
             }
             db.commit()
             counts["success"] += 1
+            if feed.table is IndexConstituentDaily and written["rows"] != TPEX50_SIZE:
+                counts["not_50"] += 1
+                if len(counts["not_50_days"]) < MAX_LISTED:
+                    counts["not_50_days"].append(
+                        {"date": day.isoformat(), "count": written["rows"]}
+                    )
             for key in (
                 "inserted",
                 "updated",

@@ -495,6 +495,45 @@ class SharesOutstandingDaily(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class IndexConstituentDaily(Base):
+    """One code of an index's official constituent list of one session (Issue #1134).
+
+    TPEx ``indexInfo/r50`` (富櫃50指數成分股資訊): the whole list of the day, not the
+    changes; additions and removals are the difference of two adjacent sessions,
+    computed by the research tools.  ``instrument_id`` is NULL when the research
+    database has no TPEx instrument with a bar of that code that day.  No
+    announcement date or reason is published.  Only the research database is
+    written; the production one has the empty table.
+    """
+
+    __tablename__ = "index_constituents_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "index_code",
+            "trading_date",
+            "symbol",
+            name="uq_index_constituents_daily",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # TPEX50.
+    index_code: Mapped[str] = mapped_column(String(20))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    symbol: Mapped[str] = mapped_column(String(30))
+    instrument_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instruments.id"), nullable=True, index=True
+    )
+    # The name as the source writes it that day (``精華``).
+    name_in_source: Mapped[str] = mapped_column(String(80))
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

@@ -43,6 +43,7 @@ CHILDREN = [
     "theme_cluster_members",
     "valuation_daily",
     "shares_outstanding_daily",
+    "index_constituents_daily",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -280,8 +281,12 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     "trading_halts",
                     "valuation_daily",
                     "shares_outstanding_daily",
+                    "index_constituents_daily",
                 }:
                     values.update(raw_payload_id=11)
+                if table.name == "index_constituents_daily":
+                    # Nullable: NULL when the research DB has no such code.
+                    values["instrument_id"] = 7
                 if table.name == "tracking_plans":
                     values.update(signal_id=11)
                 c.execute(table.insert().values(**values))

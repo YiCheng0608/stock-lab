@@ -808,3 +808,262 @@ def test_reapply_writes_no_manifest_row_for_a_session_never_asked(factory):
     assert result["feeds"]["twse-pb"]["not_answered"] == 2
     with factory() as db:
         assert db.scalar(select(func.count()).select_from(IngestionRun)) == 0
+
+
+# --- TPEx 50 constituents (#1134) -------------------------------------------------
+#
+# ``r50_20100430`` (the first day), ``r50_20100429_before_first`` (stat ok, empty)
+# and ``r50_20210419`` (-KY names) are whole answers of the #1130 probe
+# (2026-11-28, evidence/1130/raw), a newline added.
+
+R50_FIRST = load("r50_20100430.json")
+R50_BEFORE = load("r50_20100429_before_first.json")
+R50_2021 = load("r50_20210419.json")
+T1, T2 = date(2010, 4, 30), date(2010, 5, 3)
+
+
+def r50_drop(payload, code: str, *, count=None):
+    """The answer without ``code``'s cell; ``totalCount`` set to ``count``."""
+
+    result = copy.deepcopy(payload)
+    table = result["tables"][0]
+    for row in table["data"]:
+        for at in range(1, len(row), 2):
+            if str(row[at]).startswith(f"{code}&nbsp;"):
+                row[at - 1], row[at] = "", ""
+    # Renumber 1..n as the source writes them.
+    number = 0
+    for at in range(0, 8, 2):
+        for row in table["data"]:
+            if row[at] != "":
+                number += 1
+                row[at] = number
+    table["totalCount"] = number if count is None else count
+    return result
+
+
+def test_r50_cells_split_into_code_and_name():
+    parsed = vb.parse_tpex50(R50_FIRST, T1)
+    assert len(parsed) == 50
+    assert list(parsed)[:3] == ["1565", "1785", "1815"]
+    assert parsed["1565"] == {"name_in_source": "精華"}
+    assert parsed["8938"] == {"name_in_source": "明安"}
+    later = vb.parse_tpex50(R50_2021, date(2021, 4, 19))
+    assert later["4966"] == {"name_in_source": "譜瑞-KY"}
+    assert {"3078", "3691", "6244", "6411"} <= set(later)
+
+
+def test_r50_request_is_the_cnst_form():
+    method, endpoint, form = vb.request_of("tpex50-daily", T1)
+    assert method == "POST"
+    assert endpoint.startswith(vb.TPEX50_ENDPOINT + "?")
+    assert form == {"type": "cnst", "date": "2010/04/30", "response": "json"}
+
+
+def test_r50_total_count_other_than_the_cells_fails_the_day():
+    payload = copy.deepcopy(R50_FIRST)
+    payload["tables"][0]["totalCount"] = 51
+    with pytest.raises(vb.LayoutError, match="totalCount 51 but 50"):
+        vb.parse_tpex50(payload, T1)
+    with pytest.raises(vb.LayoutError, match="totalCount 50 but 49"):
+        vb.parse_tpex50(r50_drop(R50_FIRST, "1565", count=50), T1)
+
+
+def test_r50_empty_table_fails_the_day():
+    with pytest.raises(vb.LayoutError, match="no rows"):
+        vb.parse_tpex50(R50_BEFORE, date(2010, 4, 29))
+
+
+@pytest.mark.parametrize("where", ["date", "table"])
+def test_r50_reported_date_other_than_the_session_fails(where):
+    payload = copy.deepcopy(R50_FIRST)
+    if where == "date":
+        payload["date"] = "20100503"
+    else:
+        payload["tables"][0]["date"] = "99/05/03"
+    with pytest.raises(vb.LayoutError, match="date"):
+        vb.parse_tpex50(payload, T1)
+
+
+@pytest.mark.parametrize(
+    "cell",
+    ["1565 精華", "1565 精華", "1565&nbsp;", "&nbsp;精華", "1565精華", 1565, None],
+)
+def test_r50_unreadable_cell_fails_the_day(cell):
+    payload = copy.deepcopy(R50_FIRST)
+    payload["tables"][0]["data"][0][1] = cell
+    with pytest.raises(vb.LayoutError, match="unreadable cell"):
+        vb.parse_tpex50(payload, T1)
+
+
+def test_r50_unreadable_number_or_columns_fail_the_day():
+    payload = copy.deepcopy(R50_FIRST)
+    payload["tables"][0]["data"][0][0] = "1"
+    with pytest.raises(vb.LayoutError, match="序號"):
+        vb.parse_tpex50(payload, T1)
+    payload = copy.deepcopy(R50_FIRST)
+    payload["tables"][0]["fields"] = payload["tables"][0]["fields"][:6]
+    with pytest.raises(vb.LayoutError, match="unknown columns"):
+        vb.parse_tpex50(payload, T1)
+    payload = copy.deepcopy(R50_FIRST)
+    payload["tables"][0]["data"][1][1] = payload["tables"][0]["data"][0][1]
+    with pytest.raises(vb.LayoutError, match="listed twice"):
+        vb.parse_tpex50(payload, T1)
+
+
+def seed_r50(db, *, missing=("8938",)):
+    """TPEx instruments with bars on T1 and T2 for the first day's codes."""
+
+    for code in vb.parse_tpex50(R50_FIRST, T1):
+        if code not in missing:
+            add_instrument(db, "TPEx", code, [T1, T2])
+    # The day before the first one: a TPEx session, never asked.
+    add_instrument(db, "TPEx", "9999", [date(2010, 4, 29), T1, T2])
+    db.commit()
+
+
+def run_r50(factory, fetch, **kwargs):
+    with factory() as db:
+        return vb.backfill(
+            db,
+            date(2010, 4, 1),
+            date(2010, 5, 31),
+            feeds=["tpex50-daily"],
+            fetch=fetch,
+            now=lambda: NOON,
+            sleep=lambda _s: pytest.fail("slept outside the quiet hours"),
+            **kwargs,
+        )
+
+
+def test_r50_backfill_writes_every_code_and_counts_unmatched(factory):
+    with factory() as db:
+        seed_r50(db)
+    fetch = Fetcher({"tpex50-daily": R50_FIRST})
+    first = run_r50(factory, fetch)
+    assert first["status"] == "success"
+    # 2010-04-29 is a session before the first day: not asked.
+    assert fetch.calls == [("tpex50-daily", T1), ("tpex50-daily", T2)]
+    counts = first["feeds"]["tpex50-daily"]
+    assert (counts["sessions"], counts["not_published"]) == (3, 1)
+    assert (counts["success"], counts["inserted"], counts["unmatched"]) == (2, 100, 2)
+    assert (counts["not_50"], counts["not_50_days"]) == (0, [])
+    with factory() as db:
+        rows = db.scalars(
+            select(vb.IndexConstituentDaily).where(
+                vb.IndexConstituentDaily.trading_date == T1
+            )
+        ).all()
+        assert len(rows) == 50
+        by_code = {row.symbol: row for row in rows}
+        # No TPEx instrument with a bar: written, instrument_id NULL, no instrument.
+        assert by_code["8938"].instrument_id is None
+        assert db.scalar(select(Instrument).where(Instrument.symbol == "8938")) is None
+        row = by_code["1565"]
+        assert row.instrument_id == db.scalar(
+            select(Instrument.id).where(Instrument.symbol == "1565")
+        )
+        assert (row.index_code, row.name_in_source) == ("TPEX50", "精華")
+        assert (row.source, row.data_as_of) == ("tpex_indexinfo_r50", T1)
+        raw = db.get(RawPayload, row.raw_payload_id)
+        assert raw.source == "tpex" and "indexInfo/r50?type=cnst" in raw.endpoint
+        assert raw.collected_at == row.collected_at
+        run_row = db.scalar(
+            select(IngestionRun).where(
+                IngestionRun.request_key == "valuation_backfill:tpex50-daily:2010-04-30"
+            )
+        )
+        assert run_row.status == "success" and run_row.records == 50
+        assert run_row.metadata_json["unmatched_codes"] == ["8938"]
+
+    again = run_r50(factory, Fetcher({}))
+    assert again["requests"] == 0 and again["changed"] == 0
+    assert again["feeds"]["tpex50-daily"]["done_before"] == 2
+    reapplied = run_r50(factory, Fetcher({}), reapply=True)
+    assert reapplied["requests"] == 0 and reapplied["changed"] == 0
+    assert reapplied["feeds"]["tpex50-daily"]["unchanged"] == 100
+
+
+def test_r50_a_list_of_other_than_50_is_written_and_listed(factory):
+    with factory() as db:
+        seed_r50(db, missing=())
+    short = r50_drop(R50_FIRST, "1565")
+    fetch = Fetcher({"tpex50-daily": lambda day: redate(short, day)})
+    result = run_r50(factory, fetch)
+    assert result["status"] == "success"
+    counts = result["feeds"]["tpex50-daily"]
+    assert counts["not_50"] == 2
+    assert counts["not_50_days"] == [
+        {"date": "2010-04-30", "count": 49},
+        {"date": "2010-05-03", "count": 49},
+    ]
+    with factory() as db:
+        assert (
+            db.scalar(select(func.count()).select_from(vb.IndexConstituentDaily)) == 98
+        )
+    # The source corrects the day: a session asked again is rewritten whole.
+    with factory() as db:
+        for run_row in db.scalars(
+            select(IngestionRun).where(IngestionRun.source == "tpex50-daily")
+        ):
+            run_row.status = "failed"
+        db.commit()
+    fixed = run_r50(factory, Fetcher({"tpex50-daily": R50_FIRST}))
+    assert fixed["feeds"]["tpex50-daily"]["inserted"] == 2
+    assert fixed["feeds"]["tpex50-daily"]["not_50"] == 0
+
+
+def test_r50_a_failed_day_writes_nothing_and_is_asked_again(factory):
+    with factory() as db:
+        seed_r50(db)
+    bad = copy.deepcopy(R50_FIRST)
+    bad["tables"][0]["totalCount"] = 49
+    first = run_r50(factory, Fetcher({"tpex50-daily": bad}))
+    assert first["status"] == "partial"
+    assert first["feeds"]["tpex50-daily"]["failed"] == 2
+    with factory() as db:
+        assert (
+            db.scalar(select(func.count()).select_from(vb.IndexConstituentDaily)) == 0
+        )
+    fetch = Fetcher({"tpex50-daily": R50_FIRST})
+    again = run_r50(factory, fetch)
+    assert again["status"] == "success" and len(fetch.calls) == 2
+
+
+def test_the_r50_migration_adds_an_empty_table_and_goes_down_again(tmp_path):
+    pytest.importorskip("alembic")
+    from alembic import command
+    from alembic.config import Config
+
+    from app import migrations
+    from app.migration_revisions import REVISIONS
+
+    revision = next(n for n in REVISIONS if n.endswith("_index_constituents"))
+    previous = REVISIONS[REVISIONS.index(revision) - 1]
+    engine = create_engine(f"sqlite:///{(tmp_path / 'm.db').as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    config = Config(str(migrations.ALEMBIC_CONFIG_PATH))
+    config.set_main_option(
+        "script_location", str(Path(migrations.ALEMBIC_CONFIG_PATH).parent / "alembic")
+    )
+    config.attributes["connection"] = engine
+    table = "index_constituents_daily"
+    try:
+        command.upgrade(config, revision)
+        assert table in inspect(engine).get_table_names()
+        with engine.connect() as connection:
+            assert (
+                connection.exec_driver_sql(f"SELECT count(*) FROM {table}").scalar()
+                == 0
+            )
+        assert {i["name"] for i in inspect(engine).get_indexes(table)} == {
+            "ix_index_constituents_daily_trading_date",
+            "ix_index_constituents_daily_instrument_id",
+            "ix_index_constituents_daily_raw_payload_id",
+        }
+        command.downgrade(config, previous)
+        assert table not in inspect(engine).get_table_names()
+        command.upgrade(config, revision)
+        assert table in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()

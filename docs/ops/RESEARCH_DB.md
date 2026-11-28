@@ -642,6 +642,30 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 - **TDR 沒有淨值比**：91 開頭的存託憑證在 `BWIBBU_d` 沒有列；研究的普通股母體本來就排除它們。
 - **N/A 留空**：上櫃的 `N/A`（集中在之後下市的公司，推測是淨值為負或財報不全）與上市的 `-` 都是 NULL，研究時另計，不當成 0。
 
+## 富櫃50 每日成分股（#1134）
+
+研究 DB 每個上櫃交易日的富櫃50 完整成分股名單（`index_constituents_daily`，`index_code=TPEX50`），給「成分股納入、剔除前後」這類假設在上櫃這一側登記。端點、欄位與授權見 [DATA_SOURCES](../DATA_SOURCES.md#富櫃50-成分股)，來源歸類見 #1 [決定 7233265682](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7233265682)，回補做法見 [#1130 決定 7233275054](https://github.com/YiCheng0608/stock-lab/issues/1130#issuecomment-7233275054)。正式 DB 只有 0042 建的空表，不寫入。
+
+**feed `tpex50-daily`**（同一個 [`valuation backfill`](#股價淨值比與發行股數1075) 命令，`--feed tpex50-daily`）：`POST https://www.tpex.org.tw/www/zh-tw/indexInfo/r50`，form `type=cnst&date=YYYY/MM/DD&response=json`，每個交易日 1 個請求，`source=tpex_indexinfo_r50`。交易日、逐日 manifest、`--reapply`、請求間隔、21:15～23:30 等待、`research-db.json` 與維護模式都和上一節的四個 feed 一樣。
+
+- **第一天 2010-04-30**：頁面「本資訊自民國99年4月30日起開始提供」，2010-04-29 回 `stat ok`、`totalCount 0`、空表；早於這天的上櫃交易日不請求（`not_published`）。
+- **一列一個代號**：表是 4 組（`序號`、`股票代號名稱`）並排，一格是 `代號&nbsp;名稱`（`1565&nbsp;精華`），拆成 `symbol` 與 `name_in_source`（名稱原文，含 `-KY`）；最後一列不足 4 組時以 `""` 補齊。官方表上的每個代號都寫；研究 DB 當天沒有這個代號的上櫃日線時 `instrument_id` 留 NULL、計入 `unmatched`，不建標的（代號對照同上一節）。
+- **整天失敗、不寫**：`totalCount` 和實際讀到的格數不符、空表、回應的 `date` 或表內民國日期不是請求日、欄名不是上面的 8 欄、`序號` 不是 1～n、讀不懂的格（不是 `代號&nbsp;名稱`、代號重複）。**檔數不是 50 照寫**：輸出的 `not_50` 與 `not_50_days`（日期與檔數）逐日列出，否則量不到真的缺檔。
+- **納入與剔除不另存**：研究工具用相鄰兩個交易日的名單相減。
+
+**跑法**（`IMG`、`R` 同上一節；開跑前 `df -h /` 至少 5 GiB 可用，研究 volume 沒有別的寫入者）：
+
+```bash
+docker run -d --name research-1134-tpex50 "${R[@]}" "$IMG" \
+  sh -c 'python -B -m worker.cli valuation backfill --feed tpex50-daily --start 2010-04-30 --end <日線截止日> > /data/logs/tpex50.json 2> /data/logs/tpex50.err; echo $? > /data/logs/tpex50.exit'
+```
+
+**已知限制**：
+
+- **沒有公告日與異動原因**：櫃買中心沒有公告定審結果（新聞稿 0 則），最早的官方證據是生效那天的名單。研究上只能用 T 以前（含 T）的名單、T+1 執行，**不能研究公告後、生效前那段**；登記假設時寫明。
+- **2009-01～2010-04-29 拿不到**：指數基期 2008-12-31，端點從 2010-04-30 才有名單。
+- **名單是當天的**：含之後下市、轉板的公司；OpenAPI `tpex50_constituents` 只有當天、沒有歷史，不用。
+
 ## 研究工具的耗時與記憶體
 
 `explore_research` 與 `trade_research` 的探索段要讀到 2019-12-31 以前的全部歷史，每個假設、每個工具版本只能跑一次，所以耗時與記憶體不能在研究 DB 上試。[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 用一份**合成的長歷史 DB** 量（量測方式是統籌決定 [6885225362](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6885225362)）。
