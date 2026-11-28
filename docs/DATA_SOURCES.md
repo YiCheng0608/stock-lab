@@ -812,7 +812,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **解析耗時與記憶體**（研究 raw 唯讀、單一 python 程序、只取上列科目）：47 季依序共 2,950 秒，最大 RSS 113 MB。
   - 2013～2018 每季 15～35 秒。
   - 2019 年起每季解壓後 1.0～1.5 GB，每季 75～140 秒（例如 2024Q2 2,613 個成員，137 秒）。
-- **短期投資、有息負債與淨利**（[#1135](https://github.com/YiCheng0608/stock-lab/issues/1135)）：同一份整包、同一份成員再加選的科目，**只回補進研究 DB**（[決定 7234355063](https://github.com/YiCheng0608/stock-lab/issues/1135#issuecomment-7234355063)）；表的欄位與寫入規則等寫入單實作時再寫。以下是 2026-11-28 讀研究 volume 已存整包的實測（2014Q2、2019Q2、2024Q2 算涵蓋，2013Q2、2017Q4、2018Q2 另看名稱；[回報 7234320089](https://github.com/YiCheng0608/stock-lab/issues/1135#issuecomment-7234320089)）。
+- **短期投資、有息負債與淨利**（[#1135](https://github.com/YiCheng0608/stock-lab/issues/1135)）：同一份整包、同一份成員再加選的科目，**只回補進研究 DB**（[決定 7234355063](https://github.com/YiCheng0608/stock-lab/issues/1135#issuecomment-7234355063)）；表的欄位與寫入規則見本節最後的「`quarterly_statements`」（[#1140](https://github.com/YiCheng0608/stock-lab/issues/1140)）。以下是 2026-11-28 讀研究 volume 已存整包的實測（2014Q2、2019Q2、2024Q2 算涵蓋，2013Q2、2017Q4、2018Q2 另看名稱；[回報 7234320089](https://github.com/YiCheng0608/stock-lab/issues/1135#issuecomment-7234320089)）。
 
   | 科目 | context | 2013Q1～2017Q4 | 2018Q1 起 | 不適用的格式 |
   | --- | --- | --- | --- | --- |
@@ -870,6 +870,14 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   - **解析耗時**：同時讀上表與原 15 科，2024Q2 是 111～134 秒，只讀原 15 科是 107～110 秒，記憶體 98 MB。
 - **`quarterly_statements`**（[#1083](https://github.com/YiCheng0608/stock-lab/issues/1083)，實作在 [`worker/quarterly_statements.py`](../backend/worker/quarterly_statements.py)）：
   - **欄位**：唯一鍵 `(instrument_id, period_end, fiscal_period)`。上表 15 科一科一欄：季底的 `total_assets`、`total_liabilities`、`equity_parent`、`equity_total`、`current_assets`、`current_liabilities`、`cash`、`receivables`、`inventories`、`share_capital_common`（普通股）、`share_capital_total`（股本合計），以及 1/1 起累計的 `cfo_ytd`、`capex_ytd`、`gross_profit_ytd`、`operating_income_ytd`。單位千元（XBRL 的元除以 1,000），YTD 照申報值存（資本支出是負數），單季由研究工具相減。營收、EPS 不在這張表，留在 `fundamental_snapshots`。
+  - **短期投資、有息負債與淨利的 17 欄**（0050，[#1140](https://github.com/YiCheng0608/stock-lab/issues/1140)；科目、名稱與限制見上面「短期投資、有息負債與淨利」那一點）：
+    - 季底：短期投資一科一欄，IFRS 9 的 `st_inv_fvtpl`、`st_inv_fvoci`、`st_inv_amortised`，IAS 39 的 `st_inv_afs`（備供出售）、`st_inv_htm`（持有至到期）、`st_inv_no_active_market`（無活絡市場之債務工具）、`st_inv_at_cost`（以成本衡量）；參考欄 `other_current_financial_assets`；有息負債 `short_term_borrowings`、`short_term_bills_payable`、`long_term_current_portion`、`bonds_payable_noncurrent`、`long_term_borrowings`；租賃 `lease_liabilities_current`、`lease_liabilities_noncurrent`。1/1 起累計：`net_income_ytd`（含非控制權益）、`net_income_parent_ytd`。
+    - 合計（短期投資合計、有息負債合計）不存，由研究工具相加；缺的欄怎麼算、租賃與其他金融資產要不要算進去，在登記假設時寫死。IAS 39 四欄 2019 起是 NULL，2018 的口徑跳動照實留在資料裡。
+    - 每欄取候選名稱裡第一個有值的（0 也算有值），順序同上表（2013～2017 名稱在前、證券別名其次、2018 起名稱最後）。租賃例外：2019 年的新名（`CurrentLeaseLiabilities`；`NoncurrentFinanceLeaseLiabilities`、`NonCurrentLeaseLiabilities`）排在 2018 與 2013～2017 的舊名前面，舊名申報 0 的公司才會取到新名的實數。2019Q2 的 3202 新舊名都非 0，只取新名、低估，不另寫加總。
+    - 個體報表（`ir`、`er`）沒有 `ProfitLossAttributableToOwnersOfParent`，`net_income_parent_ytd` 取同一 YTD context 的 `ProfitLoss`，`elements` 記 `ProfitLoss`；和 `equity_parent` 退回 `Equity` 同一條規則（程式的 `FALLBACKS`）。合併報表沒有這一科就是 NULL。
+    - 銀行 `basi`、金控 `fh`、保險 `ins` 的 15 欄季底科目（短期投資、其他金融資產、借款、票券、一年內到期、公司債、租賃）存 NULL、列在 `not_applicable`；證券 `bd` 照取（FVTPL 是營業證券）；淨利全部格式都取。
+    - 一年內到期長期負債分不出的公司照存 NULL，不從其他流動負債推算。
+    - 0050 之前寫入的列，這 17 欄是 NULL，要用 `statements-apply` 重讀整包才有值（[RESEARCH_DB](ops/RESEARCH_DB.md#跑一批)）。
   - **來源與可得日**：整張表只有 `source=mops_tifrs_zip`。`raw_payload_id` 指向該季整包那列 `raw_payloads`（`mops_tifrs`，和 `xbrl-apply` 共用），`data_as_of` 是季底日。`announcement_date` 照 EPS 的法定期限（產業碼對到格式，遇休市順延；期限還沒到時用抓取日）。
   - **`data_json`**：成員名稱與 sha256、整包 sha256、產業碼、`cr`／`ir`／`er`、格式、整包的 EPS、`target_rule`（`t163sb04_eps`、`snapshot_eps` 或 `bar_window`）、每欄用的 element 與 context id（`elements`）、`not_applicable` 的欄、可得日依據（`announcement_basis`、`statutory_deadline`、`deadline_calendar`；外國發行人 2021 年起的 Q2 另記 `deadline_rule`、`foreign_issuer_basis`，其他列不記）。
   - **缺值**：沒申報的科目與格式本來就沒有的科目都存 NULL，不補零；後者列在 `not_applicable`（上表最後一欄，依產業碼：銀行 `basi`、金控 `fh`、保險 `ins`、證券 `bd`）。附註 taxonomy（命名空間或 inline 前綴含 `notes`）的 fact 不取。每個 element 只讀它那一欄用的 context（資產負債表是季底時點、其餘是 YTD）。另一種 context 的 fact 不解析：2013Q1 有 117 家把現金政策的附註文字標成 YTD 的 `CashAndCashEquivalents`。成員裡沒有季底 context（非曆年制）的公司不寫。金融業在資料層不排除。
@@ -878,7 +886,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
     - 沒有上述列的 `delisted`、`transferred` 標的（含轉板前的舊標的），照 `xbrl-apply` 的窗口：季底起 670 天內有日線（`target_rule=bar_window`）。
     - 其他不寫：沒有上述列的 active（例如存託憑證、研究 DB 副本之後才申報的公司），計 `no_identity_row`；研究 DB 沒有的興櫃、公開發行公司計 `not_in_db`。
   - **寫入前的核對**：每季兩項，任一項有一家不同、一家都沒比到，或比不到的（沒有成員、讀不了、沒有 EPS）超過核對家數的 1%，那一季就不寫，命令停下（`failed`）。容差 1 千元。整包 EPS 和下面那些列不同的（`eps_different`）超過核對家數的 1% 也停：代號重用一季只有零星幾家，多了表示來源出錯。
-    - 損益表：上一點那些列，整包 EPS 相同的公司。`t163sb04` 列核對 `gross_profit_ytd`、`operating_income_ytd` 對 `data_json` 的「營業毛利（毛損）淨額」「營業利益（損失）」；快照列沒有毛利，只核對營業利益對「營業利益」，格式沒有營業利益的（銀行、金控）不比。那欄空白、`--` 或沒有這欄的不比；有值而整包沒有算不同。計數依來源分開記在 `income_by_source`。
+    - 損益表：上一點那些列，整包 EPS 相同的公司。`t163sb04` 列核對 `gross_profit_ytd`、`operating_income_ytd` 對 `data_json` 的「營業毛利（毛損）淨額」「營業利益（損失）」，`net_income_ytd` 對「本期淨利（淨損）」（沒有數字時依序取「本期稅後淨利（淨損）」「繼續營業單位本期純益（純損）」），`net_income_parent_ytd` 對「淨利（淨損）歸屬於母公司業主」或「淨利（損）歸屬於母公司業主」（#1140）；快照列沒有毛利與淨利，只核對營業利益對「營業利益」，格式沒有營業利益的（銀行、金控）不比。那欄空白、`--` 或沒有這欄的不比；有值而整包沒有算不同。例外是母公司淨利：`t163sb04` 只有個體報表那一欄是 `--`，所以合併報表（`cr`）的成員遇到 `--` 算不同。計數依來源分開記在 `income_by_source`。
     - 資產負債表：該季一個市場的 `t163sb05`（上市、上櫃逐季輪流：`(年×4＋季)` 為偶數是上市），頁上每家的 `total_assets`、`equity_total` 對「資產總額／總計／合計」「權益總額／總計／合計」。
   - **命令**（[CLI](ops/CLI.md#現有-worker-cli)）：
     - `fundamentals statements-check-fetch --start --end --dir` 把每季那一頁存到 `<dir>/t163sb05/<季>-<市場>.html`，`<dir>/t163sb05/manifest.json` 記 form、sha256、家數與抓取時間；不碰 DB。請求規則同 `xbrl-fetch`：一季 1 個請求、間隔 ≥ 5 秒、台北 20:30～23:30 與 08:00～09:00 不發、已有而且 sha256 相符的不重抓、連續 3 季失敗就停。不重試：非 200、連線錯誤、版面認不得、封鎖頁、市場或季別不對都算該季失敗，不存檔；輸出的 `requests` 就是送出的 HTTP 請求數。

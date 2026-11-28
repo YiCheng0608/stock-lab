@@ -48,6 +48,24 @@ PAGE = FIXTURES / "mops_t163sb05" / "t163sb05_sii_103_02.html"
 Q = Quarter(2014, 2)
 NOW = datetime(2026, 11, 27, 3, 0)  # 11:00 Taipei
 FETCHED = "2026-11-16T03:00:00+00:00"
+# #1140's balance sheet items: those a bank, a holding or an insurer has no line for.
+DEBT_FIELDS = [
+    "st_inv_fvtpl",
+    "st_inv_fvoci",
+    "st_inv_amortised",
+    "st_inv_afs",
+    "st_inv_htm",
+    "st_inv_no_active_market",
+    "st_inv_at_cost",
+    "other_current_financial_assets",
+    "short_term_borrowings",
+    "short_term_bills_payable",
+    "long_term_current_portion",
+    "bonds_payable_noncurrent",
+    "long_term_borrowings",
+    "lease_liabilities_current",
+    "lease_liabilities_noncurrent",
+]
 
 NS = {
     "ifrs": "http://xbrl.iasb.org/taxonomy/2010-04-30/ifrs",
@@ -161,8 +179,9 @@ def company(
     industry: str = "ci",
     kind: str = "cr",
     quarter: Quarter = Q,
+    extra: tuple[tuple[str, str, str], ...] = (),
 ) -> tuple[str, bytes]:
-    """One member with the core items (NTD; the pages are in thousands)."""
+    """One member with the core items and EXTRA (NTD; the pages are in thousands)."""
 
     facts = [
         ("ifrs:Assets", "I", assets),
@@ -179,6 +198,7 @@ def company(
         ("tifrs-bsci-ci:GrossProfitLossFromOperationsNet", "Y", gross),
         ("tifrs-bsci-ci:NetOperatingIncomeLoss", "Y", operating),
         ("ifrs:BasicEarningsLossPerShare", "Y", eps),
+        *extra,
     ]
     name = f"tifrs-fr1-m1-{industry}-{kind}-{symbol}-{quarter.label}.xml"
     return name, statement_xml(facts, quarter)
@@ -266,6 +286,11 @@ def test_the_xml_fixture_reads_the_2013_names_in_thousands():
         "capex_ytd": None,  # nor a purchase of equipment
         "gross_profit_ytd": -1432.0,
         "operating_income_ytd": -10389.0,
+        # #1140: 3671 has no investment, debt or lease line; its net income is all
+        # the parent's.
+        **{name: None for name in DEBT_FIELDS},
+        "net_income_ytd": -8572.0,
+        "net_income_parent_ytd": -8572.0,
     }
     assert statement.elements["equity_parent"] == [
         "EquityAttributableToOwnersOfParent",
@@ -273,6 +298,10 @@ def test_the_xml_fixture_reads_the_2013_names_in_thousands():
     ]
     assert statement.elements["gross_profit_ytd"] == [
         "GrossProfitLossFromOperationsNet",
+        "From20140101To20140630",
+    ]
+    assert statement.elements["net_income_parent_ytd"] == [
+        "ProfitLossAttributableToOwnersOfParent",
         "From20140101To20140630",
     ]
     assert statement.not_applicable == []
@@ -304,6 +333,20 @@ def test_the_inline_fixture_reads_the_2018_names_and_an_individual_equity():
     assert statement.elements["operating_income_ytd"][0] == (
         "ProfitLossFromOperatingActivities"
     )
+    # #1140: the 2018 FVTPL name, and an individual report's parent net income is
+    # its ProfitLoss (the year to date, not the quarter's 102,381).
+    assert statement.thousands("st_inv_fvtpl") == 208847.0
+    assert statement.elements["st_inv_fvtpl"] == [
+        "CurrentFinancialAssetsAtFairValueThroughProfitOrLoss",
+        "AsOf20240930",
+    ]
+    assert statement.thousands("net_income_ytd") == 274267.0
+    assert statement.thousands("net_income_parent_ytd") == 274267.0
+    assert statement.elements["net_income_parent_ytd"] == [
+        "ProfitLoss",
+        "From20240101To20240930",
+    ]
+    assert statement.values["short_term_borrowings"] is None
 
 
 def test_a_consolidated_report_without_the_parent_line_stays_empty():
@@ -470,33 +513,48 @@ def test_a_note_taxonomy_fact_is_not_read():
         (
             "basi",
             [
-                "current_assets",
-                "current_liabilities",
-                "gross_profit_ytd",
-                "inventories",
-                "operating_income_ytd",
-                "receivables",
+                *sorted(
+                    [
+                        "current_assets",
+                        "current_liabilities",
+                        "gross_profit_ytd",
+                        "inventories",
+                        "operating_income_ytd",
+                        "receivables",
+                        *DEBT_FIELDS,
+                    ]
+                )
             ],
         ),
         (
             "fh",
             [
-                "current_assets",
-                "current_liabilities",
-                "gross_profit_ytd",
-                "inventories",
-                "operating_income_ytd",
-                "receivables",
+                *sorted(
+                    [
+                        "current_assets",
+                        "current_liabilities",
+                        "gross_profit_ytd",
+                        "inventories",
+                        "operating_income_ytd",
+                        "receivables",
+                        *DEBT_FIELDS,
+                    ]
+                )
             ],
         ),
         (
             "ins",
             [
-                "current_assets",
-                "current_liabilities",
-                "gross_profit_ytd",
-                "inventories",
-                "receivables",
+                *sorted(
+                    [
+                        "current_assets",
+                        "current_liabilities",
+                        "gross_profit_ytd",
+                        "inventories",
+                        "receivables",
+                        *DEBT_FIELDS,
+                    ]
+                )
             ],
         ),
         ("bd", ["gross_profit_ytd", "inventories"]),
@@ -715,7 +773,11 @@ def add_instrument(db, symbol, *, exchange="TWSE", status="delisted", bars=(10,)
     return item
 
 
-def add_t163sb04(db, item, eps, gross="1,000", operating="500", quarter=Q):
+def add_t163sb04(
+    db, item, eps, gross="1,000", operating="500", quarter=Q, columns=None
+):
+    """A t163sb04 row; COLUMNS adds page columns (#1140's net income)."""
+
     db.add(
         FundamentalSnapshot(
             instrument_id=item.id,
@@ -727,6 +789,7 @@ def add_t163sb04(db, item, eps, gross="1,000", operating="500", quarter=Q):
                 "report_format": "general",
                 "營業毛利（毛損）淨額": gross,
                 "營業利益（損失）": operating,
+                **(columns or {}),
             },
             source=qx.T163SB04_SOURCE,
             data_as_of=quarter.period_end.isoformat(),
@@ -792,10 +855,13 @@ def test_active_delisted_and_transferred_instruments_get_the_quarter(factory, tm
         "delisted": 1,
         "transferred": 1,
     }
-    # The members have no inventory or receivable line: missing, not 0.
+    # The members have no inventory or receivable line (nor #1140's): missing, not 0.
     assert quarter["groups"]["active"]["missing"] == {
         "inventories": 2,
         "receivables": 2,
+        **{name: 2 for name in DEBT_FIELDS},
+        "net_income_ytd": 2,
+        "net_income_parent_ytd": 2,
     }
     assert quarter["groups"]["active"]["applicable"]["inventories"] == 2
     assert quarter["groups"]["active"]["rules"] == {"t163sb04_eps": 2}
@@ -1117,7 +1183,9 @@ def test_a_financial_company_s_not_applicable_lines_are_null(factory, tmp_path):
     delisted = result["quarters"]["2014Q2"]["groups"]["delisted"]
     # Not applicable lines are neither missing nor in the denominator.
     assert "current_assets" not in delisted["applicable"]
-    assert delisted["missing"] == {}
+    assert "short_term_borrowings" not in delisted["applicable"]
+    # The member files no net income (every format has the line: missing).
+    assert delisted["missing"] == {"net_income_ytd": 1, "net_income_parent_ytd": 1}
     with factory() as db:
         bank = written(db)[("TWSE", "2837")]
         assert bank.current_assets is None and bank.gross_profit_ytd is None
@@ -1273,6 +1341,616 @@ def test_insurers_use_the_ifrs17_format_from_2026():
     assert qx.report_format_of("ins", Quarter(2026, 1)) == "insurance"
     assert qx.report_format_of("ci", Quarter(2026, 1)) == "general"
     assert qx.report_format_of("zz", Quarter(2026, 1)) is None
+
+
+# --- #1140: current investments, interest-bearing debt and net income ---------------------
+
+# (element, NTD, field): one value a line, so each field's read is told apart.
+NAMES_2013 = [
+    (
+        "tifrs-bsci-ci:CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss",
+        "1100000",
+        "st_inv_fvtpl",
+    ),
+    ("tifrs-bsci-ci:CurrentAvailableForSaleFinancialAssets", "1200000", "st_inv_afs"),
+    ("tifrs-bsci-ci:CurrentHeldToMaturityFinancialAssets", "1300000", "st_inv_htm"),
+    (
+        "tifrs-bsci-ci:CurrentBondInvestmentWithoutActiveMarket",
+        "1400000",
+        "st_inv_no_active_market",
+    ),
+    ("tifrs-bsci-ci:CurrentFinancialAssetsAtCost", "1500000", "st_inv_at_cost"),
+    ("ifrs:OtherCurrentFinancialAssets", "1600000", "other_current_financial_assets"),
+    ("tifrs-bsci-ci:ShorttermBorrowings", "2100000", "short_term_borrowings"),
+    (
+        "tifrs-bsci-ci:ShorttermNotesAndBillsPayable",
+        "2200000",
+        "short_term_bills_payable",
+    ),
+    (
+        "tifrs-bsci-ci:LongtermLiabilitiesCurrentPortion",
+        "2300000",
+        "long_term_current_portion",
+    ),
+    ("tifrs-bsci-ci:BondsPayable", "2400000", "bonds_payable_noncurrent"),
+    ("tifrs-bsci-ci:LongtermBorrowings", "2500000", "long_term_borrowings"),
+    (
+        "tifrs-bsci-ci:CurrentLeaseObligationsPayable",
+        "2600000",
+        "lease_liabilities_current",
+    ),
+    (
+        "tifrs-bsci-ci:NoncurrentLeaseObligationsPayable",
+        "2700000",
+        "lease_liabilities_noncurrent",
+    ),
+]
+# A securities firm's 2013–2017 names.
+NAMES_2013_SECURITIES = [
+    (
+        "tifrs-bsci-ci:CurrentFinancialAssetsAtFairValueThroughProfitOrLoss",
+        "1100000",
+        "st_inv_fvtpl",
+    ),
+    ("tifrs-bsci-ci:AvailableForSaleCurrentFinancialAssets", "1200000", "st_inv_afs"),
+    ("tifrs-bsci-ci:HeldToMaturityCurrentFinancialAssets", "1300000", "st_inv_htm"),
+    ("tifrs-bsci-ci:CommercialPaperPayable", "2200000", "short_term_bills_payable"),
+    (
+        "tifrs-bsci-ci:BondsPayableIncludingOverseasBonds",
+        "2400000",
+        "bonds_payable_noncurrent",
+    ),
+]
+NAMES_2018 = [
+    (
+        "ifrs-full:CurrentFinancialAssetsAtFairValueThroughProfitOrLoss",
+        "1100000",
+        "st_inv_fvtpl",
+    ),
+    (
+        "ifrs-full:CurrentFinancialAssetsAtFairValueThroughOtherComprehensiveIncome",
+        "1150000",
+        "st_inv_fvoci",
+    ),
+    ("ifrs-full:CurrentFinancialAssetsAtAmortisedCost", "1170000", "st_inv_amortised"),
+    ("tifrs-bsci-ci:CurrentFinancialAssetsAvailableforsale", "1200000", "st_inv_afs"),
+    (
+        "ifrs-full:OtherCurrentFinancialAssets",
+        "1600000",
+        "other_current_financial_assets",
+    ),
+    ("tifrs-bsci-ci:ShorttermBorrowings", "2100000", "short_term_borrowings"),
+    (
+        "ifrs-full:CurrentCommercialPapersIssuedAndCurrentPortionOfNoncurrentCommercialPapersIssued",
+        "2200000",
+        "short_term_bills_payable",
+    ),
+    (
+        "tifrs-bsci-ci:LongtermLiabilitiesCurrentPortion",
+        "2300000",
+        "long_term_current_portion",
+    ),
+    (
+        "ifrs-full:NoncurrentPortionOfNoncurrentBondsIssued",
+        "2400000",
+        "bonds_payable_noncurrent",
+    ),
+    ("tifrs-bsci-ci:LongtermBorrowings", "2500000", "long_term_borrowings"),
+    (
+        "ifrs-full:CurrentFinanceLeaseLiabilities",
+        "2600000",
+        "lease_liabilities_current",
+    ),
+    ("ifrs-full:FinanceLeaseLiabilities", "2700000", "lease_liabilities_noncurrent"),
+]
+
+
+@pytest.mark.parametrize(
+    "quarter, facts",
+    [
+        (Quarter(2017, 4), NAMES_2013),
+        (Quarter(2016, 2), NAMES_2013_SECURITIES),
+        (Quarter(2018, 2), NAMES_2018),
+    ],
+    ids=["2013-2017", "2013-2017 securities", "2018"],
+)
+def test_both_sets_of_investment_and_debt_names_are_read(quarter, facts):
+    data = statement_xml(
+        [(name, "I", text) for name, text, _field in facts]
+        + [("ifrs:ProfitLoss", "Y", "900000")],
+        quarter,
+    )
+    statement = qs.parse_statement(data, quarter, industry="ci", kind="cr")
+    read = {field: int(text) / 1000 for _name, text, field in facts}
+    for field in DEBT_FIELDS:
+        assert statement.thousands(field) == read.get(field), field
+    for name, _text, field in facts:
+        assert statement.elements[field] == [name.split(":")[1], "I"]
+    assert statement.thousands("net_income_ytd") == 900.0
+    # A consolidated report without the parent's line: none, not its ProfitLoss.
+    assert statement.values["net_income_parent_ytd"] is None
+
+
+def test_the_lower_case_fairvalue_is_2013_2017_s_name_only():
+    """2013–2017 general industry spells it ``Fairvalue``; the capital V is the other."""
+
+    lower = statement_xml(
+        [
+            (
+                "tifrs-bsci-ci:CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss",
+                "I",
+                "5000",
+            )
+        ]
+    )
+    upper = statement_xml(
+        [
+            (
+                "ifrs-full:CurrentFinancialAssetsAtFairValueThroughProfitOrLoss",
+                "I",
+                "7000",
+            )
+        ]
+    )
+    for data, expected, element in (
+        (lower, 5.0, "CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss"),
+        (upper, 7.0, "CurrentFinancialAssetsAtFairValueThroughProfitOrLoss"),
+    ):
+        statement = qs.parse_statement(data, Q, industry="ci", kind="cr")
+        assert statement.thousands("st_inv_fvtpl") == expected
+        assert statement.elements["st_inv_fvtpl"][0] == element
+
+
+def test_the_inline_names_from_2019_are_read_in_thousands():
+    quarter = Quarter(2024, 2)
+    spec = 'format="ixt:num-dot-decimal" scale="3"|'
+    data = statement_inline(
+        [
+            ("ifrs-full:CurrentFinancialAssetsAtAmortisedCost", "I", spec + "1,170"),
+            ("tifrs-bsci-ci:ShorttermBorrowings", "I", spec + "2,100"),
+            ("ifrs-full:CurrentLeaseLiabilities", "I", spec + "2,600"),
+            ("ifrs-full:NoncurrentFinanceLeaseLiabilities", "I", spec + "2,700"),
+            # Filed as 0: kept as 0, not missing.
+            (
+                "tifrs-bsci-ci:LongtermBorrowings",
+                "I",
+                'format="ixt:fixed-zero" scale="3"|-',
+            ),
+            ("ifrs-full:ProfitLoss", "Y", spec + "900"),
+            ("ifrs-full:ProfitLossAttributableToOwnersOfParent", "Y", spec + "850"),
+        ],
+        quarter,
+    )
+    statement = qs.parse_statement(data, quarter, industry="ci", kind="cr")
+    assert statement.thousands("st_inv_amortised") == 1170.0
+    assert statement.thousands("short_term_borrowings") == 2100.0
+    assert statement.thousands("lease_liabilities_current") == 2600.0
+    assert statement.thousands("lease_liabilities_noncurrent") == 2700.0
+    assert statement.thousands("long_term_borrowings") == 0.0
+    assert statement.values["bonds_payable_noncurrent"] is None
+    assert statement.thousands("net_income_ytd") == 900.0
+    assert statement.thousands("net_income_parent_ytd") == 850.0
+
+
+@pytest.mark.parametrize(
+    "noncurrent_new",
+    ["NoncurrentFinanceLeaseLiabilities", "NonCurrentLeaseLiabilities"],
+)
+def test_2019_s_lease_names_come_before_the_old_ones_filed_as_0(noncurrent_new):
+    """2019Q2: 89 companies file the 2018 name as 0 beside IFRS 16's (#1135 7234320089)."""
+
+    quarter = Quarter(2019, 2)
+    both = statement_xml(
+        [
+            ("ifrs-full:CurrentFinanceLeaseLiabilities", "I", "0"),
+            ("ifrs-full:CurrentLeaseLiabilities", "I", "14417000"),
+            ("ifrs-full:FinanceLeaseLiabilities", "I", "0"),
+            (f"ifrs-full:{noncurrent_new}", "I", "30000000"),
+        ],
+        quarter,
+    )
+    statement = qs.parse_statement(both, quarter, industry="ci", kind="cr")
+    assert statement.thousands("lease_liabilities_current") == 14417.0
+    assert (
+        statement.elements["lease_liabilities_current"][0] == "CurrentLeaseLiabilities"
+    )
+    assert statement.thousands("lease_liabilities_noncurrent") == 30000.0
+    assert statement.elements["lease_liabilities_noncurrent"][0] == noncurrent_new
+    # The old name alone (2018) is read, its 0 kept.
+    old = statement_xml(
+        [
+            ("ifrs-full:CurrentFinanceLeaseLiabilities", "I", "0"),
+            ("ifrs-full:FinanceLeaseLiabilities", "I", "5000"),
+        ],
+        quarter,
+    )
+    statement = qs.parse_statement(old, quarter, industry="ci", kind="cr")
+    assert statement.thousands("lease_liabilities_current") == 0.0
+    assert statement.thousands("lease_liabilities_noncurrent") == 5.0
+
+
+def test_an_individual_report_s_parent_net_income_is_its_profit_loss():
+    data = statement_xml(
+        [
+            ("ifrs:ProfitLoss", "Y", "900000"),
+            # Another context's ProfitLoss is not the year to date's.
+            ("ifrs:ProfitLoss", "P", "111000"),
+        ]
+    )
+    for kind in ("ir", "er"):
+        statement = qs.parse_statement(data, Q, industry="ci", kind=kind)
+        assert statement.thousands("net_income_parent_ytd") == 900.0
+        assert statement.elements["net_income_parent_ytd"] == ["ProfitLoss", "Y"]
+    assert (
+        qs.parse_statement(data, Q, industry="ci", kind="cr").values[
+            "net_income_parent_ytd"
+        ]
+        is None
+    )
+    # A consolidated report's parent line is its own, not the total with
+    # non-controlling interests.
+    consolidated = statement_xml(
+        [
+            ("ifrs:ProfitLoss", "Y", "900000"),
+            ("ifrs:ProfitLossAttributableToOwnersOfParent", "Y", "700000"),
+        ]
+    )
+    for kind in ("cr", "ir"):
+        statement = qs.parse_statement(consolidated, Q, industry="ci", kind=kind)
+        assert statement.thousands("net_income_parent_ytd") == 700.0
+        assert statement.thousands("net_income_ytd") == 900.0
+
+
+@pytest.mark.parametrize("industry", ["basi", "fh", "ins", "bd", "ci"])
+def test_a_bank_holding_or_insurer_has_no_investment_or_debt_line(industry):
+    """A securities firm (bd) keeps them; its current FVTPL is its trading stock."""
+
+    data = statement_xml(
+        [
+            ("ifrs:CurrentFinancialAssetsAtFairValueThroughProfitOrLoss", "I", "1000"),
+            ("ifrs:OtherCurrentFinancialAssets", "I", "2000"),
+            ("ifrs:ShorttermBorrowings", "I", "3000"),
+            ("ifrs:BondsPayable", "I", "4000"),
+            ("ifrs:CurrentLeaseLiabilities", "I", "5000"),
+            ("ifrs:ProfitLoss", "Y", "6000"),
+            ("ifrs:ProfitLossAttributableToOwnersOfParent", "Y", "6000"),
+        ]
+    )
+    statement = qs.parse_statement(data, Q, industry=industry, kind="cr")
+    unclassified = industry in {"basi", "fh", "ins"}
+    for field in DEBT_FIELDS:
+        assert (field in statement.not_applicable) is unclassified, field
+    for field, value in (
+        ("st_inv_fvtpl", 1.0),
+        ("other_current_financial_assets", 2.0),
+        ("short_term_borrowings", 3.0),
+        ("bonds_payable_noncurrent", 4.0),
+        ("lease_liabilities_current", 5.0),
+    ):
+        assert statement.thousands(field) == (None if unclassified else value)
+        assert (field in statement.elements) is not unclassified
+    # Every format has its net income.
+    assert statement.thousands("net_income_ytd") == 6.0
+    assert statement.thousands("net_income_parent_ytd") == 6.0
+
+
+NET_INCOME = (
+    ("ifrs:ProfitLoss", "Y", "8000000"),
+    ("ifrs:ProfitLossAttributableToOwnersOfParent", "Y", "7000000"),
+)
+
+
+@pytest.mark.parametrize(
+    "kind, columns, expected",
+    [
+        (
+            "cr",
+            {"本期淨利（淨損）": "8,000", "淨利（淨損）歸屬於母公司業主": "7,000"},
+            [],
+        ),
+        # The other names, and one thousand of rounding.
+        (
+            "cr",
+            {"本期稅後淨利（淨損）": "8,001", "淨利（損）歸屬於母公司業主": "6,999"},
+            [],
+        ),
+        ("cr", {"本期淨利（淨損）": "--", "繼續營業單位本期純益（純損）": "8,000"}, []),
+        (
+            "cr",
+            {"本期淨利（淨損）": "8,002", "淨利（淨損）歸屬於母公司業主": "7,000"},
+            ["net_income_ytd"],
+        ),
+        (
+            "cr",
+            {"本期淨利（淨損）": "8,000", "淨利（淨損）歸屬於母公司業主": "7,002"},
+            ["net_income_parent_ytd"],
+        ),
+        # An individual report's parent line is -- on the page: its ProfitLoss is not
+        # compared with it.
+        ("ir", {"本期淨利（淨損）": "8,000", "淨利（淨損）歸屬於母公司業主": "--"}, []),
+        # A consolidated report's is printed: -- there is a difference.
+        (
+            "cr",
+            {"本期淨利（淨損）": "8,000", "淨利（淨損）歸屬於母公司業主": "--"},
+            ["net_income_parent_ytd"],
+        ),
+        # A page without the columns compares nothing (as the gross profit's).
+        ("cr", {}, []),
+    ],
+    ids=[
+        "same",
+        "other names within rounding",
+        "the continuing operations name",
+        "net income differs",
+        "parent differs",
+        "individual report's --",
+        "consolidated report's --",
+        "no column",
+    ],
+)
+def test_the_net_income_is_checked_against_t163sb04(
+    factory, tmp_path, kind, columns, expected
+):
+    with factory() as db:
+        item = add_instrument(db, "2330", status="active")
+        add_t163sb04(db, item, 4.0, columns=columns)
+        db.commit()
+    facts = NET_INCOME if kind == "cr" else NET_INCOME[:1]
+    store(
+        tmp_path,
+        Q,
+        archive(dict([company("2330", eps="4.00", kind=kind, extra=facts)])),
+        page_html({"2330": ("10000", "6000")}),
+    )
+    result = apply(factory, tmp_path)
+    quarter = result["quarters"]["2014Q2"]
+    if not expected:
+        assert result["status"] == "success", result
+        assert quarter["income_same"] == 1
+        with factory() as db:
+            row = written(db)[("TWSE", "2330")]
+            assert row.net_income_ytd == 8000.0
+            assert row.net_income_parent_ytd == (7000.0 if kind == "cr" else 8000.0)
+        return
+    assert result["status"] == "failed"
+    assert "t163sb04／snapshot" in result["aborted"] and "停下來問" in result["aborted"]
+    assert quarter["income_different"] == 1
+    assert quarter["examples"] == [["mops_t163sb04", "2330", expected]]
+    with factory() as db:
+        assert written(db) == {}
+
+
+def test_the_new_lines_are_written_and_a_rerun_keeps_them(factory, tmp_path):
+    with factory() as db:
+        survivor = add_instrument(db, "2330", status="active")
+        add_t163sb04(db, survivor, 4.0)
+        add_instrument(db, "2837")  # a delisted bank
+        db.commit()
+    debt = (
+        ("ifrs:ShorttermBorrowings", "I", "300000"),
+        ("ifrs:LongtermLiabilitiesCurrentPortion", "I", "0"),
+        ("ifrs:CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss", "I", "120000"),
+    )
+    store(
+        tmp_path,
+        Q,
+        archive(
+            dict(
+                [
+                    company("2330", eps="4.00", extra=debt + NET_INCOME),
+                    company("2837", industry="basi", extra=debt + NET_INCOME),
+                ]
+            )
+        ),
+        page_html({"2330": ("10000", "6000")}),
+    )
+    result = apply(factory, tmp_path)
+    assert result["status"] == "success", result
+    groups = result["quarters"]["2014Q2"]["groups"]
+    assert "short_term_borrowings" not in groups["active"]["missing"]
+    assert groups["active"]["missing"]["bonds_payable_noncurrent"] == 1
+    # The bank's lines are not applicable: neither missing nor counted.
+    assert "short_term_borrowings" not in groups["delisted"]["applicable"]
+    assert groups["delisted"]["applicable"]["net_income_ytd"] == 1
+    with factory() as db:
+        rows = written(db)
+        survivor = rows[("TWSE", "2330")]
+        assert survivor.short_term_borrowings == 300.0
+        assert survivor.long_term_current_portion == 0.0
+        assert survivor.bonds_payable_noncurrent is None
+        assert survivor.st_inv_fvtpl == 120.0
+        assert survivor.net_income_ytd == 8000.0
+        assert survivor.net_income_parent_ytd == 7000.0
+        assert survivor.data_json["elements"]["short_term_borrowings"] == [
+            "ShorttermBorrowings",
+            "I",
+        ]
+        bank = rows[("TWSE", "2837")]
+        assert bank.short_term_borrowings is None and bank.st_inv_fvtpl is None
+        assert bank.long_term_current_portion is None
+        assert set(DEBT_FIELDS) <= set(bank.data_json["not_applicable"])
+        assert "short_term_borrowings" not in bank.data_json["elements"]
+        assert bank.net_income_ytd == 8000.0
+        assert bank.net_income_parent_ytd == 7000.0
+    again = apply(factory, tmp_path)
+    assert again["changed"] == 0 and again["quarters"]["2014Q2"]["unchanged"] == 2
+
+
+# --- #1140: the migration --------------------------------------------------------------------
+
+DEBT_REVISION = "0050_quarterly_statement_debt"
+NEW_COLUMNS = [*DEBT_FIELDS, "net_income_ytd", "net_income_parent_ytd"]
+
+
+def _alembic(engine):
+    from alembic.config import Config
+
+    from app import migrations
+
+    config = Config(str(migrations.ALEMBIC_CONFIG_PATH))
+    config.set_main_option(
+        "script_location", str(Path(migrations.ALEMBIC_CONFIG_PATH).parent / "alembic")
+    )
+    config.attributes["connection"] = engine
+    return config
+
+
+def _insert_old_row(engine):
+    """One instrument, raw payload and 0042 row (the fifteen amounts only)."""
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO instruments (id, market, exchange, symbol, name, "
+            "instrument_type, is_watchlisted, status, created_at) VALUES "
+            "(1, 'TW', 'TWSE', '2330', '台積電', 'stock', 0, 'active', "
+            "'2026-11-11 10:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO raw_payloads (id, source, endpoint, payload_path, sha256, "
+            "data_as_of, collected_at) VALUES (1, 'mops_tifrs_zip', 'u', 'p', 'x', "
+            "'2014Q2', '2026-11-16 03:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO quarterly_statements (id, instrument_id, period_end, "
+            "fiscal_period, announcement_date, total_assets, equity_total, source, "
+            "raw_payload_id, data_as_of, collected_at, data_json) VALUES "
+            "(1, 1, '2014-06-30', 'Q2', '2014-08-14', 10000, 6000, 'mops_tifrs_zip', "
+            "1, '2014-06-30', '2026-11-27 03:00:00', '{}')"
+        )
+
+
+def _statement_table(path):
+    import sqlite3
+
+    with sqlite3.connect(path) as connection:
+        columns = {
+            row[1]: row
+            for row in connection.execute("PRAGMA table_info(quarterly_statements)")
+        }
+        old = [name for name in columns if name not in NEW_COLUMNS]
+        rows = connection.execute(
+            f"SELECT {', '.join(old)} FROM quarterly_statements ORDER BY id"
+        ).fetchall()
+        new = [name for name in NEW_COLUMNS if name in columns]
+        values = (
+            connection.execute(
+                f"SELECT {', '.join(new)} FROM quarterly_statements ORDER BY id"
+            ).fetchall()
+            if new
+            else None
+        )
+        checks = (
+            connection.execute("PRAGMA integrity_check").fetchall(),
+            connection.execute("PRAGMA foreign_key_check").fetchall(),
+        )
+    return columns, rows, values, checks
+
+
+def _assert_new_columns(columns):
+    for name in NEW_COLUMNS:
+        assert columns[name][2] == "FLOAT", name
+        assert columns[name][3] == 0, name  # nullable
+        assert columns[name][4] is None, name  # no default: NULL, never 0
+
+
+def _old_table(engine, config):
+    """A 0042 database as it was: at head, then down to 0042 (0001 builds tables from
+    today's models, so an upgrade straight to 0042 already has the new columns)."""
+
+    from alembic import command
+
+    from app.migration_revisions import REVISIONS
+
+    command.upgrade(config, DEBT_REVISION)
+    command.downgrade(config, REVISIONS[REVISIONS.index(DEBT_REVISION) - 1])
+    _insert_old_row(engine)
+
+
+def test_the_migration_adds_the_columns_goes_down_and_up_keeping_every_row(tmp_path):
+    pytest.importorskip("alembic")
+    from alembic import command
+
+    from app.migration_revisions import REVISIONS
+
+    previous = REVISIONS[REVISIONS.index(DEBT_REVISION) - 1]
+    path = tmp_path / "debt.db"
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    config = _alembic(engine)
+    try:
+        # From the old revision with a stored row.
+        _old_table(engine, config)
+        before_columns, before_rows, before_values, _checks = _statement_table(path)
+        assert before_values is None and not set(NEW_COLUMNS) & set(before_columns)
+        assert len(before_rows) == 1
+        command.upgrade(config, DEBT_REVISION)
+        columns, rows, values, checks = _statement_table(path)
+        _assert_new_columns(columns)
+        assert rows == before_rows
+        assert values == [(None,) * len(NEW_COLUMNS)]
+        assert checks == ([("ok",)], [])
+        # Down drops only the new columns and keeps the row.
+        command.downgrade(config, previous)
+        down_columns, down_rows, down_values, down_checks = _statement_table(path)
+        assert set(down_columns) == set(before_columns)
+        assert down_rows == before_rows and down_values is None
+        assert down_checks == ([("ok",)], [])
+        command.upgrade(config, DEBT_REVISION)
+        up_columns, up_rows, up_values, up_checks = _statement_table(path)
+        _assert_new_columns(up_columns)
+        assert up_rows == before_rows and up_values == values
+        assert up_checks == ([("ok",)], [])
+    finally:
+        engine.dispose()
+
+
+def test_the_fallback_adds_the_columns_to_an_old_table(tmp_path, monkeypatch):
+    """Without Alembic, ``init-db`` from a 0042 database adds them (app.migrations)."""
+
+    pytest.importorskip("alembic")
+    import sqlite3
+
+    from app import migrations
+
+    path = tmp_path / "fallback.db"
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    try:
+        _old_table(engine, _alembic(engine))
+        before, before_rows, _values, _checks = _statement_table(path)
+        assert not set(NEW_COLUMNS) & set(before) and len(before_rows) == 1
+        monkeypatch.setattr(migrations, "ALEMBIC_CONFIG_PATH", tmp_path / "absent.ini")
+        upgrade_database(engine)
+    finally:
+        engine.dispose()
+    columns, rows, values, checks = _statement_table(path)
+    _assert_new_columns(columns)
+    assert rows == before_rows and values == [(None,) * len(NEW_COLUMNS)]
+    assert checks == ([("ok",)], [])
+    with sqlite3.connect(path) as connection:
+        assert (DEBT_REVISION,) in connection.execute(
+            "SELECT version FROM schema_migrations"
+        ).fetchall()
+
+
+def test_a_new_database_has_the_columns_by_either_path(tmp_path, monkeypatch):
+    from app import migrations
+
+    for name, absent in (("alembic.db", False), ("fallback.db", True)):
+        if absent:
+            monkeypatch.setattr(
+                migrations, "ALEMBIC_CONFIG_PATH", tmp_path / "absent.ini"
+            )
+        path = tmp_path / name
+        engine = create_engine(f"sqlite:///{path.as_posix()}")
+        enable_sqlite_foreign_keys(engine)
+        try:
+            upgrade_database(engine)
+        finally:
+            engine.dispose()
+        columns, rows, _values, checks = _statement_table(path)
+        _assert_new_columns(columns)
+        assert rows == [] and checks == ([("ok",)], [])
 
 
 # --- commands -----------------------------------------------------------------------------
