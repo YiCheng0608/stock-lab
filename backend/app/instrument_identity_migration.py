@@ -58,6 +58,7 @@ _CHILDREN = {
     "valuation_daily",
     "shares_outstanding_daily",
     "quarterly_statements",
+    "index_constituents_daily",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"

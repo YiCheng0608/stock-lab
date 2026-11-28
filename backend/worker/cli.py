@@ -700,7 +700,7 @@ def main() -> None:
     )
     valuation_parser = subparsers.add_parser(
         "valuation",
-        help="研究 DB 的股價淨值比與發行股數（#1075）：TWSE BWIBBU_d／MI_QFIIS、TPEx peQryDate、已存的上櫃行情表",
+        help="研究 DB 的股價淨值比、發行股數與富櫃50 成分股（#1075、#1134）：TWSE BWIBBU_d／MI_QFIIS、TPEx peQryDate／indexInfo/r50、已存的上櫃行情表",
     )
     valuation_subparsers = valuation_parser.add_subparsers(
         dest="valuation_command", required=True
@@ -715,7 +715,7 @@ def main() -> None:
         "--feed",
         action="append",
         choices=sorted(VALUATION_FEEDS),
-        help="只跑這個 feed（可重複）；預設四個都跑",
+        help="只跑這個 feed（可重複）；預設五個都跑",
     )
     valuation_backfill_parser.add_argument(
         "--reapply",

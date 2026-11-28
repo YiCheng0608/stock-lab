@@ -2685,6 +2685,7 @@ OMITTED_TABLES: dict[str, str] = {
         "季度資產負債表與現金流量表（#1083）：正式 DB 只建空表、只有研究 DB 寫入，"
         "五頁 API 不讀"
     ),
+    "index_constituents_daily": "同 valuation_daily（#1134 富櫃50 成分股）",
     "shares_outstanding_daily": "同 valuation_daily",
     "theme_cluster_members": "同 theme_cluster_runs",
     "theme_cluster_runs": (
