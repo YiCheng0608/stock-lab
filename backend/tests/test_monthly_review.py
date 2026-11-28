@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import sqlite3
 import sys
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
@@ -74,9 +75,69 @@ def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+POOL_DAY = date(2026, 12, 1)
+
+
+def add_pool(path: Path) -> None:
+    """One evening pool on 2026-12-01 (four stocks, one left out by the cap), so
+    the pool entry has numbers to compare alone and under the review."""
+
+    from datetime import datetime
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.models import CandidatePoolItem, CandidatePoolRun
+
+    engine = create_engine(f"sqlite:///{path}")
+    with Session(engine) as db:
+        run = CandidatePoolRun(
+            trading_date=POOL_DAY,
+            version="candidate_pool_v1",
+            phase="evening",
+            status="computed",
+            cap=40,
+            config_json={"liquidity_days": 20, "min_average_lots": 1.0},
+            computed_at=datetime(2026, 12, 1, 13, 40),
+        )
+        db.add(run)
+        db.flush()
+        for rank, (instrument_id, sources, selected) in enumerate(
+            [
+                (1, ["rule_signal", "news"], True),
+                (2, ["volume"], True),
+                (3, ["chips", "volume"], True),
+                (4, ["chips"], False),
+            ],
+            start=1,
+        ):
+            db.add(
+                CandidatePoolItem(
+                    run_id=run.id,
+                    trading_date=POOL_DAY,
+                    version="candidate_pool_v1",
+                    phase="evening",
+                    instrument_id=instrument_id,
+                    rank=rank if selected else None,
+                    tier=2 if "rule_signal" in sources else 5,
+                    selected=selected,
+                    reject_reason=None if selected else "cap",
+                    source_count=len(sources),
+                    sources_json=[
+                        {"source": name, "value": {}, "data_date": "2026-12-01"}
+                        for name in sources
+                    ],
+                )
+            )
+        db.commit()
+    engine.dispose()
+
+
 @pytest.fixture(scope="module")
 def copy_db(tmp_path_factory) -> Path:
-    return fwt.build(tmp_path_factory.mktemp("review") / "stock.db")
+    path = fwt.build(tmp_path_factory.mktemp("review") / "stock.db")
+    add_pool(path)
+    return path
 
 
 @pytest.fixture(scope="module")
@@ -107,6 +168,8 @@ def test_every_entry_runs_in_order(copy_db, tmp_path):
         *fw.WATCHES,
         "candidate_scorecard",
         "feature_evidence",
+        "candidate_pool_score",
+        "premarket_errors",
         "premarket_score_report",
     ]
 
@@ -121,11 +184,21 @@ def test_the_review_runs_every_entry(review_run):
         *fw.WATCHES,
         "candidate_scorecard",
         "feature_evidence",
+        "candidate_pool_score",
+        "premarket_errors",
         "premarket_score_report",
     }
-    for name in ("H1", *fw.WATCHES, "candidate_scorecard", "feature_evidence"):
+    for name in (
+        "H1",
+        *fw.WATCHES,
+        "candidate_scorecard",
+        "feature_evidence",
+        "candidate_pool_score",
+    ):
         assert (out / name / "tables.json").is_file(), name
         assert (out / name / "summary.md").is_file(), name
+    assert (out / "premarket_errors" / "cases.json").is_file()
+    assert (out / "premarket_errors" / "cases.md").is_file()
     assert (out / "premarket_score_report" / "report.md").is_file()
     assert review["cutoff"] == CUTOFF.isoformat()
     summary = (out / "summary.md").read_text(encoding="utf-8")
@@ -147,7 +220,15 @@ def normalized(path: Path) -> dict:
 
 
 @pytest.mark.parametrize(
-    "name", ["H1", *fw.WATCHES, "candidate_scorecard", "feature_evidence"]
+    "name",
+    [
+        "H1",
+        *fw.WATCHES,
+        "candidate_scorecard",
+        "feature_evidence",
+        "candidate_pool_score",
+        "premarket_errors",
+    ],
 )
 def test_each_entrys_output_is_the_one_it_writes_alone(
     review_run, copy_db, tmp_path, monkeypatch, name
@@ -157,9 +238,45 @@ def test_each_entrys_output_is_the_one_it_writes_alone(
     fwt.no_window(monkeypatch)
     code, _stdout, stderr = in_process(step["tool"], step["argv"])
     assert code == 0, stderr
-    assert normalized(tmp_path / name / "tables.json") == normalized(
-        out / name / "tables.json"
-    )
+    tables = step.get("tables", "tables.json")
+    assert normalized(tmp_path / name / tables) == normalized(out / name / tables)
+
+
+def test_the_pool_entry_has_the_fixture_pool(review_run):
+    _code, out = review_run
+    review = read_json(out / "review.json")
+    pool = review["pool"]
+    assert pool["range"] == [POOL_DAY.isoformat(), POOL_DAY.isoformat()]
+    assert pool["comparisons"] == 54
+    assert pool["sources"]["volume"]["5"]["days"] == 1
+    assert pool["sources"]["volume"]["5"]["verdict"] == "樣本不足"
+    assert review["errors"]["proposal_gate"]["status"] == "insufficient_sample"
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    assert summary.index("## 候選池的對答案") < summary.index("## 早盤 AI 判錯清單")
+    assert summary.index("## 早盤 AI 判錯清單") < summary.index("## 早盤 AI 判讀月報")
+    assert "樣本不足，不提案" in summary
+    assert f"第 {mr.VERSION} 版改了什麼：{mr.VERSION_NOTES[mr.VERSION]}" in summary
+
+
+def test_a_previous_of_the_first_version_is_read(
+    review_run, copy_db, tmp_path, monkeypatch
+):
+    """12/02's review.json is format 1 of monthly_review 1, without the pool
+    and the AI's misses: January's review reads it as it is."""
+
+    _code, out = review_run
+    first = read_json(out / "review.json")
+    for key in ("pool", "errors"):
+        first.pop(key)
+    first.update(version=1, month="2026-11")
+    (tmp_path / "last").mkdir()
+    (tmp_path / "last" / "review.json").write_text(json.dumps(first), encoding="utf-8")
+    fwt.no_window(monkeypatch)
+    argv = review_argv(copy_db, tmp_path / "out", "--previous", str(tmp_path / "last"))
+    assert mr.main(argv, runner=in_process) == 0
+    review = read_json(tmp_path / "out" / "review.json")
+    assert review["previous"]["month"] == "2026-11"
+    assert review["feature_comparison"] is None
 
 
 def test_the_premarket_report_is_the_clis_on_the_copy(review_run, copy_db, monkeypatch):
@@ -377,6 +494,46 @@ def made_review(**parts) -> dict:
 
 def names(items: list[dict], kind: str | None = None) -> list[str]:
     return [item["name"] for item in items if kind is None or item["kind"] == kind]
+
+
+def pool_fact(verdicts: dict[str, dict[str, str]]) -> dict:
+    return {
+        "range": ["2026-12-01", "2026-12-31"],
+        "comparisons": 54,
+        "sources": {
+            source: {
+                horizon: {"days": 60, "mean": 0.001, "t": 2.5, "verdict": verdict}
+                for horizon, verdict in by.items()
+            }
+            for source, by in verdicts.items()
+        },
+    }
+
+
+def test_a_pool_source_losing_is_worse_and_passing_is_better():
+    review = made_review(
+        pool=pool_fact(
+            {
+                "volume": {"5": "輸給基準", "20": "沒有優勢"},
+                "chips": {"5": "通過", "20": "通過"},
+                "news": {"5": "樣本不足", "20": "方向一致但不顯著"},
+            }
+        )
+    )
+    worse = mr.worse(review, None)
+    better = mr.better(review, None, {})
+    assert names(worse, "pool") == ["pool:volume:T+5"]
+    assert names(better, "pool") == ["pool:chips:T+5", "pool:chips:T+20"]
+    assert worse[names(worse).index("pool:volume:T+5")]["action"] == mr.POOL_NOTE
+    assert better[names(better).index("pool:chips:T+5")]["action"].startswith(
+        "只當紀錄"
+    )
+
+
+def test_a_failed_pool_entry_is_in_both_lists():
+    review = made_review(pool=None)
+    for items in (mr.worse(review, None), mr.better(review, None, {})):
+        assert "candidate_pool_score" in names(items, "failed")
 
 
 def test_a_forward_object_losing_is_listed_from_60_sessions_only():
@@ -664,3 +821,39 @@ def test_a_copy_without_the_premarket_tables_says_so(copy_db, tmp_path):
     status = mr.run_premarket(older, MONTH, tmp_path / "out", mr.premarket_text)
     assert status["status"] == "failed"
     assert status["reason"].startswith("副本沒有 `premarket_ai_readings` 表")
+
+
+def test_an_entry_on_a_copy_without_its_table_says_so(copy_db, tmp_path):
+    """Before 0039/0040 reach production the pool and the AI's misses have no
+    table: their section says the migration is not deployed yet."""
+
+    older = tmp_path / "older.db"
+    older.write_bytes(copy_db.read_bytes())
+    con = sqlite3.connect(older)
+    con.execute("drop table candidate_pool_items")
+    con.commit()
+    con.close()
+    step = next(
+        s
+        for s in mr.steps(older, tmp_path, CUTOFF, 0)
+        if s["name"] == "candidate_pool_score"
+    )
+
+    def runner(tool, argv):
+        return in_process_no_window(tool, argv)
+
+    status = mr.run_tool_step(step, tmp_path / "out", runner, older)
+    assert status["status"] == "failed"
+    assert status["reason"].startswith("副本沒有 `candidate_pool_items` 表（alembic")
+
+
+def in_process_no_window(tool: str, argv: list[str]) -> tuple[int, str, str]:
+    patch = pytest.MonkeyPatch()
+    fwt.no_window(patch)
+    try:
+        code, out, err = in_process(tool, argv)
+    except Exception as exc:  # noqa: BLE001 - the subprocess would print it
+        code, out, err = 1, "", f"{type(exc).__name__}: {exc}"
+    finally:
+        patch.undo()
+    return code, out, err
