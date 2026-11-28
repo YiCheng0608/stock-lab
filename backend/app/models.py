@@ -880,7 +880,8 @@ class QuarterlyStatement(Base):
     values; ``*_ytd`` are year to date as filed (capital expenditure is negative,
     an outflow), a single quarter is the research tools' difference.  A value the
     company did not file, or one its report format has no line for, is NULL, never
-    0; ``data_json.not_applicable`` names the latter.  Revenue and EPS stay in
+    0; ``data_json.not_applicable`` names the latter (a bank's, a holding's and an
+    insurer's current investments and debts, #1140).  Revenue and EPS stay in
     ``fundamental_snapshots``.  ``announcement_date`` is the statutory deadline as
     for the archive's EPS.  Only the research database is written; the production
     one has the empty table.
@@ -919,6 +920,35 @@ class QuarterlyStatement(Base):
     capex_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
     gross_profit_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
     operating_income_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 0050 (#1140): current investments, one line each (IFRS 9 three, IAS 39 four),
+    # a reference line, the interest-bearing debt, leases and the net income.
+    st_inv_fvtpl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    st_inv_fvoci: Mapped[float | None] = mapped_column(Float, nullable=True)
+    st_inv_amortised: Mapped[float | None] = mapped_column(Float, nullable=True)
+    st_inv_afs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    st_inv_htm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    st_inv_no_active_market: Mapped[float | None] = mapped_column(Float, nullable=True)
+    st_inv_at_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Time deposits over three months before 2018, restricted deposits: no sum.
+    other_current_financial_assets: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    short_term_borrowings: Mapped[float | None] = mapped_column(Float, nullable=True)
+    short_term_bills_payable: Mapped[float | None] = mapped_column(Float, nullable=True)
+    long_term_current_portion: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    bonds_payable_noncurrent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    long_term_borrowings: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lease_liabilities_current: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    lease_liabilities_noncurrent: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    # With non-controlling interests; the parent's is an individual report's ProfitLoss.
+    net_income_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    net_income_parent_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(40))
     raw_payload_id: Mapped[int] = mapped_column(
         ForeignKey("raw_payloads.id"), index=True

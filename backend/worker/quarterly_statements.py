@@ -3,8 +3,10 @@
 ``t163sb04`` has the income statement only.  The quarterly archive that
 ``worker.quarterly_xbrl`` reads for EPS also holds every company's balance sheet and
 cash flow statement; #1078 chose fifteen items (``FIELDS``) and checked them against
-the summary pages (#1078 7207007046).  ``quarterly_statements`` keeps them, research
-database only (#1078 decision 7207067861).
+the summary pages (#1078 7207007046), and #1135 seventeen more: the current
+investments, the interest-bearing debt and the net income (#1135 7234320089, decision
+7234355063; Issue #1140).  ``quarterly_statements`` keeps them, research database
+only (#1078 decision 7207067861).
 
 Two commands:
 
@@ -16,8 +18,9 @@ Two commands:
 - ``apply_statements`` writes the quarters of the archive directory (the one
   ``fundamentals xbrl-fetch`` fills) into ``quarterly_statements``: one
   ``quarterly_statements_backfill`` run, one commit per quarter.  Before a quarter is
-  written it is checked twice: the gross profit and operating income of every
-  company ``t163sb04`` has against that row's ``data_json``, and the total assets and
+  written it is checked twice: the gross profit, operating income, net income and
+  the parent's net income of every company ``t163sb04`` has against that row's
+  ``data_json`` (``INCOME_CHECKS``), and the total assets and
   total equity against the quarter's ``t163sb05`` page.  One different company (or
   too many that cannot be compared) stops the command before that quarter.  Who gets
   a row: an instrument with a ``t163sb04`` row of the quarter whose archive EPS is
@@ -77,7 +80,7 @@ YEAR_TO_DATE = "ytd"  # 1 January to the quarter's end
 FIELDS: dict[str, tuple[str, tuple[str, ...]]] = {
     "total_assets": (INSTANT, ("Assets",)),
     "total_liabilities": (INSTANT, ("Liabilities",)),
-    # An individual report (``ir``／``er``) has no subsidiary: its Equity (below).
+    # An individual report (``ir``／``er``) has no subsidiary: its Equity (FALLBACKS).
     "equity_parent": (INSTANT, ("EquityAttributableToOwnersOfParent",)),
     "equity_total": (INSTANT, ("Equity",)),
     "current_assets": (INSTANT, ("CurrentAssets",)),
@@ -106,10 +109,115 @@ FIELDS: dict[str, tuple[str, tuple[str, ...]]] = {
         YEAR_TO_DATE,
         ("NetOperatingIncomeLoss", "ProfitLossFromOperatingActivities"),
     ),
+    # --- short-term investments, interest-bearing debt and net income (#1140) ---
+    # Names and order as #1135 7234320089.  One line a field, no sum: the totals are
+    # the research tools'.  Current financial assets, IFRS 9 (2018 on); 2013–2017's
+    # FVTPL is spelt ``Fairvalue`` (a securities firm's ``FairValue``).
+    "st_inv_fvtpl": (
+        INSTANT,
+        (
+            "CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss",
+            "CurrentFinancialAssetsAtFairValueThroughProfitOrLoss",
+        ),
+    ),
+    "st_inv_fvoci": (
+        INSTANT,
+        ("CurrentFinancialAssetsAtFairValueThroughOtherComprehensiveIncome",),
+    ),
+    "st_inv_amortised": (INSTANT, ("CurrentFinancialAssetsAtAmortisedCost",)),
+    # IAS 39's four current lines (2013–2017; none from 2019); the second names are a
+    # securities firm's, the available-for-sale third one its 2018 name.
+    "st_inv_afs": (
+        INSTANT,
+        (
+            "CurrentAvailableForSaleFinancialAssets",
+            "AvailableForSaleCurrentFinancialAssets",
+            "CurrentFinancialAssetsAvailableforsale",
+        ),
+    ),
+    "st_inv_htm": (
+        INSTANT,
+        (
+            "CurrentHeldToMaturityFinancialAssets",
+            "HeldToMaturityCurrentFinancialAssets",
+        ),
+    ),
+    "st_inv_no_active_market": (INSTANT, ("CurrentBondInvestmentWithoutActiveMarket",)),
+    "st_inv_at_cost": (INSTANT, ("CurrentFinancialAssetsAtCost",)),
+    # A reference line: time deposits over three months before 2018, and restricted
+    # deposits and other items that are no investment.
+    "other_current_financial_assets": (INSTANT, ("OtherCurrentFinancialAssets",)),
+    "short_term_borrowings": (INSTANT, ("ShorttermBorrowings",)),
+    "short_term_bills_payable": (
+        INSTANT,
+        (
+            "ShorttermNotesAndBillsPayable",
+            "CommercialPaperPayable",
+            "CurrentCommercialPapersIssuedAndCurrentPortionOfNoncurrentCommercialPapersIssued",
+        ),
+    ),
+    # Holds the current bonds and borrowings.  A company that leaves it inside
+    # 其他流動負債 has none: NULL, never worked out from that total.
+    "long_term_current_portion": (INSTANT, ("LongtermLiabilitiesCurrentPortion",)),
+    "bonds_payable_noncurrent": (
+        INSTANT,
+        (
+            "BondsPayable",
+            "BondsPayableIncludingOverseasBonds",
+            "NoncurrentPortionOfNoncurrentBondsIssued",
+        ),
+    ),
+    "long_term_borrowings": (INSTANT, ("LongtermBorrowings",)),
+    # IFRS 16's 2019 names first: 2019Q2 has 89 companies filing the old name as 0
+    # beside the new one.  2019Q2's 3202 files both non-zero; the first is kept.
+    "lease_liabilities_current": (
+        INSTANT,
+        (
+            "CurrentLeaseLiabilities",
+            "CurrentFinanceLeaseLiabilities",
+            "CurrentLeaseObligationsPayable",
+        ),
+    ),
+    "lease_liabilities_noncurrent": (
+        INSTANT,
+        (
+            "NoncurrentFinanceLeaseLiabilities",
+            "NonCurrentLeaseLiabilities",
+            "FinanceLeaseLiabilities",
+            "NoncurrentLeaseObligationsPayable",
+        ),
+    ),
+    # With non-controlling interests; an individual report's parent line is this one
+    # (FALLBACKS).
+    "net_income_ytd": (YEAR_TO_DATE, ("ProfitLoss",)),
+    "net_income_parent_ytd": (
+        YEAR_TO_DATE,
+        ("ProfitLossAttributableToOwnersOfParent",),
+    ),
 }
 # Lines a report format does not have (industry codes as quarterly_xbrl.INDUSTRY_FORMATS):
 # banks, holdings and insurers do not split current items; no cost of sales.
 _UNCLASSIFIED = frozenset({"basi", "fh", "ins"})
+# Their investments and debts are the business (deposits, insurance liabilities), with
+# no current line: none of #1140's balance sheet items (#1135 decision 7234355063).  A
+# securities firm (``bd``) has them; its current FVTPL is its trading stock.
+_DEBT_AND_INVESTMENTS = (
+    "st_inv_fvtpl",
+    "st_inv_fvoci",
+    "st_inv_amortised",
+    "st_inv_afs",
+    "st_inv_htm",
+    "st_inv_no_active_market",
+    "st_inv_at_cost",
+    "other_current_financial_assets",
+    "short_term_borrowings",
+    "short_term_bills_payable",
+    "long_term_current_portion",
+    "bonds_payable_noncurrent",
+    "long_term_borrowings",
+    "lease_liabilities_current",
+    "lease_liabilities_noncurrent",
+)
 NOT_APPLICABLE: dict[str, frozenset[str]] = {
     "current_assets": _UNCLASSIFIED,
     "current_liabilities": _UNCLASSIFIED,
@@ -117,16 +225,24 @@ NOT_APPLICABLE: dict[str, frozenset[str]] = {
     "inventories": _UNCLASSIFIED | {"bd"},
     "gross_profit_ytd": _UNCLASSIFIED | {"bd"},
     "operating_income_ytd": frozenset({"basi", "fh"}),
+    **{name: _UNCLASSIFIED for name in _DEBT_AND_INVESTMENTS},
 }
 # Facts of a note taxonomy (a holding's OrdinaryShare is in ``tifrs-notes``) are not read.
 NOTES_MARK = "notes"
-EQUITY_FALLBACK = "Equity"
-_WANTED = {name for _context, names in FIELDS.values() for name in names}
+# An individual report (``ir``／``er``) has no subsidiary, so no line for the parent's
+# share: the parent's is the whole (its Equity, its ProfitLoss), read in the same context.
+FALLBACKS: dict[str, str] = {
+    "equity_parent": "Equity",
+    "net_income_parent_ytd": "ProfitLoss",
+}
+_WANTED = {name for _context, names in FIELDS.values() for name in names} | set(
+    FALLBACKS.values()
+)
 # The (element, context) pairs read: a fact of a wanted element in the other context
 # is never a number we use (2013Q1 has a cash policy note tagged as a year-to-date
 # CashAndCashEquivalents), so it is skipped, not parsed.
 _SLOTS = {(name, context) for context, names in FIELDS.values() for name in names} | {
-    (EQUITY_FALLBACK, INSTANT)
+    (element, FIELDS[name][0]) for name, element in FALLBACKS.items()
 }
 
 # --- the checks -------------------------------------------------------------------------
@@ -134,15 +250,30 @@ _SLOTS = {(name, context) for context, names in FIELDS.values() for name in name
 # daily's OpenAPI snapshot (t187ap14), which writes a quarter first (2026Q2 on).
 SNAPSHOT_SOURCE = "mops_fundamental"
 IDENTITY_SOURCES = {qx.T163SB04_SOURCE: "t163sb04_eps", SNAPSHOT_SOURCE: "snapshot_eps"}
-# Their data_json columns (thousand NTD) the archive's YTD must equal; the snapshot
-# has no gross profit.
-INCOME_CHECKS: dict[str, dict[str, str]] = {
+# Their data_json columns (thousand NTD) the archive's YTD must equal, the first of a
+# field's names with a number (each format names a line its own way; #1135
+# 7234320089); the snapshot has no gross profit nor net income.
+INCOME_CHECKS: dict[str, dict[str, tuple[str, ...]]] = {
     qx.T163SB04_SOURCE: {
-        "gross_profit_ytd": "營業毛利（毛損）淨額",
-        "operating_income_ytd": "營業利益（損失）",
+        "gross_profit_ytd": ("營業毛利（毛損）淨額",),
+        "operating_income_ytd": ("營業利益（損失）",),
+        "net_income_ytd": (
+            "本期淨利（淨損）",
+            "本期稅後淨利（淨損）",
+            "繼續營業單位本期純益（純損）",
+        ),
+        "net_income_parent_ytd": (
+            "淨利（淨損）歸屬於母公司業主",
+            "淨利（損）歸屬於母公司業主",
+        ),
     },
-    SNAPSHOT_SOURCE: {"operating_income_ytd": "營業利益"},
+    SNAPSHOT_SOURCE: {"operating_income_ytd": ("營業利益",)},
 }
+# A page value that is blank (``--``) or a column the page lacks is not compared, but
+# t163sb04 prints the parent's net income for every consolidated report: only an
+# individual one's is ``--`` (its parent's is ProfitLoss, FALLBACKS; #1135
+# 7234320089), so a consolidated report's ``--`` there is a difference.
+CONSOLIDATED_PAGE_LINES = frozenset({"net_income_parent_ytd"})
 # t163sb05 columns (each format names them differently) the quarter-end must equal.
 BALANCE_CHECKS: dict[str, tuple[str, ...]] = {
     "total_assets": ("資產總額", "資產總計", "資產合計"),
@@ -265,12 +396,14 @@ def parse_statement(
                 values[name] = known[0]
                 elements[name] = [local, found[known[0]]]
                 break
-    if values["equity_parent"] is None and kind != "cr":
-        found = facts.get((EQUITY_FALLBACK, INSTANT), {})
+    for name, local in FALLBACKS.items():
+        if values[name] is not None or kind == "cr":
+            continue
+        found = facts.get((local, FIELDS[name][0]), {})
         known = [value for value in found if value is not None]
         if known:
-            values["equity_parent"] = known[0]
-            elements["equity_parent"] = [EQUITY_FALLBACK, found[known[0]]]
+            values[name] = known[0]
+            elements[name] = [local, found[known[0]]]
     not_applicable = sorted(
         name for name, industries in NOT_APPLICABLE.items() if industry in industries
     )
@@ -545,8 +678,34 @@ def _differs(stored: Decimal | None, read: float | None) -> bool:
     return abs(stored - Decimal(str(read))) > CHECK_TOLERANCE
 
 
-def _page_number(details: dict[str, Any] | None, column: str) -> Decimal | None:
-    return _amount((details or {}).get(column))
+def _page_number(
+    details: dict[str, Any] | None, columns: tuple[str, ...]
+) -> Decimal | None:
+    """The first of COLUMNS the page has a number in (thousand NTD)."""
+
+    for column in columns:
+        number = _amount((details or {}).get(column))
+        if number is not None:
+            return number
+    return None
+
+
+def _income_differs(
+    statement: Statement,
+    kind: str,
+    name: str,
+    details: dict[str, Any] | None,
+    columns: tuple[str, ...],
+) -> bool:
+    stored = _page_number(details, columns)
+    if (
+        stored is None
+        and kind == "cr"
+        and name in CONSOLIDATED_PAGE_LINES
+        and any(column in (details or {}) for column in columns)
+    ):
+        return True
+    return _differs(stored, statement.thousands(name))
 
 
 def _group(instrument: Instrument) -> str:
@@ -632,6 +791,7 @@ def apply_statement_quarter(
             rules[instrument_id] = IDENTITY_SOURCES[source]
             found = read(symbol)
             statement = found[1] if found else None
+            kind = found[0].kind if found else ""
             if statement is None or statement.eps is None or stored_eps is None:
                 counts.income_missing += 1
                 same_eps[instrument_id] = False
@@ -644,10 +804,10 @@ def apply_statement_quarter(
             same_eps[instrument_id] = True
             different = [
                 name
-                for name, column in INCOME_CHECKS[source].items()
+                for name, columns in INCOME_CHECKS[source].items()
                 # The snapshot prints a 營業利益 for formats without the line.
                 if not (source == SNAPSHOT_SOURCE and name in statement.not_applicable)
-                and _differs(_page_number(details, column), statement.thousands(name))
+                and _income_differs(statement, kind, name, details, columns)
             ]
             tally = counts.income_by_source.setdefault(
                 source, {"same": 0, "different": 0}

@@ -57,6 +57,26 @@ _ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
     "strategy_versions": {
         "canonical_config_snapshot": "JSON NOT NULL DEFAULT '{}'",
     },
+    "quarterly_statements": {
+        # 0050: current investments, interest-bearing debt and net income (#1140).
+        "st_inv_fvtpl": "FLOAT",
+        "st_inv_fvoci": "FLOAT",
+        "st_inv_amortised": "FLOAT",
+        "st_inv_afs": "FLOAT",
+        "st_inv_htm": "FLOAT",
+        "st_inv_no_active_market": "FLOAT",
+        "st_inv_at_cost": "FLOAT",
+        "other_current_financial_assets": "FLOAT",
+        "short_term_borrowings": "FLOAT",
+        "short_term_bills_payable": "FLOAT",
+        "long_term_current_portion": "FLOAT",
+        "bonds_payable_noncurrent": "FLOAT",
+        "long_term_borrowings": "FLOAT",
+        "lease_liabilities_current": "FLOAT",
+        "lease_liabilities_noncurrent": "FLOAT",
+        "net_income_ytd": "FLOAT",
+        "net_income_parent_ytd": "FLOAT",
+    },
     "signals": {
         "earliest_execution_date": "DATE",
         "execution_date": "DATE",
@@ -887,6 +907,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0042_quarterly_statements', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0050 only adds seventeen quarterly_statements columns (#1140), added above
+    # with the other additive columns.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0050_quarterly_statement_debt', CURRENT_TIMESTAMP)"
         )
     )
 
