@@ -44,6 +44,9 @@ CHILDREN = [
     "valuation_daily",
     "shares_outstanding_daily",
     "quarterly_statements",
+    "insider_holdings_monthly",
+    "insider_pledges_monthly",
+    "insider_transfer_declarations",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -282,6 +285,9 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     "valuation_daily",
                     "shares_outstanding_daily",
                     "quarterly_statements",
+                    "insider_holdings_monthly",
+                    "insider_pledges_monthly",
+                    "insider_transfer_declarations",
                 }:
                     values.update(raw_payload_id=11)
                 if table.name == "tracking_plans":

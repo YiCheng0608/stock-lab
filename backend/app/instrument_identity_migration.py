@@ -58,6 +58,9 @@ _CHILDREN = {
     "valuation_daily",
     "shares_outstanding_daily",
     "quarterly_statements",
+    "insider_holdings_monthly",
+    "insider_pledges_monthly",
+    "insider_transfer_declarations",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"

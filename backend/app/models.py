@@ -495,6 +495,162 @@ class SharesOutstandingDaily(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class InsiderHoldingsMonthly(Base):
+    """One company's insider holdings of one month (Issue #1133).
+
+    siis ``IRB110`` (董事、監察人、經理人及百分之十以上大股東股權異動彙總表), in
+    shares and %: the directors and supervisors together (no one person), the
+    managers' and the 10% holders' shares held.  A 0 of the answer is 0, a blank
+    is NULL.  ``period_month`` is the first day of the report's 資料年月;
+    ``data_as_of`` its 資料日期 (the day the file was made, 18..30 of the next
+    month), so a signal day T uses only ``data_as_of < T``.  ``market`` is the
+    report's (``sii``/``otc``): a company that moved board that month is in the
+    new one's.  Only the research database is written; production has the empty
+    table.
+    """
+
+    __tablename__ = "insider_holdings_monthly"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "period_month",
+            "source",
+            name="uq_insider_holdings_monthly",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    period_month: Mapped[date] = mapped_column(Date, index=True)
+    # 實際發行股票總額.
+    shares_issued: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 董事、監察人本月份 增加股數, 減少股數, 實際持有股數, 佔股份總額 %.
+    director_increase: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    director_decrease: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    director_held: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    director_held_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 經理人本月份實際持有股數, 百分之十以上大股東本月份實際持有股數.
+    manager_held: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    major_holder_held: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    market: Mapped[str] = mapped_column(String(10))
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class InsiderPledgesMonthly(Base):
+    """One company's insider pledges of one month (Issue #1133).
+
+    siis ``IRB130`` (董事、監察人、經理人及百分之十以上大股東質權設定彙總表):
+    the directors' and supervisors' shares held (the same number as IRB110's,
+    kept as the report has it), pledged and released this month, pledged in all
+    and its % of their holding; the managers' and 10% holders' shares held and
+    pledged in all.  0 is 0, blank is NULL; ``period_month``, ``data_as_of`` and
+    ``market`` as ``insider_holdings_monthly``.  Research database only.
+    """
+
+    __tablename__ = "insider_pledges_monthly"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "period_month",
+            "source",
+            name="uq_insider_pledges_monthly",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    period_month: Mapped[date] = mapped_column(Date, index=True)
+    director_held: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    director_pledge_set: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    director_pledge_released: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    director_pledged: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    director_pledged_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    manager_held: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    major_holder_held: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 經理人及百分之十以上大股東已設定股數 and its 佔持股比例 %.
+    manager_major_pledged: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manager_major_pledged_pct: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    market: Mapped[str] = mapped_column(String(10))
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class InsiderTransferDeclaration(Base):
+    """One insider's declaration before transferring shares (Issue #1133).
+
+    MOPS ``t56sb21`` (內部人持股轉讓事前申報彙總表), one row of the answer each:
+    no natural key (one person may file several methods a day), so the key is
+    the raw and the row's place in it; a year asked again replaces the year.  A
+    change (``change_note``) is a row of its own, the first one stays.
+    ``role_raw`` is the 申報人身分 as written; ``insider_type``, ``relation``
+    and ``via_trustee`` split it, NULL when it does not split.  The share counts
+    of a row filed before 2003-05-01 whose share cells are all 0 or blank (the
+    site's placeholder of 2002-08..2003-04) are NULL.  The names are the official
+    public filing's; they stay in the research database (never in Git, a page,
+    an Issue or a PR).  A signal day T uses only ``filed_date < T``.
+    """
+
+    __tablename__ = "insider_transfer_declarations"
+    __table_args__ = (
+        UniqueConstraint(
+            "raw_payload_id", "row_no", name="uq_insider_transfer_declarations"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    filed_date: Mapped[date] = mapped_column(Date, index=True)
+    role_raw: Mapped[str] = mapped_column(String(80))
+    # director, supervisor, manager, major_holder, specific_person, with
+    # ``subsidiary_`` before when 子公司; NULL when the role does not split.
+    insider_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # self, spouse, minor_child, nominee (利用他人名義持有者), representative
+    # (法人…代表人本人), representative_spouse, representative_minor_child,
+    # representative_nominee.
+    relation: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # 1 when the role ends in 及由受託人持有者, else 0.
+    via_trustee: Mapped[int] = mapped_column(Integer)
+    person_name: Mapped[str] = mapped_column(String(200))
+    transferee: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # 預定轉讓方式 and its 轉讓股數, as written (several, space separated).
+    method_raw: Mapped[str] = mapped_column(String(200))
+    method_shares_raw: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    intraday_max_shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 目前持有股數, 預定轉讓總股數, 預定轉讓後持股: 自有持股 and 保留運用決定權信託股數.
+    held_own: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    held_trust: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    planned_own: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    planned_trust: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    after_own: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    after_trust: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 有效轉讓期間.
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 是否申報持股未完成轉讓: 是 is 1, blank NULL.
+    unfinished_declared: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 異動情形 (本單為變更 107/06/28之申報, 已於107/10/30 申報變更); blank NULL.
+    change_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    market: Mapped[str] = mapped_column(String(10))
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    row_no: Mapped[int] = mapped_column(Integer)
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

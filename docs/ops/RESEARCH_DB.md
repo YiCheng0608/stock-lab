@@ -221,6 +221,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 | 週末交易日（#790） | 三步，照順序跑：<br>1. `python -B tools/research/history_backfill.py --from 2004-02-11 --to 2018-12-31 --weekend-sessions`（用 `history_backfill.py` 的那行 `docker run -d`，不是 `worker.cli`）<br>2. 含週末交易日的每個月，各跑一次 `index-bars backfill --from-month <月> --to-month <月>`<br>3. `indicators --rebuild` | 補月份模式沒送的星期六、星期日（`OFFICIAL_WEEKEND_SESSIONS`，[DATA_SOURCES](../DATA_SOURCES.md#交易日的判定與週末交易日)）。<br>**為什麼要另跑**：已完成的月份，request key 是 success，不會再送；所以每個週末交易日各跑一個單日 backfill。progress 檔記 `weekend` 行，和 `month` 行分開，暫停與最後的整庫檢查和月份模式相同。<br>**第 2 步**：單日 backfill 從 `MI_INDEX` 寫 TAIEX 收盤；重跑 `index-bars` 後，那天的 `no_close_row` 會變成 `upgraded`。`index-bars` 不讀已存 raw，每月重發 4 個請求。<br>**請求數**：單日 backfill 每天約 11 個：上市 6（含 3 個名冊 OpenAPI）、上櫃 4、MOPS 1，是 2026-11-16 在副本上補 2012-12-22 的實測數；2012-05 以前沒有 T86，2009 年以前多 1 個 `MI_5MINS_HIST`。`index-bars` 每月 4 個。總數約為「天數 × 11 ＋ 月數 × 4」，清單的 23 天分在 22 個月，約 253 ＋ 88 ＝ 341 個請求。<br>**耗時**：副本上每天約 3.5 分鐘（這次為了不和批 5 疊加，請求間隔拉到 30 秒；照預設 3 秒會更短），加上最後一次整庫檢查約 14 分鐘（13.5 GB 的副本） |
 | 上櫃舊版 `0.00` 價格的修正（#819） | 兩步：SQL 刪除＋`no-trade-days --start 2007-04-23 --end 2011-11-11`，命令全文見下節[上櫃舊版 0.00 價格的修正](#上櫃舊版-000-價格的修正819) | 只跑一次，跑完後才跑 `indicators --rebuild` |
 | 股價淨值比與發行股數（#1075） | `valuation backfill --start 2004-02-11 --end <日線截止日> --fallback-raw-dir /prod/raw`，另以 `-v stock-lab_stock-data:/prod:ro` 唯讀掛正式 volume | 見下節[股價淨值比與發行股數](#股價淨值比與發行股數1075)：四個 feed 一個程序，已成功的日子不再請求；每個 host 間隔 3.5 秒，台北 21:15～23:30 等待；要先跑 `init-db` 到 0041 |
+| 內部人持股、設質與轉讓申報（#1133） | `insider backfill --start 2002-01 --end <最新一期的月>` | 見下節[內部人持股、設質與轉讓申報](#內部人持股設質與轉讓申報1133)：三個 feed 一個程序，已成功的月不再請求；每個 host 間隔 3.5 秒，台北 21:15～23:30 與偶數整點前後 10 分鐘等待；要先跑 `init-db` 到 0048 |
 
 回補日線或除權息之後，對研究 DB 跑 `indicators --rebuild`（研究工具自己算報酬，不讀指標；要用 API 或回測時才需要）。
 
@@ -642,6 +643,45 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 - **財報重編不回溯**：兩個端點存的是當天公布的值（TWSE 說明「不作回溯計算」），和研究 DB 季報存「最新數值」的口徑相反。
 - **TDR 沒有淨值比**：91 開頭的存託憑證在 `BWIBBU_d` 沒有列；研究的普通股母體本來就排除它們。
 - **N/A 留空**：上櫃的 `N/A`（集中在之後下市的公司，推測是淨值為負或財報不全）與上市的 `-` 都是 NULL，研究時另計，不當成 0。
+
+## 內部人持股、設質與轉讓申報（#1133）
+
+研究 DB 的董事、監察人、經理人與持股 10% 以上大股東每月的持股（`insider_holdings_monthly`）、設質（`insider_pledges_monthly`），以及逐筆的轉讓事前申報（`insider_transfer_declarations`），讓「內部人賣股」「董監持股設質比率高」這類假設登記得了。端點、欄位、授權與可得時點見 [DATA_SOURCES](../DATA_SOURCES.md#內部人持股設質與轉讓申報)，做法見 [#1129 決定](https://github.com/YiCheng0608/stock-lab/issues/1129#issuecomment-7233121423)。正式 DB 只有 0048 建的空表，不寫入。**姓名只存研究 DB**：不進 Git、不上畫面、不寫進 Issue、PR 與 `pr-assets`，舉例寫代號與身分。
+
+**三個 feed**（[`worker.insider_backfill`](../../backend/worker/insider_backfill.py)，`--feed`、`--market` 可只跑其中幾個）：
+
+| feed | 來源 | 寫入 | `source` | 起點 | 請求 |
+| --- | --- | --- | --- | --- | --- |
+| `irb110` | `GET https://siis.twse.com.tw/publish/<sii\|otc>/<民國年>IRB110_<MM>.HTM` | `insider_holdings_monthly` | `siis_irb110` | 2003-08 | 每市場每月 1 個 |
+| `irb130` | 同上，`IRB130` | `insider_pledges_monthly` | `siis_irb130` | 2003-08 | 每市場每月 1 個 |
+| `t56sb21` | `POST https://mopsov.twse.com.tw/mops/web/ajax_t56sb21`，整年一次（`smonth=01&emonth=12`） | `insider_transfer_declarations` | `mops_t56sb21` | 2002 | 每市場每年 1 個 |
+
+- **manifest**：每個 feed、市場與月（年）一列 `ingestion_runs`（`run_type=insider_backfill_period`、`request_key=insider_backfill:<feed>:<sii|otc>:<YYYY-MM|YYYY>`、`metadata_json` 記 raw id、`asked_on` 與計數），一個單位一個 commit。月報 `success` 的月重跑不再請求（`done_before`）。轉讓申報的年要在該年結束後問過一次才算完成：還沒結束的年重跑會再問，整年的列換成新的回應（以 raw＋列序為鍵，舊列刪掉）。`failed` 的單位重跑會再問；月報的 404 記 `not_published`（還沒產生的月，例如次月 18 日前的上個月），不算失敗、下次再問；`t56sb21` 是查詢端點，404 代表端點變了，記失敗；早於起點的月份不請求，也計 `not_published`。`--reapply` 完全不送請求：有已存 raw 的單位改讀 raw 重寫，沒有差異時 `changed 0`。
+- **raw**：回應原文的位元組以 base64 存進 raw JSON（`content_base64`，另記 method、form、狀態碼），月報存在 `raw/siis/`、轉讓申報 `raw/mops/`。`siis` 檔看 BOM：`FF FE`／`FE FF` 是 UTF-16（2013-07 上櫃兩份），其餘以 cp950 讀（Big5，名稱欄有少數罕用字讀成 U+FFFD，計入 `names_replaced`；代號與數字不受影響）。
+- **整份失敗、不猜**：表頭 `[IRB110]`／`[IRB130]` 不是請求的報表、「資料年月」不是請求的月份、沒有「資料日期」、欄名不是已知的版面、某列格數不對或沒有代號、代號重複、某個數字格讀不懂、表是空的，都整份記失敗，那份不寫任何列；回應照樣存 raw。轉讓申報的列數不等於表尾「總計：N筆」、申報日不在請求的年、身分／姓名／轉讓方式空白、期間或「是否申報持股未完成轉讓」讀不懂，也整份失敗。回「無持股轉讓之情形」寫 0 列（`no_transfer`）。回 MOPS 的封鎖頁（「查詢過於頻繁」等 `BLOCK_MARKERS`）就停下 `t56sb21`，輸出的 `blocked` 記原因。
+- **值**：回應裡的 0 照存 0，空白存 NULL。轉讓申報 2002-08～2003-04 的佔位 0 存 NULL，判準見 [DATA_SOURCES](../DATA_SOURCES.md#內部人持股設質與轉讓申報)（計入 `placeholder_rows`）。預定轉讓方式可多種並列（`一般交易 盤後定價交易`），方式與股數照原文存 `method_raw`、`method_shares_raw`。
+- **身分**：月報的身分就是欄（董監合計、經理人、大股東）。轉讓申報存原文 `role_raw`，另拆 `insider_type`（`director`、`supervisor`、`manager`、`major_holder`、`specific_person`，子公司的前面加 `subsidiary_`）、`relation`（`self`、`spouse`、`minor_child`、`nominee`＝利用他人名義持有者；法人董監代表人是 `representative`、`representative_spouse`、`representative_minor_child`、`representative_nominee`）與 `via_trustee`（身分含「及由受託人持有者」是 1）；對不上這個樣式的留 NULL、不猜。變更申報（`change_note` 有「本單為變更…之申報」）是另一列，原來那列照留。
+- **代號對照**：月報代號對研究 DB 該月有日線的 `stock`／`ipo` 標的，先找報表所在市場的交易所（`sii`→TWSE、`otc`→TPEx），沒有再找另一個（轉板當月列在新市場的報表，舊市場的標的當月有日線；計入 `cross_market`）；轉讓申報以申報日所在的月對。都沒有的代號只計 `unmatched`（`metadata_json.unmatched_codes`），不建標的。同一家當月已由另一市場的報表寫入時，計 `duplicate`、不覆蓋。研究 DB 上市日線從 2004-02-11、上櫃從 2007-04-23 起，所以更早的月報與轉讓申報全部是 `unmatched`。
+- **請求規則**：同一 host 間隔至少 3.5 秒；台北 21:15～23:30 與偶數整點前後 10 分鐘不送，程序等到時段過了再接著送；連線錯誤、429、5xx 隔 5、10、20 秒重試（計 `retries`），其他狀態碼記失敗；同一 host 連續 5 個請求失敗就停（`aborted`）。只在有 `research-db.json` 的 DB 跑，否則 `refused`、exit 2；持有維護模式。
+
+**跑法**：
+
+```bash
+# IMG＝含 #1133 的 backend image；R 同「跑一批」。研究 volume 同時只有一個寫入者：先 docker ps
+# 開跑前 df -h / 至少 5 GiB 可用；不夠就停在請求之前、在 #1133 提問，不刪任何資料（#1129 決定第 7 項）
+docker run --rm --network none "${R[@]}" "$IMG" python -B -m worker.cli init-db
+docker run -d --name research-1133-insider "${R[@]}" "$IMG" \
+  sh -c 'python -B -m worker.cli insider backfill --start 2002-01 --end <最新一期的月> > /data/logs/insider.json 2> /data/logs/insider.err; echo $? > /data/logs/insider.exit'
+# 有失敗時：修好 parser 先 --reapply（0 個請求），再不加 --reapply 跑一次，只重問其餘失敗的單位
+```
+
+**已知限制**：
+
+- **下市或轉板當月沒有月報列**：月報在次月 18～30 日產生，那時已不在該市場的名單（#1129 抽樣的 7 檔都是這種）。
+- **月報只有董監合計**：沒有逐人，也分不出配偶與法人代表人；董監持股不含法人代表人的分戶集保股數與保留運用決定權信託股數。持股增減只有董監，經理人與大股東只有持有。
+- **設質只有月資料**：逐筆公告 `STAMAK03` 是倖存者名單，不用；設質比 5 日內的公告晚約 3～7 週可得。
+- **可得時點**：月報只用 `data_as_of < T` 的月份，轉讓申報只用 `filed_date < T` 的列（兩者都沒有時刻）。轉讓申報是「可轉讓的股數」，實際有沒有轉讓要看事後申報，這裡沒有。
+- **2003-05 以前的轉讓申報股數**：佔位 0 存 NULL（見上）。
 
 ## 研究工具的耗時與記憶體
 
