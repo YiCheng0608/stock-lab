@@ -5611,6 +5611,63 @@ AJ1 用[假設登記表](#假設登記表)（買前 N 名、持有 K 天）與[�
 - **K＝60**：`simulate` 的 K 份子帳戶照用，K 是 60；母體也用 K＝60。期末未賣以最後收盤計，同[實作釋義](#實作釋義)。
 - **重疊比例只列出**：分母是 AJ1 當天的名單檔數；AJ1 或 X5 當天沒有名單的日子不計入平均，同第十三～二十五輪。X5 的名單用 `explore_research` 第 2 版的定義在同一個 T 算，不另寫一份。
 
+### 第二十七輪：沒有登記
+
+**登記**
+- 本輪 0 個，累計仍是 77 個（同[第二十六輪](#第二十六輪aj1)），驗證段門檻不變：第二十六輪 AJ1 仍是 3.410，前面各輪照各自登記時的累計數，[多重比較](#多重比較)那一行不加新句子。下一輪登記時，累計數從 77 往上加。
+- 代號：本輪是 `AK`（[第二十六輪](#第二十六輪aj1)登記段寫明下一輪備用是 `AK`）。提問列了 AK1～AK4，都不登記；`AK` 算用掉，下一輪用 `AL`。
+  - 提問時在 `999b2d92`（本段 PR 的 base）跑的兩個核對：`git grep -n -w -E 'AK[1-8]' -- . | wc -l` 是 0 筆；`git grep -n -w -E 'AK'` 是 1 筆，在本檔第二十六輪登記段記的核對結果，不是假設代號、不是程式字串。
+  - 下一輪用 `AL`：同一組核對 `AL[1-8]` 是 0 筆，`AL` 不帶數字的也是 0 筆（`999b2d92`）。
+- **定義照摘要與轉述，未讀全文**：下面引用的文獻，期刊、卷期與頁碼以網路搜尋核對過索引頁，內容只讀摘要、索引頁與後續文獻的轉述。
+
+**依據**
+- #1 決定 [7231913151](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7231913151)：本輪在第二十三輪 AF1、AF2、第二十四輪 AG2、第二十五輪 AH1 與第二十六輪 AJ1 的結果出來前開（[#1127](https://github.com/YiCheng0608/stock-lab/issues/1127) 本文），讓候選完全不看它們的結果。
+- 候選清單：#1127 AC-1 提問 [7232041959](https://github.com/YiCheng0608/stock-lab/issues/1127#issuecomment-7232041959)。
+  - 4 個候選（AK1～AK4），只依公開研究、交易規則和 repo 的文件。
+  - 沒有讀研究 DB（沒有掛研究 volume），也沒有跑研究工具。涵蓋只引用 [RESEARCH_DB](../ops/RESEARCH_DB.md) 的「股價淨值比與發行股數（#1075）」、[DATA_SOURCES](../DATA_SOURCES.md) 的「股價淨值比與發行股數」「減資停止買賣」、PR #1084 的文件 diff（`quarterly_statements` 的欄位、`not_applicable` 與可得日）、本檔（第九、十輪的 `trading_halts` 筆數與 F5，第二十三～二十六輪，AB3、AG4、AH2～AH4、AJ2～AJ4 的不登記理由，全部的定義列），以及資料單 #1075、#1083、#1089、#1090、#1094、#1100、#1101、#1121 的留言第一行與 Issue／PR 狀態。
+  - **AF1、AF2、AG2、AH1、AJ1 的時點**：候選在 AF1、AF2、AG2、AH1、AJ1 結果公開前選定。提問 2026-11-28 台北約 10:00 發出；發出前（09:56）看過 [#1107](https://github.com/YiCheng0608/stock-lab/issues/1107)、[#1116](https://github.com/YiCheng0608/stock-lab/issues/1116)、[#1123](https://github.com/YiCheng0608/stock-lab/issues/1123) 與 [#1126](https://github.com/YiCheng0608/stock-lab/issues/1126) 的留言第一行：#1107 只有承諾、開工、等外部，與 AF1 的 `--coverage-only` 提問 [7228069659](https://github.com/YiCheng0608/stock-lab/issues/1107#issuecomment-7228069659)、決定 [7228091362](https://github.com/YiCheng0608/stock-lab/issues/1107#issuecomment-7228091362)（只有覆蓋與缺值，沒有報酬，沒有拿來當任何候選的理由）；#1116、#1123、#1126 各只有一則兌現承諾的回報。五個的探索段都還沒跑。前二十六輪的報告都沒開，狀態紀錄照任務檔讀過，只拿來確認哪些結構用過、哪些狀態已知。
+- 選定：#1127 統籌決定 [7232068563](https://github.com/YiCheng0608/stock-lab/issues/1127#issuecomment-7232068563)：AK1～AK4 都不登記，本段取代登記段。
+- **AK1 不登記**（淨流動資產價值對市值大者先，Graham & Dodd 1934；Oppenheimer 1986, "Ben Graham's Net Current Asset Values: A Performance Update", *Financial Analysts Journal* 42(6)，[CFA Institute](https://rpc.cfainstitute.org/research/financial-analysts-journal/1986/ben-grahams-net-current-asset-values-a-performance-update)）：
+  - 和 AF1 同屬價值族（同 AG4 的前例）：`ncav_mv`＝（流動資產 − 負債總額）÷ 市值＝1／淨值比 −（非流動資產 ÷ 市值），分子是 AF1 的帳面淨值扣掉非流動資產。理論上的說法不同（清算底價，不是價值溢酬），但排序用的量重疊很大，名單也會大量重疊。
+  - AF1 還沒跑，結果出來前登記等於同一機制登記兩次（同 AH2 對 AF2 的前例）。
+  - 台股營建業的存貨（在建、待售房地）列在流動資產，`ncav_mv` 大者先的名單很可能集中在營建業，量到的是產業，不是清算底價的錯價。
+  - **之後重提**：AF1 的探索段報告公開之後才能再提；重提要回應上面的價值族理由與營建業集中，並寫明不是看 AF1 的結果挑的。
+- **AK2 不登記**（低財務困境機率，Campbell, Hilscher & Szilagyi 2008, "In Search of Distress Risk", *Journal of Finance* 63(6), 2899–2939；Gao, Parsons & Shen 2018, "Global Relation between Financial Distress and Equity Returns", *Review of Financial Studies* 31(1), 239–277）：淨利不在 `quarterly_statements`，換成營業利益就不是文獻的模型；8 個變數裡，波動（V1）、股價（L3）、規模（X5 的反面）、相對報酬（動能類）的狀態已知，負債（AH1）、現金（AG2）、淨值比（AF1）還沒跑，同 AB3 的理由；係數是美國資料估的，沒有在台股核對過。
+- **AK3 不登記**（彌補虧損減資恢復買賣之後，Wang, Hou & Hu 2015, "Are Capital Reductions to Cover Losses and Following Seasoned Equity Offerings a Panacea for Recovery?", *Advances in Quantitative Analysis of Finance and Accounting*，[臺大學術庫](https://scholars.lib.ntu.edu.tw/handle/123456789/414601)）：和 #932 F5 同一張表（`trading_halts`），減資的股東會決議日問題沒變（恢復買賣時消息已公開好幾個月）；探索段的事件數可能不足；唯一的正面來源只讀到摘要，同校另一篇論文還指出有存活者偏差（減資後沒改善的公司幾年內下市）。
+- **AK4 不登記**（高流動比率，Piotroski 2000 的 F-score 流動性訊號）：沒有單獨的文獻（Piotroski 用的是變化，不是水準）；和 AG2、AH1 同類的資產負債表水準，兩個都還沒跑；和 AK1 同一張表。
+- 前幾輪列過、沒排的：
+  - #1124 決定沒登記的 AJ2～AJ4：理由（AJ2 是法人流量族、和 A1 分不開；AJ3 排序退化成 AJ1、方向定不出；AJ4 是 AJ1 的另一邊、和 U1 同一機制）都是結構，AJ1 也還沒跑，不重提。
+  - #1118 的 AH2～AH4、#1114 的 AG1、AG3、AG4、#1105 的 AF3～AF5、#1073 的 AE2～AE5、#1065 的 AD2～AD4、#1053 的 AB3／AB4、#1038 的 D3／D4、#1025 的 G3／G4、#1006 的 A4，以及更早各輪列過的：理由同第二十六輪那一段，沒變，不重提。AF4（借券）這次另搜了 Boehmer, Jones & Zhang (2008)，做多的那一邊仍是「放空少的」，和 B1 同一族；AF5（處置期間）同一篇來源的摘要說處置結束後異常報酬消失，處置解除後也沒有方向可以事先定。
+  - #932 的 F5（現金減資恢復買賣）：AK3 是同一張表的另一個原因，見上面 AK3。
+- 提問時另外考慮過、沒列的：
+  - 當沖比（#1089）：仍只找到台股當沖對波動與交易者績效的研究，沒有以個股當沖比預測之後報酬、方向可以事先定的。
+  - 平均每筆成交股數（#1094）：Brennan & Subrahmanyam (1998, *Journal of Business* 71(1)) 只說平均每筆股數和法人持股、交易成本有關，沒有報酬的方向；2020-10-26 起盤中零股的口徑問題沒變。
+  - 注意股（#1090）：沒有找到以官方注意股公告做事件研究的文獻；短期反轉類（L1、AB2、V2、Y4）的狀態已知。
+  - 延後申報（#1100）：Chambers & Penman (1984, *Journal of Accounting Research* 22(1)) 量的是公告當期的反應，延後的那一邊要放空；提早申報的理由同 AD2，沒變。
+  - 每股淨值低於面額、暫停信用交易（證交所「有價證券得為融資融券標準」第 4 條）：`margin_lists` 的註記不記原因，每季事件只有個位數。
+  - 殖利率、本益比、規模、週轉率、外資持股的短期變化：理由同第二十六輪那一段，沒變。
+
+**前二十六輪沒用到的資料或結構**（提問 7232041959，接著[第二十六輪](#第二十六輪aj1)那一段寫，只看文件裡的筆數與日期範圍，不看報酬）
+- **前二十六輪用過的結構**：第二十六輪那一段列的，加上：
+  - 單一類投資人的持股存量當排序（外資持股比率的水準）：AJ1。
+- **這幾天補進或正在補的資料**（「可用」是哪一張的哪條 AC 驗收之後；狀態是 2026-11-28 10:00）：
+
+  | 資料單 | 資料 | 涵蓋 | 存活者偏差 | 可用 | 本輪 |
+  | --- | --- | --- | --- | --- | --- |
+  | [#1075](https://github.com/YiCheng0608/stock-lab/issues/1075) | `valuation_daily`（淨值比、本益比、殖利率）、`shares_outstanding_daily`（發行股數） | 上市淨值比 2005-09-02 起、股數 2004-02-11 起；上櫃兩者 2007-04-23 起；到研究 DB 日線截止日 2026-11-13 | **小**：依當天名單，含之後下市的；上市之後下市的 2007 年起 98.5%～100% 有淨值比，上櫃 92.4%～100%；抽樣日的發行股數全部有 | 已可用（#1075 已結案，研究 DB 已回補） | AK1、AK2 的市值（都沒登記） |
+  | [#1083](https://github.com/YiCheng0608/stock-lab/issues/1083) | `quarterly_statements`（資產負債表 11 科；營業現金流、資本支出、毛利、營業利益 4 科 YTD） | 2013Q1～2026Q2（2026Q3 由 AC-3 的 `xbrl-apply` 延長） | **小**：含下市、轉板（季底起 670 天內有日線）；下市股沒有那一季的 16 個公司年 | #1083 AC-2（研究 DB 已升到 0042，`statements-apply` 11/28 09:31 用修正後的程式重跑中） | AK1、AK2、AK4（都沒登記） |
+  | [#1089](https://github.com/YiCheng0608/stock-lab/issues/1089) | `securities_lending_daily`、`day_trade_daily` | 上市借券 2005-07-01 起（2012-03-19 換公式）、上櫃借券 2012-10-02 起、兩市當沖 2014-01-06 起；2016 上半年以前的當沖只有試辦標的 | **無**：依當天名單，含之後下市的 | #1089 AC-2（PR #1091 還沒合併） | 沒列（AF4 不重提、當沖比沒有方向可以事先定的研究） |
+  | [#1090](https://github.com/YiCheng0608/stock-lab/issues/1090) | `trading_attentions`、`trading_disposals` | 上市注意與處置 2001-01、上櫃注意 2002-02、上櫃處置 2003-09 起 | **無**：含下市與轉板 | #1090 AC-2、AC-3（PR #1092 還沒合併） | 沒列（AF5 不重提、注意股沒有事件研究） |
+  | [#1094](https://github.com/YiCheng0608/stock-lab/issues/1094) | `market_bars.trade_count`（官方成交筆數） | 上市 2004-02-11 起、上櫃 2007-04-23 起 | **無**：同日線 | #1094 AC-2、AC-3（PR #1097 還沒合併） | 沒列 |
+  | [#1100](https://github.com/YiCheng0608/stock-lab/issues/1100) | `financial_report_filings`（季報的實際上傳時間） | 2013 年起；抽樣 303 家年（含下市、轉板）全部查得到；抓取約 11/30 完成 | **小**：下市、合併消滅的也查得到 | #1100 AC-2、AC-3（PR #1104 還沒合併） | 沒列（提早申報同 AD2；延後申報要放空） |
+  | [#1101](https://github.com/YiCheng0608/stock-lab/issues/1101) | 外國發行人 Q2 的 `announcement_date` 修正 | 2021Q2～2026Q2 共 694 列 | 不適用（修可得日） | 已可用（#1101 已結案，研究 DB 與正式 DB 都已重算） | AK1、AK2、AK4 的季報可得日照它（都沒登記） |
+  | [#1121](https://github.com/YiCheng0608/stock-lab/issues/1121) | `foreign_holdings_daily`（外資持股比率、持有股數、發行股數、上限、異動原因） | 上市 2004-02-11 起（2009-04-30 以前是舊版面；2004-02-11～07-23 的上限存 NULL）、上櫃 2007-05-10 起；到研究 DB 日線截止日 | **小**：依當天名單，含之後下市的；#1117 的三個抽樣日有日線的普通股 0 檔沒有列 | #1121 AC-2、AC-3（PR #1122 還沒合併，研究 DB 還沒寫） | 不用（AJ1 已登記；AJ2～AJ4 不重提） |
+
+- 月營收、EPS 的舊彙總頁沒有下市公司，這點不變；AK2 要淨利，是它不登記的理由之一。
+- **仍沒用的**：同第二十六輪那一段，另加流動資產對市值（AK1 沒登記）、困境機率的合成（AK2 沒登記）、彌補虧損減資恢復買賣（AK3 沒登記）、流動比率（AK4 沒登記）。
+- **研究 DB 沒有的**：同第二十六輪那一段（短期投資、有息負債與淨利；投信、自營商與其他法人的持股存量），另加信用交易暫停的原因（`margin_lists` 只存註記）；股利與減資的董事會決議日仍沒有（第十輪那一段已列）。
+- **本輪新用的結構**：無。
+
 ## 隔夜美股條件研究
 
 這一段回答：T+1 開盤前才知道的隔夜美股漲跌，能不能分辨今日名單之後的結果（[#855](https://github.com/YiCheng0608/stock-lab/issues/855)，#567 的隔夜版）。設計在看任何結果前以提問 [7018248685](https://github.com/YiCheng0608/stock-lab/issues/855#issuecomment-7018248685) 貼出，統籌決定 [7018301183](https://github.com/YiCheng0608/stock-lab/issues/855#issuecomment-7018301183) 核准並加了一層「有優勢」。研究只產報告，不改評分、排序、08:45 通知或 `candidate_score`；美股依 #547 仍只顯示。
