@@ -285,6 +285,16 @@ class Pick:
     def head(self) -> str:
         return f"{self.rank}. {self.name}"
 
+    @property
+    def level_lines(self) -> tuple[str, ...]:
+        """The card's levels on two lines (PR #1153 review 1: one line is cut at 448 px):
+        the entry, then 「停損 …｜目標 …｜RR …」; the sentence in their place on one."""
+
+        if not self.shown:
+            return (self.levels,)
+        entry, _, rest = self.levels.partition("｜")
+        return (entry, rest) if rest else (entry,)
+
 
 @dataclass(frozen=True)
 class AiList:
@@ -301,6 +311,7 @@ class AiList:
     market: str | None = None  # 「中性（把握低）」
     market_reason: str | None = None
     sectors: str | None = None  # 「PCB 可能正向、金融 可能負向」
+    sector_items: tuple[str, ...] = ()  # each 「PCB 可能正向」: the card's lines
     picks: tuple[Pick, ...] = ()
     empty: str | None = None  # 「今天 AI 沒有列股票：…」
 
@@ -418,10 +429,11 @@ def _ai_list(reading: dict[str, Any] | None) -> AiList:
     market = reading.get("market") or {}
     stance = market.get("stance_text") or "—"
     confidence = market.get("confidence_text")
-    sectors = "、".join(
+    items = tuple(
         f"{sector.get('name') or ''} {sector.get('direction_text') or ''}".strip()
         for sector in (reading.get("sectors") or [])[:AI_MAX_SECTORS]
     )
+    sectors = "、".join(items)
     return AiList(
         "done",
         session_date=session,
@@ -430,6 +442,7 @@ def _ai_list(reading: dict[str, Any] | None) -> AiList:
         market=f"{stance}（{confidence}）" if confidence else stance,
         market_reason=_first(market.get("reasons")),
         sectors=sectors or None,
+        sector_items=items,
         picks=tuple(_pick(pick, list_date) for pick in reading.get("picks") or []),
         empty=reading.get("empty_text"),
     )
@@ -689,19 +702,6 @@ def previous_session(db, day: date) -> date:
     return cursor
 
 
-def daily_status(db, day: date) -> str | None:
-    from sqlalchemy import desc, select
-
-    from app.models import ScheduleRun
-
-    return db.scalar(
-        select(ScheduleRun.status)
-        .where(ScheduleRun.job == "daily", ScheduleRun.target_date == day)
-        .order_by(desc(ScheduleRun.id))
-        .limit(1)
-    )
-
-
 def read(db, today: date) -> Content:
     """Today's message from the database (the AI list of today, or the list before it
     with the reason today has none, the overnight US indexes and the count of the
@@ -711,7 +711,12 @@ def read(db, today: date) -> Content:
     from app.candidate_view import candidate_list
     from app.market_overview import foreign_indices
 
-    listing = candidate_list(db, previous_session(db, today), limit=1)
+    try:
+        listing = candidate_list(db, previous_session(db, today), limit=1)
+    except Exception:
+        # Only its count is sent (PR #1153 review, suggestion 1): 「（規則名單：無資料）」.
+        db.rollback()
+        listing = None
     indexes = foreign_indices(db, today.isoformat())
     try:
         reading = ai_list_view(db, session_date=today, today=today)

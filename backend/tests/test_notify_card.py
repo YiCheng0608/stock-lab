@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -145,7 +146,8 @@ def test_the_card_shows_the_texts_picks_in_its_words():
     for pick in card.ai.picks:
         assert f'<span class="name line">{pick.head}</span>' in html
         assert f"<b>{pick.head}</b>｜{pick.method}" in text
-        assert notify_card.esc(pick.levels) in html and pick.levels in text
+        assert pick.levels in text
+        assert all(f">{notify_card.esc(line)}</div>" in html for line in pick.level_lines)
     assert '<div class="corp line">（除權息，價位以 09/04 為基準）</div>' in html
     page = Page(html)
     page_text = "".join(page.text)
@@ -246,7 +248,7 @@ def test_the_cards_height_follows_its_blocks():
         + p.SOURCE_H
     )
     assert p.card_height(none) == base
-    pick = p.AI_LINE_H + p.AI_LEVELS_H + p.AI_REASON_H
+    pick = p.AI_LINE_H + 2 * p.AI_LEVELS_H + p.AI_REASON_H
     section = (
         p.GAP
         + 2
@@ -255,6 +257,7 @@ def test_the_cards_height_follows_its_blocks():
         + p.AI_HEAD_H
         + p.AI_REASON_H
         + p.AI_HEAD_H
+        + p.AI_LINE_H  # one sector
     )
     done = _card(_view([_pick(1)]))
     assert p.card_height(done) == base - p.HEAD_LINE_H + section + pick
@@ -509,3 +512,62 @@ def test_the_images_chromium_draws_the_card(private_temp, monkeypatch, case):
     assert not all(_blank(row, channels) for row in rows[edge - 4 : edge])
     assert all(_blank(row, channels) for row in rows[edge + 2 : height * scale])
     assert os.listdir(private_temp) == []
+
+
+WIDE = {
+    "entry": {"type": "breakout", "low": 1233.0, "high": 1286.5},
+    "stop": 1186.0,
+    "target_1": 1343.5,
+    "target_2": 1454.5,
+    "risk_reward": 2.33,
+}
+OVERFLOW_SCRIPT = (
+    "<script>document.body.setAttribute('data-overflow', String("
+    "Array.from(document.querySelectorAll('div, span, h1, h2'))"
+    ".filter((e) => e.scrollWidth > e.clientWidth + 1).length));</script>"
+)
+
+
+@pytest.mark.skipif(
+    BROWSER is None, reason="no Chromium (the image has it: docker job)"
+)
+def test_the_images_chromium_cuts_no_levels_or_sector_line(private_temp):
+    """PR #1153 review 1: four-digit prices with a second target and five sectors fit
+    the card's width (no element wider than its box). The page's own policy forbids
+    scripts, so the test page drops it and counts the overflowing elements itself."""
+
+    view = _view(
+        [
+            _pick(1, "2330", "台積電", WIDE, corporate_action_on_session=True),
+            _pick(2, "3008", "大立光", {**WIDE, "entry": {"type": "pullback", "low": 1233.0, "high": 1286.5}}),
+        ]
+    )
+    view["sectors"] = [
+        {"name": name, "direction_text": "正負互見"}
+        for name in ("半導體業", "電腦及週邊設備業", "光電業", "電子零組件業", "其他電子業")
+    ]
+    card = _card(view, CARD_US)
+    html = notify_card.card_html(card)
+    html = html.replace(
+        f'<meta http-equiv="Content-Security-Policy" content="{notify_card.CSP}">', ""
+    ).replace("</body>", OVERFLOW_SCRIPT + "</body>")
+    work = Path(tempfile.mkdtemp(prefix="ov-"))
+    try:
+        (work / "card.html").write_text(html, encoding="utf-8")
+        command = [
+            arg
+            for arg in notify_card.browser_command(BROWSER, work, notify_card.card_height(card))
+            if not arg.startswith("--screenshot")
+        ]
+        command.insert(-1, "--dump-dom")
+        dom = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=RUNNER_RENDER_TIMEOUT_SECONDS,
+            env=notify_card.browser_environment(work),
+            cwd=work,
+        ).stdout
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    assert 'data-overflow="0"' in dom, dom[:500]

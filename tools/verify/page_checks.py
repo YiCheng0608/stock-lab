@@ -2841,7 +2841,7 @@ def ai_list_section(text: Text) -> tuple[int, int]:
         (
             n
             for n, line in enumerate(text.lines)
-            if line == AI_LIST_TITLE or line.startswith(AI_LIST_TITLE + " · ")
+            if line == AI_LIST_TITLE
         ),
         -1,
     )
@@ -2862,17 +2862,17 @@ def _mmdd(iso: str | None) -> str | None:
     return f"{iso[5:7]}/{iso[8:10]}" if iso else None
 
 
-def ai_list_head(data: dict) -> str:
-    """aiListHead: 「AI 名單 · 2026/10/16 開盤前產出（08:22）」."""
+def ai_list_head(data: dict) -> str | None:
+    """aiListHead: the line after the title 「AI 名單」, 「2026/10/16 開盤前產出（08:22）」."""
 
     day = data.get("session_date")
     if not day:
-        return AI_LIST_TITLE
+        return None
     at = ""
     if data.get("finished_at"):
         moment = datetime.fromisoformat(data["finished_at"]).astimezone(TAIPEI_TZ)
         at = f"（{moment:%H:%M}）"
-    return f"{AI_LIST_TITLE} · {day.replace('-', '/')} 開盤前產出{at}"
+    return f"{day.replace('-', '/')} 開盤前產出{at}"
 
 
 def _ai_price(value: Any) -> str:
@@ -2911,7 +2911,7 @@ def t30(run: Run) -> str:
     data = run.get("ai-list", "ai-list.json")
     text = run.text(TODAY)
     start, end = ai_list_section(text)
-    expect(start >= 0, f"缺 `{AI_LIST_TITLE}` 開頭的標題行")
+    expect(start >= 0, f"缺整行 `{AI_LIST_TITLE}`")
     expect(
         end > start,
         f"`{AI_LIST_TITLE}` 之後缺 `{RULE_LIST_FOLD}` 開頭的行（段落沒有終點）",
@@ -2930,7 +2930,8 @@ def t30(run: Run) -> str:
             )
         return f"status={data.get('status')}：`{failure['text'] if failure else AI_LIST_MISSING}`"
     head = ai_list_head(data)
-    expect(lines[0] == head, f"標題行是 {lines[0]!r}，預期 `{head}`")
+    second = lines[1] if len(lines) > 1 else None
+    expect(second == head, f"標題 `{AI_LIST_TITLE}` 的下一行是 {second!r}，預期 `{head}`")
     meta = f"模型 {data.get('llm_model') or '未記錄'} · 提示 {data.get('prompt_version')} · {AI_LIST_MARK}"
     expect(meta in lines, f"段內缺 `{meta}`")
     badge = (

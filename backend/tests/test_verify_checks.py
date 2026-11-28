@@ -4229,7 +4229,7 @@ def _ai_list(**change):
 
 
 AI_BLOCK = (
-    "AI 名單 · 2026/10/16 開盤前產出（08:22）\n10/16 的名單\nAI 推論，未經驗證\n"
+    "AI 名單\n2026/10/16 開盤前產出（08:22）\n10/16 的名單\nAI 推論，未經驗證\n"
     "10/19 的 AI 名單沒有產出：呼叫逾時\n"
     "模型 claude-sonnet-5-5 · 提示 ai_list_v1 · AI 推論，未經驗證\n"
     "大盤 偏多（把握中） · 依據：美股\n根據美股，推論偏多\n"
@@ -4276,7 +4276,7 @@ def test_t30_passes_and_t8_leaves_the_blocks_badge_out(tmp_path):
             AI_BLOCK.replace(" · 提示 ai_list_v1", ""),
             "段內缺 `模型 claude-sonnet-5-5 · 提示",
         ),
-        (AI_BLOCK.replace("（08:22）", ""), "標題行是"),
+        (AI_BLOCK.replace("（08:22）", ""), "標題 `AI 名單` 的下一行是"),
         (
             AI_BLOCK.replace("停損 20.05", "停損 20.00"),
             "9100 示範一 缺 `進場 站上 21.10",
@@ -4316,7 +4316,7 @@ def test_t30_fails_without_its_end_or_its_title(tmp_path):
                 AI_BLOCK.replace("規則名單（背景計算，對答案用的基準） 2 檔\n", ""),
             )
         )
-    with pytest.raises(page_checks.Fail, match="缺 `AI 名單` 開頭的標題行"):
+    with pytest.raises(page_checks.Fail, match="缺整行 `AI 名單`"):
         page_checks.t30(_t30_run(tmp_path, ""))
 
 

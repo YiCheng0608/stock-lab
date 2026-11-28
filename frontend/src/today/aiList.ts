@@ -14,6 +14,8 @@ export const AI_LIST_GAPS = '資料缺口'
 export const AI_LIST_INPUT_GAPS = '名單輸入的資料缺口'
 export const AI_LIST_LEVEL_REFS = '價位依據'
 export const AI_LIST_EXIT = '出場條件'
+// The fold under each pick (PR #1153 review 3: the first screen shows two picks at 1280×800).
+export const AI_LIST_MORE = '條件與價位依據'
 export const AI_LIST_ENTRY_CONDITION = '進場條件'
 // The background rule list (#1142 3/4 Q3-5 A): folded under the AI list, closed at first.
 export const RULE_LIST_FOLD = '規則名單（背景計算，對答案用的基準）'
@@ -24,11 +26,11 @@ const mmdd = (iso: string | null | undefined): string | null => {
   return day ? day.slice(5) : null
 }
 
-// 「AI 名單 · 2026/11/27 開盤前產出（08:22）」.
-export function aiListHead(data: AiListResponse): string {
+// The line beside the title 「AI 名單」: 「2026/11/27 開盤前產出（08:22）」; null without a list.
+export function aiListHead(data: AiListResponse): string | null {
   const day = formatDay(data.session_date)
   const at = formatTaipeiMinute(data.finished_at)?.slice(11)
-  return day ? `${AI_LIST_TITLE} · ${day} 開盤前產出${at ? `（${at}）` : ''}` : AI_LIST_TITLE
+  return day ? `${day} 開盤前產出${at ? `（${at}）` : ''}` : null
 }
 
 // 「模型 claude-sonnet-5-5 · 提示 ai_list_v1 · AI 推論，未經驗證」.

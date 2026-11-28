@@ -8,7 +8,7 @@ import { chartToggleLabel, nextChartRank } from '../candidates/candidates'
 import { Badge, cx } from '../components/ui'
 import type { AiListPick, AiListReason, AiListResponse } from '../types'
 import {
-  AI_LIST_ENTRY_CONDITION, AI_LIST_ERROR, AI_LIST_EXIT, AI_LIST_GAPS, AI_LIST_INPUT_GAPS, AI_LIST_LEVEL_REFS, AI_LIST_LOADING, AI_LIST_MARK,
+  AI_LIST_ENTRY_CONDITION, AI_LIST_ERROR, AI_LIST_EXIT, AI_LIST_GAPS, AI_LIST_INPUT_GAPS, AI_LIST_LEVEL_REFS, AI_LIST_LOADING, AI_LIST_MARK, AI_LIST_MORE,
   AI_LIST_MISSING, AI_LIST_TITLE, aiLevelParts, aiListHead, aiListMarket, aiListMeta, aiListStaleBadge, aiNoLevelsText, aiPickName, aiPickPath,
   aiReasonRefs,
 } from './aiList'
@@ -81,12 +81,18 @@ function PickRow({ pick, selected, onSelect, chart }: { pick: AiListPick; select
       <Levels pick={pick} />
       {pick.corporate_action_text && <p className="ai-list-corporate">{pick.corporate_action_text}</p>}
       <Reasons reasons={pick.reasons} />
-      {pick.levels && pick.entry_condition && <p className="ai-list-condition">{AI_LIST_ENTRY_CONDITION}：{pick.entry_condition}</p>}
-      {pick.exit_conditions.length > 0 && <p className="ai-list-condition">{AI_LIST_EXIT}：{pick.exit_conditions.map((item) => item.text).join('；')}</p>}
-      {pick.level_refs.length > 0 && (
-        <details className="ai-list-level-refs">
-          <summary>{AI_LIST_LEVEL_REFS}</summary>
-          <ul>{pick.level_refs.map((line) => <li key={line}>{line}</li>)}</ul>
+      {/* The conditions and the levels' basis folded (PR #1153 review 3: two picks on the first screen at 1280×800). */}
+      {((pick.levels && pick.entry_condition) || pick.exit_conditions.length > 0 || pick.level_refs.length > 0) && (
+        <details className="ai-list-more">
+          <summary>{AI_LIST_MORE}</summary>
+          {pick.levels && pick.entry_condition && <p className="ai-list-condition">{AI_LIST_ENTRY_CONDITION}：{pick.entry_condition}</p>}
+          {pick.exit_conditions.length > 0 && <p className="ai-list-condition">{AI_LIST_EXIT}：{pick.exit_conditions.map((item) => item.text).join('；')}</p>}
+          {pick.level_refs.length > 0 && (
+            <div className="ai-list-level-refs">
+              <p className="ai-list-condition">{AI_LIST_LEVEL_REFS}</p>
+              <ul>{pick.level_refs.map((line) => <li key={line}>{line}</li>)}</ul>
+            </div>
+          )}
         </details>
       )}
       {chart && (
@@ -133,10 +139,12 @@ export function AiListView({ data, loading = false, error = null, renderChart, w
   const done = data?.status === 'done'
   const stale = data ? aiListStaleBadge(data) : null
   const market = data ? aiListMarket(data) : null
+  const head = data && done ? aiListHead(data) : null
   return (
     <section className="ai-inference ai-list" aria-labelledby="ai-list-title" data-ai-list-state={data?.status ?? (loading ? 'loading' : 'error')}>
       <div className="ai-list-head">
-        <h2 id="ai-list-title">{data && done ? aiListHead(data) : AI_LIST_TITLE}</h2>
+        <h2 id="ai-list-title">{AI_LIST_TITLE}</h2>
+        {head && <span className="ai-list-date">{head}</span>}
         {stale && <Badge tone="warning" className="badge-compact ai-list-stale">{stale}</Badge>}
         <AiBadge />
       </div>
@@ -148,11 +156,12 @@ export function AiListView({ data, loading = false, error = null, renderChart, w
           : (
             <>
               <p className="small-note ai-list-meta">{aiListMeta(data)}</p>
+              {/* The market's reasons folded under its one-line summary (PR #1153 review 3: the first screen). */}
               {market && (
-                <div className="ai-list-block" data-part="market">
-                  <h3>{market}</h3>
+                <details className="ai-list-block ai-list-market" data-part="market">
+                  <summary>{market}</summary>
                   <Reasons reasons={data.market?.reasons ?? []} />
-                </div>
+                </details>
               )}
               {data.sectors.length > 0 && (
                 <p className="ai-list-sectors" data-part="sectors">族群：{data.sectors.map((sector) => `${sector.name} ${sector.direction_text}`).join('、')}</p>

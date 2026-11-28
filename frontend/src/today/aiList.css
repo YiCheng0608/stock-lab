@@ -2,15 +2,16 @@
    the 「MM/DD 的名單」 badge and the corporate-action note in the warning token, prices mono and tabular. */
 .ai-list { margin-top: var(--space-block); padding: var(--space-4) var(--space-5); }
 .ai-list-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-1); }
-.ai-list-head h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.ai-list-head h2 { margin: 0; font-size: var(--text-2xl); font-weight: 700; }
+.ai-list-date { font-size: var(--text-md); color: var(--color-text-muted); }
 .ai-list-head .ai-list-mark { margin-left: auto; }
 .ai-list-failure { margin: var(--space-1) 0; font-size: var(--text-md); color: var(--color-warning); }
 .ai-list-meta { margin: 0 0 var(--space-2); }
 .ai-list-empty { margin: var(--space-2) 0 0; font-size: var(--text-md); color: var(--color-text-muted); }
-.ai-list-block { padding-top: var(--space-3); margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
-.ai-list-block h3 { margin: 0; font-size: var(--text-base); font-weight: 600; }
-.ai-list-sectors { margin: var(--space-2) 0 0; font-size: var(--text-md); }
-.ai-list-picks { display: grid; gap: 0; margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+.ai-list-block { padding-top: var(--space-2); margin-top: var(--space-2); border-top: 1px solid var(--color-border); }
+.ai-list-market > summary { cursor: pointer; font-size: var(--text-base); font-weight: 600; }
+.ai-list-sectors { margin: var(--space-1) 0 0; font-size: var(--text-md); }
+.ai-list-picks { display: grid; gap: 0; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .ai-list-row { padding: var(--space-3) 0; border-top: 1px solid var(--color-border); min-width: 0; }
 .ai-list-row-selected { box-shadow: inset 2px 0 0 var(--color-primary); padding-left: var(--space-2); }
 .ai-list-row-title { margin: 0; font-size: var(--text-md); overflow-wrap: anywhere; }
@@ -28,7 +29,8 @@
 .ai-list-reason > span { overflow-wrap: anywhere; }
 .ai-list-refs { display: flex; flex-wrap: wrap; gap: 0 var(--space-3); font-size: var(--text-sm); }
 .ai-list-condition { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
-.ai-list-level-refs { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-text-muted); }
+.ai-list-more { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-text-muted); }
+.ai-list-more > summary { cursor: pointer; }
 .ai-list-level-refs ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); }
 .ai-list-chart { margin-top: var(--space-2); }
 .ai-list-gaps { margin: var(--space-3) 0 0; }

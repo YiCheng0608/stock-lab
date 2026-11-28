@@ -84,7 +84,7 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 
 ## 顯示
 
-自 [#1146](https://github.com/YiCheng0608/stock-lab/issues/1146) 起不顯示：API 照留（`GET /api/premarket-ai`），頁面與 Telegram 改讀 AI 名單（[ai_list_v1 顯示](ai_list.md#顯示)）。以下是 API 的契約，以及 #1042～#1146 之間頁面與 Telegram 的寫法（紀錄）。
+自 [#1146](https://github.com/YiCheng0608/stock-lab/issues/1146) 起不顯示：API 照留（`GET /api/premarket-ai`），頁面與 Telegram 改讀 AI 名單（[ai_list_v1 顯示](ai_list.md#顯示)）。以下是 API 的契約；#1042～#1146 之間頁面與 Telegram 的寫法見 [#1042](https://github.com/YiCheng0608/stock-lab/issues/1042)。
 
 `app.premarket_ai.view`（#1042）：只讀 champion（`role=champion`、目前的 `premarket_reading.PROMPT_VERSION`）當天的判讀（[重跑](#紀錄)：有 `done` 就是它，沒有時是最新一列）；shadow 與其他版本不顯示。判讀和規則名單分開放，標「AI 推論」、模型（`llm_model`）與提示版本；文案見 [UI_COPY_SPEC §10](../UI_COPY_SPEC.md#10-每日候選)。
 
@@ -102,10 +102,8 @@ JSON schema 釘在 `premarket_reading.OUTPUT_SCHEMA`（雜湊 `SCHEMA_SHA256`）
 | `input_gaps` | 輸入快照標缺漏的事實（`premarket_ai.input_gaps`）：加權指數沒有、美股未取得或非最新、台指期日盤／夜盤沒有、截止前沒判讀的隔夜新聞則數、每檔名單日沒有日線、沒有籌碼、規則價位不完整 |
 
 - 每條理由 `{text, refs}`：`refs` 每個是 `{ref, kind, label}`；`news:<id>` 是 `kind=news`、`news_id` 與輸入快照裡那則的標題（頁面連到 `/news/<id>`），`us:<代號>`、`tx:night`、`tx:day`、`taiex`、`stock:<代號>:<欄位>` 是給人看的名稱，其他是 `kind=other`、`label` null（頁面不列）。
-- 價位（3a）：頁面只在今日名單的股票寫「規則價位 進場／進場區 …｜停損 …｜目標一 …」（`levels`，事實，不標推論），其他股票不寫任何價位；依開盤價重算的價位由程式在開盤後算，08:45 還沒有。
-- 價位被核對記下的理由（`checks_json.prices_without_levels`，見[核對](#核對)）：`view` 把那幾條理由的 `text` 換成「理由含價位，未顯示」（`PRICE_HIDDEN_TEXT`）、`refs` 清空，提到該股的 `data_gaps` 那條也換成同一句；API、Telegram（文字版與卡片）與今日名單頁都讀 `view`，拿不到原文。原文仍在 `output_json`。
-- **Telegram**（#1042～#1146，已不送）：`done` 時在隔夜美股之後一段「早盤 AI 判讀（AI 推論）」：模型與提示、大盤與前 2 條理由、族群（前 5 個，各第一條理由）、每檔動作與第一條理由（今日名單的股票在前，最多 20 檔，其餘寫「另 N 檔的 AI 判讀見今日名單頁」），段內不寫價位（今日名單的價位在上面的名單）。文字版超過 4096 字時先從 AI 段最後一檔往前刪，再刪名單的列。`failed`／`rejected` 不送這段，名單標題下一行「今日 AI 判讀失敗：<reason_text>」；`missing` 寫「今日 AI 判讀尚未完成」。讀判讀或組 AI 段時出錯（`view` 或 `notify.ai_view` 丟例外，例如判讀的形狀和這一版不同）寫「今日 AI 判讀無法讀取」，日誌記 `--- premarket_ai unreadable error=<例外型別>`，規則名單與隔夜美股照送。notify 不等判讀、不拿判讀的鎖。
-- **今日名單頁**（#1042～#1146，已拿掉）：只在「今日名單」分頁、名單之後、熱門族群之前，讀頁面那份名單的 `list_date`。#1146 起 verify today T30 改檢查 AI 名單。
+- 價位（3a）：只有今日名單的股票帶 `levels`（規則價位，事實），其他股票沒有這個欄位；依開盤價重算的價位由程式在開盤後算，08:45 還沒有。
+- 價位被核對記下的理由（`checks_json.prices_without_levels`，見[核對](#核對)）：`view` 把那幾條理由的 `text` 換成「理由含價位，未顯示」（`PRICE_HIDDEN_TEXT`）、`refs` 清空，提到該股的 `data_gaps` 那條也換成同一句；API 讀 `view`，拿不到原文。原文仍在 `output_json`。
 
 ## 對答案
 

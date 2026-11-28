@@ -10,6 +10,7 @@ and the cut of a text past 4096 characters (3/4). The session is MONDAY
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from datetime import date, datetime
 
@@ -438,7 +439,9 @@ def test_the_texts_have_no_order_wording():
         ai_list.expired_text(3, MONDAY),
         ai_list.corporate_action_text(FRIDAY),
     ]
-    assert [text for text in texts if directive_words(text)] == []
+    assert directive_words(texts) == []
+    # The check is not empty (PR #1153 review 2).
+    assert directive_words([*texts, "今日買進"]) != []
 
 
 # --- the API -------------------------------------------------------------------------
@@ -504,7 +507,9 @@ def test_the_text_is_the_ai_list_with_its_date_and_mark(db):
     ]
     assert "（規則名單 3 檔見今日名單頁）" in lines
     assert "🌎 <b>隔夜美股</b>（09/04 收盤）" in lines
-    assert not directive_words(message)
+    card_text = re.sub(r"<[^>]+>", "\n", notify_card.card_html(_card(db)))
+    assert directive_words([message, card_text]) == []
+    assert directive_words([message, "今日買進"]) != []
 
 
 def test_a_failed_day_sends_the_list_before_with_its_first_line(db):
@@ -609,10 +614,8 @@ def test_the_card_has_the_picks_levels_and_the_rule_line(db):
     html = notify_card.card_html(card)
     assert '<span class="badge">AI 推論，未經驗證</span>' in html
     assert '<span class="name line">1. 1477 聚陽</span>' in html
-    assert (
-        "進場 站上 233.00（不追 236.50）｜停損 226.00｜目標 243.50／254.50｜RR 1.50"
-        in html
-    )
+    assert "進場 站上 233.00（不追 236.50）</div>" in html
+    assert "停損 226.00｜目標 243.50／254.50｜RR 1.50</div>" in html
     assert '<div class="corp line">（除權息，價位以 09/04 為基準）</div>' in html
     assert '<div class="levels line hidden muted">價位未通過核對，未顯示</div>' in html
     assert "（規則名單 3 檔見今日名單頁）" in html
@@ -625,3 +628,49 @@ def test_the_card_has_the_picks_levels_and_the_rule_line(db):
         notify.Content(MONDAY, notify.AiList("missing", line="x"), card.us, 3)
     )
     assert notify_card.card_height(card) > base
+
+
+def test_an_empty_list_sends_its_reason(db):
+    """PR #1153 review, suggestion 2: the text, the card and its height."""
+
+    _reading(db, picks=[], empty_reason="大盤偏空、信心不低")
+    card = _card(db)
+    assert "今天 AI 沒有列股票：大盤偏空、信心不低" in notify.text(card).splitlines()
+    html = notify_card.card_html(card)
+    assert '<div class="reason">今天 AI 沒有列股票：大盤偏空、信心不低</div>' in html
+    assert notify.caption(card) == "<b>AI 名單 09/07（一）</b>・0 檔・AI 推論，未經驗證"
+    p = notify_card
+    without = notify.Content(MONDAY, dataclasses.replace(card.ai, empty=None), card.us, 3)
+    assert p.card_height(card) == p.card_height(without) + p.AI_REASON_H
+
+
+def test_a_rule_list_that_cannot_be_read_is_no_data(db, monkeypatch):
+    """PR #1153 review, suggestion 1: the message still goes, with one line."""
+
+    import app.candidate_view
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(app.candidate_view, "candidate_list", broken)
+    _reading(db)
+    card = notify.read(db, MONDAY)
+    assert card.rule_count is None
+    assert notify.RULE_LIST_MISSING in notify.text(card).splitlines()
+    assert card.ai.done and len(card.ai.picks) == 3
+
+
+def test_the_cards_levels_are_two_lines_and_sectors_one_each(db):
+    """PR #1153 review 1: one levels line is cut at the card's 448 px."""
+
+    _reading(db)
+    card = _card(db)
+    first = card.ai.picks[0]
+    assert first.level_lines == (
+        "進場 站上 233.00（不追 236.50）",
+        "停損 226.00｜目標 243.50／254.50｜RR 1.50",
+    )
+    assert card.ai.picks[2].level_lines == ("價位未通過核對，未顯示",)
+    html = notify_card.card_html(card)
+    assert '<div class="levels line">停損 226.00｜目標 243.50／254.50｜RR 1.50</div>' in html
+    assert '<div class="sector line">PCB 可能正向</div>' in html

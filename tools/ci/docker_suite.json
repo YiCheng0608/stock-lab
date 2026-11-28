@@ -43,6 +43,10 @@
     {
       "select": "tests/test_notify_card.py::test_the_images_chromium_draws_the_card",
       "reason": "the daily Telegram card is drawn by the image's /usr/bin/chromium and fonts-noto-cjk (#754); the runner has a /usr/bin/chromium of its own, so the backend job runs it too (#824)"
+    },
+    {
+      "select": "tests/test_notify_card.py::test_the_images_chromium_cuts_no_levels_or_sector_line",
+      "reason": "whether the card's AI list lines fit depends on the image's fonts-noto-cjk (PR #1153 review 1); the runner's /usr/bin/chromium runs it too"
     }
   ],
   "skipped_everywhere": [

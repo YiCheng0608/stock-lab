@@ -16,8 +16,9 @@ The page:
   「MM/DD 的名單」 when it is not today's, its count and 「AI 推論，未經驗證」, the
   failure line when today has no list of its own; then one section with the accent bar
   and the badge of DESIGN_SYSTEM §7: the model and the prompt version, 大盤 and its first
-  reason, 族群, and each pick's head (rank, code, name, 判讀方式 and 把握), its levels line
-  (or the sentence in their place), its corporate-action note in ``--color-warning`` and
+  reason, 族群 one a line, and each pick's head (rank, code, name, 判讀方式 and 把握), its
+  levels on two lines (the entry, then the stop, targets and RR; PR #1153 review 1) or the
+  sentence in their place, its corporate-action note in ``--color-warning`` and
   its first reason (at most two lines, ``AI_REASON_H``; longer ones end with an ellipsis,
   the page has them whole). Then the rule list's count line and the US block.
 
@@ -84,7 +85,7 @@ US_ROW_H = 36
 US_NOTE_H = 24  # a second line for 「（11/11 收盤） 非最新」
 SOURCE_H = 28
 # The AI list (#1146): its title, the model line, a head (大盤, 族群), a pick's head, its
-# levels line, its corporate-action note, a reason (two lines at most) and 「另 N 檔」/the
+# levels lines (entry, then stop／target／RR), its corporate-action note, a reason (two lines at most) and 「另 N 檔」/the
 # rule list's line.
 AI_TITLE_H = 36
 AI_META_H = 24
@@ -162,6 +163,8 @@ section h2 {{ height: {US_TITLE_H}px; line-height: {US_TITLE_H}px; padding: 0 14
 .ai .levels {{ height: {AI_LEVELS_H}px; line-height: {AI_LEVELS_H}px; font-size: 14px;
   padding: 0 14px 0 28px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }}
 .ai .levels.hidden {{ font-family: var(--font-body); }}
+.ai .sector {{ height: {AI_LINE_H}px; line-height: {AI_LINE_H}px; font-size: 15px;
+  padding: 0 14px 0 28px; }}
 .ai .corp {{ height: {AI_NOTE_H}px; line-height: {AI_NOTE_H}px; font-size: 13px;
   padding: 0 14px 0 28px; color: var(--color-warning); }}
 .ai .reason {{ height: {AI_REASON_H}px; line-height: 20px; font-size: 14px;
@@ -223,12 +226,12 @@ def ai_height(content: Content) -> int:
     height = GAP + 2 + AI_TITLE_H + AI_META_H + AI_HEAD_H
     if ai.market_reason:
         height += AI_REASON_H
-    if ai.sectors:
-        height += AI_HEAD_H
+    if ai.sector_items:
+        height += AI_HEAD_H + len(ai.sector_items) * AI_LINE_H
     if ai.empty:
         height += AI_REASON_H
     for pick in shown_picks(content):
-        height += AI_LINE_H + AI_LEVELS_H
+        height += AI_LINE_H + len(pick.level_lines) * AI_LEVELS_H
         height += AI_NOTE_H if pick.note else 0
         height += AI_REASON_H if pick.reason else 0
     if more_count(content):
@@ -272,8 +275,11 @@ def _pick_html(pick: Pick) -> str:
     parts = [
         f'<div class="pick"><span class="name line">{esc(pick.head)}</span>'
         f'<span class="method muted line">{esc(pick.method)}</span></div>',
-        f'<div class="levels line{"" if pick.shown else " hidden muted"}">'
-        f"{esc(pick.levels)}</div>",
+        *(
+            f'<div class="levels line{"" if pick.shown else " hidden muted"}">'
+            f"{esc(line)}</div>"
+            for line in pick.level_lines
+        ),
     ]
     if pick.note:
         parts.append(f'<div class="corp line">{esc(pick.note)}</div>')
@@ -297,10 +303,12 @@ def _ai_html(content: Content) -> str:
     ]
     if ai.market_reason:
         parts.append(f'<div class="reason muted">{esc(ai.market_reason)}</div>')
-    if ai.sectors:
-        parts.append(
-            f'<div class="head line">族群<span class="v">{esc(ai.sectors)}</span></div>'
-        )
+    if ai.sector_items:
+        # One line each (PR #1153 review 1: five on one line are cut).
+        parts.append('<div class="head line">族群</div>')
+        parts += [
+            f'<div class="sector line">{esc(item)}</div>' for item in ai.sector_items
+        ]
     if ai.empty:
         parts.append(f'<div class="reason">{esc(ai.empty)}</div>')
     parts += [_pick_html(pick) for pick in shown_picks(content)]

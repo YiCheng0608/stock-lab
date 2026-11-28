@@ -247,7 +247,7 @@ const AiListView = component(AiListModule as Record<string, unknown>, 'AiListVie
 const ai = render('AiListView done', () => <AiListView data={aiListDone()} />)
 const aiText = text(ai)
 check(ai.startsWith('<section class="ai-inference ai-list"') && count(ai, AI_LIST_MARK) === 2 && count(ai, 'badge-accent') === 1, `AI 名單: one §7 block, one badge 「AI 推論，未經驗證」 and the meta line, got ${ai.slice(0, 300)}`)
-check(aiText.includes('AI 名單 · 2026/11/27 開盤前產出（08:22）') && aiText.includes('模型 claude-sonnet-5-5 · 提示 ai_list_v1 · AI 推論，未經驗證'), `AI 名單 (AC-1): the list's date, the model and the prompt version, got ${aiText}`)
+check(ai.includes('<h2 id="ai-list-title">AI 名單</h2><span class="ai-list-date">2026/11/27 開盤前產出（08:22）</span>') && aiText.includes('模型 claude-sonnet-5-5 · 提示 ai_list_v1 · AI 推論，未經驗證'), `AI 名單 (AC-1): the list's date, the model and the prompt version, got ${aiText}`)
 check(!ai.includes('ai-list-stale') && !ai.includes('ai-list-failure'), 'AI 名單: today\'s list has no date badge and no failure line')
 check(aiText.includes('大盤 中性（把握低） · 依據：台指期夜盤＞加權指數＞隔夜消息＞美股') && aiText.includes('族群：PCB 可能正向'), `AI 名單: market with its basis, the sectors, got ${aiText}`)
 const firstPick = slice(ai, 'data-ai-rank="1"', '</li><li')
@@ -260,6 +260,10 @@ check(text(slice(ai, 'data-ai-rank="2"', '</li><li')).includes('進場區 44.40�
 const failedPick = slice(ai, 'data-ai-rank="3"', '</ol>')
 check(failedPick.includes('data-levels="hidden"') && text(failedPick).includes('價位未通過核對，未顯示') && !failedPick.includes('ai-list-price') && !text(failedPick).includes('停損') && !text(failedPick).includes('進場條件'), `AI 名單 (AC-2): a failed check shows no price, got ${text(failedPick)}`)
 const aiCss = fs.readFileSync(path.join(__dirname, 'aiList.css'), 'utf8')
+// PR #1153 review 4: the first focus's title is DESIGN_SYSTEM §3's 今日名單 title (--text-2xl／700), no fixed size.
+check(/\.ai-list-head h2\s*\{[^}]*font-size:\s*var\(--text-2xl\);\s*font-weight:\s*700/.test(aiCss) && !/font-size:\s*\d+px/.test(aiCss), 'AI 名單: the title uses --text-2xl／700 and the block no fixed px size')
+// PR #1153 review 3: the market's reasons and each pick's conditions are folded, so two picks fit 1280×800's first screen.
+check(/<details class="ai-list-block ai-list-market"[^>]*><summary>大盤 /.test(ai) && !/<details class="ai-list-block ai-list-market"[^>]*open/.test(ai) && count(ai, '<details class="ai-list-more">') === 3, `AI 名單: the market reasons and the conditions are folded, got ${slice(ai, 'ai-list-market', '</summary>')}`)
 check(/\.ai-list-level\s*\{[^}]*white-space:\s*nowrap/.test(aiCss) && /\.ai-list-price\s*\{[^}]*font-family:\s*var\(--font-mono\)[^}]*tabular-nums/.test(aiCss), 'AI 名單: a price is mono, tabular and stays with its label')
 check(/\.ai-list-expired, \.ai-list-corporate\s*\{\s*color:\s*var\(--color-warning\)/.test(aiCss), 'AI 名單: the expired and corporate-action lines use the warning token')
 // A list of another day (AC-1), and the list before a failed day (AC-2, 1/4 Q1-5 A).
