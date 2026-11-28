@@ -1063,7 +1063,105 @@ def test_the_r50_migration_adds_an_empty_table_and_goes_down_again(tmp_path):
         }
         command.downgrade(config, previous)
         assert table not in inspect(engine).get_table_names()
+        # The way an older database comes up: 0049 creates the table itself.
         command.upgrade(config, revision)
-        assert table in inspect(engine).get_table_names()
+        schema = inspect(engine)
+        assert table in schema.get_table_names()
+        columns = {c["name"]: c["nullable"] for c in schema.get_columns(table)}
+        assert columns == {
+            "id": False,
+            "index_code": False,
+            "trading_date": False,
+            "symbol": False,
+            "instrument_id": True,
+            "name_in_source": False,
+            "source": False,
+            "data_as_of": False,
+            "raw_payload_id": False,
+            "collected_at": False,
+        }
+        assert {
+            (tuple(fk["constrained_columns"]), fk["referred_table"])
+            for fk in schema.get_foreign_keys(table)
+        } == {
+            (("instrument_id",), "instruments"),
+            (("raw_payload_id",), "raw_payloads"),
+        }
+        assert {i["name"] for i in schema.get_indexes(table)} == {
+            "ix_index_constituents_daily_trading_date",
+            "ix_index_constituents_daily_instrument_id",
+            "ix_index_constituents_daily_raw_payload_id",
+        }
+        assert [
+            tuple(u["column_names"]) for u in schema.get_unique_constraints(table)
+        ] == [("index_code", "trading_date", "symbol")]
     finally:
         engine.dispose()
+
+
+def test_r50_a_table_of_padding_only_fails_the_day():
+    payload = copy.deepcopy(R50_BEFORE)
+    payload["tables"][0]["data"] = [["", "", "", "", "", "", "", ""]]
+    with pytest.raises(vb.LayoutError, match="no codes"):
+        vb.parse_tpex50(payload, date(2010, 4, 29))
+
+
+@pytest.mark.parametrize(
+    "feed, endpoint, form",
+    [
+        (
+            "tpex-pb",
+            vb.PE_QRY_DATE_ENDPOINT,
+            {"date": "2010/04/30", "response": "json"},
+        ),
+        (
+            "tpex50-daily",
+            vb.TPEX50_ENDPOINT,
+            {"type": "cnst", "date": "2010/04/30", "response": "json"},
+        ),
+    ],
+)
+def test_the_post_feeds_send_their_own_endpoint_and_form(
+    monkeypatch, feed, endpoint, form
+):
+    sent = []
+    monkeypatch.setattr(
+        sources,
+        "fetch_json",
+        lambda url, **kwargs: sent.append((url, kwargs)) or {"stat": "ok"},
+    )
+    assert vb.fetch_official(feed, T1) == {"stat": "ok"}
+    assert sent == [(endpoint, {"method": "POST", "data": form})]
+
+
+def test_a_database_before_0049_still_runs_the_older_feeds(tmp_path, monkeypatch):
+    from app.models import Base
+
+    monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            t
+            for name, t in Base.metadata.tables.items()
+            if name != "index_constituents_daily"
+        ],
+    )
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    with factory() as db:
+        add_instrument(db, "TPEx", "1240", [D1])
+        db.commit()
+        result = vb.backfill(
+            db,
+            D1,
+            D1,
+            feeds=["tpex-pb"],
+            fetch=Fetcher(),
+            now=lambda: NOON,
+        )
+        assert result["status"] == "success"
+        with pytest.raises(ValueError, match="index_constituents_daily is missing"):
+            vb.backfill(
+                db, D1, D1, feeds=["tpex50-daily"], fetch=Fetcher(), now=lambda: NOON
+            )
+    engine.dispose()

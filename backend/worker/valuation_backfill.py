@@ -254,7 +254,6 @@ SOURCES = {
     "tpex-pb": "tpex_pe_qry_date",
     "tpex50-daily": "tpex_indexinfo_r50",
 }
-TABLES = ("valuation_daily", "shares_outstanding_daily", "index_constituents_daily")
 # tpex-shares: by the endpoint of the capture read.
 TPEX_SHARES_SOURCES = {
     TPEX_HISTORY_API: "tpex_daily_quotes",
@@ -533,6 +532,8 @@ def parse_tpex50(payload: Any, day: date) -> dict[str, dict[str, Any]]:
             if number in cells:
                 raise LayoutError(f"序號 {number} is listed twice")
             cells[number] = cell
+    if not cells:  # rows of padding only
+        raise LayoutError("the table has no codes")
     if count != len(cells):
         raise LayoutError(f"totalCount {count!r} but {len(cells)} codes")
     if sorted(cells) != list(range(1, len(cells) + 1)):
@@ -895,7 +896,9 @@ def backfill(
     unknown = [name for name in names if name not in FEEDS]
     if unknown:
         raise ValueError(f"unknown feeds {unknown}; known: {list(FEEDS)}")
-    for table in TABLES:
+    # Only the chosen feeds' tables: a research DB before 0049 still runs the
+    # #1075 feeds (review of PR #1137).
+    for table in sorted({FEEDS[name].table.__tablename__ for name in names}):
         if not inspect(db.get_bind()).has_table(table):
             raise ValueError(f"{table} is missing: run init-db first")
     started = time.monotonic()

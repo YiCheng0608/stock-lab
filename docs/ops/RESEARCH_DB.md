@@ -220,7 +220,8 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 | 休市表 | `trading-calendar --year 2021 --year 2022` | 2020 年以前沒有內容 |
 | 週末交易日（#790） | 三步，照順序跑：<br>1. `python -B tools/research/history_backfill.py --from 2004-02-11 --to 2018-12-31 --weekend-sessions`（用 `history_backfill.py` 的那行 `docker run -d`，不是 `worker.cli`）<br>2. 含週末交易日的每個月，各跑一次 `index-bars backfill --from-month <月> --to-month <月>`<br>3. `indicators --rebuild` | 補月份模式沒送的星期六、星期日（`OFFICIAL_WEEKEND_SESSIONS`，[DATA_SOURCES](../DATA_SOURCES.md#交易日的判定與週末交易日)）。<br>**為什麼要另跑**：已完成的月份，request key 是 success，不會再送；所以每個週末交易日各跑一個單日 backfill。progress 檔記 `weekend` 行，和 `month` 行分開，暫停與最後的整庫檢查和月份模式相同。<br>**第 2 步**：單日 backfill 從 `MI_INDEX` 寫 TAIEX 收盤；重跑 `index-bars` 後，那天的 `no_close_row` 會變成 `upgraded`。`index-bars` 不讀已存 raw，每月重發 4 個請求。<br>**請求數**：單日 backfill 每天約 11 個：上市 6（含 3 個名冊 OpenAPI）、上櫃 4、MOPS 1，是 2026-11-16 在副本上補 2012-12-22 的實測數；2012-05 以前沒有 T86，2009 年以前多 1 個 `MI_5MINS_HIST`。`index-bars` 每月 4 個。總數約為「天數 × 11 ＋ 月數 × 4」，清單的 23 天分在 22 個月，約 253 ＋ 88 ＝ 341 個請求。<br>**耗時**：副本上每天約 3.5 分鐘（這次為了不和批 5 疊加，請求間隔拉到 30 秒；照預設 3 秒會更短），加上最後一次整庫檢查約 14 分鐘（13.5 GB 的副本） |
 | 上櫃舊版 `0.00` 價格的修正（#819） | 兩步：SQL 刪除＋`no-trade-days --start 2007-04-23 --end 2011-11-11`，命令全文見下節[上櫃舊版 0.00 價格的修正](#上櫃舊版-000-價格的修正819) | 只跑一次，跑完後才跑 `indicators --rebuild` |
-| 股價淨值比與發行股數（#1075） | `valuation backfill --start 2004-02-11 --end <日線截止日> --fallback-raw-dir /prod/raw`，另以 `-v stock-lab_stock-data:/prod:ro` 唯讀掛正式 volume | 見下節[股價淨值比與發行股數](#股價淨值比與發行股數1075)：四個 feed 一個程序，已成功的日子不再請求；每個 host 間隔 3.5 秒，台北 21:15～23:30 等待；要先跑 `init-db` 到 0041 |
+| 股價淨值比與發行股數（#1075） | `valuation backfill --start 2004-02-11 --end <日線截止日> --feed twse-pb --feed twse-shares --feed tpex-pb --feed tpex-shares --fallback-raw-dir /prod/raw`，另以 `-v stock-lab_stock-data:/prod:ro` 唯讀掛正式 volume | 見下節[股價淨值比與發行股數](#股價淨值比與發行股數1075)：四個 feed 一個程序，已成功的日子不再請求；每個 host 間隔 3.5 秒，台北 21:15～23:30 等待；要先跑 `init-db` 到 0041。四個 `--feed` 要寫明：不帶 `--feed` 時連下一列的 `tpex50-daily` 一起跑 |
+| 富櫃50 每日成分股（#1134） | `valuation backfill --start 2010-04-30 --end <日線截止日> --feed tpex50-daily` | 見[富櫃50 每日成分股](#富櫃50-每日成分股1134)：每個上櫃交易日 1 個請求，其餘規則同上一列；要先跑 `init-db` 到 0049。只檢查所選 feed 的表，研究 DB 還沒到 0049 時上一列照跑 |
 
 回補日線或除權息之後，對研究 DB 跑 `indicators --rebuild`（研究工具自己算報酬，不讀指標；要用 API 或回測時才需要）。
 
@@ -563,7 +564,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 研究 DB 每天的股價淨值比、本益比、殖利率（`valuation_daily`）與發行股數（`shares_outstanding_daily`），價值與規模兩類特徵的資料；市值由研究工具以當天收盤 × 發行股數算，不另存。端點、欄位與可得時點見 [DATA_SOURCES](../DATA_SOURCES.md#股價淨值比與發行股數)，來源歸類見 [#1074 決定](https://github.com/YiCheng0608/stock-lab/issues/1074#issuecomment-7205622705)。正式 DB 只有 0041 建的空表，不寫入。
 
-**四個 feed**（[`worker.valuation_backfill`](../../backend/worker/valuation_backfill.py)，`--feed` 可只跑其中幾個）：
+**四個 feed**（[`worker.valuation_backfill`](../../backend/worker/valuation_backfill.py)，`--feed` 可只跑其中幾個；同一個命令還有第五個 feed `tpex50-daily`，見[富櫃50 每日成分股](#富櫃50-每日成分股1134)，不帶 `--feed` 時五個都跑）：
 
 | feed | 來源 | 寫入 | `source` | 第一天 | 請求 |
 | --- | --- | --- | --- | --- | --- |
@@ -585,7 +586,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 # IMG＝含 #1075 的 backend image；R 同「跑一批」
 docker run --rm --network none "${R[@]}" "$IMG" python -B -m worker.cli init-db   # 研究 DB 在 0033 時約 97 分鐘
 docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:ro "$IMG" \
-  sh -c 'python -B -m worker.cli valuation backfill --start 2004-02-11 --end 2026-11-13 --fallback-raw-dir /prod/raw > /data/logs/valuation.json 2> /data/logs/valuation.err; echo $? > /data/logs/valuation.exit'
+  sh -c 'python -B -m worker.cli valuation backfill --start 2004-02-11 --end 2026-11-13 --feed twse-pb --feed twse-shares --feed tpex-pb --feed tpex-shares --fallback-raw-dir /prod/raw > /data/logs/valuation.json 2> /data/logs/valuation.err; echo $? > /data/logs/valuation.exit'
 # 有失敗日時：先 --reapply（0 個請求）讀已存的 raw，再不加 --reapply 跑一次，只重問其餘失敗日
 ```
 
@@ -652,11 +653,12 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 - **第一天 2010-04-30**：頁面「本資訊自民國99年4月30日起開始提供」，2010-04-29 回 `stat ok`、`totalCount 0`、空表；早於這天的上櫃交易日不請求（`not_published`）。
 - **一列一個代號**：表是 4 組（`序號`、`股票代號名稱`）並排，一格是 `代號&nbsp;名稱`（`1565&nbsp;精華`），拆成 `symbol` 與 `name_in_source`（名稱原文，含 `-KY`）；最後一列不足 4 組時以 `""` 補齊。官方表上的每個代號都寫；研究 DB 當天沒有這個代號的上櫃日線時 `instrument_id` 留 NULL、計入 `unmatched`，不建標的（代號對照同上一節）。
 - **整天失敗、不寫**：`totalCount` 和實際讀到的格數不符、空表、回應的 `date` 或表內民國日期不是請求日、欄名不是上面的 8 欄、`序號` 不是 1～n、讀不懂的格（不是 `代號&nbsp;名稱`、代號重複）。**檔數不是 50 照寫**：輸出的 `not_50` 與 `not_50_days`（日期與檔數）逐日列出，否則量不到真的缺檔。
-- **納入與剔除不另存**：研究工具用相鄰兩個交易日的名單相減。
+- **納入與剔除不另存**：研究工具用相鄰兩個交易日的名單相減，**以 `symbol` 比，不用 `instrument_id`**：成分股停牌那天研究 DB 沒有它的日線，`instrument_id` 是 NULL。
 
 **跑法**（`IMG`、`R` 同上一節；開跑前 `df -h /` 至少 5 GiB 可用，研究 volume 沒有別的寫入者）：
 
 ```bash
+docker run --rm --network none "${R[@]}" "$IMG" python -B -m worker.cli init-db   # 先升到 0049；沒升時 tpex50-daily 拒跑（index_constituents_daily is missing）
 docker run -d --name research-1134-tpex50 "${R[@]}" "$IMG" \
   sh -c 'python -B -m worker.cli valuation backfill --feed tpex50-daily --start 2010-04-30 --end <日線截止日> > /data/logs/tpex50.json 2> /data/logs/tpex50.err; echo $? > /data/logs/tpex50.exit'
 ```
