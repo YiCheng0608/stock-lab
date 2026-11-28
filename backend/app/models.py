@@ -495,6 +495,56 @@ class SharesOutstandingDaily(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class ForeignHoldingsDaily(Base):
+    """One security's official foreign holding of one session (Issue #1121).
+
+    TWSE ``MI_QFIIS`` (外資及陸資投資持股統計, read from the raw ``twse-shares``
+    stored) and TPEx ``insti/qfii`` (僑外資及陸資持股比例排行表), in shares and %.
+    ``shares_issued`` is the table's own denominator, never the one of
+    ``shares_outstanding_daily``.  0 shares held is 0; a value the source leaves
+    blank (or the TWSE limit of 2004-02-11..07-23, 0.00 on every row) is NULL.
+    Only the research database is written; the production one has the empty table.
+    """
+
+    __tablename__ = "foreign_holdings_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "trading_date",
+            "source",
+            name="uq_foreign_holdings_daily",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    # 發行股數 of the table; 0 or blank is NULL.
+    shares_issued: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 全體外資（及陸資）持有股數.
+    foreign_shares_held: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 持股比率 in % (54.47 is 54.47%), cut to 2 decimals by the source.
+    foreign_held_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 尚可投資股數.
+    foreign_available_shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 法令投資上限比率 (%).
+    foreign_limit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # TWSE 陸資法令投資上限比率 (%), from 2009-05-04; NULL before and on TPEx.
+    mainland_limit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # TWSE 與前日異動原因 without its HTML (``2``, ``2 4``); blank is NULL.
+    change_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # TWSE 最近一次上市公司申報外資持股異動日期; ``0`` is NULL.
+    last_filing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # TPEx 備註 (已達上限, 禁止投資); blank is NULL.
+    note: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

@@ -642,6 +642,40 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 - **TDR 沒有淨值比**：91 開頭的存託憑證在 `BWIBBU_d` 沒有列；研究的普通股母體本來就排除它們。
 - **N/A 留空**：上櫃的 `N/A`（集中在之後下市的公司，推測是淨值為負或財報不全）與上市的 `-` 都是 NULL，研究時另計，不當成 0。
 
+## 外資持股（#1121）
+
+研究 DB 每天的外資持股（`foreign_holdings_daily`）：發行股數（這張表的分母）、外資持有股數、持股比率、尚可投資股數、法令投資上限、陸資上限、上市的異動原因與最近申報日期、上櫃的備註。端點、欄位、兩版與可得時點見 [DATA_SOURCES](../DATA_SOURCES.md#外資持股)，做法見 [#1117 決定](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230109916)。正式 DB 只有 0042 建的空表，不寫入。
+
+**兩個 feed**（同一個 `valuation backfill`，[`worker.valuation_backfill`](../../backend/worker/valuation_backfill.py)；交易日、標的、逐日 manifest、`--reapply`、整天失敗、請求規則與維護模式都照[上一節](#股價淨值比與發行股數1075)）：
+
+| feed | 來源 | `source` | 第一天 | 請求 |
+| --- | --- | --- | --- | --- |
+| `twse-foreign` | `twse-shares` 已存的 `MI_QFIIS` raw：當天 `valuation_backfill:twse-shares:<日>` manifest 的 `raw_payload_id`，列也指向同一份 raw | `twse_mi_qfiis` | 2004-02-11 | 0 |
+| `tpex-foreign` | TPEx `POST www/zh-tw/insti/qfii` | `tpex_insti_qfii` | 2007-05-10（之前回空表；上櫃日線 2007-04-23～05-09 的 12 天計 `not_published`） | 每個交易日 1 個 |
+
+- **`twse-foreign` 跟著 `twse-shares`**：同一個程序裡每個交易日先跑 `twse-shares` 再跑它（`--feed` 的順序不影響）。`twse-shares` 那天還沒有 raw 時計 `not_answered`、不寫 manifest，下次再讀；`twse-shares` 存的回應讀不懂時，這天也記失敗。
+- **整天失敗**：上市只認「外資」「外資及陸資」兩版；上櫃只認一種欄名，另比回應的 `date` 與表內民國日期，`totalCount` 要有、要等於列數，空表也失敗。股數不是整數、比率讀不成數字（上櫃要帶 `%`）、申報日期不是民國日期、異動原因去掉 HTML 後不是數字代碼，都整天失敗。
+- **值的寫法**：持有 0 股、尚可投資 0 股、比率 `0%` 都存 0，不當缺值；發行股數 0 或空白、空白的比率與備註存 NULL。異動原因去掉 MOPS 連結的 HTML，空白字元併成一個（`2`、`2 4`、`45`），空白存 NULL；最近申報日期民國轉西元，數字 `0` 存 NULL。上市 2004-02-11～07-23 的上限 `0.00` 存 NULL（[#1117 決定](https://github.com/YiCheng0608/stock-lab/issues/1117#issuecomment-7230109916)第 4 點；那段的異動原因 `1` 照存）；之後的 `0.00` 照存。上市舊版沒有陸資上限、上櫃沒有陸資上限與異動原因、上市沒有備註，都是 NULL。
+
+**跑法**（`IMG`、`R` 同上一節；上市 0 個請求，上櫃 4,796 個，估約 5 小時加台北 21:15～23:30 的等待）：
+
+```bash
+df -h /    # 至少 5 GiB 可用才跑（#1117 決定第 5 點）
+docker run --rm --network none "${R[@]}" "$IMG" python -B -m worker.cli init-db
+docker run -d --name research-1121-foreign "${R[@]}" "$IMG" \
+  sh -c 'python -B -m worker.cli valuation backfill --start 2004-02-11 --end <日線截止日> --feed twse-foreign --feed tpex-foreign > /data/logs/foreign.json 2> /data/logs/foreign.err; echo $? > /data/logs/foreign.exit'
+```
+
+兩個 feed 不同 host，一個程序依日期交錯；上市那邊不送請求，每天只讀一份 raw。
+
+**已知限制**（細節見 [DATA_SOURCES](../DATA_SOURCES.md#外資持股)）：
+
+- **上市 2004-02-11～07-23 沒有上限**：要用上限或尚可投資比率的研究從 2004-07-26 起。
+- **上櫃 2007-05-10 起**：之前的上櫃日線沒有外資持股。
+- **兩市口徑不同**：上市持有股數含集中市場以外的異動，上櫃是「市場買賣之持有股數」；兩個 `source` 分開用，不混。
+- **分母只給這張表**：`shares_issued` 不取代 `shares_outstanding_daily`；上櫃的 A 和 `dailyQuotes` 的發行股數有 2～5% 的檔不同。
+- **可得時點**：上市公布時刻未公開；上櫃 18:00 與 22:00 更新。研究工具只在 T 晚上 22:00 以後（或 T+1 開盤前）用 T 那一列、T+1 執行。
+
 ## 研究工具的耗時與記憶體
 
 `explore_research` 與 `trade_research` 的探索段要讀到 2019-12-31 以前的全部歷史，每個假設、每個工具版本只能跑一次，所以耗時與記憶體不能在研究 DB 上試。[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 用一份**合成的長歷史 DB** 量（量測方式是統籌決定 [6885225362](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6885225362)）。

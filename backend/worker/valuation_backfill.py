@@ -1,6 +1,7 @@
-"""Daily P/B and issued shares of the research database (Issue #1075).
+"""Daily P/B, issued shares and foreign holding of the research database.
 
-Four feeds, one ``valuation backfill`` command (#1074 decision 7205622705):
+Six feeds, one ``valuation backfill`` command (#1074 decision 7205622705; the
+foreign holding ones #1117 decision 7230109916, Issue #1121):
 
 - ``twse-pb``: TWSE ``BWIBBU_d`` (個股日本益比、殖利率及股價淨值比), one request a
   session from ``BWIBBU_FIRST_DATE``, into ``valuation_daily``.
@@ -12,6 +13,12 @@ Four feeds, one ``valuation backfill`` command (#1074 decision 7205622705):
   OpenAPI ``tpex_mainboard_daily_close_quotes`` and its ``Capitals``).  The
   research DB's seed rows (from the production copy) cite files of the production
   volume; ``fallback_raw_dir`` reads them there, read-only.
+- ``twse-foreign``: the 外資（及陸資）持股 columns of the ``MI_QFIIS`` raw that
+  ``twse-shares`` stored for the session (its manifest's ``raw_payload_id``), no
+  request, into ``foreign_holdings_daily``.  A session ``twse-shares`` has not
+  answered is ``not_answered``.
+- ``tpex-foreign``: TPEx ``insti/qfii`` (僑外資及陸資持股比例排行表), one request a
+  session from ``TPEX_QFII_FIRST_DATE``, into ``foreign_holdings_daily``.
 
 The sessions are the research DB's: the days with a TWSE or TPEx bar of a stock,
 ``ipo`` or ETF in the range, from each feed's first day (no request before it).
@@ -32,7 +39,8 @@ A table that is not one of the known layouts (``*_LAYOUTS``: the TWSE columns be
 and after 2017-04-12, TPEx with and without 財報年/季), a value that does not read
 as a number, a reported date other than the session or an empty table fails the
 whole session; nothing of it is written and nothing is guessed.  ``-``, ``N/A``,
-``null`` and blank are NULL (and 0 shares), never 0.
+``null`` and blank are NULL (and 0 shares issued), never 0; 0 shares held or
+available is 0.  The ``insti/qfii`` table must also hold ``totalCount`` rows.
 
 Requests: at least ``REQUEST_INTERVAL_SECONDS`` apart on a host, none between
 ``QUIET_START`` and ``QUIET_END`` Taipei (the run waits), ``ABORT_AFTER_FAILURES``
@@ -63,6 +71,7 @@ from app.models import (
     IngestionRun,
     Instrument,
     MarketBar,
+    ForeignHoldingsDaily,
     RawPayload,
     SharesOutstandingDaily,
     ValuationDaily,
@@ -80,6 +89,7 @@ from worker.sources import (
 BWIBBU_ENDPOINT = "https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d"
 MI_QFIIS_ENDPOINT = "https://www.twse.com.tw/rwd/zh/fund/MI_QFIIS"
 PE_QRY_DATE_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate"
+TPEX_QFII_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/insti/qfii"
 
 # docs/DATA_SOURCES.md 各來源最早可得 (#1074): BWIBBU_d answers 「查詢日期小於94年9月
 # 2日」 before this; MI_QFIIS answers on the research DB's first TWSE session;
@@ -88,6 +98,11 @@ BWIBBU_FIRST_DATE = date(2005, 9, 2)
 MI_QFIIS_FIRST_DATE = TWSE_QUOTES_FIRST_DATE
 PE_QRY_DATE_FIRST_DATE = date(2007, 1, 2)
 TPEX_SHARES_FIRST_DATE = TPEX_QUOTES_FIRST_DATE
+# insti/qfii answers an empty table (stat ok, totalCount 0) before 96/05/10 (#1117).
+TPEX_QFII_FIRST_DATE = date(2007, 5, 10)
+# MI_QFIIS writes 法令投資上限比率 0.00 on every row up to this day, which the rows'
+# 尚可投資比率 contradict: no data (#1117 decision 7230109916 point 4).
+MI_QFIIS_NO_LIMIT_LAST_DATE = date(2004, 7, 23)
 
 DAY_RUN_TYPE = "valuation_backfill_day"
 REQUEST_KEY = "valuation_backfill:{feed}:{day}"
@@ -180,6 +195,21 @@ TPEX_MANAGED_TITLE = "管理股票"
 _TWSE_PERIOD = re.compile(r"(\d{2,3})/([1-4])")
 _TPEX_PERIOD = re.compile(r"(\d{2,3})Q([1-4])")
 _ROC_DAY = re.compile(r"(\d{2,3})/(\d{1,2})/(\d{1,2})")
+TPEX_QFII_LAYOUT = (
+    "排行",
+    "代號",
+    "名稱",
+    "發行股數(A)",
+    "僑外資及陸資尚可投資股數B=A*F-C",
+    "僑外資及陸資持有股數(C)",
+    "僑外資及陸資尚可投資比率(D=B/A)",
+    "僑外資及陸資持股比率(E=C/A)",
+    "法令投資上限比率(F)",
+    "備註",
+)
+_HTML_TAG = re.compile(r"<[^>]*>")
+# 與前日異動原因: blank or codes (``2``, ``2 4``, ``45``; ``1`` in 2004).
+_CHANGE_REASON = re.compile(r"[0-9]+(?: [0-9]+)*")
 
 
 class LayoutError(OfficialDataError):
@@ -220,13 +250,33 @@ FEEDS: dict[str, Feed] = {
             "tpex",
             False,
         ),
+        # After twse-shares: it reads the raw that feed stores for the session.
+        Feed(
+            "twse-foreign",
+            "TWSE",
+            ForeignHoldingsDaily,
+            MI_QFIIS_FIRST_DATE,
+            "twse",
+            False,
+        ),
+        Feed(
+            "tpex-foreign",
+            "TPEx",
+            ForeignHoldingsDaily,
+            TPEX_QFII_FIRST_DATE,
+            "tpex",
+            True,
+        ),
     )
 }
 SOURCES = {
     "twse-pb": "twse_bwibbu_d",
     "twse-shares": "twse_mi_qfiis",
     "tpex-pb": "tpex_pe_qry_date",
+    "twse-foreign": "twse_mi_qfiis",
+    "tpex-foreign": "tpex_insti_qfii",
 }
+TABLES = ("valuation_daily", "shares_outstanding_daily", "foreign_holdings_daily")
 # tpex-shares: by the endpoint of the capture read.
 TPEX_SHARES_SOURCES = {
     TPEX_HISTORY_API: "tpex_daily_quotes",
@@ -244,16 +294,17 @@ def request_of(feed: str, day: date) -> tuple[str, str, dict[str, str] | None]:
     if feed == "twse-shares":
         url = f"{MI_QFIIS_ENDPOINT}?date={compact}&selectType=ALLBUT0999&response=json"
         return "GET", url, None
-    if feed == "tpex-pb":
+    tpex = {"tpex-pb": PE_QRY_DATE_ENDPOINT, "tpex-foreign": TPEX_QFII_ENDPOINT}
+    if feed in tpex:
         form = {"date": day.strftime("%Y/%m/%d"), "response": "json"}
-        return "POST", f"{PE_QRY_DATE_ENDPOINT}?date={form['date']}&response=json", form
+        return "POST", f"{tpex[feed]}?date={form['date']}&response=json", form
     raise ValueError(f"{feed} sends no request")
 
 
 def fetch_official(feed: str, day: date) -> Any:
     method, url, form = request_of(feed, day)
     if method == "POST":
-        return sources.fetch_json(PE_QRY_DATE_ENDPOINT, method="POST", data=form)
+        return sources.fetch_json(url.split("?")[0], method="POST", data=form)
     return sources.fetch_json(url)
 
 
@@ -284,6 +335,55 @@ def _shares(cell: Any) -> int | None:
     if value < 0 or not value.is_integer():
         raise LayoutError(f"unreadable share count {cell!r}")
     return int(value)
+
+
+def _count(cell: Any) -> int | None:
+    """Shares held or available: 0 is 0, blank is NULL."""
+
+    value = _number(cell)
+    if value is None:
+        return None
+    if value < 0 or not value.is_integer():
+        raise LayoutError(f"unreadable share count {cell!r}")
+    return int(value)
+
+
+def _percent(cell: Any) -> float | None:
+    """A TPEx ratio as ``87.8%``; blank is NULL, a number without ``%`` unread."""
+
+    text = "" if cell is None else str(cell).strip()
+    if text in NULL_CELLS:
+        return None
+    try:
+        value = _number(text[:-1]) if text.endswith("%") else None
+    except LayoutError:
+        value = None
+    if value is None:
+        raise LayoutError(f"unreadable ratio {cell!r}")
+    return value
+
+
+def _change_reason(cell: Any) -> str | None:
+    """與前日異動原因 without the MOPS link it is wrapped in from 2004-02-13."""
+
+    text = " ".join(_HTML_TAG.sub(" ", "" if cell is None else str(cell)).split())
+    if not text:
+        return None
+    if not _CHANGE_REASON.fullmatch(text):
+        raise LayoutError(f"unreadable change reason {cell!r}")
+    return text
+
+
+def _filing_day(cell: Any) -> date | None:
+    """最近一次申報日期 as ``92/09/16``; the number ``0`` (never filed) is NULL."""
+
+    text = "" if cell is None else str(cell).strip()
+    if text in NULL_CELLS or text == "0":
+        return None
+    day = _roc_day(text)
+    if day is None:
+        raise LayoutError(f"unreadable filing date {cell!r}")
+    return day
 
 
 def _period(cell: Any, pattern: re.Pattern[str]) -> str | None:
@@ -383,6 +483,38 @@ def parse_twse_shares(payload: Any, day: date) -> dict[str, dict[str, Any]]:
     )
 
 
+def parse_twse_foreign(payload: Any, day: date) -> dict[str, dict[str, Any]]:
+    """The 外資 (to 2009-04-30) or 外資及陸資 (from 2009-05-04) columns."""
+
+    body = _twse_header(payload, day)
+    rows = _rows(body.get("fields"), body.get("data"), MI_QFIIS_LAYOUTS)
+    mainland = "全體外資及陸資持有股數" in body["fields"]
+    who = "外資及陸資" if mainland else "外資"
+    limit_name = "外資及陸資共用法令投資上限比率" if mainland else "法令投資上限比率"
+
+    def values(row: dict[str, Any]) -> dict[str, Any]:
+        limit = _number(row[limit_name])
+        if limit == 0 and day <= MI_QFIIS_NO_LIMIT_LAST_DATE:
+            limit = None
+        return {
+            "shares_issued": _shares(row["發行股數"]),
+            "foreign_shares_held": _count(row[f"全體{who}持有股數"]),
+            "foreign_held_pct": _number(row[f"全體{who}持股比率"]),
+            "foreign_available_shares": _count(row[f"{who}尚可投資股數"]),
+            "foreign_limit_pct": limit,
+            "mainland_limit_pct": _number(row["陸資法令投資上限比率"])
+            if mainland
+            else None,
+            "change_reason": _change_reason(row["與前日異動原因(註)"]),
+            "last_filing_date": _filing_day(
+                row[f"最近一次上市公司申報{who}持股異動日期"]
+            ),
+            "note": None,
+        }
+
+    return _by_code(rows, "證券代號", values)
+
+
 def _tpex_table(payload: Any, day: date, *, title: str | None = None) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise LayoutError("the answer is not a JSON object")
@@ -420,6 +552,38 @@ def parse_tpex_pb(payload: Any, day: date) -> dict[str, dict[str, Any]]:
             "report_period": _period(row.get("財報年/季"), _TPEX_PERIOD),
         },
     )
+
+
+def parse_tpex_foreign(payload: Any, day: date) -> dict[str, dict[str, Any]]:
+    table = _tpex_table(payload, day)
+    data = table.get("data")
+    count = table.get("totalCount")
+    if not isinstance(data, list) or isinstance(count, bool) or count != len(data):
+        raise LayoutError(
+            f"totalCount {count!r} but "
+            f"{len(data) if isinstance(data, list) else 'no'} rows"
+        )
+    rows = _rows(table.get("fields"), data, (TPEX_QFII_LAYOUT,))
+    return _by_code(
+        rows,
+        "代號",
+        lambda row: {
+            "shares_issued": _shares(row["發行股數(A)"]),
+            "foreign_shares_held": _count(row["僑外資及陸資持有股數(C)"]),
+            "foreign_held_pct": _percent(row["僑外資及陸資持股比率(E=C/A)"]),
+            "foreign_available_shares": _count(row["僑外資及陸資尚可投資股數B=A*F-C"]),
+            "foreign_limit_pct": _percent(row["法令投資上限比率(F)"]),
+            "mainland_limit_pct": None,
+            "change_reason": None,
+            "last_filing_date": None,
+            "note": _note(row["備註"]),
+        },
+    )
+
+
+def _note(cell: Any) -> str | None:
+    text = "" if cell is None else str(cell).strip()
+    return None if text in NULL_CELLS else text
 
 
 def parse_tpex_quote_shares(payload: Any, day: date) -> dict[str, dict[str, Any]]:
@@ -482,6 +646,8 @@ PARSERS: dict[str, Callable[[Any, date], dict[str, dict[str, Any]]]] = {
     "twse-shares": parse_twse_shares,
     "tpex-pb": parse_tpex_pb,
     "tpex-shares": parse_tpex_quote_shares,
+    "twse-foreign": parse_twse_foreign,
+    "tpex-foreign": parse_tpex_foreign,
 }
 
 
@@ -611,6 +777,25 @@ def write_rows(
         "no_row": len(set(barred) - set(parsed)),
         "nulls": dict(sorted(nulls.items())),
     }
+
+
+def _shares_raw_id(db: Session, day: date) -> int | None:
+    """The raw payload id of the ``twse-shares`` manifest row of ``day``."""
+
+    run = _day_run(db, "twse-shares", day, create=False)
+    return (run.metadata_json or {}).get("raw_payload_id") if run else None
+
+
+def _shares_capture(db: Session, day: date) -> RawPayload:
+    """The ``MI_QFIIS`` capture ``twse-shares`` stored for ``day``."""
+
+    stored = _shares_raw_id(db, day)
+    raw = db.get(RawPayload, stored) if stored is not None else None
+    if raw is None or raw.endpoint.split("?")[0] != MI_QFIIS_ENDPOINT:
+        raise OfficialDataError(
+            f"the twse-shares session {day} cites raw payload {stored}, not MI_QFIIS"
+        )
+    return raw
 
 
 def _feed_sources(feed: Feed) -> set[str]:
@@ -745,7 +930,7 @@ def backfill(
     unknown = [name for name in names if name not in FEEDS]
     if unknown:
         raise ValueError(f"unknown feeds {unknown}; known: {list(FEEDS)}")
-    for table in ("valuation_daily", "shares_outstanding_daily"):
+    for table in TABLES:
         if not inspect(db.get_bind()).has_table(table):
             raise ValueError(f"{table} is missing: run init-db first")
     started = time.monotonic()
@@ -755,7 +940,8 @@ def backfill(
         exchange: _sessions(db, exchange, start, end)
         for exchange in {FEEDS[name].exchange for name in names}
     }
-    for name in names:
+    # FEEDS order within a session: twse-foreign reads what twse-shares stores.
+    for name in sorted(names, key=list(FEEDS).index):
         feed = FEEDS[name]
         for day in sessions[feed.exchange]:
             result[name]["sessions"] += 1
@@ -772,6 +958,10 @@ def backfill(
         for name in plan[day]:
             feed = FEEDS[name]
             counts = result[name]
+            # A twse-shares session without a capture: nothing to read yet.
+            if name == "twse-foreign" and _shares_raw_id(db, day) is None:
+                counts["not_answered"] += 1
+                continue
             # reapply asks nothing, so a session never asked gets no manifest row.
             run = _day_run(db, name, day, create=not (reapply and feed.requests))
             if run is None:
@@ -814,6 +1004,9 @@ def backfill(
                             raise OfficialDataError(
                                 "the stored session has no raw payload"
                             )
+                        source = SOURCES[name]
+                    elif name == "twse-foreign":
+                        raw = _shares_capture(db, day)
                         source = SOURCES[name]
                     else:
                         raw = _quote_capture(db, day)
