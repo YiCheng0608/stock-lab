@@ -1986,3 +1986,113 @@ class PremarketAiScore(Base):
     score_version: Mapped[str] = mapped_column(String(40))
     outcome_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     computed_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class AiListReading(Base):
+    """One run of the AI list of a trading day (Issue #1145, docs/spec/ai_list.md).
+
+    ``worker.ai_list`` writes a row once its calls are over, with the whole input
+    sent to the model, the output and the checks; a row is never changed or
+    deleted.  ``sequence`` counts the runs of one ``session_date``,
+    ``prompt_version`` and ``role``: a run after a ``done`` one is skipped, a run
+    after a ``failed`` or ``rejected`` one adds the next sequence.  Its own table,
+    not ``premarket_ai_readings``: ``premarket_score_v1`` scores every done row
+    there (#1142 3/4 Q3-1).
+    """
+
+    __tablename__ = "ai_list_readings"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_date",
+            "prompt_version",
+            "role",
+            "sequence",
+            name="uq_ai_list_reading_run",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_date: Mapped[date] = mapped_column(Date, index=True)
+    list_date: Mapped[date] = mapped_column(Date)
+    role: Mapped[str] = mapped_column(String(20))
+    sequence: Mapped[int] = mapped_column(Integer)
+    trigger: Mapped[str] = mapped_column(String(20))
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    prompt_sha256: Mapped[str] = mapped_column(String(64))
+    schema_sha256: Mapped[str] = mapped_column(String(64))
+    model_alias: Mapped[str] = mapped_column(String(40))
+    # The model the CLI reported (``modelUsage``); null when no call answered.
+    llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # morning / evening / interim, as premarket_ai_readings.
+    pool_phase: Mapped[str] = mapped_column(String(20))
+    # UTC-naive: D 08:15 Taipei.
+    cutoff_at: Mapped[datetime] = mapped_column(DateTime)
+    input_hash: Mapped[str] = mapped_column(String(64))
+    input_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # done | failed | rejected
+    status: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # The market's method.basis in order (null without an answer).
+    market_method_json: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    checks_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    attempts: Mapped[int] = mapped_column(Integer)
+    attempts_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    usage_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    ingestion_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ingestion_runs.id"), nullable=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    finished_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class AiListPick(Base):
+    """One pick of a ``done`` AI list reading (Issue #1145).
+
+    The AI's rank, method, reasons and levels as answered, the program's check
+    of the levels (rounding to the tick, the limits, the order, the reward to
+    risk), and the levels shown only when every check passed.  Written with its
+    reading, never changed.
+    """
+
+    __tablename__ = "ai_list_picks"
+    __table_args__ = (
+        UniqueConstraint("reading_id", "rank", name="uq_ai_list_pick_rank"),
+        UniqueConstraint("reading_id", "instrument_id", name="uq_ai_list_pick_stock"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reading_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_list_readings.id"), index=True
+    )
+    session_date: Mapped[date] = mapped_column(Date, index=True)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    role: Mapped[str] = mapped_column(String(20))
+    rank: Mapped[int] = mapped_column(Integer)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30))
+    # candidate_pool_items.id when the pool was candidate_pool_v1.
+    pool_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pool_sources_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # On the background rule list (the today list of the list date).
+    on_rule_list: Mapped[bool] = mapped_column(Boolean)
+    setup: Mapped[str] = mapped_column(String(40))
+    basis_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    basis_primary: Mapped[str] = mapped_column(String(20))
+    confidence: Mapped[str] = mapped_column(String(20))
+    levels_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    levels_check_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # The rounded levels when every level check passed, else null.
+    display_levels_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    risk_reward: Mapped[float | None] = mapped_column(Float, nullable=True)
+    valid_sessions: Mapped[int] = mapped_column(Integer)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    exit_conditions_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    reasons_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # The stock's rule levels of the list date as the input had them (null off the
+    # rule list or without levels).
+    rule_levels_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

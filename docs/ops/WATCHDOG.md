@@ -54,6 +54,12 @@
   - 不算異常、不留言的 skipped：`non_trading_day`、`already_done`、`already_running`、`maintenance`（含 `after_calls=yes`）、`low_memory`。
   - 每台北日各最多一則；還沒有任何 `premarket-ai-*.log` 時不判定（部署前的日子）。不送 Telegram：通知那邊由 08:45 的 notify 自己寫失敗（#1042）。
   - 處置：查該日誌與當天的 `premarket_ai_readings`（`status`、`reason`、`error`、`checks_json`）；要補可用 `docker compose -p <P> exec scheduler python -m worker.cli premarket-ai --trigger manual`（不受時段限制，開盤後補的判讀只供紀錄）。
+- `ai_list`（AI 名單，[#1145](https://github.com/YiCheng0608/stock-lab/issues/1145)；週一至週五 08:21 與 premarket-ai 同時起跑，同樣的時段與上限，見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve) 的 ai-list 一節）：
+  - `ai_list_missing`：週一至週五台北 09:15 以後，當天的 `logs/ai-list-YYYYMMDD.log` 不存在，或 `start` 列比 `end` 列多（同 `premarket_ai_missing`）。
+  - `ai_list_failed`：當天最後一個不是 `skipped` 的 `--- result` 列是 `status=failed` 或 `status=rejected`（[ai_list_v1 核對](../spec/ai_list.md#核對)），而且當天沒有 `status=done`；留言附那一列。
+  - `ai_list_missed`：當天的結果只有 skipped，其中有 `skipped reason=too_late`。
+  - 不算異常的 skipped、每台北日各最多一則、沒有任何 `ai-list-*.log` 時不判定：同 `premarket_ai`。不送 Telegram（名單還不顯示）。
+  - 處置：查該日誌與當天的 `ai_list_readings`（`status`、`reason`、`error`、`checks_json`）；要補可用 `docker compose -p <P> exec scheduler python -m worker.cli ai-list --trigger manual`（不受時段限制，開盤後補的名單只供紀錄）。
 - `intraday_result_<日期>`（盤中即時通知，[#801](https://github.com/YiCheng0608/stock-lab/issues/801)；週一至週五 08:59～13:31，見 [scheduler 容器的排程](SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）：
   - 週一至週五台北 13:45 以後（13:45 那一輪起），當天的 `logs/intraday-YYYYMMDD.log` 不存在（08:59 的 intraday 沒有跑，留言寫 scheduler 可能沒在跑），或當天成功的輪詢（`--- poll` 列 `ok` 大於 0）少於整天 271 輪（09:00～13:30 每分鐘一輪）的 80%：216 輪以下留言，留言附最後一個 `--- result` 列。少於 80% 的例子：富果連續失敗、改成每 5 分鐘一輪；401／403／429 當天停止讀取（`status=stopped`）；scheduler 中途停過、補跑晚了。
   - 不判定：行事曆（`trading_calendar_days`，以 `watchdog_helper.py closed-day` 唯讀查）標 `closed` 的日子；日誌的結果有 `non_trading_day`、`not_configured`（還沒放 `FUGLE_API_KEY` 或 Telegram 的設定）或 `no_targets`（當天沒有對象）。還沒有任何 `intraday-*.log` 時也不判定（#801 部署前的日子）。

@@ -83,8 +83,9 @@ ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news", "us", "night")
 # The locks of the scheduled runs that write stock.db (``running_jobs``): the jobs here,
-# worker.preopen's (#755) and worker.premarket_ai's (#1041), which are not worker.job jobs.
-WRITER_LOCKS = (*JOBS, "preopen", "premarket_ai")
+# worker.preopen's (#755), worker.premarket_ai's (#1041) and worker.ai_list's (#1145),
+# which are not worker.job jobs.
+WRITER_LOCKS = (*JOBS, "preopen", "premarket_ai", "ai_list")
 TRIGGERS = ("scheduler", "manual", "simulation")
 # daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
 # serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
@@ -217,9 +218,9 @@ def lock_held(path: Path) -> bool:
     and record ``already_running``.  Callers:
 
     - the maintenance checks: serve's lock, and the job locks (``running_jobs``, with
-      preopen's, #755, and premarket_ai's, #1041); daily, news and us skip for
-      maintenance before they look at their lock (``_Job._skip_reason``), preopen and
-      premarket-ai only after they took their own;
+      preopen's, #755, premarket_ai's, #1041, and ai_list's, #1145); daily, news and us
+      skip for maintenance before they look at their lock (``_Job._skip_reason``),
+      preopen, premarket-ai and ai-list only after they took their own;
     - ``worker.premarket_ai`` (#1041): ``news.lock`` once, only to log whether a news
       run was going at 08:21;
     - ``worker.preopen.wait_for_news`` (#755): ``news.lock`` every 10 seconds while a
