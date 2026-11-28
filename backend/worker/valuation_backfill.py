@@ -366,7 +366,8 @@ def _percent(cell: Any) -> float | None:
 def _change_reason(cell: Any) -> str | None:
     """與前日異動原因 without the MOPS link it is wrapped in from 2004-02-13."""
 
-    text = " ".join(_HTML_TAG.sub(" ", "" if cell is None else str(cell)).split())
+    # Only the tags go: ``<a…>2</a>3`` is ``23``, as ``45`` is written without a link.
+    text = " ".join(_HTML_TAG.sub("", "" if cell is None else str(cell)).split())
     if not text:
         return None
     if not _CHANGE_REASON.fullmatch(text):

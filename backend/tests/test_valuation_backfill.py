@@ -884,6 +884,11 @@ def test_twse_foreign_strips_the_html_of_the_change_reason():
         vb.parse_twse_foreign(combined, date(2024, 7, 1))["0050"]["change_reason"]
         == "2 4"
     )
+    combined["data"][0][10] = MOPS_LINK + "3"
+    assert (
+        vb.parse_twse_foreign(combined, date(2024, 7, 1))["0050"]["change_reason"]
+        == "23"
+    )
     combined["data"][0][10] = "<a>x</a>"
     with pytest.raises(vb.LayoutError, match="change reason"):
         vb.parse_twse_foreign(combined, date(2024, 7, 1))
@@ -965,6 +970,29 @@ def test_tpex_foreign_unknown_columns_fail_the_day():
     payload["tables"][0]["fields"][5] = "外資持有股數"
     with pytest.raises(vb.LayoutError, match="unknown columns"):
         vb.parse_tpex_foreign(payload, date(2018, 7, 2))
+
+
+@pytest.mark.parametrize(
+    "feed, endpoint",
+    [
+        ("tpex-pb", "https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate"),
+        ("tpex-foreign", "https://www.tpex.org.tw/www/zh-tw/insti/qfii"),
+    ],
+)
+def test_fetch_official_posts_each_tpex_feed_to_its_endpoint(
+    monkeypatch, feed, endpoint
+):
+    calls = []
+    monkeypatch.setattr(
+        sources, "fetch_json", lambda url, **kwargs: calls.append((url, kwargs))
+    )
+    vb.fetch_official(feed, date(2018, 7, 2))
+    assert calls == [
+        (
+            endpoint,
+            {"method": "POST", "data": {"date": "2018/07/02", "response": "json"}},
+        )
+    ]
 
 
 def test_tpex_foreign_posts_to_insti_qfii():
