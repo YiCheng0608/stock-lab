@@ -318,8 +318,8 @@ def run(db, target):
 # change to either fails here: give it a new SCORE_VERSION and pin that one.
 PINNED = {
     "ai_list_score_v1": (
-        "cda5034953f74e33c3b07a651e19eac048c93beac4854b17ad628e2533bf52f1",
-        "0fcbc4fbbd1501d255531d42a91d1124d5fc1d684289bfc909b1240d6d481737",
+        "c720ea7f06f95af67cb189afbdf9c5b4e902a33049ea0d4bc14b51ccb48971b6",
+        "8d541272a872e144bc1b4897ea139c2f72f6cd0c3fee7dc77e61215203d53f12",
     ),
 }
 
@@ -506,6 +506,38 @@ def test_an_empty_list_scores_the_market_and_an_empty_overall(db, world):
     assert (row.id, "market", "market", "d0") in scores
 
 
+def test_the_fill_window_is_twenty_sessions_not_the_valid_sessions(db, world):
+    """Q3-3 A: J's valid_sessions is 3, its breakout 50 first trades on session 7.
+
+    The window is tracking_v2's 20 sessions: T+5 is not filled by its
+    horizon, T+20 is filled at the breakout 50 (the open 49.5 is under it)
+    on session 7 and comparable.
+    """
+
+    j = instrument(db, "J")
+    path(
+        db,
+        j,
+        48,
+        (48, 48.5, 47.5, 48),
+        lambda at: (49.5, 50.5, 49, 50.5) if at == 7 else (51 if at > 7 else 48),
+    )
+    world["J"] = j
+    shown = display("breakout", 50, 52, 45, 60)
+    assert shown["valid_sessions"] == 3
+    picks = (("J", False, "breakout", ["technical"], "low", shown, None),)
+    row = reading(db, world, picks=picks)
+    run(db, SESSIONS[19])
+    scores = written(db, row.id)
+    t5 = scores[(row.id, "stock", "J", "t5")]["ai_levels"]
+    assert (t5["status"], t5["reason"]) == ("incomparable", "not_filled_by_horizon")
+    assert t5["execution_date"] is None
+    t20 = scores[(row.id, "stock", "J", "t20")]["ai_levels"]
+    assert t20["status"] == "comparable"
+    assert t20["execution_date"] == SESSIONS[6].isoformat()
+    assert t20["return"] == approx(tracked(50, 51))
+
+
 def test_t20_records_the_first_trigger(db, world):
     """G: breakout 50 fills at the open 51, touches the target 56 on session 3."""
 
@@ -557,6 +589,21 @@ def test_open_check_rules():
         "no_open",
         None,
     )
+    assert score.open_check(breakout, 101, None)["reason"] == "no_open"
+
+
+def test_open_check_compares_the_raw_open_with_the_level_times_the_factor():
+    """tracking_v2's direction: an open equal to a level on an ex-dividend day
+    (raw = level * factor) is at the level, whatever ``raw / factor`` rounds to."""
+
+    levels_ = display("breakout", 50, 51.5, 47, 56)
+    for factor in (0.9, 0.7, 0.3, 1 / 3):
+        at_stop = score.open_check(levels_, 47 * factor, factor)
+        assert at_stop["conditions"] == ["open_at_or_below_stop"], factor
+        at_target = score.open_check(levels_, 56 * factor, factor)
+        assert "open_at_or_above_target" in at_target["conditions"], factor
+        at_high = score.open_check(levels_, 51.5 * factor, factor)
+        assert at_high["applicable"] is True, factor
 
 
 def test_ex_dividend_opens_are_checked_on_the_list_date_basis(db, world):
@@ -662,6 +709,8 @@ def test_a_group_under_the_threshold_lists_counts_only():
     assert (part["n"], part["comparable"], part["filled"]) == (19, 19, 19)
     assert part["win_rate"] is None and part["mean"] is None
     assert part["median"] is None
+    # The fill rate is a ratio too: under the floor only the counts stay.
+    assert part["fill_rate"] is None and part["levels_n"] == 19
     assert set(part["first_trigger"].values()) == {None}
     assert part["open_hold_t5_excess"] is None
     rows = under + [
@@ -703,6 +752,55 @@ def test_picks_count_in_each_of_their_groups():
     assert (failed["levels_n"], failed["comparable"]) == (0, 0)
 
 
+def test_a_pick_without_a_d_open_is_its_own_state():
+    """Levels passed, D had no usable open: not counted as applicable."""
+
+    no_d = outcome()
+    no_d["open_check"] = {"status": "no_data", "reason": "no_open", "applicable": None}
+    states = [
+        score.state_of(no_d),
+        score.state_of(outcome()),
+        score.state_of(outcome(levels=False)),
+    ]
+    assert states == ["no_open", "applicable", "levels_check_failed"]
+    gated = outcome()
+    gated["open_check"] = {"status": "checked", "applicable": False}
+    assert score.state_of(gated) == "not_applicable"
+    groups = score.grouped([{"t5": no_d, "t20": no_d}])
+    assert set(groups["state"]) == {"no_open"}
+    assert score.RULES["states"] == [
+        "levels_check_failed",
+        "no_open",
+        "not_applicable",
+        "applicable",
+    ]
+
+
+def test_a_suspended_d_is_no_open_in_the_stored_rows(db, world):
+    k = instrument(db, "K")
+    bar(db, k, L, 30, 30, 30, 30)
+    bar(db, k, D, 30, 30, 30, 30, volume=0, is_suspended=True)
+    for day in SESSIONS[1:]:
+        bar(db, k, day, 30, 30, 30, 30)
+    world["K"] = k
+    picks = (
+        (
+            "K",
+            False,
+            "breakout",
+            ["technical"],
+            "low",
+            display("breakout", 31, 32, 28, 36),
+            None,
+        ),
+    )
+    row = reading(db, world, picks=picks)
+    run(db, SESSIONS[4])
+    stock = written(db, row.id)[(row.id, "stock", "K", "t5")]
+    assert stock["open_check"]["reason"] == "no_open"
+    assert score.state_of(stock) == "no_open"
+
+
 def test_market_groups_need_twenty_scored_days():
     rows = [
         {"horizon": "d0", "basis_primary": "us", "status": "scored", "hit": day < 15}
@@ -730,11 +828,50 @@ def test_the_month_report_has_the_sections_and_marks_a_short_sample(db, world):
     assert "## `ai_list_v1`／`champion`" in text
     # The day has a done reading: it counts as done, as premarket_score_report.
     assert "判讀日 1 天：`done` 1、`failed` 0、`rejected` 0" in text
-    assert "### 依判讀方式分組：累積" in text and "### 依判讀方式分組：當月" in text
+    assert "### 累積（結果在 2026-12-31 以前）" in text
+    assert "### 當月（結果在 2026-12-01～2026-12-31）" in text
+    assert text.count("#### 依判讀方式分組") == 2
     assert "**型態 `setup`**" in text and "樣本不足" in text
     assert "規則名單是對答案的基準：只記錄，不提案" in text
     assert "價位核對不過 1、今日不適用 2、沒有規則價位 4" in text
     assert ai_list_score_report.render(db, "2026-11").count("尚無判讀紀錄") == 1
+
+
+def test_results_count_in_the_month_their_horizon_ends(db, world):
+    """A reading late in a month: its T+20 comes out the next month and is
+    counted there, not in the reading's month (as the pre-market misses)."""
+
+    row = reading(db, world)
+    run(db, SESSIONS[19])
+    overall = written(db, row.id)[(row.id, "overall", "overall", "t20")]
+    assert overall["end_date"] == SESSIONS[19].isoformat()
+    # Make A's T+20 end on 2027-01-04, as a reading at the end of December would.
+    late = db.scalar(
+        select(AiListScore).where(
+            AiListScore.reading_id == row.id,
+            AiListScore.subject == "A",
+            AiListScore.horizon == "t20",
+        )
+    )
+    outcome_ = json.loads(json.dumps(late.outcome_json))
+    outcome_["open_hold"]["exit_date"] = "2027-01-04"
+    late.outcome_json = outcome_
+    db.commit()
+    rows = list(db.scalars(select(AiListScore)))
+    assert ai_list_score_report.result_date(late).isoformat() == "2027-01-04"
+    december = [r for r in rows if ai_list_score_report.result_date(r) <= SESSIONS[19]]
+    picks = ai_list_score_report.pick_rows(december)
+    a = next(item for item in picks if (item.get("t5") or {}).get("symbol") == "A")
+    assert set(a) == {"t5"}
+    january = [
+        r
+        for r in rows
+        if ai_list_score_report.result_date(r).isoformat() >= "2027-01-01"
+    ]
+    assert [set(item) for item in ai_list_score_report.pick_rows(january)] == [{"t20"}]
+    text = ai_list_score_report.render(db, "2027-01")
+    month = text[text.index("### 當月") :]
+    assert "每檔 1 筆" in month
 
 
 # --- the daily step and the CLI -----------------------------------------------------

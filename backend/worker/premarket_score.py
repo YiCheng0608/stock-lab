@@ -1,6 +1,7 @@
 """Scoring the stored pre-market AI readings after the close (Issue #1043).
 
-The ``premarket_score`` step of ``worker.cli daily`` (last, non-blocking) and
+The ``premarket_score`` step of ``worker.cli daily`` (non-blocking; only
+``ai_list_score`` runs after it, #1147) and
 ``worker.cli premarket-score``.  Every ``done`` reading (each trading day,
 prompt version and role) gets, under ``app.premarket_score.SCORE_VERSION``
 (docs/spec/premarket_ai.md 對答案):

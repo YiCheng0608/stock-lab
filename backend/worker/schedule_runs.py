@@ -946,7 +946,7 @@ def run_daily_job(
         # The candidate pool (#1020): last, as it reads the day's clusters,
         # heat, lists and today list; the morning run is preopen's.
         ("candidate_pool", 17, lambda: _candidate_pool_step(target)),
-        # The pre-market AI scores (#1043): last, on the day's bars alone.
+        # The pre-market AI scores (#1043): after the pool, on the day's bars alone.
         ("premarket_score", 18, lambda: _premarket_score_step(target)),
         # The AI list scores (#1147): after premarket_score, on the day's bars alone.
         ("ai_list_score", 19, lambda: _ai_list_score_step(target)),

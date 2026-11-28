@@ -34,7 +34,7 @@ GROUP_LABELS = {
     "basis": "依據含 `basis`（可重複計）",
     "confidence": "把握 `confidence`",
     "setup_confidence": "型態×把握",
-    "state": "狀態（價位核對不過／今日不適用／可進場）",
+    "state": "狀態（價位核對不過／D 沒有開盤價／今日不適用／可進場）",
 }
 
 
@@ -78,6 +78,26 @@ def collect(db: Session, end: date) -> dict[tuple[str, str], dict[str, Any]]:
     ):
         out[(row.prompt_version, row.role)]["scores"].append(row)
     return dict(out)
+
+
+def result_date(row: AiListScore) -> date:
+    """The day a row's result came out: its horizon's last session.
+
+    A stock row's ``open_hold.exit_date``, a market row's ``close_date``, an
+    overall row's ``end_date``; the reading's day when the row has none (a
+    confirmed closure is scored on that day).  The report counts a result in
+    this day's month, as the pre-market misses do (docs/spec/premarket_ai.md
+    判錯清單): a T+20 comes out about a month after its reading.
+    """
+
+    outcome = row.outcome_json or {}
+    if row.scope == score.STOCK:
+        text = (outcome.get("open_hold") or {}).get("exit_date")
+    elif row.scope == score.MARKET:
+        text = outcome.get("close_date")
+    else:
+        text = outcome.get("end_date")
+    return date.fromisoformat(text) if text else row.session_date
 
 
 def overall_part(rows: list[AiListScore], horizon: str) -> dict[str, Any]:
@@ -173,36 +193,8 @@ def market_table(rows: list[AiListScore]) -> list[str]:
     return lines
 
 
-def groups_block(rows: list[AiListScore], title: str) -> list[str]:
-    picks = pick_rows(rows)
-    lines = [f"### 依判讀方式分組：{title}", ""]
-    if not picks:
-        return lines + ["尚無已對答案的每檔列。", ""]
-    lines.append(
-        f"每檔 {len(picks)} 筆；`ai_levels` 看 T+20，可比 < {score.MIN_GROUP_COMPARABLE} 的組"
-        "標樣本不足，只列筆數；open_hold 超額的可比也要滿同一門檻才列。"
-    )
-    lines.append("")
-    for name, groups in score.grouped(picks).items():
-        lines += [f"**{GROUP_LABELS[name]}**", "", *group_table(groups), ""]
-    lines += ["**大盤**", "", *market_table(rows), ""]
-    return lines
-
-
-def section(version: str, role: str, data: dict[str, Any], start: date) -> list[str]:
-    days = data["days"]
-    statuses = Counter(days.values())
-    month_statuses = Counter(status for day, status in days.items() if day >= start)
-    rows = data["scores"]
+def overall_lines(rows: list[AiListScore]) -> list[str]:
     lines = [
-        f"## `{version}`／`{role}`",
-        "",
-        f"- 判讀日 {len(days)} 天：`done` {statuses.get(DONE, 0)}、`failed` "
-        f"{statuses.get('failed', 0)}、`rejected` {statuses.get('rejected', 0)}"
-        + (f"（{min(days).isoformat()}～{max(days).isoformat()}）" if days else ""),
-        f"- 當月：`done` {month_statuses.get(DONE, 0)}、`failed` "
-        f"{month_statuses.get('failed', 0)}、`rejected` {month_statuses.get('rejected', 0)}",
-        "",
         "| 整體 | 天數 | AI 名單 open_hold 超額 | 規則名單超額（有名單天數） "
         "| AI 價位對規則價位（天數，配對檔數） | AI 選股對規則選股（天數） |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -224,8 +216,52 @@ def section(version: str, role: str, data: dict[str, Any], start: date) -> list[
         f"{counts.get('corporate_action_on_session', 0)}",
         "",
     ]
-    lines += groups_block(rows, "累積")
-    lines += groups_block([row for row in rows if row.session_date >= start], "當月")
+    return lines
+
+
+def block(rows: list[AiListScore], title: str) -> list[str]:
+    """The comparisons and the method groups of the results in ``rows``."""
+
+    lines = [f"### {title}", "", *overall_lines(rows)]
+    picks = pick_rows(rows)
+    lines += ["#### 依判讀方式分組", ""]
+    if not picks:
+        return lines + ["尚無已對答案的每檔列。", ""]
+    lines.append(
+        f"每檔 {len(picks)} 筆；`ai_levels` 看 T+20，可比 < {score.MIN_GROUP_COMPARABLE} 的組"
+        "標樣本不足，只列筆數；open_hold 超額的可比也要滿同一門檻才列。"
+    )
+    lines.append("")
+    for name, groups in score.grouped(picks).items():
+        lines += [f"**{GROUP_LABELS[name]}**", "", *group_table(groups), ""]
+    lines += ["**大盤**", "", *market_table(rows), ""]
+    return lines
+
+
+def section(
+    version: str, role: str, data: dict[str, Any], start: date, end: date
+) -> list[str]:
+    days = data["days"]
+    statuses = Counter(days.values())
+    month_statuses = Counter(status for day, status in days.items() if day >= start)
+    rows = [row for row in data["scores"] if result_date(row) <= end]
+    lines = [
+        f"## `{version}`／`{role}`",
+        "",
+        f"- 判讀日 {len(days)} 天：`done` {statuses.get(DONE, 0)}、`failed` "
+        f"{statuses.get('failed', 0)}、`rejected` {statuses.get('rejected', 0)}"
+        + (f"（{min(days).isoformat()}～{max(days).isoformat()}）" if days else ""),
+        f"- 當月判讀日：`done` {month_statuses.get(DONE, 0)}、`failed` "
+        f"{month_statuses.get('failed', 0)}、`rejected` {month_statuses.get('rejected', 0)}",
+        "- 結果歸到它那個期間最後一個交易日的月份（T+20 約在判讀日一個月後）；"
+        "累積只算月底前已到期的結果。",
+        "",
+    ]
+    lines += block(rows, f"累積（結果在 {end.isoformat()} 以前）")
+    lines += block(
+        [row for row in rows if result_date(row) >= start],
+        f"當月（結果在 {start.isoformat()}～{end.isoformat()}）",
+    )
     return lines
 
 
@@ -245,7 +281,7 @@ def render(db: Session, month: str) -> str:
         return "\n".join(lines)
     ordered = sorted(data.items(), key=lambda item: (item[0][1] != CHAMPION, item[0]))
     for (version, role), part in ordered:
-        lines += section(version, role, part, start)
+        lines += section(version, role, part, start, end)
     return "\n".join(lines)
 
 

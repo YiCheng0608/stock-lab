@@ -54,8 +54,10 @@ def _levels(levels: Any, tracked: list[TrackBar], horizon: int) -> dict[str, Any
     return v1.settled(result) or {"status": "incomparable", "reason": v1.MISSING_BAR}
 
 
-def _d_open(tracked: list[TrackBar], session_date: date) -> float | None:
-    """D's official open on the list date's basis; None without a usable D bar."""
+def _d_open(
+    tracked: list[TrackBar], session_date: date
+) -> tuple[float | None, float | None]:
+    """D's official raw open and its factor; (None, None) without a usable D bar."""
 
     first = tracked[0] if tracked else None
     if (
@@ -64,8 +66,8 @@ def _d_open(tracked: list[TrackBar], session_date: date) -> float | None:
         or v1.suspended(first)
         or not first.factor
     ):
-        return None
-    return first.open / first.factor
+        return None, None
+    return first.open, first.factor
 
 
 def pick_outcome(
@@ -105,7 +107,7 @@ def pick_outcome(
     }
     if passed:
         out["open_check"] = score.open_check(
-            display, _d_open(tracked, reading.session_date)
+            display, *_d_open(tracked, reading.session_date)
         )
         out["ai_levels"] = _levels(score.ai_track_levels(display), tracked, horizon)
     else:
@@ -281,6 +283,8 @@ def score_reading(
                 pool_phase=reading.pool_phase,
             )
             overall["reading_id"] = reading.id
+            # The horizon's last session: the month the report counts it in.
+            overall["end_date"] = sessions[length - 1].isoformat()
             add(score.OVERALL, score.OVERALL, horizon, overall)
     return rows
 

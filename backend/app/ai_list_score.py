@@ -59,6 +59,9 @@ OPEN_CHECK_CONDITIONS = (
     GAP_ABOVE_ENTRY_HIGH,
 )
 # tracking_v2's first trigger of a comparable result; None is neither.
+# The state groups of the report.
+STATE_NO_OPEN = "no_open"
+STATES = (LEVELS_CHECK_FAILED, STATE_NO_OPEN, "not_applicable", "applicable")
 TARGET_HIT = "target_1_hit"
 STOP_HIT = "invalidated"
 TRIGGERS = (TARGET_HIT, STOP_HIT, None)
@@ -83,7 +86,7 @@ RULES: dict[str, Any] = {
     "levels_window": TRACKING_WINDOW_SESSIONS,
     "levels_rules": TRACKING_RULES_V2,
     "basis": "list_date basis: pipeline._tracking_inputs factors, corporate_action_on_session kept, not excluded",
-    "open_check": "levels passed: D official open / factor; first of the conditions",
+    "open_check": "levels passed: D official raw open against level * factor (tracking_v2's direction); first of the conditions",
     "open_check_conditions": list(OPEN_CHECK_CONDITIONS),
     "open_check_no_open": "no D bar, suspended, or no factor -> no_data no_open",
     "not_applicable": "ai_levels still tracked; a group of its own in the report",
@@ -107,7 +110,10 @@ RULES: dict[str, Any] = {
     "group_levels_horizon": LEVELS_HORIZON,
     "group_win": "comparable ai_levels return > 0",
     "group_min_comparable": MIN_GROUP_COMPARABLE,
+    "group_insufficient": "counts only (n, levels_n, filled, comparable, reasons): no fill rate, win rate, mean, median or trigger counts",
     "group_open_hold_min": "open_hold excess shown only with MIN_GROUP_COMPARABLE comparable holds",
+    "states": list(STATES),
+    "report_month": "a result counts in the month its horizon ends (stock open_hold.exit_date, market close_date, overall end_date); cumulative = ended by the month's last day; reading days by session_date",
     "market_groups": "basis_primary of market_method_json; stance hit rate d0, t5",
 }
 
@@ -153,34 +159,44 @@ def ai_track_levels(display: dict[str, Any]) -> TrackLevels:
     )
 
 
-def open_check(display: dict[str, Any], open_price: float | None) -> dict[str, Any]:
-    """今日不適用 from D's official open on the list date's basis.
+def open_check(
+    display: dict[str, Any], open_raw: float | None, factor: float | None = 1.0
+) -> dict[str, Any]:
+    """今日不適用 from D's official open.
 
     D's open at or below the stop, at or above the first target, or (a
     breakout) above the entry's upper bound, the no-chase price: not
     applicable today.  A pullback opening above its zone still is: the price
     may come back within the valid sessions.  All conditions that hold are
     listed; ``reason`` is the first.
+
+    The levels are on the list date's basis and ``factor`` maps them to D's
+    raw basis; as ``app.tracking.track_path``, the raw open is compared with
+    ``level * factor`` (the same direction, so an open equal to a level on an
+    ex-dividend day is judged as tracking_v2 judges it).  ``open`` is kept on
+    the list date's basis.
     """
 
-    opened = _finite(open_price)
+    opened = _finite(open_raw)
+    scale = _finite(factor)
     out: dict[str, Any] = {
         "status": "checked",
         "applicable": None,
         "reason": None,
         "conditions": [],
-        "open": _round(opened),
+        "open": None,
     }
-    if opened is None or opened <= 0:
+    if opened is None or opened <= 0 or scale is None or scale <= 0:
         out.update(status=NO_DATA, reason=NO_OPEN)
         return out
+    out["open"] = _round(opened / scale)
     entry = display["entry"]
     conditions = []
-    if opened <= float(display["stop"]):
+    if opened <= float(display["stop"]) * scale:
         conditions.append(OPEN_AT_OR_BELOW_STOP)
-    if opened >= float(display["target_1"]):
+    if opened >= float(display["target_1"]) * scale:
         conditions.append(OPEN_AT_OR_ABOVE_TARGET)
-    if entry["type"] == "breakout" and opened > float(entry["high"]):
+    if entry["type"] == "breakout" and opened > float(entry["high"]) * scale:
         conditions.append(GAP_ABOVE_ENTRY_HIGH)
     out.update(
         applicable=not conditions,
@@ -193,6 +209,13 @@ def open_check(display: dict[str, Any], open_price: float | None) -> dict[str, A
 def not_applicable(outcome: dict[str, Any]) -> bool:
     check = outcome.get("open_check") or {}
     return check.get("applicable") is False
+
+
+def no_open(outcome: dict[str, Any]) -> bool:
+    """Levels passed but D had no usable open: today's check could not be made."""
+
+    check = outcome.get("open_check") or {}
+    return bool(outcome.get("levels_passed")) and check.get("status") == NO_DATA
 
 
 def with_excess(hold: dict[str, Any], population_mean: float | None) -> dict[str, Any]:
@@ -333,7 +356,7 @@ def group_stats(picks: Sequence[dict[str, dict[str, Any] | None]]) -> dict[str, 
         "status": "sufficient" if enough else INSUFFICIENT_SAMPLE,
         "levels_n": len(with_levels),
         "filled": filled,
-        "fill_rate": filled / len(with_levels) if with_levels else None,
+        "fill_rate": filled / len(with_levels) if enough and with_levels else None,
         "comparable": len(comparable),
         "win_rate": (sum(1 for value in returns if value > 0) / len(returns))
         if enough and returns
@@ -360,10 +383,13 @@ def group_stats(picks: Sequence[dict[str, dict[str, Any] | None]]) -> dict[str, 
 
 
 def state_of(outcome: dict[str, Any]) -> str:
-    """The pick's state group: levels failed, not applicable today, or tradable."""
+    """The pick's state group: levels failed, no D open, not applicable today,
+    or applicable."""
 
     if not outcome["levels_passed"]:
         return LEVELS_CHECK_FAILED
+    if no_open(outcome):
+        return STATE_NO_OPEN
     if not_applicable(outcome):
         return "not_applicable"
     return "applicable"

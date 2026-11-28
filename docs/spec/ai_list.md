@@ -103,7 +103,7 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 | `open_hold` | 名單每檔（含價位核對不過的） | D 開盤買、T+N 收盤賣，同 `premarket_score_v1`（`missing_bar`、`suspended_in_window`、`no_price` 不算報酬）；`excess` 是報酬減同一份判讀同一 horizon 的母體平均 |
 | `ai_levels` | 價位核對過的每檔 | `tracking_v2`（`track_path`＋`settle`）：名單日是 level date，D 是第 1 根，最多 20 根（Q3-3 A：`valid_sessions` 只用在顯示）。突破用 `entry.low` 當突破價，拉回用 `entry.low`～`entry.high`，停損 `stop`、目標 `target_1`（取整後的 `display_levels_json`）。記有沒有成交、成交日、`first_trigger`（`target_1_hit`／`invalidated`／都沒有）與報酬；不能成交照 `tracking_v2` 的原因碼。核對不過的是 null，`ai_levels_reason=levels_check_failed` |
 | `rule_levels` | 規則價位有進場區的檔（`rule_levels_json` 照 `premarket_score_v1` 的 `has_levels`） | 同上，換成規則價位（`entry_zone`、`invalid_price`、`target_1`）。沒有的是 null，`rule_levels_reason=no_rule_levels`，不進「AI 價位對規則價位」（Q3-2 A） |
-| `open_check` | 價位核對過的每檔 | 今日不適用：D 的官方日 K 開盤價（除以因子換回 T 的基準）依序檢查 ≤ 停損（`open_at_or_below_stop`）、≥ 目標一（`open_at_or_above_target`）、突破型 > 進場上緣（`gap_above_entry_high`），任一成立是 `applicable=false`（全部列在 `conditions`，`reason` 是第一個）；拉回型開在進場區之上不算。D 沒有日 K、停牌或沒有因子記 `no_data`（`no_open`）。唯一的算法是 `app.ai_list_score.open_check`，頁面當晚的標記（#1148）也呼叫它；不讀 `ai_list_open_checks` |
+| `open_check` | 價位核對過的每檔 | 今日不適用：D 的官方日 K 原始開盤價依序和「價位 × 因子」（T 的基準換到 D 的原始基準，和 `tracking_v2` 同方向）比：≤ 停損（`open_at_or_below_stop`）、≥ 目標一（`open_at_or_above_target`）、突破型 > 進場上緣（`gap_above_entry_high`），任一成立是 `applicable=false`（全部列在 `conditions`，`reason` 是第一個）；拉回型開在進場區之上不算。`open` 記換回 T 基準的開盤價。D 沒有日 K、停牌或沒有因子記 `no_data`（`no_open`），`applicable` 是 null。唯一的算法是 `app.ai_list_score.open_check`，頁面當晚的標記（#1148）也呼叫它；不讀 `ai_list_open_checks` |
 
 - 今日不適用的檔 `ai_levels` 照算（`tracking_v2` 本來就會記 `gap_*`），月報另列一組。
 
@@ -118,6 +118,7 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 - **AI 選股對規則選股**＝AI 名單的 `open_hold` 平均－規則名單的 `open_hold` 平均。
 - 任一邊沒有可比的就記 `null`（`empty_side`）。
 - `counts`：每檔數、價位核對不過、今日不適用、沒有規則價位、名單日到 D 有公司行動。
+- `outcome_json` 另記 `reading_id`、`pool_phase` 與 `end_date`（這個 horizon 的最後一個交易日）。
 
 ### 寫入與重跑
 
@@ -127,10 +128,11 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 
 `worker.cli ai-list-score-report --month YYYY-MM` 產 markdown（讀 DB、不寫）；每月檢討（`tools/research/monthly_review.py`，[evidence 每月檢討](evidence.md#每月檢討)）把它併成一段。每個 `prompt_version`＋`role` 一節：
 
-- 判讀天數（`done`／`failed`／`rejected`，累積與當月）；整體的四個比較（T+5、T+20 的每日值平均）；T+20 已對答案的每檔裡價位核對不過、今日不適用、沒有規則價位與有公司行動的筆數。
-- **依判讀方式分組**，累積到月底與當月各一份：每檔依 `setup`、`basis_primary`、`basis` 含某個代碼（可重複計）、`confidence`、`setup`×`confidence`，以及狀態（`levels_check_failed`／`not_applicable`／`applicable`）分組。每組列筆數；`ai_levels`（看 T+20）的有價位數、成交數與成交率、可比數、勝率（可比裡報酬 > 0 的比例）、平均與中位數報酬、`first_trigger` 分布；`open_hold` T+5、T+20 對母體超額的平均；不能比的原因碼筆數。
+- **歸月**：判讀天數照 `session_date`；對答案的結果歸到**結果出來的月份**，也就是那個 horizon 的最後一個交易日（每檔 `open_hold.exit_date`、大盤 `close_date`、整體 `end_date`；確認休市沒有這個日期的列用 `session_date`），同[早盤 AI 判錯清單](premarket_ai.md#判錯清單與改版提案)。T+20 約在判讀日一個月後才出來，照判讀日歸月的話，月初跑時上個月大多還沒到期；照結果月歸，每筆剛好在一個月出現一次。累積只算月底以前已到期的結果。
+- 判讀天數（`done`／`failed`／`rejected`，累積與當月）。累積與當月各一份：整體的四個比較（T+5、T+20 的每日值平均）、T+20 已對答案的每檔裡價位核對不過、今日不適用、沒有規則價位與有公司行動的筆數，以及下面的分組。
+- **依判讀方式分組**：每檔依 `setup`、`basis_primary`、`basis` 含某個代碼（可重複計）、`confidence`、`setup`×`confidence`，以及狀態分組：`levels_check_failed`（價位核對不過）、`no_open`（核對過但 D 沒有可用的開盤價，今日檢查做不了）、`not_applicable`（今日不適用）、`applicable`，依序取第一個符合的。每組列筆數；`ai_levels`（看 T+20）的有價位數、成交數與成交率、可比數、勝率（可比裡報酬 > 0 的比例）、平均與中位數報酬、`first_trigger` 分布；`open_hold` T+5、T+20 對母體超額的平均；不能比的原因碼筆數。
 - **大盤**：依 `basis_primary` 分組，列 `d0`、`t5` 的判對率。
-- **樣本不足**（Q3-4 A，`MIN_GROUP_COMPARABLE = 20`）：`ai_levels` 可比數 < 20 的組標「樣本不足」，只列筆數，不列勝率、平均、中位數與 `first_trigger` 分布；`open_hold` 超額的可比數 < 20 也不列平均；大盤一組已對答案的天數 < 20 不列判對率。
+- **樣本不足**（Q3-4 A，`MIN_GROUP_COMPARABLE = 20`）：`ai_levels` 可比數 < 20 的組標「樣本不足」，只列筆數（筆數、有價位數、成交數、可比數、不能比的原因碼），不列成交率、勝率、平均、中位數與 `first_trigger` 分布；`open_hold` 超額的可比數 < 20 也不列平均；大盤一組已對答案的天數 < 20 不列判對率。
 - 規則名單是對答案的基準：只記錄，不提案。AI 名單的判錯清單與改版提案另開單（3/4 每月檢討第 4 點），本節不做。
 
 ## 限制
