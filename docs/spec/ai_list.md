@@ -1,7 +1,7 @@
-<!-- owns: ai_list_v1、AI 名單的輸入價位事實、AI 名單的核對、AI 名單紀錄表 -->
+<!-- owns: ai_list_v1、AI 名單的輸入價位事實、AI 名單的核對、AI 名單紀錄表、AI 名單的顯示 -->
 # AI 名單 ai_list_v1
 
-AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單（最多 10 檔、排名次），每檔給判讀方式、理由、進場區、停損、目標與有效期，程式核對後存檔，存了不改。名單與價位是 **AI 推論，未經驗證**，不是下單指示；價位由 AI 給、程式核對。本規格只寫產出與存檔（[#1145](https://github.com/YiCheng0608/stock-lab/issues/1145)）；頁面、Telegram、盤中通知與對答案是母單 [#1144](https://github.com/YiCheng0608/stock-lab/issues/1144) 的後續任務。依據：[#1142](https://github.com/YiCheng0608/stock-lab/issues/1142) 的評估（[1/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235660250) 名單怎麼產生、[2/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235671507) 價位與核對、[3/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235688997) 存法、[4/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235713717) 架構），#1 決定 [7235996430](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7235996430)（全部選建議的 A）。
+AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單（最多 10 檔、排名次），每檔給判讀方式、理由、進場區、停損、目標與有效期，程式核對後存檔，存了不改。名單與價位是 **AI 推論，未經驗證**，不是下單指示；價位由 AI 給、程式核對。本規格寫產出與存檔（[#1145](https://github.com/YiCheng0608/stock-lab/issues/1145)）與頁面、Telegram 的[顯示](#顯示)（[#1146](https://github.com/YiCheng0608/stock-lab/issues/1146)）；盤中通知與對答案是母單 [#1144](https://github.com/YiCheng0608/stock-lab/issues/1144) 的後續任務。依據：[#1142](https://github.com/YiCheng0608/stock-lab/issues/1142) 的評估（[1/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235660250) 名單怎麼產生、[2/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235671507) 價位與核對、[3/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235688997) 存法、[4/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235713717) 架構），#1 決定 [7235996430](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7235996430)（全部選建議的 A）。
 
 程式：job `backend/worker/ai_list.py`、輸入 `backend/worker/ai_list_input.py`、呼叫與核對 `backend/worker/ai_list_reading.py`、提示詞 `backend/worker/prompts/ai_list_v1.md`；排程與日誌見 [SCHEDULING](../ops/SCHEDULING.md#scheduler-容器的排程serve)，看門狗見 [WATCHDOG](../ops/WATCHDOG.md)。和 [早盤 AI 判讀 premarket_v1](premarket_ai.md) 並存：兩者 08:21 同時起跑、各自的呼叫、鎖、上限與表，`premarket_v1` 照跑、照存、照對答案。
 
@@ -81,8 +81,46 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 - **重跑**：同一天已有 `done` 就不呼叫，記 `skipped reason=already_done`；`failed`／`rejected` 之後再跑才另加下一個 `sequence`。呼叫期間不寫 DB：每次呼叫的提示與回應先寫 raw 檔，呼叫結束、再查一次維護模式後，才在同一個交易裡寫 `ingestion_runs`（`run_type=ai_list`）、`raw_payloads`（`source=ai_list`）、判讀與每檔列。
 - **模型與提示版本**：每次呼叫記 `prompt_version`、`prompt_sha256`、`schema_sha256`、`model_alias`（`sonnet`）與 CLI 回報的 `llm_model`。
 
+## 顯示
+
+今日名單頁（「今日名單」分頁的第一塊）、08:45 的 Telegram（`worker.notify`、`worker.notify_card`）與 `GET /api/ai-list` 讀同一個函式 `app.ai_list.view`（[#1146](https://github.com/YiCheng0608/stock-lab/issues/1146)）：只讀 champion（`role=champion`、目前的 `ai_list_reading.PROMPT_VERSION`）。頁面一直顯示最新一份、一定標名單日期（#1 [7235380964](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7235380964)）；文案在 [UI_COPY_SPEC §10 AI 名單](../UI_COPY_SPEC.md#10-每日候選)，Telegram 的格式在 [SETUP 每日 Telegram 通知](../ops/SETUP.md#每日-telegram-通知)。
+
+- **哪一天**：給 `date`（交易日 D；Telegram 給當天）就是那天，不給時是有紀錄的最新一天。那天有 `done` 就是它（[重跑](#紀錄)：同一天第一個 `done`）。
+- **沒有自己的名單**（那天 `failed`／`rejected`，或那天沒有任何列；1/4 Q1-5 A）：改顯示那天以前最新的 `done` 名單，`failure` 寫那天的狀態、原因與失敗句；一份 `done` 都沒有時 `status=missing`（仍帶 `failure`）。單檔的價位核對不過不走這裡（見下面每檔的 `levels`）。
+- **今天**：`today` 是台北的今天；`is_today` 是名單的 `session_date` 等於今天，不是時頁面加「{MM/DD} 的名單」badge。
+
+| 欄位 | 內容 |
+| --- | --- |
+| `status` | `done`（有名單可顯示，可能是上一份）或 `missing` |
+| `title`、`mark` | 「AI 名單」、「AI 推論，未經驗證」 |
+| `today`、`session_date`、`list_date`、`is_today` | 台北的今天、顯示那份名單的 D 與 T、是否今天的 |
+| `prompt_version`、`llm_model`、`model_alias`、`pool_phase`、`cutoff_at`、`finished_at` | 那一列的值（時間是 UTC、帶時區） |
+| `failure` | null，或 `{session_date, status, reason, reason_text, text}`：沒有自己名單的那天、它的 `status`（沒有列是 `missing`）、`reason`、給人看的原因（`app.ai_list.REASON_TEXT`，對照在 UI_COPY_SPEC §10）與失敗句「今天的 AI 名單沒有產出：{原因}」（那天不是今天時「{MM/DD} 的…」） |
+| `market` | `stance`、`stance_text`、`confidence`、`confidence_text`、`basis`（依序）、`basis_text`（「台指期夜盤＞加權指數＞…」）、`reasons` |
+| `sectors` | 同 [premarket_v1](premarket_ai.md#顯示)：`group_id`、`name`、`direction`、`direction_text`、`reasons` |
+| `picks` | 每檔依 `rank`，見下表 |
+| `empty_reason`、`empty_text` | 空名單時 AI 寫的原因與「今天 AI 沒有列股票：{原因}」 |
+| `data_gaps`、`input_gaps` | AI 寫的資料缺口（文字）；輸入快照標缺漏的事實（`premarket_ai.input_gaps`） |
+
+每檔（`picks[]`）：
+
+| 欄位 | 內容 |
+| --- | --- |
+| `rank`、`symbol`、`exchange`、`name`、`instrument_type`、`on_rule_list` | 名次與股票（名稱讀 `instruments`） |
+| `setup`、`setup_text`、`basis`、`basis_text`、`confidence`、`confidence_text`、`method_text` | 判讀方式與中文名；`method_text` 是「突破 · 技術面＞籌碼 · 把握中」 |
+| `levels_status`、`levels`、`levels_text` | `pass`／`fail`；`levels` 是 `display_levels_json`（全過才有：取整後的 `entry{type,low,high}`、`stop`、`target_1`、`target_2`、`risk_reward`、`valid_sessions`、`valid_until`），核對不過或已過有效期是 null；核對不過時 `levels_text`「價位未通過核對，未顯示」 |
+| `risk_reward`、`valid_sessions`、`valid_until` | 程式算的 RR（核對過才有）、AI 給的有效交易日數與程式換算的最後一天 |
+| `expired`、`expired_text` | 核對過、`valid_until` 早於今天：true 與「價位已過有效期（{N} 個交易日，至 {MM/DD}）」 |
+| `corporate_action_on_session`、`corporate_action_text` | 輸入快照該檔 `level_facts.corporate_action_on_session`；價位照顯示（決定 [7238366814](https://github.com/YiCheng0608/stock-lab/issues/1146#issuecomment-7238366814)），有價位時帶警示句「名單日後有除權息，價位以 {T 的 MM/DD} 收盤為基準，今天的漲跌停與參考價可能不同」 |
+| `entry_condition`、`exit_conditions`、`reasons` | AI 的進場條件（有價位才有）、出場條件與理由（`{text, refs}`，`refs` 的寫法同 premarket_v1） |
+| `level_refs` | 有價位時每個價位的基準：「進場下緣 233.00＝20 日高點（11/26） ＋0.5 倍 ATR」 |
+
+- **Telegram**：第一行「📋 AI 名單 {YYYY/MM/DD}（{星期}）開盤前 · AI 推論，未經驗證」，沿用上一份時前面多一行「今天的 AI 名單沒有產出（{原因}）；以下是 {MM/DD} 的名單」。一份都沒有時只有那一行（或「尚無 AI 名單」），讀名單時出錯寫「AI 名單無法讀取」、日誌記 `--- ai_list unreadable error=<例外型別>`，美股照送。notify 不等名單、不拿名單的鎖。
+- **K 線卡**：今日名單頁選中有價位的檔時畫 AI 價位線（標「AI」）；個股頁照舊畫規則價位線。
+- **verify**：today T30（[features/today.md](../../.claude/skills/verify-stock-lab/features/today.md)）。
+
 ## 限制
 
-- 價位事實換到 T 的基準；T 之後到 D 有除權息時，D 的漲跌停與價位基準不同，只標 `corporate_action_on_session`，核對照 T 的漲跌停。
+- 價位事實換到 T 的基準；T 之後到 D 有除權息時，D 的漲跌停與價位基準不同，只標 `corporate_action_on_session`，核對照 T 的漲跌停；頁面與 Telegram 價位照顯示並加警示（[顯示](#顯示)）。
 - 重放過去的日子（`--date`）時，今日名單、自選、H2 與台指期日盤讀的是現在存的值，同 [premarket_v1 的限制](premarket_ai.md#限制)。
 - 名單日之後的走勢、開盤後檢查與對答案不在本規格。

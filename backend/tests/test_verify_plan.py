@@ -47,7 +47,7 @@ TREE = {
         "import { StockBarsChart } from './stock/StockBarsChart'\n"
         "import { NewsCard } from './news/NewsViews'\n"
         "import { TodayHeader } from './today/TodayViews'\n"
-        "import { PremarketAiSection } from './today/PremarketAiSection'\n"
+        "import { AiListSection } from './today/AiListSection'\n"
         "import { CandidateChart } from './today/CandidateChart'\n"
         "import { MarketPage } from './market/MarketPage'\n"
         "import { MainstreamChart } from './candidates/MainstreamChart'\n"
@@ -118,12 +118,12 @@ TREE = {
         "import { Card } from '../components/ui'\n"
         "import { summaryItems } from '../market/marketOverview'\n"
     ),
-    # Issue 1042: the pre-market AI reading after the lists, mounted by App.tsx.
-    "today/PremarketAiSection.tsx": (
-        "import { AiBadge } from '../news/NewsViews'\n"
-        "import { premarketAiState } from './premarketAi'\n"
+    # Issue 1146: the AI list on the 今日名單 tab, mounted by App.tsx.
+    "today/AiListSection.tsx": (
+        "import { Card } from '../components/ui'\n"
+        "import { aiListHead } from './aiList'\n"
     ),
-    "today/premarketAi.ts": "export const premarketAiState = 1\n",
+    "today/aiList.ts": "export const aiListHead = 1\n",
     # Issue 549: the market page belongs to the today page's features file.
     "market/MarketPage.tsx": "import { MarketOverviewPanel } from './MarketViews'\n",
     "market/MarketViews.tsx": (

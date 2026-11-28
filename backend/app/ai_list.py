@@ -211,7 +211,7 @@ def done_before(
 def failure_text(failed_day: date, today: date, reason: str | None) -> str:
     """「今天的 AI 名單沒有產出：呼叫逾時」 (another day: 「11/27 的 AI 名單…」)."""
 
-    who = "今天" if failed_day == today else short_day(failed_day)
+    who = "今天" if failed_day == today else f"{short_day(failed_day)} "
     return f"{who}的 AI 名單沒有產出：{reason_text(reason)}"
 
 
