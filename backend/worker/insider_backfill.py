@@ -412,7 +412,7 @@ def parse_irb(feed: str, content: bytes, month: date) -> dict[str, Any]:
         code = match.group(1)
         if code in parsed:
             raise LayoutError(f"code {code} is listed twice")
-        if "�" in first:
+        if "\ufffd" in first:
             replaced += 1
         parsed[code] = {
             name: read(cell_text(cell))
