@@ -935,6 +935,9 @@ def run_valuation_backfill(
     try:
         with SessionLocal() as db:
             try:
+                if feeds and TIP_FEED in feeds:
+                    # Before any feed writes: a missing table fails the run whole.
+                    tip_notices.require_table(db)
                 results = []
                 if session_feeds:
                     results.append(

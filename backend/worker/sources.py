@@ -706,6 +706,10 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     "mops.twse.com.tw": 3.0,
     # The old MOPS site serves the quarterly report pages (Issue #529).
     "mopsov.twse.com.tw": 3.0,
+    # Taiwan Index Plus technical notices (Issue #1149): no published limit; the
+    # retries inside fetch_json keep the 3.5 seconds too.
+    "taiwanindex.com.tw": 3.5,
+    "backend.taiwanindex.com.tw": 3.5,
 }
 _host_last_request: dict[str, float] = {}
 # A floor over every official host for this process, set by the backfill

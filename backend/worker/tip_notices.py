@@ -40,7 +40,8 @@ Manifest: one ``ingestion_runs`` row a list year and a notice
 (``valuation_backfill:tip-notices:list:<year>``, ``…:tip-notices:<id>``).  A notice
 already ``success`` is not asked again; one whose file came but did not read is
 read again from its raw without a request, as ``reapply`` does for all of them
-(no request at all).  The raw of each answer is a JSON wrapper of its bytes
+(no request at all); an answer that is not a ``.doc`` or PDF (an error page) is
+not stored and is asked again.  The raw of each answer is a JSON wrapper of its bytes
 (``wrap_body``), as raw files are JSON or zip.  Requests: at least
 ``REQUEST_INTERVAL_SECONDS`` apart on a host, none between ``QUIET_START`` and
 ``QUIET_END`` Taipei nor within ``EVEN_HOUR_MARGIN`` of an even hour (news), and
@@ -56,6 +57,7 @@ import io
 import re
 import struct
 import time
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -412,7 +414,9 @@ _PART = re.compile(
     r"^(?:成[分份]股)?(納入|刪除|剔除|候補名單|候補)(?:成[分份]股)?[：:]?"
 )
 _FREE_FLOAT = re.compile(r"公眾流通量(?:係數)?\s*為\s*([\d.]+)\s*%")
-_CODE = r"\d{4,6}[A-Z]?"
+# A letter after the digits is the code's only when no letter follows it
+# (``3673TPK-KY`` is 3673 and TPK-KY).
+_CODE = r"\d{4,6}(?:[A-Z](?![A-Za-z]))?"
 _CODE_FIRST = re.compile(rf"^({_CODE})\s*(\D.*?)$")
 _NAME_FIRST = re.compile(rf"^(.*?\D)\s*({_CODE})$")
 _MENTIONS_INDEX = re.compile(r"臺灣50|中型100")
@@ -459,7 +463,9 @@ def _effective(flat: str, announced: date, kind: str) -> date | None:
 
 
 def _normalize(text: str) -> list[str]:
-    text = text.replace("　", " ").replace("\xa0", " ").replace("\t", " ")
+    # NFKC: full-width digits, ％, ：, （） and the ideographic space as ASCII.
+    text = unicodedata.normalize("NFKC", text)
+    text = text.replace("\xa0", " ").replace("\t", " ")
     return [line.rstrip() for line in text.splitlines()]
 
 
@@ -490,6 +496,9 @@ def _entry(line: str) -> Entry:
         if not 0 < ratio <= 100:
             raise NoticeError(f"free float {ratio} in {line.strip()!r}")
     rest = _FREE_FLOAT.sub(" ", line)
+    if "流通" in rest or "%" in rest:
+        # A free float written another way: never left in the name, never NULL.
+        raise NoticeError(f"unreadable free float in {line.strip()!r}")
     rest = re.sub(r"[，,、；;]", " ", rest)
     rest = re.sub(r"\s+", " ", rest).strip()
     match = _CODE_FIRST.fullmatch(rest)
@@ -544,9 +553,10 @@ def _sections(lines: list[str]) -> tuple[int, dict[str, dict[str, list[Entry] | 
             if current[action] is not None:
                 raise NoticeError(f"{code} {word} appears twice")
             current[action] = []
-            # What follows the heading on its line (``成分股刪除：無``).
+            # What follows the heading on its line (``成分股刪除：無``, or
+            # ``成分股候補名單 1101 丙泥`` without a colon).
             colon = re.search(r"[：:]", line)
-            content = line[colon.end() :] if colon else ""
+            content = line[colon.end() :] if colon else flat[part.end() :]
             if not content.strip():
                 continue
         if action is None:
@@ -601,6 +611,10 @@ def parse_notice(text: str, kind: str, site_date: date) -> ParsedNotice:
         return ParsedNotice(announced, effective, {}, deferred)
     sections: dict[str, dict[str, list[Entry]]] = {}
     for code, parts in found.items():
+        if all(entries is None for entries in parts.values()):
+            raise NoticeError(
+                f"{code} has a heading but no part: left for manual reading"
+            )
         if kind == "periodic" and (parts["add"] is None or parts["delete"] is None):
             raise NoticeError(f"{code} has no additions or deletions part")
         adds, deletes = parts["add"] or [], parts["delete"] or []
@@ -862,8 +876,28 @@ def _empty_counts() -> dict[str, Any]:
     }
 
 
-def _list_is_final(raw: RawPayload, year: int) -> bool:
-    return _taipei(raw.collected_at).date() > date(year, 12, 31)
+def _naive_utc(moment: datetime) -> datetime:
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _list_is_final(fetched: datetime, year: int) -> bool:
+    """Whether a list fetched at ``fetched`` (UTC) was taken after its year ended."""
+
+    return _taipei(fetched).date() > date(year, 12, 31)
+
+
+def _fetched_at(run: IngestionRun, raw: RawPayload) -> datetime:
+    # When this run fetched the list: the raw row keeps the first capture's time
+    # when the answer is the same (pipeline._upsert_raw_payload).
+    stored = (run.metadata_json or {}).get("fetched_at")
+    return datetime.fromisoformat(stored) if stored else raw.collected_at
+
+
+def require_table(db: Session) -> None:
+    if not inspect(db.get_bind()).has_table(IndexConstituentChange.__tablename__):
+        raise ValueError("index_constituent_changes is missing: run init-db first")
 
 
 def backfill(
@@ -879,8 +913,7 @@ def backfill(
 ) -> dict[str, Any]:
     if end < start:
         raise ValueError("--end is before --start")
-    if not inspect(db.get_bind()).has_table(IndexConstituentChange.__tablename__):
-        raise ValueError("index_constituent_changes is missing: run init-db first")
+    require_table(db)
     started = time.monotonic()
     pacer = Pacer(now, sleep, monotonic)
     counts = _empty_counts()
@@ -921,11 +954,12 @@ def backfill(
         stored = (run.metadata_json or {}).get("raw_payload_id")
         raw = db.get(RawPayload, stored) if stored else None
         url = LIST_URL.format(year=year)
+        fetched = _fetched_at(run, raw) if raw is not None else None
         try:
             if reapply or (
                 run.status == "success"
-                and raw is not None
-                and _list_is_final(raw, year)
+                and fetched is not None
+                and _list_is_final(fetched, year)
             ):
                 if raw is None:
                     counts["list_not_answered"] += 1
@@ -938,6 +972,7 @@ def backfill(
             else:
                 counts["list_requested"] += 1
                 raw = None
+                fetched = _naive_utc(now())
                 body = request(url)
                 captured = sources.capture_payload(
                     RAW_SOURCE, url, wrap_body(url, body), str(year)
@@ -962,7 +997,11 @@ def backfill(
         run.error = None
         run.records = len(listed)
         run.finished_at = utcnow()
-        run.metadata_json = {"raw_payload_id": raw.id, "rows": len(listed)}
+        run.metadata_json = {
+            "raw_payload_id": raw.id,
+            "rows": len(listed),
+            "fetched_at": (fetched or raw.collected_at).isoformat(),
+        }
         db.commit()
         for notice in listed:
             counts["listed"] += 1
@@ -1002,6 +1041,12 @@ def backfill(
                 counts["requested"] += 1
                 url = FILE_URL.format(id=notice.doc_id)
                 body = request(url)
+                if not body.startswith((OLE_MAGIC, b"%PDF")):
+                    # An error page with a 200: not stored, asked again next run.
+                    failures_in_a_row[urlsplit(url).hostname or ""] += 1
+                    raise NoticeError(
+                        f"the answer is not a .doc or PDF file: {body[:8]!r}"
+                    )
                 captured = sources.capture_payload(
                     RAW_SOURCE, url, wrap_body(url, body), notice.site_date.isoformat()
                 )

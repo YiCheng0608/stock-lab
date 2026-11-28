@@ -649,15 +649,15 @@ docker run -d --name research-valuation "${R[@]}" -v stock-lab_stock-data:/prod:
 
 **feed**：`valuation backfill --feed tip-notices`（[`worker.tip_notices`](../../backend/worker/tip_notices.py)；只在指名時跑，不加 `--feed` 的四個逐交易日 feed 不含它）。它讀年清單與每份公告，不是逐交易日的 JSON 表，所以另開模組，間隔、等待時段、manifest 與 raw 讀法沿用 [`valuation_backfill`](#股價淨值比與發行股數1075)。
 
-1. 每年 1 頁中文清單（`--start` 的年份起，最早 2002；`--end` 的年份止），1 個請求。清單在那年結束後抓的就不再請求，當年的每次都再請求。
+1. 每年 1 頁中文清單（`--start` 的年份起，最早 2002；`--end` 的年份止），1 個請求。清單在那年結束後抓的就不再請求，當年的每次都再請求（看 manifest 記的這次抓取時間 `fetched_at`，不看 raw 列的時間：內容相同時 raw 列沿用第一次的）。
 2. 依標題挑出定審與臨時公告，網站檔案日期在 `--start`～`--end` 的才下載：每份 `/tw` 檔 1 個請求。
 3. `.doc`（`olefile`＋自己解 piece table）或 PDF（`pypdf` layout 模式）抽文字，只寫臺灣50、中型100 兩段。
 
-- **manifest**：每年清單一列、每份公告一列 `ingestion_runs`（`run_type=valuation_backfill_day`、`request_key=valuation_backfill:tip-notices:list:<年>`／`valuation_backfill:tip-notices:<id>`）；公告的 `metadata_json` 記 raw id、標題、類別、`kind`、格式、公告日、生效日與計數，失敗時記 `error`。`success` 的公告重跑不再請求（`done_before`）；請求失敗的重跑會再請求；檔案拿到了、讀不懂而失敗的，重跑改讀已存的 raw、不送請求（`reapplied`），留給人工判讀或修 parser。`--reapply` 完全不送請求，清單與公告都讀已存的 raw 重寫，沒有差異時 `changed 0`；沒有 raw 的計 `not_answered`。
+- **manifest**：每年清單一列、每份公告一列 `ingestion_runs`（`run_type=valuation_backfill_day`、`request_key=valuation_backfill:tip-notices:list:<年>`／`valuation_backfill:tip-notices:<id>`）；公告的 `metadata_json` 記 raw id、標題、類別、`kind`、格式、公告日、生效日與計數，失敗時記 `error`。`success` 的公告重跑不再請求（`done_before`）；請求失敗的重跑會再請求（回 200 但不是 `.doc`／PDF 的也是，例如錯誤頁：不存 raw）；檔案拿到了、讀不懂而失敗的，重跑改讀已存的 raw、不送請求（`reapplied`），留給人工判讀或修 parser。`--reapply` 完全不送請求，清單與公告都讀已存的 raw 重寫，沒有差異時 `changed 0`；沒有 raw 的計 `not_answered`。
 - **raw**：`raw/tip/<抓取日>/<sha256>.json`，內容是 JSON 包著回應原文的 base64（`url`、`bytes`、`sha256`、`base64`），讀回時比對 SHA-256。
 - **寫入**：一份公告一個 commit，整份寫入或整份不寫；同一份公告重讀時以 `source_doc_id` 對齊，多的刪、少的補、變的改。`instrument_id` 是公告日（休市時取之前 14 天內最後一個交易日）有這個代號上市日線的標的，沒有就留空、計 `unmatched`（列數；代號列在 `unmatched_codes`），不建標的。
-- **請求規則**：同一 host 間隔至少 3.5 秒（`taiwanindex.com.tw` 與 `backend.taiwanindex.com.tw` 各算）；台北 21:15～23:30 與偶數整點前後 10 分鐘（news）不送，程序等到窗口結束再送；同一 host 連續 5 個請求失敗就停（`aborted`、`partial`）。只在有 `research-db.json` 的 DB 跑，否則 `refused`、exit 2；持有維護模式。
-- **輸出**：`feeds.tip-notices` 記清單（`list_*`）、`listed`、`picked`（`periodic`、`ad_hoc`）、`requested`、`reapplied`、`success`、`without_rows`（臨時公告沒提到這兩個指數）、`failed` 與 `failed_notices`（id、網站日期、`kind`、原因）、列數與 `unmatched`、`formats`（`doc`／`pdf` 份數）、`waited_seconds`。
+- **請求規則**：同一 host 間隔至少 3.5 秒（`taiwanindex.com.tw` 與 `backend.taiwanindex.com.tw` 各算；兩者也在 `sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS`，`fetch_json` 對 429／5xx／傳輸錯誤的內部重試一樣隔 3.5 秒）；台北 21:15～23:30 與偶數整點前後 10 分鐘（news）不送，程序等到窗口結束再送；同一 host 連續 5 個請求失敗就停（`aborted`、`partial`）。只在有 `research-db.json` 的 DB 跑，否則 `refused`、exit 2；持有維護模式。
+- **輸出**：`requests` 是送出請求的次數，`fetch_json` 內部的重試（每次最多再 2 次）另計、不在數字裡。`feeds.tip-notices` 記清單（`list_*`）、`listed`、`picked`（`periodic`、`ad_hoc`）、`requested`、`reapplied`、`success`、`without_rows`（臨時公告沒提到這兩個指數）、`failed` 與 `failed_notices`（id、網站日期、`kind`、原因）、列數與 `unmatched`、`formats`（`doc`／`pdf` 份數）、`waited_seconds`。
 
 **跑法**：
 
@@ -669,7 +669,7 @@ docker run -d --name research-1149-tip "${R[@]}" "$IMG" \
 # 修好 parser 後：先 --reapply（0 個請求）讀已存的 raw，再不加 --reapply 跑一次，只重問請求失敗的公告
 ```
 
-估約 290 個請求（清單 25、定審 95、臨時 169）、約 20 分鐘加上等待，raw 約 25～35 MB，約 3,000 列。回補後的實測、覆蓋與留給人工判讀的公告記在 [#1149](https://github.com/YiCheng0608/stock-lab/issues/1149)。
+估約 290 個請求（清單 25、定審 95、臨時 169）、約 20 分鐘加上等待；raw 與列數的估計見 [DATA_SOURCES](../DATA_SOURCES.md#臺灣50臺灣中型100-成分股調整)「全歷史的量」。回補後的實測、覆蓋與留給人工判讀的公告記在 [#1149](https://github.com/YiCheng0608/stock-lab/issues/1149)。
 
 **已知限制**：
 

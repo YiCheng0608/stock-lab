@@ -419,6 +419,51 @@ def test_an_ad_hoc_change_must_balance_unless_deferred():
         tn.parse_notice(text, "ad_hoc", date(2024, 5, 2))
 
 
+def test_full_width_digits_and_percent_read_as_ascii():
+    text = WESTERN_REVIEW.replace(
+        "壬科 2492 公眾流通量為100.000000000000%", "壬科 ２４９２ 公眾流通量為１００％"
+    )
+    parsed = tn.parse_notice(text, "periodic", date(2018, 6, 1))
+    assert entries(parsed, "TW50", "add") == [("2492", "壬科", 100.0)]
+
+
+@pytest.mark.parametrize(
+    "written", ["公眾流通量係數：75%", "流通量為75%", "公眾流通量為 七成"]
+)
+def test_a_free_float_written_another_way_fails_instead_of_null(written):
+    text = WESTERN_REVIEW.replace("公眾流通量為100.000000000000%", written)
+    with pytest.raises(tn.NoticeError, match="unreadable"):
+        tn.parse_notice(text, "periodic", date(2018, 6, 1))
+
+
+def test_a_part_heading_without_a_colon_keeps_the_code_on_its_line():
+    text = ROC_REVIEW.replace(
+        "成分股候補名單：\n        1101 甲泥", "成分股候補名單 1101 甲泥"
+    )
+    parsed = tn.parse_notice(text, "periodic", date(2008, 7, 10))
+    assert [e[0] for e in entries(parsed, "TW50", "reserve")] == ["1101", "2603"]
+
+
+def test_an_ad_hoc_section_without_any_part_is_left_for_manual_reading():
+    text = """技術通知
+2019年3月4日
+甲公司股數變動，自2019年3月11日起生效。
+一、臺灣中型100指數
+二、臺灣高股息指數
+"""
+    with pytest.raises(tn.NoticeError, match="no part: left for manual reading"):
+        tn.parse_notice(text, "ad_hoc", date(2019, 3, 4))
+
+
+def test_a_letter_after_the_code_belongs_to_the_name_when_letters_follow():
+    text = WESTERN_REVIEW.replace("子銀-KY  6541", "6541TPK-KY")
+    parsed = tn.parse_notice(text, "periodic", date(2018, 6, 1))
+    assert entries(parsed, "TW50", "reserve") == [("6541", "TPK-KY", 33.449629575852)]
+    text = WESTERN_REVIEW.replace("子銀-KY  6541", "2881A 甲金特")
+    parsed = tn.parse_notice(text, "periodic", date(2018, 6, 1))
+    assert entries(parsed, "TW50", "reserve")[0][:2] == ("2881A", "甲金特")
+
+
 # --- titles and the list ---------------------------------------------------------------------
 
 
@@ -773,10 +818,46 @@ def test_a_code_without_a_twse_bar_is_unmatched_not_created(factory):
 
 
 def test_the_current_years_list_is_asked_again():
-    raw = RawPayload(collected_at=datetime(2018, 12, 31, 15, 59))
-    assert not tn._list_is_final(raw, 2018)  # 23:59 Taipei
-    raw.collected_at = datetime(2018, 12, 31, 16, 0)
-    assert tn._list_is_final(raw, 2018)
+    assert not tn._list_is_final(datetime(2018, 12, 31, 15, 59), 2018)  # 23:59 Taipei
+    assert tn._list_is_final(datetime(2018, 12, 31, 16, 0), 2018)
+
+
+def test_a_list_is_final_by_when_it_was_fetched_not_by_its_raw(factory):
+    # The same answer fetched again after the year: the raw row keeps the first
+    # capture's time (pipeline._upsert_raw_payload), the manifest this fetch's.
+    run(factory, Site())
+    with factory() as db:
+        list_run = db.scalar(
+            select(IngestionRun).where(
+                IngestionRun.request_key == "valuation_backfill:tip-notices:list:2018"
+            )
+        )
+        assert list_run.metadata_json["fetched_at"] == NOON.isoformat()
+        raw = db.get(RawPayload, list_run.metadata_json["raw_payload_id"])
+        raw.collected_at = datetime(2018, 12, 1, 3, 0)
+        db.commit()
+        assert tn._fetched_at(list_run, raw) == NOON
+    again = Site()
+    assert run(factory, again)["feeds"]["tip-notices"]["list_done_before"] == 1
+    assert tn.LIST_URL.format(year=2018) not in again.calls
+
+
+def test_a_200_answer_that_is_not_a_file_is_not_stored_and_asked_again(factory):
+    page = b"<!doctype html><title>error</title>"
+    site = Site({tn.FILE_URL.format(id=247): page})
+    counts = run(factory, site)["feeds"]["tip-notices"]
+    failed = {f["id"]: f["error"] for f in counts["failed_notices"]}
+    assert "not a .doc or PDF" in failed["247"]
+    with factory() as db:
+        notice_run = db.scalar(
+            select(IngestionRun).where(
+                IngestionRun.request_key == "valuation_backfill:tip-notices:247"
+            )
+        )
+        assert "raw_payload_id" not in notice_run.metadata_json
+    again = Site()
+    run(factory, again)
+    assert again.calls == [tn.FILE_URL.format(id=247)]
 
 
 def test_a_failed_request_is_asked_again_and_five_in_a_row_stop_the_run(factory):
@@ -852,6 +933,49 @@ def test_a_request_in_the_even_hour_waits(factory):
     assert slept[0] == 15 * 60
 
 
+def test_a_retry_inside_fetch_json_keeps_three_and_a_half_seconds(monkeypatch):
+    import httpx
+
+    clock = [500.0]
+    sent: list[float] = []
+    url = tn.FILE_URL.format(id=247)
+
+    def sleep(seconds):
+        clock[0] += seconds
+
+    def get(target, **_kwargs):
+        sent.append(clock[0])
+        request = httpx.Request("GET", target)
+        if len(sent) == 1:
+            return httpx.Response(503, request=request)
+        return httpx.Response(200, content=b"%PDF-1.4 x", request=request)
+
+    monkeypatch.setattr(sources.time, "sleep", sleep)
+    monkeypatch.setattr(sources.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(sources.httpx, "get", get)
+    monkeypatch.setattr(sources, "_host_last_request", {})
+    assert tn.fetch_file(url) == b"%PDF-1.4 x"
+    assert len(sent) == 2 and sent[1] - sent[0] >= tn.REQUEST_INTERVAL_SECONDS
+    assert sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS["taiwanindex.com.tw"] == 3.5
+
+
+def test_a_missing_table_fails_before_the_session_feeds_write(monkeypatch):
+    def missing(_db):
+        raise ValueError("index_constituent_changes is missing: run init-db first")
+
+    monkeypatch.setattr(tn, "require_table", missing)
+    monkeypatch.setattr(
+        vb, "backfill", lambda *a, **k: pytest.fail("a session feed ran first")
+    )
+    result = vb.run_valuation_backfill(
+        "2018-01-01", "2018-12-31", feeds=["twse-pb", "tip-notices"]
+    )
+    assert result == {
+        "status": "failed",
+        "error": "index_constituent_changes is missing: run init-db first",
+    }
+
+
 def test_the_table_must_exist(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'empty.db'}")
     with sessionmaker(bind=engine)() as db, pytest.raises(ValueError, match="init-db"):
@@ -896,6 +1020,7 @@ def test_tip_notices_is_a_feed_of_valuation_backfill_run_only_when_named(monkeyp
             "duration_seconds": 2.0,
         },
     )
+    monkeypatch.setattr(tn, "require_table", lambda _db: None)
     vb.run_valuation_backfill("2018-01-01", "2018-12-31")
     assert calls == [("sessions", list(vb.FEEDS))]
     calls.clear()
