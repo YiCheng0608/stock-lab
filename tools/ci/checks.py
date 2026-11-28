@@ -87,6 +87,11 @@ BACKEND_IMAGE_FILES: frozenset[str] = frozenset({".dockerignore"})
 COMPOSE_FILES: frozenset[str] = frozenset(
     {"docker-compose.yml", "docker-compose.dev.yml"}
 )
+# Markdown inside backend/ that the worker reads at run time: the LLM prompts, each pinned by
+# SHA-256 in a backend test (test_premarket_ai, test_ai_list, …). Editing a prompt without a
+# new version must fail CI, not the next scheduled call (PR #1151 review), so a change to
+# one alone sets python even though it is markdown.
+BACKEND_MARKDOWN_DIRS: tuple[str, ...] = ("backend/worker/prompts/",)
 
 
 # Every Python file under backend/ and tools/, not only the changed ones, with the root ruff.toml.
@@ -103,7 +108,10 @@ def change_flags(paths: list[str]) -> dict[str, bool]:
     return {
         "python": shared
         or any(
-            p in BACKEND_READ_FILES or p in BACKEND_IMAGE_FILES or p in COMPOSE_FILES
+            p in BACKEND_READ_FILES
+            or p in BACKEND_IMAGE_FILES
+            or p in COMPOSE_FILES
+            or p.startswith(BACKEND_MARKDOWN_DIRS)
             for p in paths
         )
         or any(
