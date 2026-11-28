@@ -889,6 +889,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0042_quarterly_statements', CURRENT_TIMESTAMP)"
         )
     )
+    # 0052 only adds index_constituent_changes (#1149), made by create_all with
+    # its indexes; only the research database writes it.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0052_index_constituent_changes', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

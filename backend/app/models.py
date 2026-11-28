@@ -495,6 +495,59 @@ class SharesOutstandingDaily(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class IndexConstituentChange(Base):
+    """One addition, deletion or reserve of 臺灣50 or 臺灣中型100 (Issue #1149).
+
+    As a Taiwan Index Plus technical notice (技術通知) writes it, a periodic review or
+    an ad hoc change: no whole constituent list is published, only the changes.
+    ``announced_date`` is the date in the text, ``site_file_date`` the one the site
+    lists (a day later for some); the research tools use a notice from the session
+    after the later of the two.  ``effective_date`` is as written (a holiday is kept;
+    NULL when deferred).  ``instrument_id`` is NULL when the research database has
+    no TWSE instrument with a bar of that code.  Only the research database is
+    written; the production one has the empty table.
+    """
+
+    __tablename__ = "index_constituent_changes"
+    __table_args__ = (
+        UniqueConstraint(
+            "index_code",
+            "symbol",
+            "action",
+            "announced_date",
+            "source_doc_id",
+            name="uq_index_constituent_changes",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # TW50 / TWMC100.
+    index_code: Mapped[str] = mapped_column(String(20))
+    symbol: Mapped[str] = mapped_column(String(30))
+    instrument_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instruments.id"), nullable=True, index=True
+    )
+    name_in_source: Mapped[str] = mapped_column(String(80))
+    # add / delete / reserve.
+    action: Mapped[str] = mapped_column(String(10))
+    # periodic / ad_hoc.
+    review_kind: Mapped[str] = mapped_column(String(10))
+    announced_date: Mapped[date] = mapped_column(Date, index=True)
+    site_file_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Not published: NULL.
+    announced_time: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    free_float_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    # The TechnicalNotices id of the file.
+    source_doc_id: Mapped[str] = mapped_column(String(20), index=True)
+    data_as_of: Mapped[date] = mapped_column(Date)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

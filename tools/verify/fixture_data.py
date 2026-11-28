@@ -2680,6 +2680,7 @@ OMITTED_TABLES: dict[str, str] = {
         "台指期夜盤（#1040）只給早盤判讀讀；五頁的 API 不讀，"
         "由後端 test_futures_night 驗"
     ),
+    "index_constituent_changes": "同 valuation_daily（#1149 臺灣50、中型100 成分股調整）",
     "premarket_ai_scores": "對答案表（#1043 寫入）；今日名單頁的早盤 AI 判讀不讀它",
     "quarterly_statements": (
         "季度資產負債表與現金流量表（#1083）：正式 DB 只建空表、只有研究 DB 寫入，"

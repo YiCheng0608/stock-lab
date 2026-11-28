@@ -69,7 +69,7 @@ from .quarterly_fundamentals import (
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
 from .quarterly_statements import run_check_fetch, run_statements_apply
-from .valuation_backfill import FEEDS as VALUATION_FEEDS
+from .valuation_backfill import FEED_CHOICES as VALUATION_FEEDS
 from .valuation_backfill import run_valuation_backfill
 from .schedule_runs import (
     LOCK_SKIP_REASON,
@@ -700,7 +700,7 @@ def main() -> None:
     )
     valuation_parser = subparsers.add_parser(
         "valuation",
-        help="研究 DB 的股價淨值比與發行股數（#1075）：TWSE BWIBBU_d／MI_QFIIS、TPEx peQryDate、已存的上櫃行情表",
+        help="研究 DB 的股價淨值比、發行股數（#1075）與臺灣50／中型100 成分股調整（#1149）：TWSE BWIBBU_d／MI_QFIIS、TPEx peQryDate、已存的上櫃行情表、TIP 技術通知",
     )
     valuation_subparsers = valuation_parser.add_subparsers(
         dest="valuation_command", required=True
@@ -715,7 +715,7 @@ def main() -> None:
         "--feed",
         action="append",
         choices=sorted(VALUATION_FEEDS),
-        help="只跑這個 feed（可重複）；預設四個都跑",
+        help="只跑這個 feed（可重複）；預設跑四個逐交易日的 feed，tip-notices（TIP 技術通知）只在指名時跑",
     )
     valuation_backfill_parser.add_argument(
         "--reapply",
