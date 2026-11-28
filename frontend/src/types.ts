@@ -1890,36 +1890,69 @@ export type X4Response = {
   recent_picks?: StrategyRecentPicks | null
 }
 
-// GET /api/premarket-ai (#1042, docs/spec/premarket_ai.md#顯示): the pre-market AI reading (inference) of a list.
-export type PremarketAiRef = { ref: string; kind: 'news' | 'us' | 'tx' | 'taiex' | 'stock' | 'other' | string; label: string | null; news_id?: number }
-export type PremarketAiReason = { text: string; refs: PremarketAiRef[] }
-export type PremarketAiStock = {
+// GET /api/ai-list (#1146, docs/spec/ai_list.md#顯示): the AI list (inference, not verified) of a session, or the latest.
+export type AiListRef = { ref: string; kind: 'news' | 'us' | 'tx' | 'taiex' | 'stock' | 'other' | string; label: string | null; news_id?: number }
+export type AiListReason = { text: string; refs: AiListRef[] }
+// The rounded levels that passed every check (display_levels_json).
+export type AiListLevels = {
+  entry: { type: 'breakout' | 'pullback' | string; low: number; high: number }
+  stop: number
+  target_1: number
+  target_2: number | null
+  risk_reward: number | null
+  valid_sessions: number
+  valid_until: string | null
+}
+export type AiListPick = {
+  rank: number
   symbol: string
   exchange: string | null
   name: string | null
-  on_today_list: boolean
-  action: 'keep' | 'reprice' | 'defer' | string
-  action_text: string
-  reprice_rule: { max_gap_pct: number; max_gap_down_pct: number; min_risk_reward: number } | null
-  reprice_text: string | null
-  reasons: PremarketAiReason[]
-  // Only on a today-list stock (3a): the rule's levels; any other stock has no price at all.
-  rank?: number | null
-  levels?: (CandidateLevels & { rank?: number; strategy?: string }) | null
+  instrument_type: string | null
+  on_rule_list: boolean
+  setup: string
+  setup_text: string
+  basis: string[]
+  basis_text: string
+  confidence: string
+  confidence_text: string
+  method_text: string
+  levels_status: 'pass' | 'fail' | string
+  // null when the levels failed a check (levels_text says so) or are past their validity (expired_text).
+  levels: AiListLevels | null
+  levels_text: string | null
+  risk_reward: number | null
+  valid_sessions: number
+  valid_until: string | null
+  expired: boolean
+  expired_text: string | null
+  corporate_action_on_session: boolean
+  corporate_action_text: string | null
+  entry_condition: string | null
+  exit_conditions: AiListReason[]
+  reasons: AiListReason[]
+  level_refs: string[]
 }
-export type PremarketAiResponse = {
-  status: 'done' | 'failed' | 'rejected' | 'missing' | string
+export type AiListFailure = { session_date: string; status: string; reason: string | null; reason_text: string; text: string }
+export type AiListResponse = {
+  status: 'done' | 'missing' | string
+  title: string
+  mark: string
+  today: string
   session_date: string | null
   list_date: string | null
+  is_today: boolean
   prompt_version: string
   llm_model: string | null
-  cutoff_at?: string | null
-  finished_at?: string | null
-  reason: string | null
-  reason_text: string | null
-  market: { stance: string; stance_text: string; confidence: string; confidence_text: string; reasons: PremarketAiReason[] } | null
-  sectors: { group_id: string; name: string; direction: string; direction_text: string; reasons: PremarketAiReason[] }[]
-  stocks: PremarketAiStock[]
+  finished_at: string | null
+  // The latest day had no list of its own: the list shown is the one before it.
+  failure: AiListFailure | null
+  missing_text: string | null
+  market: { stance: string; stance_text: string; confidence: string; confidence_text: string; basis: string[]; basis_text: string; reasons: AiListReason[] } | null
+  sectors: { group_id: string; name: string; direction: string; direction_text: string; reasons: AiListReason[] }[]
+  picks: AiListPick[]
+  empty_reason: string | null
+  empty_text: string | null
   data_gaps: string[]
   input_gaps: string[]
 }

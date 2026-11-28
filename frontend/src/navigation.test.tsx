@@ -163,7 +163,9 @@ homeClient.setQueryData(['theme-board', 'industry', TODAY_BOARD_LIMIT], industry
 homeClient.setQueryData(['candidates', 'latest'], listResponse())
 const TodayPage = AppModule.TodayPage as () => ReactElement
 const home = render('/', <TodayPage />, homeClient)
-check(home.includes('id="candidates-title">今日名單</h2>'), '首頁名單標題是「今日名單」')
+// #1146: the 今日名單 tab opens on the AI list; the rule list is folded under it, closed.
+check(home.includes('id="ai-list-title">') && home.indexOf('id="ai-list-title"') < home.indexOf('<details class="rule-list-fold">'), '首頁「今日名單」分頁先放 AI 名單，規則名單收合在下面')
+check(home.includes('id="candidates-title">規則名單</h2>') && home.includes('<summary>規則名單（背景計算，對答案用的基準） '), '收合區的標題是「規則名單」並寫檔數')
 // Issue 549: one market line linking to /market sits above the list; the four-widget overview moved there.
 check(home.includes('class="market-summary"') && home.includes('href="/market"') && !home.includes('market-overview-grid'), '首頁大盤只留一行摘要，連到 /market')
 check(home.indexOf('class="market-summary"') < home.indexOf('id="candidates-title"'), '大盤摘要在今日名單之前')

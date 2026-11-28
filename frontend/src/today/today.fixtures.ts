@@ -1,4 +1,4 @@
-import type { ActionSummary, MarketOverview, MarketOverviewExchange, PremarketAiResponse } from '../types'
+import type { ActionSummary, AiListPick, AiListResponse, MarketOverview, MarketOverviewExchange } from '../types'
 
 // dashboard.market_overview shapes (#275) with the 2026-10-22 values checked in the #269 design (§4).
 
@@ -63,34 +63,39 @@ export const riskActions = (): ActionSummary[] => [
   action('2412', '中華電', 'reduce_exit', { held: true }),
 ]
 
-// GET /api/premarket-ai (#1042): a done reading with a today-list stock (rule levels) and a pool stock (no price).
-export function premarketAiDone(): PremarketAiResponse {
+// GET /api/ai-list (#1146): today's done list with a breakout (corporate action after the list date), a pullback and
+// a pick whose levels failed the check; the values of #1142 3/4's sketch.
+const aiReason = (text: string, refs: AiListResponse['picks'][number]['reasons'][number]['refs'] = []) => ({ text, refs })
+export function aiPick(rank: number, overrides: Partial<AiListPick> = {}): AiListPick {
   return {
-    status: 'done', session_date: '2026-11-30', list_date: '2026-11-27', prompt_version: 'premarket_v1', llm_model: 'claude-sonnet-5-5',
-    cutoff_at: '2026-11-30T00:15:00+00:00', finished_at: '2026-11-30T00:24:00+00:00', reason: null, reason_text: null,
-    market: { stance: 'bullish', stance_text: '偏多', confidence: 'medium', confidence_text: '把握中', reasons: [{ text: '根據美股四大指數收高，推論台股開盤偏多', refs: [{ ref: 'us:SPX', kind: 'us', label: '美股 S&P 500' }, { ref: 'tx:night', kind: 'tx', label: '台指期夜盤' }] }] },
-    sectors: [{ group_id: 'industry:24', name: '半導體', direction: 'positive', direction_text: '可能正向', reasons: [{ text: '根據隔夜新聞，推論半導體族群可能正向', refs: [{ ref: 'news:777', kind: 'news', news_id: 777, label: '美股收高 費半大漲' }] }] }],
-    stocks: [
-      {
-        symbol: '1101', exchange: 'TWSE', name: '台泥', on_today_list: true, action: 'reprice', action_text: '依開盤價重算',
-        reprice_rule: { max_gap_pct: 0.05, max_gap_down_pct: 0.03, min_risk_reward: 1.5 }, reprice_text: '開盤漲幅逾 5.0%、跌幅逾 3.0%或重算後 RR 低於 1.5 倍即暫緩',
-        reasons: [{ text: '根據台泥擴產新聞，推論開盤可能跳空', refs: [{ ref: 'news:501', kind: 'news', news_id: 501, label: '台泥擴產' }, { ref: 'stock:1101:chips', kind: 'stock', label: '1101 籌碼' }, { ref: 'weird', kind: 'other', label: null }] }],
-        rank: 1,
-        levels: { rank: 1, entry_type: 'breakout', entry: 101, entry_zone: { low: 101, high: 101 }, invalid_price: 98, target_1: 103.2, target_2: null, risk_reward: 0.73, earliest_execution_date: '2026-11-30' },
-      },
-      {
-        symbol: '2330', exchange: 'TWSE', name: '台積電', on_today_list: false, action: 'defer', action_text: '暫緩', reprice_rule: null, reprice_text: null,
-        reasons: [{ text: '根據台指期夜盤缺資料，推論族群方向不明，暫緩判讀', refs: [{ ref: 'tx:night', kind: 'tx', label: '台指期夜盤' }] }],
-      },
-    ],
-    data_gaps: ['台指期夜盤沒有資料，大盤判讀信心降低'],
-    input_gaps: ['台指期夜盤無資料', '2330 台積電 名單日無日線'],
+    rank, symbol: '1477', exchange: 'TWSE', name: '聚陽', instrument_type: 'stock', on_rule_list: true,
+    setup: 'breakout', setup_text: '突破', basis: ['technical', 'chips'], basis_text: '技術面＞籌碼', confidence: 'medium', confidence_text: '把握中',
+    method_text: '突破 · 技術面＞籌碼 · 把握中', levels_status: 'pass',
+    levels: { entry: { type: 'breakout', low: 233, high: 236.5 }, stop: 226, target_1: 243.5, target_2: 254.5, risk_reward: 1.5, valid_sessions: 3, valid_until: '2026-12-02' },
+    levels_text: null, risk_reward: 1.5, valid_sessions: 3, valid_until: '2026-12-02', expired: false, expired_text: null,
+    corporate_action_on_session: false, corporate_action_text: null, entry_condition: '若站上 20 日高點',
+    exit_conditions: [aiReason('若外資與投信轉為連續賣超')],
+    reasons: [aiReason('根據收盤 233 創 20 日與 60 日新高、量比 1.39，推論突破格局成形', [{ ref: 'news:501', kind: 'news', news_id: 501, label: '聚陽接單暢旺' }, { ref: 'stock:1477:chips', kind: 'stock', label: '1477 籌碼' }])],
+    level_refs: ['進場下緣 233.00＝20 日高點（11/26）'],
+    ...overrides,
   }
 }
-
-export function premarketAiNotDone(status: 'failed' | 'rejected' | 'missing', reasonText: string | null = null): PremarketAiResponse {
+export function aiListDone(overrides: Partial<AiListResponse> = {}): AiListResponse {
   return {
-    status, session_date: status === 'missing' ? null : '2026-11-30', list_date: '2026-11-27', prompt_version: 'premarket_v1', llm_model: null,
-    reason: reasonText ? 'timeout' : null, reason_text: reasonText, market: null, sectors: [], stocks: [], data_gaps: [], input_gaps: [],
+    status: 'done', title: 'AI 名單', mark: 'AI 推論，未經驗證', today: '2026-11-27', session_date: '2026-11-27', list_date: '2026-11-26', is_today: true,
+    prompt_version: 'ai_list_v1', llm_model: 'claude-sonnet-5-5', finished_at: '2026-11-27T00:22:00+00:00', failure: null, missing_text: null,
+    market: { stance: 'neutral', stance_text: '中性', confidence: 'low', confidence_text: '把握低', basis: ['tx_night', 'taiex', 'news', 'us'], basis_text: '台指期夜盤＞加權指數＞隔夜消息＞美股', reasons: [aiReason('根據台指期夜盤收 39492、與結算價持平，推論開盤缺乏方向訊號', [{ ref: 'tx:night', kind: 'tx', label: '台指期夜盤' }])] },
+    sectors: [{ group_id: 'industry:28', name: 'PCB', direction: 'positive', direction_text: '可能正向', reasons: [] }],
+    picks: [
+      aiPick(1, { corporate_action_on_session: true, corporate_action_text: '名單日後有除權息，價位以 11/26 收盤為基準，今天的漲跌停與參考價可能不同' }),
+      aiPick(2, {
+        symbol: '2618', name: '長榮航', setup: 'pullback_support', setup_text: '回檔到支撐', method_text: '回檔到支撐 · 技術面＞籌碼 · 把握中', on_rule_list: false,
+        levels: { entry: { type: 'pullback', low: 44.4, high: 46.05 }, stop: 42, target_1: 48.95, target_2: 50.15, risk_reward: 1.2, valid_sessions: 4, valid_until: '2026-12-03' },
+        level_refs: [],
+      }),
+      aiPick(3, { symbol: '9999', name: '範例', levels_status: 'fail', levels: null, levels_text: '價位未通過核對，未顯示', risk_reward: null, entry_condition: null, level_refs: [] }),
+    ],
+    empty_reason: null, empty_text: null, data_gaps: ['台指期日盤沒有資料'], input_gaps: ['美股 費半 非最新'],
+    ...overrides,
   }
 }

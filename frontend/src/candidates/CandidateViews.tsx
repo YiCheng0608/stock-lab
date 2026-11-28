@@ -525,7 +525,8 @@ export function TodayCandidateList({ items, renderChart, wide = false, initialCh
   )
 }
 
-export function CandidatesSection({ data, loading, error, renderChart, wide = false, pick = null }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; pick?: string | null }) {
+// title: 「今日名單」, or 「規則名單」 when it is the background list folded under the AI list (#1146).
+export function CandidatesSection({ data, loading, error, renderChart, wide = false, pick = null, title = '今日名單' }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; pick?: string | null; title?: string }) {
   const state = data ? candidatesState(data) : null
   const t1 = state?.kind === 'list' ? candidateT1Text(data?.trading_date) : null
   const overnight = overnightUsView(data?.overnight_us)
@@ -534,7 +535,7 @@ export function CandidatesSection({ data, loading, error, renderChart, wide = fa
       {/* One head line (#510): title, date and count, the date the conditions held on, then the strategy name and 策略說明
           (#577). Issue 729: no how-to-read sentence, disclaimer or research status here. */}
       <div className="candidates-head">
-        <h2 id="candidates-title">今日名單</h2>
+        <h2 id="candidates-title">{title}</h2>
         {data && data.status !== 'not_computed' && (
           <span className="board-dates"><DateBadge date={formatDate(data.trading_date)} />{state?.kind === 'list' && <Badge>{data.candidate_count} 檔</Badge>}</span>
         )}
