@@ -1,3 +1,4 @@
+<!-- owns: ai_list_v1、AI 名單的輸入價位事實、AI 名單的核對、AI 名單紀錄表 -->
 # AI 名單 ai_list_v1
 
 AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單（最多 10 檔、排名次），每檔給判讀方式、理由、進場區、停損、目標與有效期，程式核對後存檔，存了不改。名單與價位是 **AI 推論，未經驗證**，不是下單指示；價位由 AI 給、程式核對。本規格只寫產出與存檔（[#1145](https://github.com/YiCheng0608/stock-lab/issues/1145)）；頁面、Telegram、盤中通知與對答案是母單 [#1144](https://github.com/YiCheng0608/stock-lab/issues/1144) 的後續任務。依據：[#1142](https://github.com/YiCheng0608/stock-lab/issues/1142) 的評估（[1/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235660250) 名單怎麼產生、[2/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235671507) 價位與核對、[3/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235688997) 存法、[4/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235713717) 架構），#1 決定 [7235996430](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7235996430)（全部選建議的 A）。
