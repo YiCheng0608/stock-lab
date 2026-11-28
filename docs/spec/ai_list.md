@@ -1,7 +1,7 @@
-<!-- owns: ai_list_v1、AI 名單的輸入價位事實、AI 名單的核對、AI 名單紀錄表、AI 名單的顯示 -->
+<!-- owns: ai_list_v1、AI 名單的輸入價位事實、AI 名單的核對、AI 名單紀錄表、AI 名單的顯示、ai_list_score_v1 -->
 # AI 名單 ai_list_v1
 
-AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單（最多 10 檔、排名次），每檔給判讀方式、理由、進場區、停損、目標與有效期，程式核對後存檔，存了不改。名單與價位是 **AI 推論，未經驗證**，不是下單指示；價位由 AI 給、程式核對。本規格寫產出與存檔（[#1145](https://github.com/YiCheng0608/stock-lab/issues/1145)）與頁面、Telegram 的[顯示](#顯示)（[#1146](https://github.com/YiCheng0608/stock-lab/issues/1146)）；盤中通知與對答案是母單 [#1144](https://github.com/YiCheng0608/stock-lab/issues/1144) 的後續任務。依據：[#1142](https://github.com/YiCheng0608/stock-lab/issues/1142) 的評估（[1/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235660250) 名單怎麼產生、[2/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235671507) 價位與核對、[3/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235688997) 存法、[4/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235713717) 架構），#1 決定 [7235996430](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7235996430)（全部選建議的 A）。
+AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單（最多 10 檔、排名次），每檔給判讀方式、理由、進場區、停損、目標與有效期，程式核對後存檔，存了不改。名單與價位是 **AI 推論，未經驗證**，不是下單指示；價位由 AI 給、程式核對。本規格寫產出與存檔（[#1145](https://github.com/YiCheng0608/stock-lab/issues/1145)）、頁面與 Telegram 的[顯示](#顯示)（[#1146](https://github.com/YiCheng0608/stock-lab/issues/1146)）與[對答案](#對答案)（[#1147](https://github.com/YiCheng0608/stock-lab/issues/1147)）；盤中通知是母單 [#1144](https://github.com/YiCheng0608/stock-lab/issues/1144) 的後續任務。依據：[#1142](https://github.com/YiCheng0608/stock-lab/issues/1142) 的評估（[1/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235660250) 名單怎麼產生、[2/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235671507) 價位與核對、[3/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235688997) 存法、[4/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235713717) 架構），#1 決定 [7235996430](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7235996430)（全部選建議的 A）。
 
 程式：job `backend/worker/ai_list.py`、輸入 `backend/worker/ai_list_input.py`、呼叫與核對 `backend/worker/ai_list_reading.py`、提示詞 `backend/worker/prompts/ai_list_v1.md`；排程與日誌見 [SCHEDULING](../ops/SCHEDULING.md#scheduler-容器的排程serve)，看門狗見 [WATCHDOG](../ops/WATCHDOG.md)。和 [早盤 AI 判讀 premarket_v1](premarket_ai.md) 並存：兩者 08:21 同時起跑、各自的呼叫、鎖、上限與表，`premarket_v1` 照跑、照存、照對答案。
 
@@ -119,8 +119,62 @@ AI 名單：每個交易日 D 08:21（台北），從候選池挑出今日名單
 - **K 線卡**：今日名單頁選中有價位的檔時畫 AI 價位線（標「AI」）；個股頁照舊畫規則價位線。
 - **verify**：today T30（[features/today.md](../../.claude/skills/verify-stock-lab/features/today.md)）。
 
+## 對答案
+
+口徑 `ai_list_score_v1`：#1142 [3/4](https://github.com/YiCheng0608/stock-lab/issues/1142#issuecomment-7235688997)（Q3-2～Q3-4 都選 A，#1 決定 [7235996430](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-7235996430)）與 #1147 決定 [7238340331](https://github.com/YiCheng0608/stock-lab/issues/1147#issuecomment-7238340331)，在看任何結果之前寫死；之後要改就是新的 `score_version`，舊列不動。常數在 `app.ai_list_score.RULES`，它與本節全文由 `test_ai_list_score` 的快照釘住。計算是 daily 的步驟 `ai_list_score`（排在 `premarket_score` 之後，`backend/worker/ai_list_score.py`，[SCHEDULING](../ops/SCHEDULING.md#日誌與-run-記錄)）與 `worker.cli ai-list-score`；純計算在 `backend/app/ai_list_score.py`。報酬、母體、大盤判對與交易日都呼叫 [premarket_score_v1](premarket_ai.md#對答案) 的同一組函式，不另寫、也不改它。AI 名單不能回測（模型已知道過去的走勢），只能從上線那天起逐日記錄、用之後才發生的走勢對答案。
+
+- **對哪些判讀**：每個交易日 D、每個 `prompt_version`＋`role` 的 `done` 判讀（`ai_list_readings`）各算一套；`failed`／`rejected` 不算分，月報列天數。
+- **交易日與休市**：同 `premarket_score_v1`：D 是第 1 個交易日，T+N 是 D 起第 N 個台股交易日；名單日之後第一個有日 K 的日子不是 D 時，確認休市才記 `no_data`（`no_session`），否則等日 K 補上。
+- **報酬**：買進價加 5 bps、賣出價減 5 bps，再扣 30 bps 來回成本；價格用 `pipeline._tracking_inputs` 的除權息因子換回名單日 T 的基準。
+- **除權息**：AI 價位與規則價位都是 T 的基準，`ai_levels`、`rule_levels`、`open_hold` 與今日不適用都在 T 的基準上判；T 之後到 D 有公司行動的檔（輸入 `level_facts.corporate_action_on_session`）照常算、不另排除，旗標記在每檔的 `outcome_json.corporate_action_on_session`，月報列筆數。
+
+### 大盤
+
+`scope=market`、`subject=market`，`horizon` 是 `d0`、`t5`：照 `premarket_score_v1` 的大盤（D 開盤起的加權指數漲跌，±0.5%／±1.5% 是平盤），另記 `basis`（`market_method_json`，依序）與 `basis_primary`（第一個）。
+
+### 每檔
+
+`scope=stock`、`subject` 是代號、`pick_id` 是 `ai_list_picks.id`，`horizon` 是 `t5`、`t20`。每檔記名次、`setup`、`basis`、`basis_primary`、`confidence`、`on_rule_list`、`levels_passed`（`display_levels_json` 有值）與 `corporate_action_on_session`，以及：
+
+| 結果 | 誰有 | 口徑 |
+| --- | --- | --- |
+| `open_hold` | 名單每檔（含價位核對不過的） | D 開盤買、T+N 收盤賣，同 `premarket_score_v1`（`missing_bar`、`suspended_in_window`、`no_price` 不算報酬）；`excess` 是報酬減同一份判讀同一 horizon 的母體平均 |
+| `ai_levels` | 價位核對過的每檔 | `tracking_v2`（`track_path`＋`settle`）：名單日是 level date，D 是第 1 根，最多 20 根（Q3-3 A：`valid_sessions` 只用在顯示）。突破用 `entry.low` 當突破價，拉回用 `entry.low`～`entry.high`，停損 `stop`、目標 `target_1`（取整後的 `display_levels_json`）。記有沒有成交、成交日、`first_trigger`（`target_1_hit`／`invalidated`／都沒有）與報酬；不能成交照 `tracking_v2` 的原因碼。核對不過的是 null，`ai_levels_reason=levels_check_failed` |
+| `rule_levels` | 規則價位有進場區的檔（`rule_levels_json` 照 `premarket_score_v1` 的 `has_levels`） | 同上，換成規則價位（`entry_zone`、`invalid_price`、`target_1`）。沒有的是 null，`rule_levels_reason=no_rule_levels`，不進「AI 價位對規則價位」（Q3-2 A） |
+| `open_check` | 價位核對過的每檔 | 今日不適用：D 的官方日 K 原始開盤價依序和「價位 × 因子」（T 的基準換到 D 的原始基準，和 `tracking_v2` 同方向）比：≤ 停損（`open_at_or_below_stop`）、≥ 目標一（`open_at_or_above_target`）、突破型 > 進場上緣（`gap_above_entry_high`），任一成立是 `applicable=false`（全部列在 `conditions`，`reason` 是第一個）；拉回型開在進場區之上不算。`open` 記換回 T 基準的開盤價。D 沒有日 K、停牌或沒有因子記 `no_data`（`no_open`），`applicable` 是 null。唯一的算法是 `app.ai_list_score.open_check`，頁面當晚的標記（#1148）也呼叫它；不讀 `ai_list_open_checks` |
+
+- 今日不適用的檔 `ai_levels` 照算（`tracking_v2` 本來就會記 `gap_*`），月報另列一組。
+
+### 整體
+
+`scope=overall`、`subject=overall`，`horizon` 是 `t5`、`t20`。每組列筆數、可比數、平均、中位數與不能比的原因碼，`tracking_v2` 的組另列成交數。
+
+- **母體**：同 `premarket_score_v1`（D 有日 K、沒停牌的 `stock`／`ipo` 的 `open_hold` 等權平均）。
+- **規則名單**（基準）：名單日的今日名單（輸入記的 `pool.today_list_run_id` 那份 `daily_candidates`）全部的 `open_hold`，與用輸入裡該檔 `strategy_levels` 的 `tracking_v2`；沒有名單記 `no_list`，不算 0。
+- **AI 名單 `open_hold` 對母體的超額**＝AI 名單的平均－母體平均。
+- **AI 價位對規則價位**＝同一批 AI 名單股票裡 `ai_levels` 與 `rule_levels` 都可比的檔，`ai_levels` 平均－`rule_levels` 平均；記配對檔數。
+- **AI 選股對規則選股**＝AI 名單的 `open_hold` 平均－規則名單的 `open_hold` 平均。
+- 任一邊沒有可比的就記 `null`（`empty_side`）。
+- `counts`：每檔數、價位核對不過、今日不適用、沒有規則價位、名單日到 D 有公司行動。
+- `outcome_json` 另記 `reading_id`、`pool_phase` 與 `end_date`（這個 horizon 的最後一個交易日）。
+
+### 寫入與重跑
+
+同 `premarket_score_v1`：一個 horizon 的最後一個交易日已有日 K 才寫，之後的日子都不讀；同一個 `reading_id`＋`scope`＋`subject`＋`horizon`＋`score_version` 已有就跳過（`ai_list_scores` 的 unique），日 K 事後更正不重算；市場已到 T+N 卻少了那根記 `missing_bar` 照寫。
+
+### 月報
+
+`worker.cli ai-list-score-report --month YYYY-MM` 產 markdown（讀 DB、不寫）；每月檢討（`tools/research/monthly_review.py`，[evidence 每月檢討](evidence.md#每月檢討)）把它併成一段。每個 `prompt_version`＋`role` 一節：
+
+- **歸月**：判讀天數照 `session_date`；對答案的結果歸到**結果出來的月份**，也就是那個 horizon 的最後一個交易日（每檔 `open_hold.exit_date`、大盤 `close_date`、整體 `end_date`；確認休市沒有這個日期的列用 `session_date`），同[早盤 AI 判錯清單](premarket_ai.md#判錯清單與改版提案)。T+20 約在判讀日一個月後才出來，照判讀日歸月的話，月初跑時上個月大多還沒到期；照結果月歸，每筆剛好在一個月出現一次。累積只算月底以前已到期的結果。
+- 判讀天數（`done`／`failed`／`rejected`，累積與當月）。累積與當月各一份：整體的四個比較（T+5、T+20 的每日值平均）、T+20 已對答案的每檔裡價位核對不過、今日不適用、沒有規則價位與有公司行動的筆數，以及下面的分組。
+- **依判讀方式分組**：每檔依 `setup`、`basis_primary`、`basis` 含某個代碼（可重複計）、`confidence`、`setup`×`confidence`，以及狀態分組：`levels_check_failed`（價位核對不過）、`no_open`（核對過但 D 沒有可用的開盤價，今日檢查做不了）、`not_applicable`（今日不適用）、`applicable`，依序取第一個符合的。每組列筆數；`ai_levels`（看 T+20）的有價位數、成交數與成交率、可比數、勝率（可比裡報酬 > 0 的比例）、平均與中位數報酬、`first_trigger` 分布；`open_hold` T+5、T+20 對母體超額的平均；不能比的原因碼筆數。
+- **大盤**：依 `basis_primary` 分組，列 `d0`、`t5` 的判對率。
+- **樣本不足**（Q3-4 A，`MIN_GROUP_COMPARABLE = 20`）：`ai_levels` 可比數 < 20 的組標「樣本不足」，只列筆數（筆數、有價位數、成交數、可比數、不能比的原因碼），不列成交率、勝率、平均、中位數與 `first_trigger` 分布；`open_hold` 超額的可比數 < 20 也不列平均；大盤一組已對答案的天數 < 20 不列判對率。
+- 規則名單是對答案的基準：只記錄，不提案。AI 名單的判錯清單與改版提案另開單（3/4 每月檢討第 4 點），本節不做。
+
 ## 限制
 
 - 價位事實換到 T 的基準；T 之後到 D 有除權息時，D 的漲跌停與價位基準不同，只標 `corporate_action_on_session`，核對照 T 的漲跌停；頁面與 Telegram 價位照顯示並加警示（[顯示](#顯示)）。
 - 重放過去的日子（`--date`）時，今日名單、自選、H2 與台指期日盤讀的是現在存的值，同 [premarket_v1 的限制](premarket_ai.md#限制)。
-- 名單日之後的走勢、開盤後檢查與對答案不在本規格。
+- 開盤後檢查的存檔與通知（`ai_list_open_checks`、#1148）不在本規格；對答案的今日不適用見[對答案](#對答案)。

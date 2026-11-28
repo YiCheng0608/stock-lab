@@ -2916,6 +2916,10 @@ OMITTED_TABLES: dict[str, str] = {
         "沒有預算列時首頁與行動頁即時計算 action tier（#476），結果相同；"
         "預算與即時一致由後端測試驗"
     ),
+    "ai_list_scores": (
+        "AI 名單對答案（#1147）只給月報（worker.cli ai-list-score-report），"
+        "五頁不讀；由後端 test_ai_list_score 驗"
+    ),
     "alembic_version": "migration 自己寫入 head 版本，假資料不寫",
     "candidate_pool_items": "同 candidate_pool_runs",
     "candidate_pool_runs": (

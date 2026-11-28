@@ -171,6 +171,7 @@ def test_every_entry_runs_in_order(copy_db, tmp_path):
         "candidate_pool_score",
         "premarket_errors",
         "premarket_score_report",
+        "ai_list_score_report",
     ]
 
 
@@ -187,6 +188,7 @@ def test_the_review_runs_every_entry(review_run):
         "candidate_pool_score",
         "premarket_errors",
         "premarket_score_report",
+        "ai_list_score_report",
     }
     for name in (
         "H1",
@@ -200,6 +202,7 @@ def test_the_review_runs_every_entry(review_run):
     assert (out / "premarket_errors" / "cases.json").is_file()
     assert (out / "premarket_errors" / "cases.md").is_file()
     assert (out / "premarket_score_report" / "report.md").is_file()
+    assert (out / "ai_list_score_report" / "report.md").is_file()
     assert review["cutoff"] == CUTOFF.isoformat()
     summary = (out / "summary.md").read_text(encoding="utf-8")
     assert summary.startswith(f"# 每月檢討 {MONTH}")
@@ -254,6 +257,7 @@ def test_the_pool_entry_has_the_fixture_pool(review_run):
     summary = (out / "summary.md").read_text(encoding="utf-8")
     assert summary.index("## 候選池的對答案") < summary.index("## 早盤 AI 判錯清單")
     assert summary.index("## 早盤 AI 判錯清單") < summary.index("## 早盤 AI 判讀月報")
+    assert summary.index("## 早盤 AI 判讀月報") < summary.index("## AI 名單對答案月報")
     assert "樣本不足，不提案" in summary
     assert f"第 {mr.VERSION} 版改了什麼：{mr.VERSION_NOTES[mr.VERSION]}" in summary
 
@@ -295,6 +299,33 @@ def test_the_premarket_report_is_the_clis_on_the_copy(review_run, copy_db, monke
     assert (out / "premarket_score_report" / "report.md").read_text(
         encoding="utf-8"
     ) == alone + "\n"
+
+
+def test_the_ai_list_report_is_the_clis_on_the_copy(review_run, copy_db, monkeypatch):
+    _code, out = review_run
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from worker import ai_list_score_report, pipeline
+
+    engine = create_engine(f"sqlite:///{copy_db}")
+    monkeypatch.setattr(pipeline, "SessionLocal", sessionmaker(bind=engine))
+    try:
+        alone = ai_list_score_report.run(MONTH)
+    finally:
+        engine.dispose()
+    assert (out / "ai_list_score_report" / "report.md").read_text(
+        encoding="utf-8"
+    ) == alone + "\n"
+    summary = (out / "summary.md").read_text(encoding="utf-8")
+    assert "- 原始輸出：`ai_list_score_report/report.md`" in summary
+
+
+def test_the_rule_list_is_the_baseline_only():
+    """#1142 4/4 第 21 列: the rule list is recorded, not proposed (VERSION 3)."""
+
+    assert mr.SCORECARD_NOTE == "規則名單是對答案的基準：只記錄，不提案"
+    assert mr.VERSION == 3 and "#1147" in mr.VERSION_NOTES[3]
 
 
 def test_a_row_added_to_watches_runs(copy_db, tmp_path, monkeypatch):
@@ -353,6 +384,24 @@ def test_a_failing_premarket_report_is_its_section_only(copy_db, tmp_path):
         copy_db, MONTH, tmp_path / "out", CUTOFF, runner=runner, premarket=broken
     )
     assert review["steps"]["premarket_score_report"]["reason"] == "ValueError: no table"
+    assert review["steps"]["ai_list_score_report"]["status"] == "ok"
+
+
+def test_a_failing_ai_list_report_is_its_section_only(copy_db, tmp_path):
+    def runner(tool, argv):
+        return 1, json.dumps({"refused": ["off"]}), ""
+
+    def broken(db, month):
+        raise ValueError("no such table: ai_list_scores")
+
+    review = mr.run_review(
+        copy_db, MONTH, tmp_path / "out", CUTOFF, runner=runner, ai_list=broken
+    )
+    reason = review["steps"]["ai_list_score_report"]["reason"]
+    assert reason.startswith("副本沒有 `ai_list_scores` 表")
+    assert review["steps"]["premarket_score_report"]["status"] == "ok"
+    summary = (tmp_path / "out" / "summary.md").read_text(encoding="utf-8")
+    assert summary.index("## AI 名單對答案月報") < summary.index(reason)
 
 
 # --- refused before any entry runs -----------------------------------------------
