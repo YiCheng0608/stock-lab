@@ -881,13 +881,21 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0041_valuation_shares', CURRENT_TIMESTAMP)"
         )
     )
-    # 0042 only adds insider_holdings_monthly / insider_pledges_monthly /
+    # 0042 only adds quarterly_statements (#1083), made by create_all with its
+    # indexes; only the research database writes it.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0042_quarterly_statements', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0048 only adds insider_holdings_monthly / insider_pledges_monthly /
     # insider_transfer_declarations (#1133), made by create_all with their
     # indexes; only the research database writes them.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0042_insider_filings', CURRENT_TIMESTAMP)"
+            "VALUES ('0048_insider_filings', CURRENT_TIMESTAMP)"
         )
     )
 

@@ -1027,6 +1027,63 @@ class FundamentalSnapshot(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class QuarterlyStatement(Base):
+    """One company's balance sheet and cash flow items of one quarter (Issue #1083).
+
+    Read from the MOPS quarterly XBRL archive (``source=mops_tifrs_zip``) by
+    ``worker.quarterly_statements``.  Amounts are thousand NTD, as
+    ``fundamental_snapshots.revenue``.  The balance sheet items are the quarter-end
+    values; ``*_ytd`` are year to date as filed (capital expenditure is negative,
+    an outflow), a single quarter is the research tools' difference.  A value the
+    company did not file, or one its report format has no line for, is NULL, never
+    0; ``data_json.not_applicable`` names the latter.  Revenue and EPS stay in
+    ``fundamental_snapshots``.  ``announcement_date`` is the statutory deadline as
+    for the archive's EPS.  Only the research database is written; the production
+    one has the empty table.
+    """
+
+    __tablename__ = "quarterly_statements"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "period_end",
+            "fiscal_period",
+            name="uq_quarterly_statements_period",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+    fiscal_period: Mapped[str] = mapped_column(String(10))
+    announcement_date: Mapped[date] = mapped_column(Date)
+    total_assets: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_liabilities: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Equity attributable to owners of the parent; an individual report's Equity.
+    equity_parent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    equity_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_assets: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_liabilities: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cash: Mapped[float | None] = mapped_column(Float, nullable=True)
+    receivables: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inventories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Ordinary shares, for per-share figures.
+    share_capital_common: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # All share capital (the summary page t163sb05's 股本).
+    share_capital_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cfo_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    capex_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gross_profit_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operating_income_ytd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    data_as_of: Mapped[date] = mapped_column(Date)
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class MonthlyRevenue(Base):
     """One company's revenue for one month (Issue #530).
 

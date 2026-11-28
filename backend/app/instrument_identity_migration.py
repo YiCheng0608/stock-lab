@@ -57,6 +57,7 @@ _CHILDREN = {
     "premarket_ai_stocks",
     "valuation_daily",
     "shares_outstanding_daily",
+    "quarterly_statements",
     "insider_holdings_monthly",
     "insider_pledges_monthly",
     "insider_transfer_declarations",

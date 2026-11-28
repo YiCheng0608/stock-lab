@@ -1,7 +1,7 @@
 """Add the insider holdings, pledges and transfer declaration tables.
 
-Revision ID: 0042_insider_filings
-Revises: 0041_valuation_shares
+Revision ID: 0048_insider_filings
+Revises: 0042_quarterly_statements
 
 ``insider_holdings_monthly`` keeps one company's insider holdings of one month
 from siis ``IRB110``, ``insider_pledges_monthly`` its insider pledges from siis
@@ -29,8 +29,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0042_insider_filings"
-down_revision = "0041_valuation_shares"
+revision = "0048_insider_filings"
+down_revision = "0042_quarterly_statements"
 branch_labels = None
 depends_on = None
 
