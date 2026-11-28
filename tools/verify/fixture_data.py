@@ -2676,6 +2676,11 @@ OMITTED_TABLES: dict[str, str] = {
     "signal_evaluations": "較早的訊號只當追蹤計畫的來源；系統訊號追蹤不在五頁顯示",
     "signal_settlements": "同 signal_evaluations",
     "technical_features": "舊版特徵表；K 線與指標讀 technical_indicators",
+    "insider_holdings_monthly": "同 valuation_daily（#1133 內部人持股月報）",
+    "insider_pledges_monthly": "同 valuation_daily（#1133 內部人設質月報）",
+    "insider_transfer_declarations": (
+        "同 valuation_daily（#1133 內部人轉讓事前申報；姓名只存研究 DB）"
+    ),
     "futures_night_bars": (
         "台指期夜盤（#1040）只給早盤判讀讀；五頁的 API 不讀，"
         "由後端 test_futures_night 驗"

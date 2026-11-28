@@ -68,6 +68,9 @@ from .quarterly_fundamentals import (
 )
 from .quarterly_xbrl import research_refusal as xbrl_research_refusal
 from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
+from .insider_backfill import FEEDS as INSIDER_FEEDS
+from .insider_backfill import MARKETS as INSIDER_MARKETS
+from .insider_backfill import run_insider_backfill
 from .valuation_backfill import FEEDS as VALUATION_FEEDS
 from .valuation_backfill import run_valuation_backfill
 from .schedule_runs import (
@@ -170,6 +173,8 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "revenue backfill"
     if args.command == "valuation" and args.valuation_command == "backfill":
         return "valuation backfill"
+    if args.command == "insider" and args.insider_command == "backfill":
+        return "insider backfill"
     if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
         return "revenue transfers --apply"
     if (
@@ -704,6 +709,40 @@ def main() -> None:
         "--fallback-raw-dir",
         help="raw 檔不在本 volume 時，到這個目錄找同一個相對路徑（正式 volume 的 raw，唯讀掛載）",
     )
+    insider_parser = subparsers.add_parser(
+        "insider",
+        help="研究 DB 的內部人持股、設質月報與轉讓事前申報（#1133）：siis IRB110／IRB130、MOPS t56sb21",
+    )
+    insider_subparsers = insider_parser.add_subparsers(
+        dest="insider_command", required=True
+    )
+    insider_backfill_parser = insider_subparsers.add_parser(
+        "backfill",
+        help="月報逐市場逐月、轉讓申報逐市場逐年回補（每 host 間隔 3.5 秒、台北 21:15～23:30 與偶數整點前後 10 分鐘等待；已成功的不再請求，重跑冪等）；只在研究 DB 跑",
+    )
+    insider_backfill_parser.add_argument(
+        "--start", required=True, help="YYYY-MM（t56sb21 取其年份）"
+    )
+    insider_backfill_parser.add_argument(
+        "--end", required=True, help="YYYY-MM（t56sb21 取其年份）"
+    )
+    insider_backfill_parser.add_argument(
+        "--feed",
+        action="append",
+        choices=sorted(INSIDER_FEEDS),
+        help="只跑這個 feed（可重複）；預設三個都跑",
+    )
+    insider_backfill_parser.add_argument(
+        "--market",
+        action="append",
+        choices=sorted(INSIDER_MARKETS),
+        help="只跑這個市場（可重複）；預設 sii、otc 都跑",
+    )
+    insider_backfill_parser.add_argument(
+        "--reapply",
+        action="store_true",
+        help="不送請求：有已存 raw 的單位改讀 raw 重寫（沒有差異時 changed 0）",
+    )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
     )
@@ -1038,14 +1077,14 @@ def research_command_refusal(args: argparse.Namespace) -> str | None:
     """Why a research-database-only command may not run here; None otherwise.
 
     ``fundamentals xbrl-apply`` (#781), the revenue commands of #782 and
-    ``valuation backfill`` (#1075).
+    ``valuation backfill`` (#1075) and ``insider backfill`` (#1133).
     """
 
     if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
         return xbrl_research_refusal(DB_PATH)
     if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
         return monthly_revenue_refusal(DB_PATH)
-    if args.command == "valuation":
+    if args.command in {"valuation", "insider"}:
         return xbrl_research_refusal(DB_PATH)
     return None
 
@@ -1068,6 +1107,7 @@ def backfill_command(args: argparse.Namespace) -> str | None:
         ("fundamentals", "fundamentals_command"),
         ("revenue", "revenue_command"),
         ("valuation", "valuation_command"),
+        ("insider", "insider_command"),
     ):
         if args.command == command and getattr(args, sub, None) == "backfill":
             return f"{command} backfill"
@@ -1255,6 +1295,14 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             reapply=args.reapply,
             fallback_raw_dir=args.fallback_raw_dir,
         )
+    elif args.command == "insider" and args.insider_command == "backfill":
+        result = run_insider_backfill(
+            args.start,
+            args.end,
+            feeds=args.feed,
+            markets=args.market,
+            reapply=args.reapply,
+        )
     elif args.command == "revenue" and args.revenue_command == "backfill":
         result = run_revenue_backfill(args.months, args.end_month)
     elif args.command == "revenue" and args.revenue_command == "transfers":
@@ -1386,7 +1434,8 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
     if args.command == "revenue" and result.get("status") == "refused":
         raise SystemExit(2)
     if (
-        args.command in {"fundamentals", "revenue", "index-bars", "valuation"}
+        args.command
+        in {"fundamentals", "revenue", "index-bars", "valuation", "insider"}
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)

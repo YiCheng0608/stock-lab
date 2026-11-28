@@ -43,6 +43,9 @@ CHILDREN = [
     "theme_cluster_members",
     "valuation_daily",
     "shares_outstanding_daily",
+    "insider_holdings_monthly",
+    "insider_pledges_monthly",
+    "insider_transfer_declarations",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -280,6 +283,9 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                     "trading_halts",
                     "valuation_daily",
                     "shares_outstanding_daily",
+                    "insider_holdings_monthly",
+                    "insider_pledges_monthly",
+                    "insider_transfer_declarations",
                 }:
                     values.update(raw_payload_id=11)
                 if table.name == "tracking_plans":
